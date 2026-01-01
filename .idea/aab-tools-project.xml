@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AabToolsProjectSettings">
+    <option name="aabDirectory" value="app/build/outputs/bundle" />
+    <option name="gradleBuildPath" value="app" />
+    <option name="migrated" value="true" />
+    <option name="outputDirectory" value="app/build/outputs/aabTools" />
+  </component>
+</project>

@@ -21,6 +21,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import React from 'react';
+import { stripImageMetadata } from '@/utils/imageMetadata';
 import {
   ActivityIndicator,
   Alert,
@@ -239,14 +240,45 @@ export default function ProfileModal({ visible, onClose }: ProfileModalProps) {
       aspect: [1, 1],
       quality: 0.8,
       base64: true,
+      exif: false,
     });
 
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      // Convert to data URI for storage
       const mimeType = asset.mimeType || 'image/jpeg';
-      const profileImage = `data:${mimeType};base64,${asset.base64}`;
-      updateProfile({ profileImage });
+
+      // Strip metadata before converting to base64
+      let profileImage: string;
+      try {
+        if (asset.uri) {
+          const strippedUri = await stripImageMetadata(asset.uri);
+          const response = await fetch(strippedUri);
+          const blob = await response.blob();
+          profileImage = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const result = reader.result as string;
+              resolve(result); // Already includes data: prefix
+            };
+            reader.onerror = () => reject(new Error('Failed to read stripped image'));
+            reader.readAsDataURL(blob);
+          });
+        } else if (asset.base64) {
+          // Fallback if URI not available
+          profileImage = `data:${mimeType};base64,${asset.base64}`;
+        } else {
+          throw new Error('No image data available');
+        }
+      } catch (error) {
+        console.warn('[ProfileModal] Failed to strip metadata, using original:', error);
+        // Fallback to original base64
+        profileImage = asset.base64
+          ? `data:${mimeType};base64,${asset.base64}`
+          : '';
+      }
+
+      if (profileImage) {
+        updateProfile({ profileImage });
 
       // Broadcast profile image update to all spaces
       const spaces = getAllSpaces();

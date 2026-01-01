@@ -1,0 +1,63 @@
+diff --git a/node_modules/jest-expo/src/preset/setup.js b/node_modules/jest-expo/src/preset/setup.js
+index a2dcecd..496061f 100644
+--- a/node_modules/jest-expo/src/preset/setup.js
++++ b/node_modules/jest-expo/src/preset/setup.js
+@@ -188,16 +188,21 @@ jest.doMock('react-native/Libraries/LogBox/LogBox', () => ({
+ }));
+ 
+ // Mock the `createSnapshotFriendlyRef` to return an ref that can be serialized in snapshots.
+-jest.doMock('expo-modules-core/src/Refs', () => ({
+-  createSnapshotFriendlyRef: () => {
+-    // We cannot use `createRef` since it is not extensible.
+-    const ref = { current: null };
++// Wrap in try-catch in case the module doesn't exist
++try {
++  jest.doMock('expo-modules-core/src/Refs', () => ({
++    createSnapshotFriendlyRef: () => {
++      // We cannot use `createRef` since it is not extensible.
++      const ref = { current: null };
+     Object.defineProperty(ref, 'toJSON', {
+       value: () => '[React.ref]',
+     });
+     return ref;
+   },
+ }));
++} catch (e) {
++  // Module doesn't exist in this version, skip it
++}
+ 
+ function attemptLookup(moduleName) {
+   // hack to get the package name from the module name
+@@ -219,7 +224,18 @@ function attemptLookup(moduleName) {
+ try {
+   jest.doMock('expo-modules-core', () => {
+     const ExpoModulesCore = jest.requireActual('expo-modules-core');
+-    const uuid = jest.requireActual('expo-modules-core/src/uuid/uuid.web');
++    let uuid;
++    try {
++      uuid = jest.requireActual('expo-modules-core/src/uuid/uuid.web');
++    } catch (e) {
++      // Module doesn't exist, use a mock with default export structure
++      uuid = {
++        default: {
++          v4: jest.fn(() => 'mock-uuid-v4'),
++          v5: jest.fn(() => 'mock-uuid-v5'),
++        },
++      };
++    }
+ 
+     const { EventEmitter, NativeModule, SharedObject } = globalThis.expo;
+ 
+@@ -296,7 +312,11 @@ try {
+ }
+ 
+ // Installs web implementations of global things that are normally installed through JSI.
+-require('expo-modules-core/src/web/index.web');
++try {
++  require('expo-modules-core/src/web/index.web');
++} catch (e) {
++  // Module doesn't exist in this version, skip it
++}
+ 
+ jest.doMock('expo/src/winter/FormData', () => ({
+   // The `installFormDataPatch` function is for native runtime only,

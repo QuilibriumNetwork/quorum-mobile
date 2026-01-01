@@ -1,0 +1,16 @@
+diff --git a/node_modules/jest-expo/src/preset/setup.js b/node_modules/jest-expo/src/preset/setup.js
+index 1234567..abcdefg 100644
+--- a/node_modules/jest-expo/src/preset/setup.js
++++ b/node_modules/jest-expo/src/preset/setup.js
+@@ -117,6 +117,11 @@ for (const moduleName of Object.keys(expoModules)) {
+   });
+ }
+
++// Ensure UIManager exists before trying to define properties on it
++if (!mockNativeModules.UIManager || typeof mockNativeModules.UIManager !== 'object') {
++  mockNativeModules.UIManager = {};
++}
++
+ Object.keys(mockNativeModules.NativeUnimoduleProxy.viewManagersMetadata).forEach(
+   (viewManagerName) => {
+     Object.defineProperty(mockNativeModules.UIManager, `ViewManagerAdapter_${viewManagerName}`, {
