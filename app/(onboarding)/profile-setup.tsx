@@ -25,6 +25,7 @@ import { useTheme } from '@/theme';
 import { useOnboarding } from '@/context';
 import { OnboardingLayout, StepNavigation } from '@/components/onboarding';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { stripImageMetadata } from '@/utils/imageMetadata';
 
 export default function ProfileSetupScreen() {
   const { theme } = useTheme();
@@ -65,10 +66,18 @@ export default function ProfileSetupScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
+      exif: false,
     });
 
     if (!result.canceled && result.assets[0]) {
-      setProfileImage(result.assets[0].uri);
+      try {
+        // Strip metadata from the image
+        const strippedUri = await stripImageMetadata(result.assets[0].uri);
+        setProfileImage(strippedUri);
+      } catch (error) {
+        console.warn('[ProfileSetup] Failed to strip metadata, using original:', error);
+        setProfileImage(result.assets[0].uri);
+      }
     }
   };
 
@@ -82,10 +91,18 @@ export default function ProfileSetupScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
+      exif: false,
     });
 
     if (!result.canceled && result.assets[0]) {
-      setProfileImage(result.assets[0].uri);
+      try {
+        // Strip metadata from the image
+        const strippedUri = await stripImageMetadata(result.assets[0].uri);
+        setProfileImage(strippedUri);
+      } catch (error) {
+        console.warn('[ProfileSetup] Failed to strip metadata, using original:', error);
+        setProfileImage(result.assets[0].uri);
+      }
     }
   };
 

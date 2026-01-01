@@ -1,3 +1,5 @@
+import { stripImageMetadata } from '@/utils/imageMetadata';
+
 const FARCASTER_BASE_URL = 'https://client.farcaster.xyz';
 
 interface PostCastParams {
@@ -567,8 +569,17 @@ export async function uploadImageToCloudflare({
   name = 'direct-cast-image',
   mimeType = 'image/jpeg',
 }: UploadImageParams): Promise<string | undefined> {
+  // Strip metadata before upload
+  let processedUri = uri;
+  try {
+    processedUri = await stripImageMetadata(uri);
+  } catch (error) {
+    console.warn('[FarcasterClient] Failed to strip metadata, using original:', error);
+    // Continue with original URI if stripping fails
+  }
+
   const file = {
-    uri,
+    uri: processedUri,
     type: mimeType,
     name,
   };

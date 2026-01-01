@@ -8,6 +8,7 @@
  */
 
 import * as ImagePicker from 'expo-image-picker';
+import { stripImageMetadata } from '@/utils/imageMetadata';
 
 // Configuration matching desktop behavior
 const EMOJI_CONFIG = {
@@ -132,11 +133,11 @@ export async function pickSticker(): Promise<AssetPickerResult> {
 /**
  * Process an image for use as an emoji
  */
-function processEmojiAsset(
+async function processEmojiAsset(
   asset: ImagePicker.ImagePickerAsset
-): AssetPickerResult {
+): Promise<AssetPickerResult> {
   try {
-    const { fileName, fileSize, mimeType, base64 } = asset;
+    const { uri, fileName, fileSize, mimeType, base64 } = asset;
     const isGif = mimeType === 'image/gif';
 
     if (!base64) {
@@ -167,9 +168,32 @@ function processEmojiAsset(
     }
 
     const finalMimeType = mimeType || 'image/png';
+
+    // Strip metadata for non-GIF images
+    let processedBase64 = base64;
+    if (!isGif && uri) {
+      try {
+        const strippedUri = await stripImageMetadata(uri);
+        const response = await fetch(strippedUri);
+        const blob = await response.blob();
+        processedBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            resolve(result.split(',')[1]);
+          };
+          reader.onerror = () => reject(new Error('Failed to read stripped image'));
+          reader.readAsDataURL(blob);
+        });
+      } catch (stripError) {
+        console.warn('[CustomAssets] Failed to strip metadata for emoji, using original:', stripError);
+        processedBase64 = base64;
+      }
+    }
+
     const id = generateId();
     const name = sanitizeName(fileName || 'emoji');
-    const imgUrl = `data:${finalMimeType};base64,${base64}`;
+    const imgUrl = `data:${finalMimeType};base64,${processedBase64}`;
 
     return {
       success: true,
@@ -187,11 +211,11 @@ function processEmojiAsset(
 /**
  * Process an image for use as a sticker
  */
-function processStickerAsset(
+async function processStickerAsset(
   asset: ImagePicker.ImagePickerAsset
-): AssetPickerResult {
+): Promise<AssetPickerResult> {
   try {
-    const { fileName, fileSize, mimeType, base64 } = asset;
+    const { uri, fileName, fileSize, mimeType, base64 } = asset;
     const isGif = mimeType === 'image/gif';
 
     if (!base64) {
@@ -222,9 +246,32 @@ function processStickerAsset(
     }
 
     const finalMimeType = mimeType || 'image/png';
+
+    // Strip metadata for non-GIF images
+    let processedBase64 = base64;
+    if (!isGif && uri) {
+      try {
+        const strippedUri = await stripImageMetadata(uri);
+        const response = await fetch(strippedUri);
+        const blob = await response.blob();
+        processedBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            resolve(result.split(',')[1]);
+          };
+          reader.onerror = () => reject(new Error('Failed to read stripped image'));
+          reader.readAsDataURL(blob);
+        });
+      } catch (stripError) {
+        console.warn('[CustomAssets] Failed to strip metadata for sticker, using original:', stripError);
+        processedBase64 = base64;
+      }
+    }
+
     const id = generateId();
     const name = sanitizeName(fileName || 'sticker');
-    const imgUrl = `data:${finalMimeType};base64,${base64}`;
+    const imgUrl = `data:${finalMimeType};base64,${processedBase64}`;
 
     return {
       success: true,

@@ -10,6 +10,7 @@
  */
 
 import * as ImagePicker from 'expo-image-picker';
+import { stripImageMetadata } from '@/utils/imageMetadata';
 
 // Configuration matching desktop behavior
 const IMAGE_CONFIG = {
@@ -98,8 +99,9 @@ export async function pickImage(
 
 /**
  * Process an image asset into a ProcessedAttachment
+ * @internal - Exported for testing purposes
  */
-async function processImageAsset(
+export async function processImageAsset(
   asset: ImagePicker.ImagePickerAsset
 ): Promise<AttachmentPickerResult> {
   try {
@@ -107,14 +109,45 @@ async function processImageAsset(
     const mime = mimeType || 'image/jpeg';
     const isGif = mime === 'image/gif';
 
-    if (!base64) {
+    // For GIFs, we can't strip metadata easily (would need to re-encode as static image)
+    // So we'll only strip metadata for non-GIF images
+    let processedUri = uri;
+    let processedBase64 = base64;
+
+    if (!isGif && uri) {
+      try {
+        // Strip metadata by re-encoding the image
+        processedUri = await stripImageMetadata(uri);
+
+        // Re-read the stripped image as base64
+        const response = await fetch(processedUri);
+        const blob = await response.blob();
+        processedBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            const base64Data = result.split(',')[1];
+            resolve(base64Data);
+          };
+          reader.onerror = () => reject(new Error('Failed to read stripped image'));
+          reader.readAsDataURL(blob);
+        });
+      } catch (stripError) {
+        console.warn('[ImageAttachment] Failed to strip metadata, using original:', stripError);
+        // Fallback to original if stripping fails
+        processedUri = uri;
+        processedBase64 = base64 || '';
+      }
+    }
+
+    if (!processedBase64) {
       return {
         success: false,
         error: 'Failed to read image data',
       };
     }
 
-    // Check file size
+    // Check file size (use original fileSize for validation)
     const fileSizeMB = (fileSize || 0) / (1024 * 1024);
     const maxSize = isGif ? IMAGE_CONFIG.maxGifSizeMB : IMAGE_CONFIG.maxFileSizeMB;
     if (fileSizeMB > maxSize) {
@@ -129,8 +162,8 @@ async function processImageAsset(
       width > IMAGE_CONFIG.thumbnailThreshold ||
       height > IMAGE_CONFIG.thumbnailThreshold;
 
-    // Create base64 data URL
-    const imageUrl = `data:${mime};base64,${base64}`;
+    // Create base64 data URL from stripped image
+    const imageUrl = `data:${mime};base64,${processedBase64}`;
 
     // For GIFs, check if it's large
     const isLargeGif = isGif && fileSizeMB > 0.5; // >500KB
@@ -148,7 +181,7 @@ async function processImageAsset(
         height,
         isLargeGif,
         mimeType: mime,
-        localUri: uri,
+        localUri: processedUri, // Use processed URI
       },
     };
   } catch (error) {
