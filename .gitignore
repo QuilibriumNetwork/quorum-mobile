@@ -18,6 +18,10 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# Native module build artifacts
+modules/*/android/build/
+modules/*/ios/build/
+
 # Metro
 .metro-health-check*
 
@@ -32,6 +36,9 @@ yarn-error.*
 
 # local env files
 .env*.local
+
+# Claude Code
+.claude/settings.local.json
 
 # typescript
 *.tsbuildinfo
