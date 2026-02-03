@@ -3579,6 +3579,142 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // Extract sender address from conversation ID (may have been updated for self-sync)
         const senderAddress = conversationId.split('/')[0];
 
+        // === Handle DM control messages (reactions, removes) ===
+        const contentType = decryptedMessage.content?.type;
+        
+        if (contentType === 'reaction') {
+          const reactionContent = decryptedMessage.content as { messageId: string; reaction: string; senderId: string };
+          logger.log(`[E2E:${getAddr()}] Adding DM reaction:`, reactionContent.reaction, 'to message:', reactionContent.messageId);
+
+          const computeNewReactions = (currentReactions: Message['reactions']) => {
+            const reactions = currentReactions || [];
+            const existingReaction = reactions.find((r) => r.emojiId === reactionContent.reaction);
+            if (existingReaction) {
+              if (!existingReaction.memberIds.includes(reactionContent.senderId)) {
+                return reactions.map((r) =>
+                  r.emojiId === reactionContent.reaction
+                    ? { ...r, count: r.count + 1, memberIds: [...r.memberIds, reactionContent.senderId] }
+                    : r
+                );
+              }
+              return reactions;
+            }
+            return [
+              ...reactions,
+              {
+                emojiId: reactionContent.reaction,
+                emojiName: reactionContent.reaction,
+                spaceId: senderAddress,
+                count: 1,
+                memberIds: [reactionContent.senderId],
+              },
+            ];
+          };
+
+          // Update React Query cache
+          const dmMessagesKey = queryKeys.messages.infinite(senderAddress, senderAddress);
+          queryClient.setQueryData(dmMessagesKey, (old: { pages: { messages: Message[] }[] } | undefined) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                messages: page.messages.map((msg) =>
+                  msg.messageId === reactionContent.messageId
+                    ? { ...msg, reactions: computeNewReactions(msg.reactions) }
+                    : msg
+                ),
+              })),
+            };
+          });
+
+          // Persist to storage
+          const targetMessage = await storage.getMessage({
+            spaceId: senderAddress,
+            channelId: senderAddress,
+            messageId: reactionContent.messageId,
+          });
+          if (targetMessage) {
+            await storage.saveMessage(
+              { ...targetMessage, reactions: computeNewReactions(targetMessage.reactions) },
+              targetMessage.createdDate,
+              senderAddress,
+              'direct',
+              '',
+              ''
+            );
+          }
+          return;
+        }
+
+        if (contentType === 'remove-reaction') {
+          const reactionContent = decryptedMessage.content as { messageId: string; reaction: string; senderId: string };
+          logger.log(`[E2E:${getAddr()}] Removing DM reaction:`, reactionContent.reaction);
+
+          const computeRemovedReactions = (currentReactions: Message['reactions']) => {
+            return (currentReactions || [])
+              .map((r) => {
+                if (r.emojiId !== reactionContent.reaction) return r;
+                const newMemberIds = r.memberIds.filter((id) => id !== reactionContent.senderId);
+                return newMemberIds.length === 0 ? null : { ...r, count: newMemberIds.length, memberIds: newMemberIds };
+              })
+              .filter((r): r is NonNullable<typeof r> => r !== null);
+          };
+
+          const dmMessagesKey = queryKeys.messages.infinite(senderAddress, senderAddress);
+          queryClient.setQueryData(dmMessagesKey, (old: { pages: { messages: Message[] }[] } | undefined) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                messages: page.messages.map((msg) =>
+                  msg.messageId === reactionContent.messageId
+                    ? { ...msg, reactions: computeRemovedReactions(msg.reactions) }
+                    : msg
+                ),
+              })),
+            };
+          });
+
+          const targetMessage = await storage.getMessage({
+            spaceId: senderAddress,
+            channelId: senderAddress,
+            messageId: reactionContent.messageId,
+          });
+          if (targetMessage) {
+            await storage.saveMessage(
+              { ...targetMessage, reactions: computeRemovedReactions(targetMessage.reactions) },
+              targetMessage.createdDate,
+              senderAddress,
+              'direct',
+              '',
+              ''
+            );
+          }
+          return;
+        }
+
+        if (contentType === 'remove-message') {
+          const removeContent = decryptedMessage.content as { removeMessageId: string };
+          logger.log(`[E2E:${getAddr()}] Removing DM message:`, removeContent.removeMessageId);
+
+          const dmMessagesKey = queryKeys.messages.infinite(senderAddress, senderAddress);
+          queryClient.setQueryData(dmMessagesKey, (old: { pages: { messages: Message[] }[] } | undefined) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                messages: page.messages.filter((msg) => msg.messageId !== removeContent.removeMessageId),
+              })),
+            };
+          });
+
+          await storage.deleteMessage(removeContent.removeMessageId);
+          return;
+        }
+
         // Save conversation to storage (creates new or updates existing)
         const existingConversation = await storage.getConversation(conversationId);
         if (!existingConversation) {
