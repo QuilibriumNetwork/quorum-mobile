@@ -123,6 +123,19 @@ export class MMKVAdapter implements StorageAdapter {
     const data = storage.getString(key);
     const messages: Message[] = data ? JSON.parse(data) : [];
 
+    // Populate replyMetadata for replies (E2E encrypted, so client must do this lookup)
+    const content = message.content as Record<string, unknown> | undefined;
+    if (content?.repliesToMessageId && !message.replyMetadata) {
+      const parentMessage = messages.find((m) => m.messageId === content.repliesToMessageId);
+      const parentContent = parentMessage?.content as Record<string, unknown> | undefined;
+      if (parentContent?.senderId) {
+        message.replyMetadata = {
+          parentAuthor: parentContent.senderId as string,
+          parentChannelId: parentMessage.channelId,
+        };
+      }
+    }
+
     // Update or add message
     const existingIdx = messages.findIndex((m) => m.messageId === message.messageId);
     if (existingIdx >= 0) {
