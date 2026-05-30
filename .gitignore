@@ -44,3 +44,11 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
+
+# build
+modules/quorum-crypto/android/build/
+
+# Local agent tooling (not synced with upstream)
+.agents/
+.claude/
+AGENTS.md
