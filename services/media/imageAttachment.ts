@@ -34,12 +34,22 @@ const IMAGE_CONFIG = {
 };
 
 export interface ProcessedAttachment {
-  /** Base64 data URL */
+  /** Discriminator. Defaults to "image" when missing for backward
+   *  compatibility with callers that only handle images. */
+  kind?: 'image' | 'video';
+  /** Base64 data URL (image only). */
   imageUrl: string;
-  /** Base64 data URL thumbnail (for large images) */
+  /** Base64 data URL thumbnail (for large images). */
   thumbnailUrl?: string;
+  /** Local file URI for the thumbnail (video). Composers render this as
+   *  the preview; the chat encryption paths only use imageUrl, so this
+   *  stays undefined for images. */
+  thumbnailLocalUri?: string;
   width: number;
   height: number;
+  /** Video duration in ms — preserved for the upload service so it can
+   *  validate length limits before kicking off the TUS upload. */
+  durationMs?: number;
   isLargeGif?: boolean;
   mimeType: string;
   localUri: string;
@@ -351,6 +361,82 @@ async function processImageAsset(
 export async function pickImageWithOptions(): Promise<AttachmentPickerResult> {
   // For now, default to library. Could add ActionSheet for source selection
   return pickImage('library');
+}
+
+/**
+ * Pick a video OR an image. Composers that publish to Farcaster need
+ * both (chat surfaces stay image-only because the encryption pipeline
+ * doesn't transport video frames). Videos skip the base64 round-trip —
+ * `imageUrl` is left empty and `localUri` is what the upload service
+ * streams from.
+ */
+export async function pickMedia(
+  source: 'library' | 'camera' = 'library',
+): Promise<AttachmentPickerResult> {
+  try {
+    if (source === 'camera') {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        return { success: false, error: 'Camera permission denied' };
+      }
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        return { success: false, error: 'Photo library permission denied' };
+      }
+    }
+
+    const result = await (source === 'camera'
+      ? ImagePicker.launchCameraAsync({
+          mediaTypes: ['images', 'videos'],
+          quality: IMAGE_CONFIG.quality,
+          base64: false,
+          exif: false,
+        })
+      : ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images', 'videos'],
+          quality: IMAGE_CONFIG.quality,
+          base64: false,
+          exif: false,
+        }));
+
+    if (result.canceled || !result.assets?.[0]) {
+      return { success: false, cancelled: true };
+    }
+
+    const asset = result.assets[0];
+    if (asset.type === 'video') {
+      return {
+        success: true,
+        attachment: {
+          kind: 'video',
+          // Chat doesn't render video, so imageUrl stays empty — the
+          // type contract requires the field, so we leave it as an
+          // empty string. Callers should branch on `kind` before
+          // touching imageUrl.
+          imageUrl: '',
+          thumbnailLocalUri: asset.uri,
+          width: asset.width ?? 0,
+          height: asset.height ?? 0,
+          durationMs: asset.duration ?? undefined,
+          mimeType: asset.mimeType ?? 'video/mp4',
+          localUri: asset.uri,
+        },
+      };
+    }
+
+    // Re-read with base64 for the image processing pipeline.
+    let base64 = asset.base64;
+    if (!base64) {
+      base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' });
+    }
+    return processImageAsset({ ...asset, base64 });
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to pick media',
+    };
+  }
 }
 
 /**

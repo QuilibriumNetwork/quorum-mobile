@@ -11,13 +11,13 @@ import { useTheme, type AppTheme } from '@/theme';
 import { isScamCast } from '@/services/farcaster/scamFilter';
 import React from 'react';
 import {
-  Image,
   Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 
 // Valid Farcaster URL patterns
 const FARCASTER_URL_PATTERNS = [
@@ -219,7 +219,7 @@ export function FarcasterCastCard({ url, cast: providedCast, channelKey, fullWid
         <Image
           source={{ uri: imageUrl }}
           style={styles.image}
-          resizeMode="cover"
+          contentFit="cover"
         />
       )}
 

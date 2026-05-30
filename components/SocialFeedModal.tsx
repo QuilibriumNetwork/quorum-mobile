@@ -1,9 +1,14 @@
-import BrowserModal from '@/components/BrowserModal';
+import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import ComposeChannelPickerModal from '@/components/ComposeChannelPickerModal';
 import { HeaderAvatar } from '@/components/HeaderAvatar';
 import { InviteLinkCard, containsInviteLink } from '@/components/Chat/InviteLinkCard';
 import type { ComposeCastOptions, ComposeCastResult } from '@/services/miniapp';
+import { AudioSpaceEmbed } from '@/components/SocialFeed/content/AudioSpaceEmbed';
+import { LiveSpacesStrip } from '@/components/SocialFeed/content/LiveSpacesStrip';
+import { FarcasterTokenEmbed } from '@/components/SocialFeed/content/FarcasterTokenEmbed';
 import { LikeIcon, getLikeIconType } from '@/components/SocialFeed/content/LikeIcon';
+import { useMiniappManifest } from '@/hooks/useMiniappManifest';
+import { useOgMetadata } from '@/hooks/useOgMetadata';
 import { SnapEmbed, useSnapDetection } from '@/components/SocialFeed/content/SnapEmbed';
 import { ImageViewer } from '@/components/SocialFeed/media/ImageViewer';
 import { extractYouTubeMatchesFromText, YouTubeEmbed, parseYouTubeUrl } from '@/components/SocialFeed/media/YouTubeEmbed';
@@ -33,11 +38,24 @@ import {
 } from '@/hooks/useFarcasterSearch';
 import { parseFarcasterUrl, useFarcasterThread, type FlattenedCast } from '@/hooks/useFarcasterThread';
 import { useFarcasterCastLimits, isLongCast } from '@/hooks/useFarcasterPro';
-import { followUser, likeCast, postFarcasterCast, recastCast, unlikeCast, unrecastCast, uploadImageForCast } from '@/services/farcasterClient';
-import { pickImage, type ProcessedAttachment } from '@/services/media/imageAttachment';
+import { followUser, likeCast, recastCast, unlikeCast, unrecastCast, uploadImageForCast } from '@/services/farcasterClient';
+import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
+import { uploadVideoForCast } from '@/services/farcaster/videoUpload';
+import { pickMedia, type ProcessedAttachment } from '@/services/media/imageAttachment';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
-import type { Channel, Space } from '@quilibrium/quorum-shared';
+import {
+  logger,
+  useFarcasterCast,
+  useFarcasterCastByUrl,
+  useFarcasterChannelByParentUrl,
+  type Channel,
+  type NormalizedCast,
+  type Space,
+} from '@quilibrium/quorum-shared';
+import { useQueryClient } from '@tanstack/react-query';
+import { useFarcasterUserPersistent } from '@/hooks/useFarcasterUserPersistent';
+import { useFarcasterUsersPrefetch } from '@/hooks/useFarcasterUsersPrefetch';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { setAudioModeAsync } from 'expo-audio';
 import { Image as ExpoImage } from 'expo-image';
@@ -45,6 +63,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Animated,
+  BackHandler,
   Dimensions,
   Image,
   Keyboard,
@@ -211,6 +230,32 @@ function formatDuration(ms?: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// Slug-like = no slashes or colons. Hypersnap sometimes sets
+// `channel.id` to the parent_url itself (e.g.
+// `chain://eip155:7777777/erc721:0x…`); if we trust that as the slug
+// we end up rendering the raw URI inline, which both looks broken and
+// overflows the header.
+function slugLikeChannelKey(s: string | null | undefined): s is string {
+  return !!s && !/[\/:]/.test(s);
+}
+
+/** Resolve a renderable channel handle from the raw key/name pair on a
+ *  cast, ignoring chain-URI-shaped keys. Returns null when the cast
+ *  has no channel. */
+function resolveChannelChip(
+  rawKey: string | null | undefined,
+  rawName: string | null | undefined,
+): { key: string; display: string } | null {
+  if (slugLikeChannelKey(rawKey)) {
+    return { key: rawKey, display: rawName ?? rawKey };
+  }
+  if (rawName) {
+    const slug = rawName.toLowerCase().replace(/\s+/g, '-');
+    return { key: slug, display: rawName };
+  }
+  return null;
 }
 
 // Parse cast text and render @mentions and /channels as tappable links
@@ -912,7 +957,7 @@ function VideoPlayer({
   theme
 }: {
   url: string;
-  thumbnailUrl: string;
+  thumbnailUrl?: string;
   width?: number;
   height?: number;
   duration?: number;
@@ -920,6 +965,7 @@ function VideoPlayer({
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const videoRef = useRef<VideoView>(null);
   const aspectRatio = width && height ? height / width : 9 / 16;
   const calculatedHeight = Math.min(SCREEN_WIDTH * aspectRatio, SCREEN_HEIGHT * 0.7);
 
@@ -951,37 +997,68 @@ function VideoPlayer({
     };
   }, [player]);
 
-  const handleTap = () => {
+  // Tap on the play-button overlay → play/pause toggle (or start on
+  // first tap). Kept narrow so it doesn't swallow the rest of the
+  // surface.
+  const handlePlayButtonTap = () => {
     if (!hasStarted) {
-      // First tap - start playing
       setHasStarted(true);
       setIsPlaying(true);
       player.play();
     } else if (isPlaying) {
-      // Tap while playing - pause
       player.pause();
       setIsPlaying(false);
     } else {
-      // Tap while paused - resume
       player.play();
       setIsPlaying(true);
     }
   };
 
+  // Tap anywhere else on the video surface → enter fullscreen. Starts
+  // playback first if needed so the user lands in the immersive view
+  // already playing.
+  const handleSurfaceTap = () => {
+    if (!hasStarted) {
+      setHasStarted(true);
+      setIsPlaying(true);
+      player.play();
+    }
+    // Wait for VideoView to mount on the very first tap before calling
+    // its imperative API.
+    requestAnimationFrame(() => {
+      videoRef.current?.enterFullscreen();
+    });
+  };
+
   return (
-    <Pressable onPress={handleTap} style={{ position: 'relative' }}>
+    <Pressable onPress={handleSurfaceTap} style={{ position: 'relative' }}>
       {!hasStarted ? (
         <>
-          <Image
-            source={{ uri: thumbnailUrl }}
-            style={{
-              width: SCREEN_WIDTH,
-              height: calculatedHeight,
-              backgroundColor: theme.colors.surface3,
-            }}
-            resizeMode="cover"
-          />
-          {/* Play button overlay */}
+          {thumbnailUrl ? (
+            <Image
+              source={{ uri: thumbnailUrl }}
+              style={{
+                width: SCREEN_WIDTH,
+                height: calculatedHeight,
+                backgroundColor: theme.colors.surface3,
+              }}
+              resizeMode="cover"
+            />
+          ) : (
+            // No poster image (typical for hypersnap-bare HLS streams).
+            // Render a flat surface tinted by the theme so the
+            // play-icon overlay still has a backdrop to sit against.
+            <View
+              style={{
+                width: SCREEN_WIDTH,
+                height: calculatedHeight,
+                backgroundColor: theme.colors.surface3,
+              }}
+            />
+          )}
+          {/* Play button overlay — tappable on top of the poster, but
+              the surrounding area falls through to the outer Pressable
+              (which enters fullscreen). */}
           <View
             style={{
               position: 'absolute',
@@ -992,18 +1069,22 @@ function VideoPlayer({
               justifyContent: 'center',
               alignItems: 'center',
             }}
-            pointerEvents="none"
+            pointerEvents="box-none"
           >
-            <View style={{
-              width: 60,
-              height: 60,
-              borderRadius: 30,
-              backgroundColor: 'rgba(0, 0, 0, 0.6)',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
+            <Pressable
+              onPress={handlePlayButtonTap}
+              hitSlop={12}
+              style={{
+                width: 60,
+                height: 60,
+                borderRadius: 30,
+                backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
               <IconSymbol name="play.fill" color="#fff" size={28} />
-            </View>
+            </Pressable>
           </View>
           {/* Duration badge */}
           {duration && duration > 0 && (
@@ -1025,6 +1106,7 @@ function VideoPlayer({
       ) : (
         <>
           <VideoView
+            ref={videoRef}
             player={player}
             style={{
               width: SCREEN_WIDTH,
@@ -1033,8 +1115,10 @@ function VideoPlayer({
             }}
             contentFit="contain"
             nativeControls={false}
+            allowsFullscreen
           />
-          {/* Pause indicator overlay - shown when paused */}
+          {/* Pause indicator — tappable to resume; surrounding area
+              still routes to handleSurfaceTap (enter fullscreen). */}
           {!isPlaying && (
             <View
               style={{
@@ -1046,18 +1130,22 @@ function VideoPlayer({
                 justifyContent: 'center',
                 alignItems: 'center',
               }}
-              pointerEvents="none"
+              pointerEvents="box-none"
             >
-              <View style={{
-                width: 60,
-                height: 60,
-                borderRadius: 30,
-                backgroundColor: 'rgba(0, 0, 0, 0.6)',
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}>
+              <Pressable
+                onPress={handlePlayButtonTap}
+                hitSlop={12}
+                style={{
+                  width: 60,
+                  height: 60,
+                  borderRadius: 30,
+                  backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
                 <IconSymbol name="play.fill" color="#fff" size={28} />
-              </View>
+              </Pressable>
             </View>
           )}
         </>
@@ -1085,11 +1173,43 @@ function LinkPreview({
   theme: AppTheme;
   onPress?: () => void;
 }) {
-  if (!title) return null;
-
   const handlePress = () => {
     onPress?.();
   };
+
+  // No OG enrichment (typical for hypersnap-sourced casts): render a bare
+  // link chip so the URL is still visible + tappable. The user can open
+  // it; the embed isn't lost just because the link's host didn't expose
+  // OG metadata.
+  if (!title && url) {
+    return (
+      <TouchableOpacity
+        style={{
+          backgroundColor: theme.colors.surface2,
+          borderRadius: 12,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          marginHorizontal: 12,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+        }}
+        onPress={handlePress}
+        activeOpacity={0.8}
+      >
+        <IconSymbol name="link" color={theme.colors.textMuted} size={14} />
+        <Text
+          style={{ color: theme.colors.textStrong, fontSize: 13, flex: 1 }}
+          numberOfLines={1}
+          ellipsizeMode="middle"
+        >
+          {domain || url}
+        </Text>
+        <IconSymbol name="arrow.up.right" color={theme.colors.textMuted} size={12} />
+      </TouchableOpacity>
+    );
+  }
+  if (!title) return null;
 
   if (useLargeImage && image) {
     return (
@@ -1206,6 +1326,271 @@ function LinkPreview({
 }
 
 /**
+ * Recognize known channel URI shapes:
+ *  - https://warpcast.com/~/channel/<slug>
+ *  - https://farcaster.xyz/~/channel/<slug>
+ *  - https://farcaster.group/<slug>           (alternative channels host)
+ *  - chain://eip155:<chainId>/erc721:<contractAddress>  (Zora/Optimism)
+ * Anything starting with chain:// is treated as a channel URI; final
+ * disambiguation happens via the hypersnap channel lookup.
+ */
+// Capture-group 1 is the channel slug. Each alternation handles one host.
+const CHANNEL_URL_RE =
+  /(?:(?:farcaster|warpcast)\.(?:xyz|com)\/~\/channel\/|farcaster\.group\/)([^\/\?#]+)/;
+
+/**
+ * Recognize `https://farcaster.xyz/~/c/<chain>:<contract>` token references.
+ * Capture group 1 is the chain slug (e.g. "base"), group 2 is the 0x-prefixed
+ * contract address. The host check is anchored to avoid false positives on
+ * anything else under the `/~/c/` namespace.
+ */
+const TOKEN_URL_RE =
+  /farcaster\.xyz\/~\/c\/([a-z]+):(0x[a-fA-F0-9]+)/i;
+
+function parseFarcasterTokenUrl(url: string | undefined): { chain: string; contractAddress: string } | null {
+  if (!url) return null;
+  const m = url.match(TOKEN_URL_RE);
+  if (!m) return null;
+  return { chain: m[1].toLowerCase(), contractAddress: m[2].toLowerCase() };
+}
+
+/** Recognize `https://farcaster.xyz/~/spaces/<uuid>` audio-space URLs. */
+const SPACE_URL_RE =
+  /^https?:\/\/(?:www\.)?farcaster\.xyz\/~\/spaces\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
+
+function parseFarcasterSpaceUrl(url: string | undefined): { id: string } | null {
+  if (!url) return null;
+  const m = url.match(SPACE_URL_RE);
+  return m ? { id: m[1].toLowerCase() } : null;
+}
+
+function looksLikeChannelUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  if (url.startsWith('chain://')) return true;
+  return CHANNEL_URL_RE.test(url);
+}
+
+function extractChannelSlugFromUrl(url: string | undefined): string | null {
+  if (!url) return null;
+  const m = url.match(CHANNEL_URL_RE);
+  return m ? m[1] : null;
+}
+
+/**
+ * Renders the channel badge next to a cast's author name. Source order:
+ *  1. explicit channel slug from the cast payload (`post.channel`)
+ *  2. /~/channel/<slug> path extraction from a parentUrl
+ *  3. hypersnap channel lookup keyed by the raw parentUrl — required for
+ *     `chain://eip155:.../erc721:...` URIs that don't carry a slug
+ * Falls back to nothing if the URI doesn't resolve.
+ */
+function ChannelBadge({
+  channelSlug,
+  parentUrl,
+  theme,
+  onOpenChannel,
+}: {
+  channelSlug?: string;
+  parentUrl?: string;
+  theme: AppTheme;
+  onOpenChannel: (channelKey: string) => void;
+}) {
+  // Hypersnap sometimes returns the raw `parent_url` (e.g.
+  // `chain://eip155:7777777/erc721:0x…`) as the "channel id". A
+  // slug-shaped string has no slashes or colons; anything else is a
+  // URI we should attempt to resolve, not render verbatim.
+  const slugIsUsable = slugLikeChannelKey(channelSlug);
+  const slugFromUrl = slugIsUsable ? null : extractChannelSlugFromUrl(parentUrl);
+  // If the slug itself is a chain URI, use IT as the resolve key.
+  // Otherwise, only resolve from `parentUrl` when it's a chain URI.
+  const resolveTarget = !slugIsUsable && channelSlug && /^chain:\/\//.test(channelSlug)
+    ? channelSlug
+    : !slugIsUsable && !slugFromUrl && parentUrl?.startsWith('chain://')
+      ? parentUrl
+      : undefined;
+  const { data: resolved } = useFarcasterChannelByParentUrl(
+    resolveTarget,
+    { enabled: Boolean(resolveTarget), gcTime: Infinity },
+  );
+  const finalKey = (slugIsUsable ? channelSlug : null) ?? slugFromUrl ?? resolved?.key;
+  const finalName = (slugIsUsable ? channelSlug : null) ?? slugFromUrl ?? resolved?.name;
+  // Omit entirely when we can't surface a clean slug — chain URIs
+  // that don't resolve shouldn't leak into the header.
+  if (!finalKey || !slugLikeChannelKey(finalKey)) return null;
+  return (
+    <TouchableOpacity onPress={() => onOpenChannel(finalKey)}>
+      <Text
+        style={{ color: theme.colors.accent, fontSize: 13 }}
+        numberOfLines={1}
+      >
+        /{finalName ?? finalKey}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+/**
+ * Renders the context line above a cast body. Three cases:
+ *  1. parentUrl points at an off-Farcaster URL → "↳ replying to <hostname>"
+ *  2. parentAuthor is set → "↳ replying to @username" (resolves FID via hook)
+ *  3. only parentHash is known → mini preview of the parent cast, with
+ *     graceful "↳ in thread" fallback while it loads or if the lookup fails
+ *
+ * Channel parentUrls (warpcast/farcaster.xyz/~/channel and chain:// URIs)
+ * are deliberately suppressed here since they're already rendered as the
+ * channel badge in the header row.
+ */
+function ParentContextLine({
+  cast,
+  theme,
+  onNavigateToThread,
+}: {
+  cast: { parentUrl?: string; parentHash?: string; parentAuthor?: { fid: number; username?: string } };
+  theme: AppTheme;
+  /** When provided, the mini parent-cast preview becomes tappable and
+   *  navigates into the parent's thread. The outer card's press handler
+   *  shouldn't fire concurrently — Pressable's touch capture wins for
+   *  touches inside the inner pressable. */
+  onNavigateToThread?: (username: string, hash: string, focusReply?: boolean, placeholderCast?: unknown) => void;
+}) {
+  const isChannelUrl = looksLikeChannelUrl(cast.parentUrl);
+  const showUrlContext = !!cast.parentUrl && !isChannelUrl;
+  // Any reply where we know the parent author's FID gets the rich mini-cast
+  // preview, not just the bare "replying to @user" line.
+  const parentFid = cast.parentAuthor?.fid;
+  const canFetchMiniCast =
+    !showUrlContext && !!cast.parentHash && Number.isFinite(parentFid) && (parentFid as number) > 0;
+  // "Replying to user" text is the fallback: we know it's a reply but
+  // can't fetch the parent cast (e.g. parentAuthor known but no parentHash,
+  // or the cast lookup hasn't resolved yet).
+  const showUserContext = !showUrlContext && !canFetchMiniCast && !!cast.parentAuthor;
+  // Pure-hash thread reference (no author info, no URL) — last-resort label.
+  const showGenericReply =
+    !showUrlContext && !canFetchMiniCast && !showUserContext && !!cast.parentHash;
+
+  const enableUser =
+    (showUserContext || (canFetchMiniCast && !cast.parentAuthor?.username)) && !!parentFid;
+  const { data: resolvedParent } = useFarcasterUserPersistent(
+    enableUser ? parentFid : undefined,
+    { enabled: enableUser },
+  );
+
+  const { data: parentCast } = useFarcasterCast(
+    canFetchMiniCast ? cast.parentHash : undefined,
+    canFetchMiniCast ? parentFid : undefined,
+    { enabled: canFetchMiniCast, gcTime: Infinity },
+  );
+
+  if (!showUrlContext && !showUserContext && !canFetchMiniCast && !showGenericReply) return null;
+
+  // The mini preview is the richest representation; render it the moment
+  // we have parentCast data, even if the older "showUserContext" branch
+  // would have been chosen by the truth-table.
+  if (parentCast) {
+    const handle = parentCast.author.username
+      ? `@${parentCast.author.username}`
+      : `fid:${parentCast.author.fid}`;
+    // First image embed in the parent cast — either a classified image
+    // (hypersnap-classified by host/extension) or a raw URL that ends in
+    // an image extension. Same fallback chain QuoteCast uses.
+    const previewImage =
+      parentCast.embeds.find((e) => e.image?.url)?.image?.url
+      ?? parentCast.embeds.find(
+        (e) => e.url && /\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(e.url),
+      )?.url;
+    const Wrapper: React.ComponentType<React.ComponentProps<typeof View>> = onNavigateToThread
+      ? (props) => (
+          <Pressable
+            onPress={() =>
+              onNavigateToThread(
+                parentCast.author.username ?? '',
+                parentCast.hash,
+                false,
+              )
+            }
+          >
+            <View {...props} />
+          </Pressable>
+        )
+      : View;
+    return (
+      <Wrapper
+        style={{
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: theme.colors.surface3,
+          backgroundColor: theme.colors.surface1,
+          overflow: 'hidden',
+        }}
+      >
+        <View style={{ padding: 8, gap: 2 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <IconSymbol name="arrowshape.turn.up.left" color={theme.colors.textMuted} size={12} />
+            <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
+              replying to <Text style={{ color: theme.colors.accent }}>{handle}</Text>
+            </Text>
+          </View>
+          {parentCast.text.trim().length > 0 && (
+            <Text
+              style={{ color: theme.colors.textMain, fontSize: 13, lineHeight: 18 }}
+              numberOfLines={3}
+            >
+              {parentCast.text}
+            </Text>
+          )}
+        </View>
+        {previewImage && (
+          <Image
+            source={{ uri: previewImage }}
+            style={{ width: '100%', height: 120, backgroundColor: theme.colors.surface3 }}
+            resizeMode="cover"
+          />
+        )}
+      </Wrapper>
+    );
+  }
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
+      <IconSymbol
+        name={showUrlContext ? 'link' : 'arrowshape.turn.up.left'}
+        color={theme.colors.textMuted}
+        size={14}
+        style={{ marginTop: 2 }}
+      />
+      {showUrlContext ? (
+        <Text style={{ color: theme.colors.textMuted, fontSize: 13, flex: 1 }} numberOfLines={1}>
+          replying to{' '}
+          <Text style={{ color: theme.colors.accent }}>
+            {(() => {
+              try {
+                return new URL(cast.parentUrl!).hostname.replace('www.', '');
+              } catch {
+                return cast.parentUrl;
+              }
+            })()}
+          </Text>
+        </Text>
+      ) : (
+        // showUserContext, mini-preview-still-loading, or showGenericReply
+        <Text style={{ color: theme.colors.textMuted, fontSize: 13, flex: 1 }}>
+          replying to{' '}
+          <Text style={{ color: theme.colors.accent }}>
+            {cast.parentAuthor?.username
+              ? `@${cast.parentAuthor.username}`
+              : resolvedParent?.username
+                ? `@${resolvedParent.username}`
+                : parentFid
+                  ? `fid:${parentFid}`
+                  : 'cast'}
+          </Text>
+        </Text>
+      )}
+    </View>
+  );
+}
+
+/**
  * Wraps a URL embed: probes for snap support and renders SnapEmbed if detected,
  * otherwise falls back to the regular LinkPreview.
  */
@@ -1286,6 +1671,105 @@ function SnapAwareUrlPreview({
   }
 
   return (
+    <MiniappAwareLinkPreview
+      url={url}
+      title={title}
+      description={description}
+      domain={domain}
+      image={image}
+      useLargeImage={useLargeImage}
+      theme={theme}
+      onPress={onPress}
+      onOpenMiniApp={onOpenMiniApp}
+    />
+  );
+}
+
+/**
+ * Wraps `LinkPreview` with a `.well-known/farcaster.json` probe so
+ * hypersnap-sourced embeds (which arrive without OG enrichment) still
+ * render as miniapp cards when the host publishes a manifest. While the
+ * probe is in flight we render the regular link preview — it's already a
+ * reasonable fallback. On success we swap to a frame-style launch card.
+ *
+ * Skipped for URLs that already came with OG/title from a legacy or
+ * cached upstream — those don't benefit from the network round-trip and
+ * the title is usually a better signal than the manifest name anyway.
+ */
+function MiniappAwareLinkPreview({
+  url,
+  title,
+  description,
+  domain,
+  image,
+  useLargeImage,
+  theme,
+  onPress,
+  onOpenMiniApp,
+}: {
+  url?: string;
+  title?: string;
+  description?: string;
+  domain?: string;
+  image?: string;
+  useLargeImage?: boolean;
+  theme: AppTheme;
+  onPress?: () => void;
+  onOpenMiniApp?: (url: string) => void;
+}) {
+  // Probe only when we lack OG enrichment — saves a hit per cell for
+  // already-enriched legacy embeds.
+  const shouldProbe = Boolean(url) && !title;
+  const { data: manifest } = useMiniappManifest(url, { enabled: shouldProbe });
+  // Page-level OG / inline-miniapp scrape, only when the manifest
+  // didn't resolve. Runs sequentially with the manifest probe so we
+  // don't issue both requests for the same URL.
+  const ogEnabled = shouldProbe && !manifest;
+  const { data: og } = useOgMetadata(url, { enabled: ogEnabled });
+
+  // Self-hosted manifest wins — strongest signal.
+  if (manifest) {
+    return (
+      <FrameEmbed
+        imageUrl={manifest.imageUrl ?? manifest.iconUrl}
+        buttonTitle={manifest.buttonTitle ?? 'Open'}
+        actionUrl={manifest.homeUrl}
+        theme={theme}
+        onPress={() => onOpenMiniApp?.(manifest.homeUrl)}
+      />
+    );
+  }
+  // Inline fc:miniapp / fc:frame meta tag (the page itself ships the
+  // launch metadata, but no .well-known manifest).
+  if (og?.miniapp?.homeUrl) {
+    const m = og.miniapp;
+    return (
+      <FrameEmbed
+        imageUrl={m.imageUrl ?? m.iconUrl ?? og.image ?? ''}
+        buttonTitle={m.buttonTitle ?? 'Open'}
+        actionUrl={m.homeUrl}
+        theme={theme}
+        onPress={() => onOpenMiniApp?.(m.homeUrl!)}
+      />
+    );
+  }
+  // Page-scraped OG enriches a plain link card.
+  if (og?.title) {
+    return (
+      <LinkPreview
+        url={url}
+        title={og.title}
+        description={og.description ?? description}
+        domain={og.siteName ?? og.domain ?? domain}
+        image={og.image ?? image}
+        useLargeImage={useLargeImage}
+        theme={theme}
+        onPress={onPress}
+      />
+    );
+  }
+
+  return (
     <LinkPreview
       url={url}
       title={title}
@@ -1340,7 +1824,56 @@ function QuoteCast({
   theme: AppTheme;
   onPress?: () => void;
 }) {
-  const hasImage = cast.embeds?.images && cast.embeds.images.length > 0;
+  // Hypersnap quote-cast embeds arrive as bare { fid, hash } stubs — no
+  // author/text/image data inline. When we see an empty stub, lazily
+  // fetch the real cast and render those fields instead. Cached with
+  // gcTime: Infinity so a quoted cast we've seen once stays warm.
+  const isStub =
+    !cast.author?.username &&
+    !cast.author?.displayName &&
+    (!cast.text || cast.text.trim().length === 0);
+  const enableResolve = isStub && Boolean(cast.hash) && Boolean(cast.author?.fid);
+  const { data: resolvedCast } = useFarcasterCast(
+    enableResolve ? cast.hash : undefined,
+    enableResolve ? cast.author!.fid : undefined,
+    { enabled: enableResolve, gcTime: Infinity },
+  );
+
+  const displayName = cast.author?.displayName || resolvedCast?.author.displayName || '';
+  const username = cast.author?.username || resolvedCast?.author.username || '';
+  const pfpUrl = cast.author?.pfp?.url || resolvedCast?.author.pfpUrl;
+  const text = cast.text || resolvedCast?.text || '';
+  const inlineImage = cast.embeds?.images?.[0]?.url;
+  const resolvedImage =
+    resolvedCast?.embeds.find((e) => e.image?.url)?.image?.url
+    ?? resolvedCast?.embeds.find((e) => e.url && /\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(e.url))?.url;
+  const previewImage = inlineImage || resolvedImage;
+  const hasImage = Boolean(previewImage);
+
+  // While the lookup is still in flight, render a minimal loading skeleton
+  // rather than a blank card so the user knows there's something here.
+  if (isStub && !resolvedCast) {
+    return (
+      <View
+        style={{
+          backgroundColor: theme.colors.surface2,
+          borderRadius: 12,
+          padding: 12,
+          marginHorizontal: 12,
+          borderWidth: 1,
+          borderColor: theme.colors.surface3,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <ActivityIndicator size="small" color={theme.colors.textMuted} />
+        <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>
+          Loading quoted cast…
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <TouchableOpacity
@@ -1359,7 +1892,7 @@ function QuoteCast({
         {/* Author row */}
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
           <CachedAvatar
-            source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
+            source={pfpUrl ? { uri: pfpUrl } : null}
             style={{
               width: 24,
               height: 24,
@@ -1369,28 +1902,32 @@ function QuoteCast({
             }}
           />
           <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: 14 }}>
-            {cast.author.displayName}
+            {displayName}
           </Text>
-          <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginLeft: 4 }}>
-            @{cast.author.username}
-          </Text>
+          {username && (
+            <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginLeft: 4 }}>
+              @{username}
+            </Text>
+          )}
         </View>
         {/* Cast text */}
-        <Text
-          style={{
-            color: theme.colors.textMain,
-            fontSize: 14,
-            lineHeight: 20,
-          }}
-          numberOfLines={4}
-        >
-          {cast.text}
-        </Text>
+        {text.length > 0 && (
+          <Text
+            style={{
+              color: theme.colors.textMain,
+              fontSize: 14,
+              lineHeight: 20,
+            }}
+            numberOfLines={4}
+          >
+            {text}
+          </Text>
+        )}
       </View>
       {/* Image preview */}
-      {hasImage && cast.embeds?.images?.[0]?.url && (
+      {hasImage && previewImage && (
         <Image
-          source={{ uri: cast.embeds.images[0].url }}
+          source={{ uri: previewImage }}
           style={{
             width: '100%',
             height: 150,
@@ -1398,6 +1935,110 @@ function QuoteCast({
           }}
           resizeMode="cover"
         />
+      )}
+    </TouchableOpacity>
+  );
+}
+
+/**
+ * Render a `https://farcaster.xyz/<username>/0x<prefix>` link inline as a
+ * quote-cast card. The Farcaster client treats these URLs as cast embeds
+ * even when the protocol-level cast.embeds.casts list omits them, so we
+ * lazily resolve the cast by (username, prefix) via legacy thread API and
+ * render it through the same `QuoteCast` component used for native quote
+ * embeds. While the lookup is in flight we show the QuoteCast loading
+ * skeleton (matches isStub branch). On a failed/empty lookup we fall back
+ * to a minimal "View cast" link card so the link is still actionable.
+ */
+function FarcasterCastUrlEmbed({
+  username,
+  castHashPrefix,
+  fallbackTitle,
+  fallbackDescription,
+  theme,
+  onPress,
+}: {
+  username: string;
+  castHashPrefix: string;
+  fallbackTitle?: string;
+  fallbackDescription?: string;
+  theme: AppTheme;
+  onPress: () => void;
+}) {
+  const { data: cast, isLoading } = useFarcasterCastByUrl(username, castHashPrefix);
+
+  if (cast) {
+    const embedded: EmbeddedCast = {
+      hash: cast.hash,
+      author: {
+        fid: cast.author.fid,
+        displayName: cast.author.displayName,
+        username: cast.author.username,
+        pfp: cast.author.pfpUrl ? { url: cast.author.pfpUrl } : undefined,
+      },
+      text: cast.text,
+      timestamp: cast.timestamp,
+      embeds: {
+        images: cast.embeds
+          .filter((e) => e.image?.url)
+          .map((e) => ({ url: e.image!.url!, alt: e.image!.alt })),
+        videos: cast.embeds
+          .filter((e) => e.video?.url)
+          .map((e) => ({ url: e.video!.url, thumbnailUrl: e.video!.thumbnailUrl })),
+      },
+      replies: { count: cast.reactions.repliesCount },
+      reactions: { count: cast.reactions.likesCount },
+    };
+    return <QuoteCast cast={embedded} theme={theme} onPress={onPress} />;
+  }
+
+  if (isLoading) {
+    return (
+      <View
+        style={{
+          backgroundColor: theme.colors.surface2,
+          borderRadius: 12,
+          padding: 12,
+          marginHorizontal: 12,
+          borderWidth: 1,
+          borderColor: theme.colors.surface3,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <ActivityIndicator size="small" color={theme.colors.textMuted} />
+        <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>
+          Loading quoted cast…
+        </Text>
+      </View>
+    );
+  }
+
+  // Resolution failed — render a minimal link card so the URL is still
+  // tappable (e.g., when the cast has been deleted server-side).
+  return (
+    <TouchableOpacity
+      style={{
+        backgroundColor: theme.colors.surface2,
+        borderRadius: 12,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: theme.colors.surface3,
+      }}
+      onPress={onPress}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <IconSymbol name="bubble.left.and.bubble.right" color={theme.colors.accent} size={16} />
+        <Text style={{ color: theme.colors.textStrong, fontWeight: '600', flex: 1 }} numberOfLines={1}>
+          {fallbackTitle || 'View cast'}
+        </Text>
+        <IconSymbol name="chevron.right" color={theme.colors.textMuted} size={14} />
+      </View>
+      {fallbackDescription && (
+        <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 4 }} numberOfLines={2}>
+          {fallbackDescription}
+        </Text>
       )}
     </TouchableOpacity>
   );
@@ -1520,6 +2161,7 @@ function ThreadDetailView({
     castHashPrefix,
     token,
   });
+  const { submitCast: submitReplyCast } = useFarcasterSubmitCast({ token });
   // Use the fetched cast once it arrives; fall back to the placeholder
   // for the loading window. Cast shapes from FeedPostCard / search /
   // channel are structurally compatible enough that the renderer below
@@ -1626,7 +2268,7 @@ function ThreadDetailView({
       setReplyError('Maximum 2 images per reply');
       return;
     }
-    const result = await pickImage('library');
+    const result = await pickMedia('library');
     if (result.success && result.attachment) {
       setReplyImages(prev => [...prev, result.attachment!]);
       setReplyError(null);
@@ -1646,30 +2288,39 @@ function ThreadDetailView({
       setIsPosting(true);
       setReplyError(null);
 
-      // Build embeds array as simple URL strings (API expects string[])
+      // Build embeds array as simple URL strings — videos go through TUS
+      // upload, images through the existing direct upload.
       const embeds: string[] = [];
-      for (const image of replyImages) {
+      for (const a of replyImages) {
         try {
-          const uploaded = await uploadImageForCast(token!, image.localUri, image.mimeType);
-          embeds.push(uploaded.url);
+          if (a.kind === 'video') {
+            const v = await uploadVideoForCast(token!, a.localUri);
+            embeds.push(v.url);
+          } else {
+            const uploaded = await uploadImageForCast(token!, a.localUri, a.mimeType);
+            embeds.push(uploaded.url);
+          }
         } catch (uploadErr: any) {
-          setReplyError(`Failed to upload image: ${uploadErr?.message ?? 'Unknown error'}`);
+          setReplyError(`Failed to upload attachment: ${uploadErr?.message ?? 'Unknown error'}`);
           setIsPosting(false);
           return;
         }
       }
 
-      await postFarcasterCast({
-        token: token!,
+      await submitReplyCast({
         text: replyText.trim(),
-        parentHash: mainCast.hash,
-        embeds,
+        embedUrls: embeds,
+        parent: { castHashHex: mainCast.hash, fid: mainCast.author.fid },
       });
       setReplyText('');
       setReplyImages([]); // Clear images after posting
       // Refetch to show the new reply
       await refetch();
     } catch (err: unknown) {
+      logger.warn(
+        '[SocialFeedModal] reply submit threw:',
+        err instanceof Error ? err.message : String(err),
+      );
       setReplyError(err instanceof Error ? err.message : 'Failed to post reply');
     } finally {
       setIsPosting(false);
@@ -1699,7 +2350,20 @@ function ThreadDetailView({
   // Image viewer state
   const [viewerState, setViewerState] = useState<{ images: string[]; index: number } | null>(null);
 
-  const renderCast = (cast: FlattenedCast, isMain = false) => {
+  // Channel URLs we never want to surface as a reply context — they're
+  // already rendered as the channel badge in the header row.
+  const isChannelParentUrl = (url: string | undefined) => looksLikeChannelUrl(url);
+
+  // True when mainCast's immediate parent is the cast directly above it
+  // in `parentCasts` — i.e., the parent chain we render up-screen already
+  // contains the reply target, so the ParentContextLine mini-preview
+  // would be a duplicate.
+  const mainParentHash = (mainCast as { parentHash?: string } | undefined)?.parentHash?.toLowerCase();
+  const parentInChain =
+    !!mainParentHash &&
+    parentCasts.some((p) => p.hash.toLowerCase() === mainParentHash);
+
+  const renderCast = (cast: FlattenedCast, isMain = false, showBackArrow = false) => {
     // Defensive: a malformed cast (typically a placeholder passed in
     // from a surface whose shape differs from the thread API) used to
     // crash here at `cast.author.fid`. Render nothing instead of
@@ -1709,7 +2373,11 @@ function ThreadDetailView({
       .map((img) => img.url)
       .filter((url): url is string => Boolean(url));
     const hasImages = imageUrls.length > 0;
-    const videos = (cast.embeds?.videos ?? []).filter((v) => v.url && v.thumbnailUrl);
+    // Some sources (hypersnap-bare URLs, m3u8 streams) ship a video
+    // URL with no thumbnail. VideoPlayer renders a black poster +
+    // play-icon overlay in that case, which is better than dropping
+    // the embed entirely.
+    const videos = (cast.embeds?.videos ?? []).filter((v) => Boolean(v.url));
     const hasVideos = videos.length > 0;
 
     // Each URL embed renders exactly once — SnapAwareUrlPreview decides between
@@ -1731,7 +2399,9 @@ function ThreadDetailView({
           }
         }
         if (containsInviteLink(url)) return true;
-        return u.openGraph?.title;
+        // Keep bare URLs — hypersnap doesn't enrich with OG, but
+        // SnapAwareUrlPreview can still render the link.
+        return Boolean(url);
       });
 
     const isNested = cast.depth > 0;
@@ -1754,7 +2424,7 @@ function ThreadDetailView({
       >
         {/* Header row */}
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {isMain && (
+          {showBackArrow && (
             <TouchableOpacity
               onPress={onClose}
               style={{ marginRight: 12 }}
@@ -1803,20 +2473,12 @@ function ThreadDetailView({
           </View>
           <View style={{ flex: 1 }}>
             {(() => {
-              // Extract channel from cast.channel, channelContext (from root-embed), or from parentUrl if it's a channel URL
-              // Note: The API may return 'name' (display name like "Music") but not 'key' (identifier like "music")
-              // We lowercase as a fallback since channel identifiers are typically lowercase
-              const channelKey = cast.channel?.key || (cast.channel?.name ? cast.channel.name.toLowerCase().replace(/\s+/g, '-') : null);
-              const channelDisplayName = cast.channel?.name || cast.channel?.key;
+              const chip = resolveChannelChip(cast.channel?.key, cast.channel?.name);
+              const channelKey = chip?.key ?? null;
+              const channelDisplayName = chip?.display ?? null;
               const channelName = channelKey ||
                 (isMain && channelContext ? (channelContext.key || (channelContext.name ? channelContext.name.toLowerCase().replace(/\s+/g, '-') : null)) : null) ||
-                (() => {
-                  if (cast.parentUrl) {
-                    const channelMatch = cast.parentUrl.match(/(?:farcaster|warpcast)\.(?:xyz|com)\/~\/channel\/([^\/\?]+)/);
-                    if (channelMatch) return channelMatch[1];
-                  }
-                  return null;
-                })();
+                extractChannelSlugFromUrl(cast.parentUrl);
 
               return (
                 <>
@@ -1826,12 +2488,24 @@ function ThreadDetailView({
                         {cast.author.displayName}
                       </Text>
                     </TouchableOpacity>
-                    {channelName && (
+                    {channelName ? (
                       <TouchableOpacity onPress={() => onOpenChannel(channelName)}>
                         <Text style={{ color: theme.colors.accent, fontSize: 13 }}>
                           /{channelDisplayName || channelName}
                         </Text>
                       </TouchableOpacity>
+                    ) : (
+                      // Last-ditch resolution for chain://-based channels
+                      // when hypersnap didn't return channel name/key —
+                      // ChannelBadge has the lookup hook + caches
+                      // results, and renders nothing if even the lookup
+                      // fails (better than the raw URI).
+                      <ChannelBadge
+                        channelSlug={undefined}
+                        parentUrl={cast.parentUrl}
+                        theme={theme}
+                        onOpenChannel={onOpenChannel}
+                      />
                     )}
                   </View>
                   <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 2 }}>
@@ -1843,43 +2517,19 @@ function ThreadDetailView({
           </View>
         </View>
 
-        {/* Parent context - URL (non-channel) or reply to user */}
-        {isMain && (() => {
-          // Check if parentUrl is a channel URL - if so, don't show as reply context
-          const isChannelUrl = cast.parentUrl?.match(/(?:farcaster|warpcast)\.(?:xyz|com)\/~\/channel\//);
-          const showUrlContext = cast.parentUrl && !isChannelUrl;
-          const showUserContext = cast.parentAuthor && !cast.parentUrl;
-
-          if (!showUrlContext && !showUserContext) return null;
-
-          return (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <IconSymbol
-                name={showUrlContext ? 'link' : 'arrowshape.turn.up.left'}
-                color={theme.colors.textMuted}
-                size={14}
-              />
-              {showUrlContext ? (
-                <Text style={{ color: theme.colors.textMuted, fontSize: 13 }} numberOfLines={1}>
-                  replying to{' '}
-                  <Text style={{ color: theme.colors.accent }}>
-                    {(() => {
-                      try {
-                        return new URL(cast.parentUrl!).hostname.replace('www.', '');
-                      } catch {
-                        return cast.parentUrl;
-                      }
-                    })()}
-                  </Text>
-                </Text>
-              ) : (
-                <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>
-                  replying to <Text style={{ color: theme.colors.accent }}>@{cast.parentAuthor!.username}</Text>
-                </Text>
-              )}
-            </View>
-          );
-        })()}
+        {/* Parent context - URL (non-channel), reply to user, or generic
+            reply when only a parent hash is known. Suppress when the
+            parent is already rendered above in the parent chain — the
+            mini preview would just duplicate the cast already visible. */}
+        {isMain && !parentInChain && (
+          <ParentContextLine
+            cast={cast}
+            theme={theme}
+            onNavigateToThread={(username, hash, focusReply, placeholder) =>
+              onOpenThread(username, hash, placeholder)
+            }
+          />
+        )}
 
         {/* Content */}
         {cast.text.trim().length > 0 && (
@@ -1960,6 +2610,44 @@ function ThreadDetailView({
                   />
                 );
               }
+              const spaceRef = parseFarcasterSpaceUrl(linkUrl);
+              if (spaceRef) {
+                return (
+                  <AudioSpaceEmbed
+                    key={index}
+                    spaceId={spaceRef.id}
+                    castHash={cast.hash}
+                    onFallbackOpen={() => linkUrl && onOpenMiniApp(linkUrl)}
+                  />
+                );
+              }
+              const tokenRef = parseFarcasterTokenUrl(linkUrl);
+              if (tokenRef) {
+                return (
+                  <FarcasterTokenEmbed
+                    key={index}
+                    chain={tokenRef.chain}
+                    contractAddress={tokenRef.contractAddress}
+                    theme={theme}
+                  />
+                );
+              }
+              const parsedFc = linkUrl && linkUrl.includes('farcaster.xyz/')
+                ? parseFarcasterUrl(linkUrl)
+                : null;
+              if (parsedFc) {
+                return (
+                  <FarcasterCastUrlEmbed
+                    key={index}
+                    username={parsedFc.username}
+                    castHashPrefix={parsedFc.castHashPrefix}
+                    fallbackTitle={urlEmbed.openGraph?.title}
+                    fallbackDescription={urlEmbed.openGraph?.description}
+                    theme={theme}
+                    onPress={() => onOpenThread(parsedFc.username, parsedFc.castHashPrefix)}
+                  />
+                );
+              }
               return (
                 <SnapAwareUrlPreview
                   key={index}
@@ -2001,7 +2689,7 @@ function ThreadDetailView({
                 key={index}
                 cast={embeddedCast as EmbeddedCast}
                 theme={theme}
-                onPress={() => onOpenThread(embeddedCast.author.username, embeddedCast.hash.slice(0, 10), embeddedCast)}
+                onPress={() => onOpenThread(embeddedCast.author.username, embeddedCast.hash, embeddedCast)}
               />
             ))}
           </View>
@@ -2076,7 +2764,13 @@ function ThreadDetailView({
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      // Android Modal contexts ignore `adjustResize` from the
+      // manifest and default to `adjustNothing`, so `behavior:
+      // undefined` left the reply composer hidden behind the
+      // keyboard. `height` is the correct Android counterpart to
+      // iOS `padding` for this layout — both keep the bottom of the
+      // KAV pinned to the keyboard top edge.
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? (8 + 32 + Math.max(8, bottomInset)) : 0}
     >
     <View style={{ flex: 1, backgroundColor: theme.colors.surface1 }}>
@@ -2106,13 +2800,30 @@ function ThreadDetailView({
         >
           {/* Parent chain — when entering from a reply notification we
               land on the reply itself; the parent casts above give the
-              conversation context. See useFarcasterThread comments. */}
+              conversation context. The back arrow goes on the topmost
+              visible cast (parentCasts[0] when present, otherwise
+              mainCast) so it sits at the top of the screen rather than
+              mid-content. */}
+          {/* Cumulative-depth indent: each cast's left-border thickness
+              reflects its distance from the topmost cast in view, so a
+              reply-to-a-reply visually steps inward regardless of which
+              cast in the chain the user focused on. organizeReplies
+              returns reply depths relative to mainCast (0 = direct
+              child); we shift by `parentCasts.length + 1` so the
+              indent runs continuously through parents → mainCast →
+              replies. */}
           {parentCasts.length > 0 && (
             <View>
-              {parentCasts.map((parent) => renderCast({ ...parent, depth: 0 }))}
+              {parentCasts.map((parent, idx) =>
+                renderCast({ ...parent, depth: idx }, false, idx === 0),
+              )}
             </View>
           )}
-          {renderCast({ ...mainCast, depth: 0 }, true)}
+          {renderCast(
+            { ...mainCast, depth: parentCasts.length },
+            true,
+            parentCasts.length === 0,
+          )}
 
           {/* Replies-loading spinner — sits between the root cast and
               the replies area so the root cast (placeholder or real)
@@ -2127,7 +2838,9 @@ function ThreadDetailView({
 
           {replies.length > 0 && (
             <View>
-              {replies.map((reply) => renderCast(reply))}
+              {replies.map((reply) =>
+                renderCast({ ...reply, depth: reply.depth + parentCasts.length + 1 }),
+              )}
             </View>
           )}
 
@@ -2229,7 +2942,7 @@ function ThreadDetailView({
                     {replyImages.map((image, index) => (
                       <View key={index} style={{ position: 'relative' }}>
                         <Image
-                          source={{ uri: image.localUri }}
+                          source={{ uri: image.thumbnailLocalUri ?? image.localUri }}
                           style={{
                             width: 80,
                             height: 80,
@@ -2238,6 +2951,19 @@ function ThreadDetailView({
                           }}
                           resizeMode="cover"
                         />
+                        {image.kind === 'video' && (
+                          <View style={{
+                            position: 'absolute',
+                            top: 0,
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}>
+                            <IconSymbol name="play.fill" size={20} color="#fff" />
+                          </View>
+                        )}
                         <TouchableOpacity
                           onPress={() => handleRemoveReplyImage(index)}
                           style={{
@@ -2604,7 +3330,11 @@ export function ProfileView({
       .map((img) => img.url)
       .filter((url): url is string => Boolean(url));
     const hasImages = imageUrls.length > 0;
-    const videos = (cast.embeds?.videos ?? []).filter((v) => v.url && v.thumbnailUrl);
+    // Some sources (hypersnap-bare URLs, m3u8 streams) ship a video
+    // URL with no thumbnail. VideoPlayer renders a black poster +
+    // play-icon overlay in that case, which is better than dropping
+    // the embed entirely.
+    const videos = (cast.embeds?.videos ?? []).filter((v) => Boolean(v.url));
     const hasVideos = videos.length > 0;
 
     // Each URL embed renders exactly once — SnapAwareUrlPreview decides between
@@ -2626,7 +3356,9 @@ export function ProfileView({
           }
         }
         if (containsInviteLink(url)) return true;
-        return u.openGraph?.title;
+        // Keep bare URLs — hypersnap doesn't enrich with OG, but
+        // SnapAwareUrlPreview can still render the link.
+        return Boolean(url);
       });
 
     // Quote casts
@@ -2673,13 +3405,17 @@ export function ProfileView({
                     {cast.author.displayName}
                   </Text>
                 </TouchableOpacity>
-                {cast.channel?.key && (
-                  <TouchableOpacity onPress={() => onOpenChannel(cast.channel!.key!)}>
-                    <Text style={{ color: theme.colors.accent, fontSize: 13 }}>
-                      /{cast.channel.key}
-                    </Text>
-                  </TouchableOpacity>
-                )}
+                {(() => {
+                  const chip = resolveChannelChip(cast.channel?.key, cast.channel?.name);
+                  if (!chip) return null;
+                  return (
+                    <TouchableOpacity onPress={() => onOpenChannel(chip.key)}>
+                      <Text style={{ color: theme.colors.accent, fontSize: 13 }} numberOfLines={1}>
+                        /{chip.display}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })()}
               </View>
               <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 2 }}>
                 @{cast.author.username} • {formatTimestamp(cast.timestamp)}
@@ -2769,6 +3505,44 @@ export function ProfileView({
                   />
                 );
               }
+              const spaceRef = parseFarcasterSpaceUrl(linkUrl);
+              if (spaceRef) {
+                return (
+                  <AudioSpaceEmbed
+                    key={index}
+                    spaceId={spaceRef.id}
+                    castHash={cast.hash}
+                    onFallbackOpen={() => linkUrl && onOpenMiniApp(linkUrl)}
+                  />
+                );
+              }
+              const tokenRef = parseFarcasterTokenUrl(linkUrl);
+              if (tokenRef) {
+                return (
+                  <FarcasterTokenEmbed
+                    key={index}
+                    chain={tokenRef.chain}
+                    contractAddress={tokenRef.contractAddress}
+                    theme={theme}
+                  />
+                );
+              }
+              const parsedFc = linkUrl && linkUrl.includes('farcaster.xyz/')
+                ? parseFarcasterUrl(linkUrl)
+                : null;
+              if (parsedFc) {
+                return (
+                  <FarcasterCastUrlEmbed
+                    key={index}
+                    username={parsedFc.username}
+                    castHashPrefix={parsedFc.castHashPrefix}
+                    fallbackTitle={urlEmbed.openGraph?.title}
+                    fallbackDescription={urlEmbed.openGraph?.description}
+                    theme={theme}
+                    onPress={() => onOpenThread(parsedFc.username, parsedFc.castHashPrefix)}
+                  />
+                );
+              }
               return (
                 <SnapAwareUrlPreview
                   key={index}
@@ -2810,7 +3584,7 @@ export function ProfileView({
                 key={index}
                 cast={embeddedCast as EmbeddedCast}
                 theme={theme}
-                onPress={() => onOpenThread(embeddedCast.author.username, embeddedCast.hash.slice(0, 10), embeddedCast)}
+                onPress={() => onOpenThread(embeddedCast.author.username, embeddedCast.hash, embeddedCast)}
               />
             ))}
           </View>
@@ -3129,7 +3903,11 @@ function ChannelView({
       .map((img) => img.url)
       .filter((url): url is string => Boolean(url));
     const hasImages = imageUrls.length > 0;
-    const videos = (cast.embeds?.videos ?? []).filter((v) => v.url && v.thumbnailUrl);
+    // Some sources (hypersnap-bare URLs, m3u8 streams) ship a video
+    // URL with no thumbnail. VideoPlayer renders a black poster +
+    // play-icon overlay in that case, which is better than dropping
+    // the embed entirely.
+    const videos = (cast.embeds?.videos ?? []).filter((v) => Boolean(v.url));
     const hasVideos = videos.length > 0;
 
     // Each URL embed renders exactly once — SnapAwareUrlPreview decides between
@@ -3151,7 +3929,9 @@ function ChannelView({
           }
         }
         if (containsInviteLink(url)) return true;
-        return u.openGraph?.title;
+        // Keep bare URLs — hypersnap doesn't enrich with OG, but
+        // SnapAwareUrlPreview can still render the link.
+        return Boolean(url);
       });
 
     // Quote casts
@@ -3287,6 +4067,44 @@ function ChannelView({
                   />
                 );
               }
+              const spaceRef = parseFarcasterSpaceUrl(linkUrl);
+              if (spaceRef) {
+                return (
+                  <AudioSpaceEmbed
+                    key={index}
+                    spaceId={spaceRef.id}
+                    castHash={cast.hash}
+                    onFallbackOpen={() => linkUrl && onOpenMiniApp(linkUrl)}
+                  />
+                );
+              }
+              const tokenRef = parseFarcasterTokenUrl(linkUrl);
+              if (tokenRef) {
+                return (
+                  <FarcasterTokenEmbed
+                    key={index}
+                    chain={tokenRef.chain}
+                    contractAddress={tokenRef.contractAddress}
+                    theme={theme}
+                  />
+                );
+              }
+              const parsedFc = linkUrl && linkUrl.includes('farcaster.xyz/')
+                ? parseFarcasterUrl(linkUrl)
+                : null;
+              if (parsedFc) {
+                return (
+                  <FarcasterCastUrlEmbed
+                    key={index}
+                    username={parsedFc.username}
+                    castHashPrefix={parsedFc.castHashPrefix}
+                    fallbackTitle={urlEmbed.openGraph?.title}
+                    fallbackDescription={urlEmbed.openGraph?.description}
+                    theme={theme}
+                    onPress={() => onOpenThread(parsedFc.username, parsedFc.castHashPrefix)}
+                  />
+                );
+              }
               return (
                 <SnapAwareUrlPreview
                   key={index}
@@ -3328,7 +4146,7 @@ function ChannelView({
                 key={index}
                 cast={embeddedCast as EmbeddedCast}
                 theme={theme}
-                onPress={() => onOpenThread(embeddedCast.author.username, embeddedCast.hash.slice(0, 10), embeddedCast)}
+                onPress={() => onOpenThread(embeddedCast.author.username, embeddedCast.hash, embeddedCast)}
               />
             ))}
           </View>
@@ -3463,7 +4281,6 @@ import type {
   FeedFilter,
   FeedPost,
   FrameEmbedInfo,
-  MiniAppInfo,
   QuoteCastEmbed,
   UrlEmbed,
   VideoEmbed,
@@ -3517,6 +4334,76 @@ function pickGridThumb(post: FeedPost): { uri: string; isVideo: boolean } | null
     if (v.thumbnailUrl) return { uri: v.thumbnailUrl, isVideo: true };
   }
   return null;
+}
+
+/**
+ * Map a NormalizedCast (from quorum-shared's cast lookup) to the thread-API
+ * cast shape that the thread renderer expects. Used to build an
+ * optimistic placeholder for a parent cast when navigating into its
+ * thread, so the parent renders immediately rather than the reply that
+ * the user tapped.
+ */
+/** Minimal placeholder for the parent cast when the user taps a reply in
+ *  the feed but the parent hasn't been resolved yet. Carries just the
+ *  hash + parent author FID — enough for the thread view to render the
+ *  back arrow against the parent (not the reply) while the real cast
+ *  loads. Once the network response lands, this is replaced by the full
+ *  fetched cast. */
+function minimalParentStub(parentHash: string, parentAuthorFid: number | undefined): unknown {
+  return {
+    hash: parentHash,
+    threadHash: parentHash,
+    author: {
+      fid: parentAuthorFid ?? 0,
+      username: '',
+      displayName: '',
+    },
+    text: '',
+    timestamp: Date.now(),
+    embeds: { images: [], videos: [] },
+    replies: { count: 0 },
+    reactions: { count: 0 },
+    recasts: { count: 0 },
+  };
+}
+
+function normalizedCastToPlaceholder(cast: NormalizedCast): unknown {
+  return {
+    hash: cast.hash,
+    threadHash: cast.threadHash ?? cast.hash,
+    author: {
+      fid: cast.author.fid,
+      username: cast.author.username,
+      displayName: cast.author.displayName,
+      pfp: cast.author.pfpUrl ? { url: cast.author.pfpUrl } : undefined,
+    },
+    text: cast.text,
+    timestamp: cast.timestamp || Date.now(),
+    embeds: {
+      images: cast.embeds
+        .filter((e) => e.image?.url)
+        .map((e) => ({ url: e.image!.url!, alt: e.image!.alt })),
+      videos: cast.embeds
+        .filter((e) => e.video?.url || e.video?.sourceUrl)
+        .map((e) => ({
+          url: e.video!.url,
+          sourceUrl: e.video!.sourceUrl,
+          thumbnailUrl: e.video!.thumbnailUrl,
+          width: e.video!.width,
+          height: e.video!.height,
+        })),
+    },
+    replies: { count: cast.reactions.repliesCount },
+    reactions: { count: cast.reactions.likesCount },
+    recasts: { count: cast.reactions.recastsCount },
+    viewerContext: {
+      reacted: cast.reactions.viewerLiked,
+      recast: cast.reactions.viewerRecasted,
+    },
+    channel: cast.channel ? { key: cast.channel.key, name: cast.channel.name } : undefined,
+    parentHash: cast.parentHash,
+    parentUrl: cast.parentUrl,
+  };
 }
 
 /**
@@ -3624,15 +4511,38 @@ const FeedPostCard = React.memo(function FeedPostCard({
   onOpenShareSheet,
   onFollow,
 }: FeedPostCardProps) {
+  const queryClient = useQueryClient();
   const navigateToThread = useCallback(() => {
-    if (post.username && post.hash) {
-      onNavigateToThread(post.username, post.hash.slice(0, 10), false, feedPostToCastPlaceholder(post));
+    if (post.parentHash) {
+      const parentNormalized =
+        post.parentAuthorFid
+          ? queryClient.getQueryData<NormalizedCast | null>(
+              ['farcaster', 'cast', { hash: post.parentHash, fid: post.parentAuthorFid }] as const,
+            )
+          : null;
+      // Always pass a placeholder for the parent so the back arrow renders
+      // on the parent from the first frame. Cache hit gives full content
+      // (text, author, embeds). Cache miss falls back to a hash-only stub
+      // so the renderer has a non-undefined mainCast keyed to the parent
+      // — without this, the loading window leaves mainCast undefined and
+      // any later partial fetch (or a stray placeholder upstream) can
+      // land on the reply instead.
+      const parentPlaceholder = parentNormalized
+        ? normalizedCastToPlaceholder(parentNormalized)
+        : minimalParentStub(post.parentHash, post.parentAuthorFid);
+      onNavigateToThread('', post.parentHash, false, parentPlaceholder);
+      return;
     }
-  }, [post, onNavigateToThread]);
+    if (post.username && post.hash) {
+      onNavigateToThread(post.username, post.hash, false, feedPostToCastPlaceholder(post));
+    }
+  }, [post, onNavigateToThread, queryClient]);
 
   const navigateToReply = useCallback(() => {
+    // Reply-compose target — always the cast itself (you're replying to
+    // *this* cast, not its parent).
     if (post.username && post.hash) {
-      onNavigateToThread(post.username, post.hash.slice(0, 10), true, feedPostToCastPlaceholder(post));
+      onNavigateToThread(post.username, post.hash, true, feedPostToCastPlaceholder(post));
     }
   }, [post, onNavigateToThread]);
 
@@ -3677,17 +4587,28 @@ const FeedPostCard = React.memo(function FeedPostCard({
             {post.isPro && (
               <IconSymbol name="star.fill" color={theme.colors.warning} size={14} />
             )}
-            {post.channel && (
-              <TouchableOpacity onPress={() => onOpenChannel(post.channel!)}>
-                <Text style={[styles.channelLabel, { color: theme.colors.accent }]}>/{post.channel}</Text>
-              </TouchableOpacity>
-            )}
+            <ChannelBadge
+              channelSlug={post.channel}
+              parentUrl={post.parentUrl}
+              theme={theme}
+              onOpenChannel={onOpenChannel}
+            />
           </View>
           <Text style={styles.authorHandle}>
             {post.authorHandle} • {post.time}
           </Text>
         </View>
       </Pressable>
+
+      <ParentContextLine
+        cast={{
+          parentUrl: post.parentUrl,
+          parentHash: post.parentHash,
+          parentAuthor: post.parentAuthorFid ? { fid: post.parentAuthorFid } : undefined,
+        }}
+        theme={theme}
+        onNavigateToThread={onNavigateToThread}
+      />
 
       {post.content.trim().length > 0 && (
         <Pressable onPress={navigateToThread}>
@@ -3725,7 +4646,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
       {post.videos.length > 0 && (
         <View style={styles.mediaContainer}>
           {post.videos.map((video, index) => (
-            video.url && video.thumbnailUrl && (
+            video.url && (
               <VideoPlayer
                 key={index}
                 url={video.url}
@@ -3762,7 +4683,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
               key={index}
               cast={qc.cast}
               theme={theme}
-              onPress={() => onNavigateToThread(qc.username, qc.hashPrefix, false, qc.cast)}
+              onPress={() => onNavigateToThread(qc.username, qc.cast.hash, false, qc.cast)}
             />
           ))}
         </View>
@@ -3770,38 +4691,46 @@ const FeedPostCard = React.memo(function FeedPostCard({
 
       {post.urlPreviews.length > 0 && (
         <View style={{ gap: 8, paddingHorizontal: 12 }}>
-          {post.urlPreviews.map((preview, index) => (
-            preview.isQuorumInvite && preview.url ? (
-              <InviteLinkCard
-                key={index}
-                inviteLink={preview.url}
-              />
-            ) : preview.isFarcasterLink && preview.farcasterUsername && preview.farcasterCastHash ? (
-              <TouchableOpacity
-                key={index}
-                style={{
-                  backgroundColor: theme.colors.surface2,
-                  borderRadius: 12,
-                  padding: 12,
-                  borderWidth: 1,
-                  borderColor: theme.colors.surface3,
-                }}
-                onPress={() => onNavigateToThread(preview.farcasterUsername!, preview.farcasterCastHash!)}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <IconSymbol name="bubble.left.and.bubble.right" color={theme.colors.accent} size={16} />
-                  <Text style={{ color: theme.colors.textStrong, fontWeight: '600', flex: 1 }} numberOfLines={1}>
-                    {preview.title || 'View cast'}
-                  </Text>
-                  <IconSymbol name="chevron.right" color={theme.colors.textMuted} size={14} />
-                </View>
-                {preview.description && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 4 }} numberOfLines={2}>
-                    {preview.description}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            ) : (
+          {post.urlPreviews.map((preview, index) => {
+            if (preview.isQuorumInvite && preview.url) {
+              return <InviteLinkCard key={index} inviteLink={preview.url} />;
+            }
+            const spaceRef = parseFarcasterSpaceUrl(preview.url);
+            if (spaceRef) {
+              return (
+                <AudioSpaceEmbed
+                  key={index}
+                  spaceId={spaceRef.id}
+                  castHash={post.hash}
+                  onFallbackOpen={() => preview.url && onLinkPress(preview.url)}
+                />
+              );
+            }
+            const tokenRef = parseFarcasterTokenUrl(preview.url);
+            if (tokenRef) {
+              return (
+                <FarcasterTokenEmbed
+                  key={index}
+                  chain={tokenRef.chain}
+                  contractAddress={tokenRef.contractAddress}
+                  theme={theme}
+                />
+              );
+            }
+            if (preview.isFarcasterLink && preview.farcasterUsername && preview.farcasterCastHash) {
+              return (
+                <FarcasterCastUrlEmbed
+                  key={index}
+                  username={preview.farcasterUsername}
+                  castHashPrefix={preview.farcasterCastHash}
+                  fallbackTitle={preview.title}
+                  fallbackDescription={preview.description}
+                  theme={theme}
+                  onPress={() => onNavigateToThread(preview.farcasterUsername!, preview.farcasterCastHash!)}
+                />
+              );
+            }
+            return (
               <SnapAwareUrlPreview
                 key={index}
                 url={preview.url}
@@ -3822,8 +4751,8 @@ const FeedPostCard = React.memo(function FeedPostCard({
                 onOpenProfile={(fid) => onNavigateToProfile(fid)}
                 onOpenMiniApp={(u) => onLinkPress(u)}
               />
-            )
-          ))}
+            );
+          })}
         </View>
       )}
 
@@ -3921,6 +4850,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   const { user } = useAuth();
   const currentUserFid = user?.farcaster?.fid;
   const insets = useSafeAreaInsets();
+  const { submitCast: submitMainCast } = useFarcasterSubmitCast({ token });
 
   // Farcaster Pro status and cast limits
   const { regularCastByteLimit, longCastByteLimit, isPro } = useFarcasterCastLimits();
@@ -3969,7 +4899,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     return [{ type: 'feed' }];
   });
 
-  const [selectedMiniApp, setSelectedMiniApp] = useState<MiniAppInfo | null>(null);
+  const { openMiniapp } = useMiniappOverlay();
   const [composeVisible, setComposeVisible] = useState(false);
   const [composeChannelKey, setComposeChannelKey] = useState<string | undefined>(undefined);
   const [composeChannelPickerVisible, setComposeChannelPickerVisible] = useState(false);
@@ -4005,6 +4935,25 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   const popScreen = useCallback(() => {
     setNavStack(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
   }, []);
+
+  // Android hardware back button. When we're inside a sub-screen
+  // (thread / profile / channel / governance), pop the nav stack
+  // instead of letting the system close the modal or exit the tab —
+  // that matches the on-screen back chevron and the swipe-back
+  // gesture's behavior. Outside a sub-screen (we're on the feed
+  // root) we return false so the OS handles it normally.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const onBack = () => {
+      if (navStack.length > 1) {
+        popScreen();
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => sub.remove();
+  }, [navStack.length, popScreen]);
 
   const currentScreen = navStack[navStack.length - 1];
 
@@ -4086,8 +5035,8 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   }, []);
 
   const openMiniApp = useCallback((url: string) => {
-    setSelectedMiniApp({ url });
-  }, []);
+    openMiniapp({ url, isQNative: false });
+  }, [openMiniapp]);
 
   const handleMentionPress = useCallback(async (username: string) => {
     try {
@@ -4391,8 +5340,10 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         .map((img) => img.url)
         .filter((url): url is string => Boolean(url));
 
+      // FeedPost only needs a URL — thumbnails are nice-to-have and
+      // missing for hypersnap-bare HLS streams.
       const videos: VideoEmbed[] = (cast.embeds?.videos ?? [])
-        .filter((v) => v.thumbnailUrl && v.url)
+        .filter((v) => Boolean(v.url))
         .map((v) => ({
           url: v.url,
           thumbnailUrl: v.thumbnailUrl,
@@ -4401,12 +5352,16 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
           duration: v.duration,
         }));
 
-      // Extract embedded casts (quote casts)
+      // Extract embedded casts (quote casts). Hypersnap delivers cast_id
+      // embeds as `{hash, fid}` stubs with no username inline —
+      // QuoteCast lazy-resolves the real cast via useFarcasterCast at
+      // render time, so we only need hash + author.fid here. Previously
+      // we required `c.author?.username`, which dropped every stub.
       const quoteCasts: QuoteCastEmbed[] = (cast.embeds?.casts ?? [])
-        .filter((c) => c.hash && c.author?.username)
+        .filter((c) => Boolean(c.hash) && c.author && Number.isFinite(c.author.fid) && c.author.fid > 0)
         .map((c) => ({
           cast: c,
-          username: c.author.username,
+          username: c.author.username || '',
           hashPrefix: c.hash.slice(0, 10), // e.g., "0x2cba399b"
         }));
 
@@ -4435,7 +5390,10 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             }
           }
           if (containsInviteLink(url)) return true;
-          return u.openGraph?.title;
+          // Keep any URL we know about, OG-enriched or not. Hypersnap
+          // returns bare URLs without OG, and SnapAwareUrlPreview can
+          // still render a minimal "open link" card from just the URL.
+          return Boolean(url);
         })
         .map((u) => {
           const url = u.openGraph?.url || u.openGraph?.sourceUrl || '';
@@ -4481,6 +5439,9 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         authorHandle: cast.author?.username ? `@${cast.author.username}` : '',
         authorAvatar: cast.author?.pfp?.url,
         channel: cast.channel?.name,
+        parentHash: cast.parentHash,
+        parentUrl: cast.parentUrl,
+        parentAuthorFid: cast.parentAuthor?.fid,
         isPro: accountLevel === 'pro' || accountLevel === 'premium',
         time: formatTimestamp(cast.timestamp),
         content: cast.text,
@@ -4509,6 +5470,12 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     }
     return posts.filter((post) => post.filter === activeFilter);
   }, [activeFilter, posts]);
+
+  // Bulk-resolve parent author handles for the visible feed page so
+  // ParentContextLine renders @handle immediately instead of fid:N → @handle.
+  useFarcasterUsersPrefetch(
+    useMemo(() => filteredPosts.map((p) => p.parentAuthorFid), [filteredPosts]),
+  );
 
   // Build search results list based on current tab
   const searchResultItems = useMemo<SearchResultItem[]>(() => {
@@ -4714,7 +5681,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
       setPostError('Maximum 2 images per cast');
       return;
     }
-    const result = await pickImage('library');
+    const result = await pickMedia('library');
     if (result.success && result.attachment) {
       setSelectedImages(prev => [...prev, result.attachment!]);
       setPostError(null);
@@ -4751,22 +5718,26 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         embeds.push(embedUrl);
       }
 
-      // Upload images and add to embeds
-      for (const image of selectedImages) {
+      // Upload attachments — videos through TUS, images direct.
+      for (const a of selectedImages) {
         try {
-          const uploaded = await uploadImageForCast(token as string, image.localUri, image.mimeType);
-          embeds.push(uploaded.url);
+          if (a.kind === 'video') {
+            const v = await uploadVideoForCast(token as string, a.localUri);
+            embeds.push(v.url);
+          } else {
+            const uploaded = await uploadImageForCast(token as string, a.localUri, a.mimeType);
+            embeds.push(uploaded.url);
+          }
         } catch (uploadErr: any) {
-          setPostError(`Failed to upload image: ${uploadErr?.message ?? 'Unknown error'}`);
+          setPostError(`Failed to upload attachment: ${uploadErr?.message ?? 'Unknown error'}`);
           setPosting(false);
           return;
         }
       }
 
-      const result = await postFarcasterCast({
-        token: token as string,
+      const result = await submitMainCast({
         text: castText.trim(),
-        embeds,
+        embedUrls: embeds,
         channelKey: composeChannelKey,
       });
 
@@ -4784,6 +5755,10 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
       setComposeVisible(false); // Close compose modal
       await refetch();
     } catch (err: unknown) {
+      logger.warn(
+        '[SocialFeedModal] main cast submit threw:',
+        err instanceof Error ? err.message : String(err),
+      );
       setPostError(err?.message ?? 'Failed to publish cast.');
     } finally {
       setPosting(false);
@@ -4948,6 +5923,8 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                     <View style={{width:16}}/>
                   </ScrollView>
                 )}
+
+                {!searchActive && <LiveSpacesStrip />}
 
                 {/* Loading state intentionally renders nothing. Stale
                     casts (if any) stay visible while the refresh runs;
@@ -5175,6 +6152,8 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                     ))}
                     <View style={{width:16}}/>
                   </ScrollView>
+
+                  <LiveSpacesStrip />
 
                   {isLoading && posts.length === 0 && (
                     <View style={styles.stateSpinner}>
@@ -5579,7 +6558,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                     {selectedImages.map((image, index) => (
                       <View key={index} style={{ position: 'relative' }}>
                         <Image
-                          source={{ uri: image.localUri }}
+                          source={{ uri: image.thumbnailLocalUri ?? image.localUri }}
                           style={{
                             width: 100,
                             height: 100,
@@ -5588,6 +6567,19 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                           }}
                           resizeMode="cover"
                         />
+                        {image.kind === 'video' && (
+                          <View style={{
+                            position: 'absolute',
+                            top: 0,
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}>
+                            <IconSymbol name="play.fill" size={24} color="#fff" />
+                          </View>
+                        )}
                         <TouchableOpacity
                           onPress={() => handleRemoveImage(index)}
                           style={{
@@ -5754,12 +6746,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             }}
           />
 
-          {/* Mini App Browser */}
-          <BrowserModal
-            visible={selectedMiniApp !== null}
-            url={selectedMiniApp?.url ?? ''}
-            onClose={() => setSelectedMiniApp(null)}
-          />
         </Animated.View>
         {/* Bottom spacer to align with userPanel - uses layout constraint instead of padding */}
         <View style={{ height: userPanelHeight }} />

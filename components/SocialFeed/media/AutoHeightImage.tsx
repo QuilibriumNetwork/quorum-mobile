@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, ImageStyle, TouchableOpacity, StyleProp } from 'react-native';
+import { Image as RNImage, ImageStyle, TouchableOpacity, StyleProp } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { SCREEN_WIDTH, imageDimensionCache } from '../utils';
 
 interface AutoHeightImageProps {
@@ -45,7 +46,7 @@ export function AutoHeightImage({
       return;
     }
 
-    Image.getSize(
+    RNImage.getSize(
       uri,
       (imgWidth, imgHeight) => {
         const aspectRatio = imgHeight / imgWidth;
@@ -63,10 +64,10 @@ export function AutoHeightImage({
   }, [uri, maxHeight, maxWidth, cacheKey]);
 
   const imageElement = (
-    <Image
+    <ExpoImage
       source={{ uri }}
       style={[style, { width: dimensions.width, height: dimensions.height }]}
-      resizeMode="cover"
+      contentFit="cover"
     />
   );
 

@@ -1,33 +1,19 @@
 import MiniAppsModal from '@/components/MiniAppsModal';
-import BrowserModal from '@/components/BrowserModal';
+import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React from 'react';
 import { View, StyleSheet } from 'react-native';
 
 export default function AppsScreen() {
-  const [selectedMiniApp, setSelectedMiniApp] = useState<{
-    url: string;
-    isQNative: boolean;
-    timestamp: number;
-  } | null>(null);
+  const { openMiniapp } = useMiniappOverlay();
 
   return (
     <View style={styles.container}>
       <MiniAppsModal
         visible={true}
         onClose={() => router.back()}
-        onOpenMiniApp={(url, isQNative) =>
-          setSelectedMiniApp({ url, isQNative, timestamp: Date.now() })
-        }
+        onOpenMiniApp={(url, isQNative) => openMiniapp({ url, isQNative })}
         isRouteMode={true}
-      />
-
-      <BrowserModal
-        visible={selectedMiniApp !== null}
-        url={selectedMiniApp?.url ?? ''}
-        isQNative={selectedMiniApp?.isQNative ?? false}
-        timestamp={selectedMiniApp?.timestamp ?? 0}
-        onClose={() => setSelectedMiniApp(null)}
       />
     </View>
   );

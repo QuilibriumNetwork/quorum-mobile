@@ -25,6 +25,7 @@ const MAPPING = {
   'chevron.up': 'expand-less',
   'chevron.down': 'expand-more',
   'wallet.bifold.fill': 'wallet',
+  'bitcoinsign.circle': 'monetization-on',
   // Onboarding icons
   'lock.shield.fill': 'security',
   'shield.checkered': 'verified-user',

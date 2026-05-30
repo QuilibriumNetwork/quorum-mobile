@@ -4,6 +4,7 @@
 
 import { SpaceChatArea, type MemberMap, type MessageUserInfo } from '@/components/Chat';
 import { useAuth } from '@/context/AuthContext';
+import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { useChannels } from '@/hooks/chat/useChannels';
 import { useHasPermission } from '@/hooks/chat/useRoleManagement';
 import { useReplyTracking, setActiveChannel, clearActiveChannel } from '@/hooks/chat/useReplyTracking';
@@ -22,7 +23,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys, type Message } from '@quilibrium/quorum-shared';
 import { sendSpaceCallStartMessage } from '@/services/space/spaceMessageService';
 
-const BrowserModal = React.lazy(() => import('@/components/BrowserModal'));
 const UserProfileModal = React.lazy(() => import('@/components/UserProfileModal'));
 const InviteModal = React.lazy(() => import('@/components/InviteModal'));
 const SpaceSettingsModal = React.lazy(() => import('@/components/SpaceSettingsModal'));
@@ -93,13 +93,10 @@ export default function SpaceChannelChat() {
     })();
   }, [spaceId, enqueueOutbound]);
 
-  // Overlay state
-  const [selectedMiniApp, setSelectedMiniApp] = useState<{
-    url: string;
-    isQNative: boolean;
-    timestamp: number;
-    fromChatLink?: boolean;
-  } | null>(null);
+  // Overlay state — miniapps go through the global overlay (a single
+  // BrowserModal lives at the tabs layout, preserving WebView state
+  // across minimize/restore).
+  const { openMiniapp } = useMiniappOverlay();
   const [selectedUserProfile, setSelectedUserProfile] = useState<MessageUserInfo | null>(null);
   const [inviteVisible, setInviteVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -114,8 +111,10 @@ export default function SpaceChannelChat() {
   }, []);
 
   const handleLinkPress = useCallback((url: string) => {
-    setSelectedMiniApp({ url, isQNative: false, timestamp: Date.now(), fromChatLink: true });
-  }, []);
+    // Chat-link URLs are user-provided and may target LAN dev hosts, so
+    // pass through `allowInsecureLAN` for SSL bypass.
+    openMiniapp({ url, isQNative: false, allowInsecureLAN: true });
+  }, [openMiniapp]);
 
   const handleOpenFarcasterCast = useCallback((username: string, castHashPrefix: string) => {
     // Open the cast's thread inline as a modal instead of routing to the feed
@@ -252,18 +251,6 @@ export default function SpaceChannelChat() {
         isDMsSelected={false}
       />
 
-      {selectedMiniApp !== null && (
-        <Suspense fallback={null}>
-          <BrowserModal
-            visible
-            url={selectedMiniApp.url}
-            isQNative={selectedMiniApp.isQNative}
-            timestamp={selectedMiniApp.timestamp}
-            onClose={() => setSelectedMiniApp(null)}
-            allowInsecureLAN={selectedMiniApp.fromChatLink ?? false}
-          />
-        </Suspense>
-      )}
 
       {selectedUserProfile && (
         <Suspense fallback={null}>

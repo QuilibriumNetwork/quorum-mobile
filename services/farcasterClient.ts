@@ -856,11 +856,18 @@ export async function unfollowUser({ token, targetFid }: FollowParams): Promise<
 
 // Image Upload API
 
-const WARPCAST_CLOUDFLARE_CDN_PREFIX = 'https://imagedelivery.net/BXluQx4ige9GuW0Ia56BHw';
-
 interface ImageUploadUrlResponse {
   url: string;
   optimisticImageId: string;
+}
+
+/** Shape returned by Cloudflare Images when you POST a file to a
+ *  direct-creator-upload URL. `variants[]` contains the public URLs
+ *  for each named variant configured on the account; we use the one
+ *  ending in `/original`. */
+interface CloudflareImageUploadResponse {
+  success: boolean;
+  result?: { variants?: string[] };
 }
 
 export async function generateImageUploadUrl(token: string): Promise<ImageUploadUrlResponse> {
@@ -897,18 +904,19 @@ export async function uploadImageForCast(
   localUri: string,
   mimeType: string = 'image/jpeg'
 ): Promise<UploadedImage> {
-  // Get presigned upload URL
-  const { url: uploadUrl, optimisticImageId } = await generateImageUploadUrl(token);
+  // Step 1: ask farcaster for a Cloudflare direct-creator-upload URL.
+  // The response also carries `optimisticImageId` which lets us paint
+  // the image in the composer before the upload completes, but the
+  // CDN URL we hand to the cast embed comes from step 2.
+  const { url: uploadUrl } = await generateImageUploadUrl(token);
 
-  // Create form data with the image
   const formData = new FormData();
   formData.append('file', {
     uri: localUri,
     type: mimeType,
     name: `image_${Date.now()}.${mimeType.split('/')[1] || 'jpg'}`,
-  } as any);
+  } as unknown as Blob);
 
-  // Upload to Cloudflare
   const uploadResponse = await fetch(uploadUrl, {
     method: 'POST',
     body: formData,
@@ -918,10 +926,19 @@ export async function uploadImageForCast(
     throw new Error(`Failed to upload image (${uploadResponse.status})`);
   }
 
-  const cdnUrl = `${WARPCAST_CLOUDFLARE_CDN_PREFIX}/${optimisticImageId}/original`;
+  // Step 2: read the variant URL Cloudflare returns. The account hash
+  // is baked into the upload URL itself, so reading the response
+  // avoids hard-coding it (and quietly breaking when the upstream
+  // account rotates).
+  const json = (await uploadResponse.json()) as CloudflareImageUploadResponse;
+  if (!json.success || !json.result?.variants?.length) {
+    throw new Error('Cloudflare image upload returned no variants');
+  }
+  const originalVariant = json.result.variants.find((v) => v.endsWith('/original'))
+    ?? json.result.variants[0];
 
   return {
-    url: cdnUrl,
+    url: originalVariant,
     localUri,
   };
 }

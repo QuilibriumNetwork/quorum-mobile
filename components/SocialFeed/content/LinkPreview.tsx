@@ -1,6 +1,7 @@
 import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
 
 interface LinkPreviewProps {
   url?: string;
@@ -44,7 +45,7 @@ export function LinkPreview({
         <Image
           source={{ uri: image }}
           style={styles.imageLarge}
-          resizeMode="cover"
+          contentFit="cover"
         />
         <View style={staticStyles.padding12}>
           <Text
@@ -81,7 +82,7 @@ export function LinkPreview({
         <Image
           source={{ uri: image }}
           style={styles.imageSmall}
-          resizeMode="cover"
+          contentFit="cover"
         />
       )}
       <View style={staticStyles.contentSmall}>

@@ -3,7 +3,6 @@ import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   LayoutChangeEvent,
   StyleSheet,
   Switch,
@@ -12,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReanimatedModule, {
   Easing,
@@ -487,7 +487,7 @@ function SnapImage({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
         borderRadius: 8,
         backgroundColor: ctx.theme.colors.surface3,
       }}
-      resizeMode="cover"
+      contentFit="cover"
       accessibilityLabel={p.alt ? String(p.alt) : undefined}
     />
   );

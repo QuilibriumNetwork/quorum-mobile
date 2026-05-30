@@ -31,5 +31,11 @@ require('./services/notifications/backgroundTask');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('./services/notifications/pushReceivedTask');
 
+// LiveKit (audio spaces) is the official web SDK + a thin WebRTC
+// global shim. The shim has to land before any module touches
+// `livekit-client`, otherwise its `new RTCPeerConnection()` calls bail.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+require('./services/spaces/livekitPolyfill').installLivekitWebrtcPolyfill();
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('expo-router/entry');

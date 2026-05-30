@@ -2,7 +2,6 @@ import type { AppTheme } from '@/theme';
 import React, { useMemo, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import YoutubePlayer from 'react-native-youtube-iframe';
-import { SCREEN_WIDTH } from '../utils';
 
 interface YouTubeEmbedProps {
   /** Video ID. May be undefined if only a playlist is provided. */
@@ -21,7 +20,12 @@ interface YouTubeEmbedProps {
  * reliably on iOS and Android.
  */
 export function YouTubeEmbed({ videoId, playlistId, theme, width }: YouTubeEmbedProps) {
-  const w = width ?? SCREEN_WIDTH;
+  // When the caller doesn't supply a width, measure the parent so the
+  // player sits inside whatever container (cast card, inset list, etc.)
+  // hosts it. Previously we fell back to `SCREEN_WIDTH` and the player
+  // overflowed any container with horizontal padding.
+  const [measured, setMeasured] = useState<number | null>(null);
+  const w = width ?? measured ?? 0;
   const h = Math.round((w * 9) / 16);
   const [loadError, setLoadError] = useState(false);
   const containerStyle = useMemo(
@@ -33,6 +37,17 @@ export function YouTubeEmbed({ videoId, playlistId, theme, width }: YouTubeEmbed
   );
 
   if (!videoId && !playlistId) return null;
+
+  // First render before onLayout fires: emit a self-measuring shell so
+  // the second pass has a real width to use.
+  if (width == null && measured == null) {
+    return (
+      <View
+        style={{ width: '100%', aspectRatio: 16 / 9, backgroundColor: theme.colors.surface3, borderRadius: 8 }}
+        onLayout={(e) => setMeasured(Math.floor(e.nativeEvent.layout.width))}
+      />
+    );
+  }
 
   const externalFallbackUrl = videoId
     ? `https://www.youtube.com/watch?v=${videoId}${playlistId ? `&list=${playlistId}` : ''}`

@@ -10,7 +10,7 @@ import { HeaderAvatar } from '@/components/HeaderAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import WalletModal from '@/components/WalletModal';
 import MiniAppsModal from '@/components/MiniAppsModal';
-import BrowserModal from '@/components/BrowserModal';
+import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -23,32 +23,22 @@ export default function WalletTab() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const [section, setSection] = useState<Section>('wallet');
-  const [selectedMiniApp, setSelectedMiniApp] = useState<{
-    url: string;
-    isQNative: boolean;
-    timestamp: number;
-  } | null>(null);
+  const { openMiniapp } = useMiniappOverlay();
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   // Mini-app deep-link from notifications. The notifications tab pushes
   // here with `?miniAppUrl=...` when the user taps a mini-app entry.
-  // We auto-switch to the Mini Apps section AND open the browser modal,
-  // then clear the param so subsequent tab visits don't re-trigger.
+  // We auto-switch to the Mini Apps section AND open the global
+  // BrowserModal overlay, then clear the param so subsequent tab visits
+  // don't re-trigger.
   const params = useLocalSearchParams<{ miniAppUrl?: string }>();
   useEffect(() => {
     if (!params.miniAppUrl) return;
     setSection('apps');
-    setSelectedMiniApp({
-      url: params.miniAppUrl,
-      // Frame URLs from Farcaster notifications are always web URLs,
-      // not native Q-mini-apps. The native flag is reserved for the
-      // built-in app catalog (which routes through the in-list press).
-      isQNative: false,
-      timestamp: Date.now(),
-    });
+    openMiniapp({ url: params.miniAppUrl, isQNative: false });
     router.setParams({ miniAppUrl: undefined });
-  }, [params.miniAppUrl]);
+  }, [params.miniAppUrl, openMiniapp]);
 
   const headingLabel = section === 'wallet' ? 'Wallet' : 'Mini Apps';
   // Wallet view → four-square (apps) icon. Mini-apps view → the same
@@ -93,22 +83,12 @@ export default function WalletTab() {
           <MiniAppsModal
             visible
             onClose={() => { /* tab route, not a modal */ }}
-            onOpenMiniApp={(url, isQNative) =>
-              setSelectedMiniApp({ url, isQNative, timestamp: Date.now() })
-            }
+            onOpenMiniApp={(url, isQNative) => openMiniapp({ url, isQNative })}
             isRouteMode
             noTopInset
           />
         )}
       </View>
-
-      <BrowserModal
-        visible={selectedMiniApp !== null}
-        url={selectedMiniApp?.url ?? ''}
-        isQNative={selectedMiniApp?.isQNative ?? false}
-        timestamp={selectedMiniApp?.timestamp ?? 0}
-        onClose={() => setSelectedMiniApp(null)}
-      />
     </View>
   );
 }

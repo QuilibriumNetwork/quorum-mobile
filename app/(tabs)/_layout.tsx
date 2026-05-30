@@ -1,6 +1,9 @@
 import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import TabBarBackground from '@/components/ui/TabBarBackground';
+import { AudioSpaceProvider } from '@/context/AudioSpaceContext';
+import { MiniappOverlayProvider } from '@/context/MiniappOverlayContext';
+import { SwapModalProvider } from '@/context/SwapModalContext';
 import { useUnifiedNotifications } from '@/hooks/useUnifiedNotifications';
 import { feedActiveTabBus } from '@/services/ui/feedActiveTab';
 import { useTheme } from '@/theme';
@@ -40,6 +43,9 @@ export default function TabsLayout() {
   const { theme } = useTheme();
 
   return (
+    <SwapModalProvider>
+    <MiniappOverlayProvider>
+    <AudioSpaceProvider>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -130,5 +136,8 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    </AudioSpaceProvider>
+    </MiniappOverlayProvider>
+    </SwapModalProvider>
   );
 }

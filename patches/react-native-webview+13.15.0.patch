@@ -285,7 +285,3 @@ index c534d17..18f93bf 100644
 +   */
 +  ignoreSslErrorForLocalNetwork?: boolean;
  }
-diff --git a/node_modules/react-native-webview/windows/.npmignore b/node_modules/react-native-webview/windows/.gitignore
-similarity index 100%
-rename from node_modules/react-native-webview/windows/.npmignore
-rename to node_modules/react-native-webview/windows/.gitignore

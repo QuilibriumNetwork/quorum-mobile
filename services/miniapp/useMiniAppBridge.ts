@@ -11,8 +11,11 @@
  */
 
 import { RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Linking } from 'react-native';
 import WebView from 'react-native-webview';
 import * as Haptics from 'expo-haptics';
+import { Camera } from 'expo-camera';
+import { AudioModule } from 'expo-audio';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useWebViewRpcEndpoint,
@@ -73,6 +76,19 @@ export interface UseMiniAppBridgeOptions {
   onSignMessage?: (msg: MessageForApproval) => Promise<SigningResult>;
   onSignTypedData?: (data: TypedDataForApproval) => Promise<SigningResult>;
   onSwapToken?: (opts: { sellToken?: string; buyToken?: string; sellAmount?: string; chain?: string }) => void;
+  /** View a token's wallet detail / swap sheet. */
+  onViewToken?: (opts: { token: string; chain?: string }) => void;
+  /** Open the send-token sheet with the given prefill. The host is
+   *  responsible for resolving `recipientFid` → a chain address. */
+  onSendToken?: (opts: {
+    token: string;
+    chain?: string;
+    amount?: string;
+    recipientFid?: number;
+  }) => void;
+  /** Persist (or remove) the current miniapp from the user's added list.
+   *  Resolve with `{ added: true }` on success, `{ error }` on rejection. */
+  onAddMiniApp?: () => Promise<{ added: true } | { error: { type: string; message?: string } }>;
 }
 
 export interface MiniAppBridgeResult {
@@ -107,6 +123,9 @@ export function useMiniAppBridge(options: UseMiniAppBridgeOptions): MiniAppBridg
     onSignMessage,
     onSignTypedData,
     onSwapToken,
+    onViewToken,
+    onSendToken,
+    onAddMiniApp,
   } = options;
 
   // Debug: Log on every render
@@ -203,6 +222,12 @@ export function useMiniAppBridge(options: UseMiniAppBridgeOptions): MiniAppBridg
 
   const onComposeCastRef = useRef(onComposeCast);
   onComposeCastRef.current = onComposeCast;
+  const onViewTokenRef = useRef(onViewToken);
+  onViewTokenRef.current = onViewToken;
+  const onSendTokenRef = useRef(onSendToken);
+  onSendTokenRef.current = onSendToken;
+  const onAddMiniAppRef = useRef(onAddMiniApp);
+  onAddMiniAppRef.current = onAddMiniApp;
 
   const onViewProfileRef = useRef(onViewProfile);
   onViewProfileRef.current = onViewProfile;
@@ -369,7 +394,10 @@ export function useMiniAppBridge(options: UseMiniAppBridgeOptions): MiniAppBridg
       },
 
       openUrl: (url: string) => {
-        // TODO: Implement URL opening
+        // Best-effort: open externally. Linking handles http(s), mailto,
+        // tel, and platform-registered schemes alike. Silent on failure
+        // (miniapp shouldn't trust opening the link anyway).
+        Linking.openURL(url).catch(() => { /* ignore */ });
       },
 
       setPrimaryButton: (opts: SetPrimaryButtonOptions) => {
@@ -492,7 +520,18 @@ export function useMiniAppBridge(options: UseMiniAppBridgeOptions): MiniAppBridg
 
       // Frame/MiniApp management
       addMiniApp: async () => {
-        return { error: { type: 'rejected_by_user' } };
+        const handler = onAddMiniAppRef.current;
+        if (!handler) return { error: { type: 'rejected_by_user' } };
+        try {
+          return await handler();
+        } catch (e) {
+          return {
+            error: {
+              type: 'rejected_by_user',
+              message: e instanceof Error ? e.message : 'Add failed',
+            },
+          };
+        }
       },
 
       // Cast composition
@@ -594,11 +633,11 @@ export function useMiniAppBridge(options: UseMiniAppBridgeOptions): MiniAppBridg
       },
 
       viewToken: (opts: { token: string; chain?: string }) => {
-        // TODO: Navigate to token view in wallet modal
+        onViewTokenRef.current?.(opts);
       },
 
       sendToken: (opts: { token: string; chain?: string; amount?: string; recipientFid?: number }) => {
-        // TODO: Open send token flow
+        onSendTokenRef.current?.(opts);
       },
 
       swapToken: (opts: { sellToken?: string; buyToken?: string; sellAmount?: string; chain?: string }) => {
@@ -606,8 +645,31 @@ export function useMiniAppBridge(options: UseMiniAppBridgeOptions): MiniAppBridg
       },
 
       requestCameraAndMicrophoneAccess: async () => {
-        // TODO: Implement permission request
-        return true;
+        // Two-step gate. The OS-level permission prompt only fires the
+        // FIRST time per app install, so subsequent miniapp requests
+        // would otherwise grant silently — instead we surface a native
+        // confirm every time the miniapp asks, since the modal
+        // surrounding it doesn't carry that contract. Only after the
+        // user confirms do we ask the OS layer.
+        const confirmed = await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'Camera & Microphone Access',
+            `"${domain}" wants to use your camera and microphone.`,
+            [
+              { text: 'Deny', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Allow', onPress: () => resolve(true) },
+            ],
+            { onDismiss: () => resolve(false) },
+          );
+        });
+        if (!confirmed) return false;
+        try {
+          const cam = await Camera.requestCameraPermissionsAsync();
+          const mic = await AudioModule.requestRecordingPermissionsAsync();
+          return Boolean(cam.granted && mic.granted);
+        } catch {
+          return false;
+        }
       },
     };
   }, [context, domain, user]);

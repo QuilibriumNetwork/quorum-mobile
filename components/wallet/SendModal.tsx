@@ -51,6 +51,13 @@ interface SendModalProps {
   visible: boolean;
   onClose: () => void;
   preselectedAsset?: AggregatedAsset | null;
+  /** Optional prefilled recipient address. Applied on each `visible`
+   *  transition false → true, so re-opening the modal with a new value
+   *  picks it up. Pass a chain-appropriate format (0x… for EVM, base58
+   *  for Solana, etc.). */
+  initialRecipient?: string;
+  /** Optional prefilled amount string (token-denominated, decimal). */
+  initialAmount?: string;
 }
 
 // Threshold for requiring biometric auth (in USD)
@@ -59,7 +66,7 @@ const BIOMETRIC_THRESHOLD = 100;
 // Non-EVM chains that we support
 const NON_EVM_CHAINS = ['solana', 'bitcoin', 'kaspa', 'bittensor', 'tezos'];
 
-export default function SendModal({ visible, onClose, preselectedAsset }: SendModalProps) {
+export default function SendModal({ visible, onClose, preselectedAsset, initialRecipient, initialAmount }: SendModalProps) {
   const { theme, isDark } = useTheme();
   const { addresses, balances, refetch: refetchBalances } = useWallet();
   const { refetch: fetchKeys } = useWalletKeys();
@@ -127,6 +134,20 @@ export default function SendModal({ visible, onClose, preselectedAsset }: SendMo
       setSelectedAsset(preselectedAsset);
     }
   }, [preselectedAsset]);
+
+  // Apply the initial recipient / amount on each open. We tie this to
+  // `visible` (false → true) instead of the value props so a user
+  // editing the field after open doesn't get clobbered if the parent
+  // re-renders with the same prefill value.
+  const wasVisibleRef = React.useRef(visible);
+  React.useEffect(() => {
+    const wasVisible = wasVisibleRef.current;
+    wasVisibleRef.current = visible;
+    if (visible && !wasVisible) {
+      if (initialRecipient) setRecipient(initialRecipient);
+      if (initialAmount) setAmount(initialAmount);
+    }
+  }, [visible, initialRecipient, initialAmount]);
 
   const getChainColor = (chain: string): string => {
     switch (chain) {

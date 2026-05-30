@@ -34,7 +34,7 @@ import type {
 
 import { useAuth } from '@/context';
 import { useFarcasterChannel } from '@/hooks/useFarcasterChannel';
-import { postFarcasterCast } from '@/services/farcasterClient';
+import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
 import { useEffectiveBindings } from '@/services/space/channelBindings';
 import { flattenMessages, useMessages } from '@/hooks/chat/useMessages';
 import { useMembersWithPublicProfileFallback } from '@/hooks/useMembersWithPublicProfileFallback';
@@ -125,6 +125,11 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
   // we can post even if the cast is no longer in the merged stream when send
   // fires.
   const replyCastHashRef = useRef<string | null>(null);
+  // Author fid of the cast we're replying to — required for the
+  // hypersnap publish path (the protocol-level reply target is
+  // `castId: { fid, hash }`). Falls back to undefined → submit hook
+  // routes through the legacy path which accepts hash-only.
+  const replyParentFidRef = useRef<number | null>(null);
   const [editingMessage, setEditingMessage] = useState<EditingMessage | null>(null);
   const [pinnedMessagesPanelVisible, setPinnedMessagesPanelVisible] = useState(false);
   const [bookmarksPanelVisible, setBookmarksPanelVisible] = useState(false);
@@ -160,6 +165,12 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
   const unpinMessageMutation = useUnpinMessage();
 
   const { data: pinnedMessages } = usePinnedMessages(spaceId, channelId);
+  // Chat → Farcaster cast: hypersnap-first with the user's signer, legacy
+  // fallback on absence. Mention extraction is OFF — chat handles may
+  // collide with Farcaster usernames and we don't want to false-tag.
+  const { submitCast: submitFarcasterCast } = useFarcasterSubmitCast({
+    token: farcasterAuthToken ?? undefined,
+  });
   const { filteredMessages: filterMutedMessages } = useUserMuting(spaceId);
 
   // Linked Farcaster channels for this space-channel (local user pref).
@@ -425,8 +436,19 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
       // this specific send (toggle resets per reply target).
       if (alsoReplyOnFarcaster && isCastReply && replyCastHashRef.current && farcasterAuthToken) {
         const parentHash = replyCastHashRef.current;
-        const fcToken = farcasterAuthToken;
-        postFarcasterCast({ token: fcToken, text, parentHash }).catch((err) => {
+        // No parent fid here — chat surfaces don't track the cast's
+        // author. submitCast falls through to the legacy path which
+        // accepts just the hash. The hypersnap path requires fid so
+        // it'll be skipped, which is the safer behavior anyway for
+        // chat-originated replies (no signed key consent at compose).
+        const parentFid = replyParentFidRef.current;
+        submitFarcasterCast({
+          text,
+          parent: parentFid != null
+            ? { castHashHex: parentHash, fid: parentFid }
+            : undefined,
+          extractMentions: false,
+        }).catch((err) => {
           logger.debug('[SpaceChatArea] Farcaster reply failed:', err);
         });
       }
@@ -461,9 +483,14 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
     });
     // Reset the cast-reply opt-in for each new reply target.
     setAlsoReplyOnFarcaster(false);
-    // Capture the Farcaster cast hash if the user is replying to an inline cast.
+    // Capture the Farcaster cast hash + author fid if the user is
+    // replying to an inline cast. Both are needed for the hypersnap
+    // publish path; the legacy fallback uses hash only.
     replyCastHashRef.current = message.renderType === 'cast' && message.cast?.hash
       ? message.cast.hash
+      : null;
+    replyParentFidRef.current = message.renderType === 'cast' && message.cast?.author?.fid
+      ? message.cast.author.fid
       : null;
     spaceMessageInputRef.current?.focus();
   }, []);
@@ -472,6 +499,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
     setReplyToMessage(null);
     setAlsoReplyOnFarcaster(false);
     replyCastHashRef.current = null;
+    replyParentFidRef.current = null;
   }, []);
 
   const handleEditMessage = useCallback((message: DisplayMessage) => {

@@ -7,6 +7,9 @@ node_modules/
 # See PREBUILD.md.
 .ios-snapshot/
 
+# build
+modules/quorum-crypto/android/build/
+
 # Expo
 .expo/
 dist/
@@ -41,6 +44,3 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
-
-# build
-modules/quorum-crypto/android/build/

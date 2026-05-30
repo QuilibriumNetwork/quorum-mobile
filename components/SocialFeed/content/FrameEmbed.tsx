@@ -1,6 +1,7 @@
 import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SCREEN_WIDTH } from '../utils';
 
@@ -62,7 +63,7 @@ export function FrameEmbed({
       <Image
         source={{ uri: imageUrl }}
         style={styles.image}
-        resizeMode="cover"
+        contentFit="cover"
       />
       <View style={styles.buttonRow}>
         <Text style={styles.buttonText}>

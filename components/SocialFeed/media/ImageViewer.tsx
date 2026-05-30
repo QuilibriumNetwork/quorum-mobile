@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { saveMediaToLibrary } from '@/services/media/saveToLibrary';
 import Reanimated, {
@@ -335,7 +336,7 @@ export function ImageViewer({
                   <Image
                     source={{ uri: url }}
                     style={styles.image}
-                    resizeMode="contain"
+                    contentFit="contain"
                   />
                 </ReanimatedView>
               ))}

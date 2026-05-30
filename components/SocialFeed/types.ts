@@ -50,6 +50,12 @@ export interface FeedPost {
   authorHandle: string;
   authorAvatar?: string;
   channel?: string;
+  /** Parent cast hash (set on replies). */
+  parentHash?: string;
+  /** Parent URL — channel URL for channel posts, source URL for off-Farcaster replies. */
+  parentUrl?: string;
+  /** Parent author FID — username is resolved by the renderer. */
+  parentAuthorFid?: number;
   isPro?: boolean;
   time: string;
   content: string;

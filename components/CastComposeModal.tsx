@@ -1,7 +1,14 @@
 import { BaseModal } from '@/components/shared';
+import {
+  MentionAutocomplete,
+  getMentionInfo,
+  replaceMention,
+} from '@/components/SocialFeed/MentionAutocomplete';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { postFarcasterCast, uploadImageForCast } from '@/services/farcasterClient';
-import { pickImage, type ProcessedAttachment } from '@/services/media/imageAttachment';
+import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
+import { uploadImageForCast } from '@/services/farcasterClient';
+import { pickMedia, type ProcessedAttachment } from '@/services/media/imageAttachment';
+import { uploadVideoForCast } from '@/services/farcaster/videoUpload';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -37,34 +44,39 @@ export default function CastComposeModal({
 }: CastComposeModalProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { submitCast } = useFarcasterSubmitCast({ token });
 
   const [text, setText] = useState('');
-  const [images, setImages] = useState<ProcessedAttachment[]>([]);
+  const [cursor, setCursor] = useState(0);
+  const [attachments, setAttachments] = useState<ProcessedAttachment[]>([]);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const mentionInfo = useMemo(() => getMentionInfo(text, cursor), [text, cursor]);
 
   // Reset state on close
   useEffect(() => {
     if (!visible) {
       setText('');
-      setImages([]);
+      setAttachments([]);
       setPosting(false);
       setError(null);
     }
   }, [visible]);
 
-  const canPost = !posting && Boolean(token) && (text.trim().length > 0 || images.length > 0);
+  const canPost =
+    !posting && Boolean(token) && (text.trim().length > 0 || attachments.length > 0);
 
-  const handlePickImage = async () => {
-    if (images.length >= 2) return;
-    const result = await pickImage('library');
+  const handlePickMedia = async () => {
+    if (attachments.length >= 2) return;
+    const result = await pickMedia('library');
     if (result.success && result.attachment) {
-      setImages((prev) => [...prev, result.attachment!]);
+      setAttachments((prev) => [...prev, result.attachment!]);
     }
   };
 
-  const handleRemoveImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
+  const handleRemoveAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handlePost = async () => {
@@ -73,14 +85,18 @@ export default function CastComposeModal({
     setError(null);
     try {
       const embeds: string[] = [];
-      for (const image of images) {
-        const uploaded = await uploadImageForCast(token, image.localUri, image.mimeType);
-        embeds.push(uploaded.url);
+      for (const a of attachments) {
+        if (a.kind === 'video') {
+          const v = await uploadVideoForCast(token, a.localUri);
+          embeds.push(v.url);
+        } else {
+          const uploaded = await uploadImageForCast(token, a.localUri, a.mimeType);
+          embeds.push(uploaded.url);
+        }
       }
-      await postFarcasterCast({
-        token,
+      await submitCast({
         text: text.trim(),
-        embeds,
+        embedUrls: embeds,
         channelKey,
       });
       onPosted?.();
@@ -119,18 +135,42 @@ export default function CastComposeModal({
           maxLength={MAX_LENGTH}
           value={text}
           onChangeText={setText}
+          onSelectionChange={(e) => setCursor(e.nativeEvent.selection.end)}
           placeholder={channelKey ? `What's on your mind in /${channelKey}?` : "What's happening?"}
           placeholderTextColor={theme.colors.textMuted}
           style={styles.input}
           editable={!posting}
         />
 
-        {images.length > 0 && (
+        {mentionInfo && (
+          <MentionAutocomplete
+            mentionInfo={mentionInfo}
+            token={token}
+            theme={theme}
+            onSelectUser={(u) => {
+              const next = replaceMention(text, mentionInfo, u.username);
+              setText(next);
+              setCursor(mentionInfo.replaceStart + u.username.length + 1);
+            }}
+            onSelectChannel={(c) => {
+              const next = replaceMention(text, mentionInfo, c.key);
+              setText(next);
+              setCursor(mentionInfo.replaceStart + c.key.length + 1);
+            }}
+          />
+        )}
+
+        {attachments.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageRow} contentContainerStyle={{ gap: 8 }}>
-            {images.map((image, index) => (
+            {attachments.map((a, index) => (
               <View key={index} style={styles.imageWrap}>
-                <Image source={{ uri: image.localUri }} style={styles.image} />
-                <TouchableOpacity onPress={() => handleRemoveImage(index)} style={styles.removeImage}>
+                <Image source={{ uri: a.thumbnailLocalUri ?? a.localUri }} style={styles.image} />
+                {a.kind === 'video' && (
+                  <View style={styles.videoBadge}>
+                    <IconSymbol name="play.fill" size={12} color="#fff" />
+                  </View>
+                )}
+                <TouchableOpacity onPress={() => handleRemoveAttachment(index)} style={styles.removeImage}>
                   <IconSymbol name="xmark.circle.fill" size={18} color="#fff" />
                 </TouchableOpacity>
               </View>
@@ -139,8 +179,8 @@ export default function CastComposeModal({
         )}
 
         <View style={styles.footer}>
-          <TouchableOpacity onPress={handlePickImage} style={styles.iconButton} disabled={posting || images.length >= 2}>
-            <IconSymbol name="photo.fill" size={20} color={images.length >= 2 ? theme.colors.textMuted : theme.colors.accent} />
+          <TouchableOpacity onPress={handlePickMedia} style={styles.iconButton} disabled={posting || attachments.length >= 2}>
+            <IconSymbol name="photo.fill" size={20} color={attachments.length >= 2 ? theme.colors.textMuted : theme.colors.accent} />
           </TouchableOpacity>
           <View style={{ flex: 1 }} />
           <Text style={styles.charCount}>
@@ -218,6 +258,15 @@ function createStyles(theme: AppTheme) {
       height: 100,
       borderRadius: 8,
       backgroundColor: theme.colors.surface3,
+    },
+    videoBadge: {
+      position: 'absolute',
+      bottom: 4,
+      left: 4,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      borderRadius: 10,
+      paddingHorizontal: 4,
+      paddingVertical: 2,
     },
     removeImage: {
       position: 'absolute',

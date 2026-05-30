@@ -1,6 +1,7 @@
 import type { AppTheme } from '@/theme';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { setAudioModeAsync } from 'expo-audio';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -186,7 +187,7 @@ export function VideoPlayer({
           <Image
             source={{ uri: thumbnailUrl }}
             style={mediaStyle}
-            resizeMode="cover"
+            contentFit="cover"
           />
           {/* Play button overlay (interactive — its own tap target) */}
           <View style={staticStyles.overlay} pointerEvents="box-none">

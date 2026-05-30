@@ -21,6 +21,18 @@ export interface FarcasterCast {
   hash: string;
   timestamp: number;
   text: string;
+  /** Parent cast hash (set on replies). */
+  parentHash?: string;
+  /** Parent URL — for channel posts this is the channel URL; for replies
+   *  to off-Farcaster content this is the original URL. */
+  parentUrl?: string;
+  /** Parent author — populated for replies. `username` is best-effort and
+   *  may be undefined when only the FID was available at fetch time. */
+  parentAuthor?: {
+    fid: number;
+    username?: string;
+    displayName?: string;
+  };
   author: {
     fid: number;
     displayName: string;

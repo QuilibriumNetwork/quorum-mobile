@@ -11,6 +11,7 @@ import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
 import { useUserPublicProfile } from '@/hooks/useUserPublicProfile';
 import { useBookmarks } from '@/hooks/useUserConfig';
 import { useCall } from '@/context';
+import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { truncateAddress } from '@/utils/formatAddress';
 import { useTheme } from '@/theme';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -19,7 +20,6 @@ import React, { Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const BrowserModal = React.lazy(() => import('@/components/BrowserModal'));
 const UserProfileModal = React.lazy(() => import('@/components/UserProfileModal'));
 const DMSettingsSheet = React.lazy(() =>
   import('@/components/Chat/DMSettingsSheet').then((m) => ({ default: m.DMSettingsSheet }))
@@ -91,12 +91,7 @@ export default function DMChatScreen() {
 
   const draftsRef = useRef<Map<string, string>>(new Map());
 
-  const [selectedMiniApp, setSelectedMiniApp] = useState<{
-    url: string;
-    isQNative: boolean;
-    timestamp: number;
-    fromChatLink?: boolean;
-  } | null>(null);
+  const { openMiniapp } = useMiniappOverlay();
   const [selectedUserProfile, setSelectedUserProfile] = useState<MessageUserInfo | null>(null);
   const [settingsVisible, setSettingsVisible] = useState(false);
 
@@ -128,8 +123,10 @@ export default function DMChatScreen() {
   }, [conversation]);
 
   const handleLinkPress = useCallback((url: string) => {
-    setSelectedMiniApp({ url, isQNative: false, timestamp: Date.now(), fromChatLink: true });
-  }, []);
+    // Chat-link URLs are user-provided and may target LAN dev hosts, so
+    // pass `allowInsecureLAN` to keep dev-time previews working.
+    openMiniapp({ url, isQNative: false, allowInsecureLAN: true });
+  }, [openMiniapp]);
 
   const handleOpenFarcasterCast = useCallback((username: string, castHashPrefix: string) => {
     router.push({ pathname: '/feed', params: { username, castHashPrefix } });
@@ -268,18 +265,6 @@ export default function DMChatScreen() {
           tabBarHeight={tabBarHeight}
         />
 
-        {selectedMiniApp !== null && (
-          <Suspense fallback={null}>
-            <BrowserModal
-              visible
-              url={selectedMiniApp.url}
-              isQNative={selectedMiniApp.isQNative}
-              timestamp={selectedMiniApp.timestamp}
-              onClose={() => setSelectedMiniApp(null)}
-              allowInsecureLAN={selectedMiniApp.fromChatLink ?? false}
-            />
-          </Suspense>
-        )}
       </View>
     );
   }
@@ -310,18 +295,6 @@ export default function DMChatScreen() {
         draftsRef={draftsRef}
       />
 
-      {selectedMiniApp !== null && (
-        <Suspense fallback={null}>
-          <BrowserModal
-            visible
-            url={selectedMiniApp.url}
-            isQNative={selectedMiniApp.isQNative}
-            timestamp={selectedMiniApp.timestamp}
-            onClose={() => setSelectedMiniApp(null)}
-            allowInsecureLAN={selectedMiniApp.fromChatLink ?? false}
-          />
-        </Suspense>
-      )}
 
       {selectedUserProfile && (
         <Suspense fallback={null}>

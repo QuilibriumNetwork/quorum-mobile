@@ -1,7 +1,5 @@
-import HypersnapSignerPromptModal from '@/components/HypersnapSignerPromptModal';
 import ProfileModal from '@/components/ProfileModal';
 import ProfileSplitModeModal from '@/components/ProfileSplitModeModal';
-import { useHypersnapSignerLifecycle } from '@/hooks/useHypersnapSignerLifecycle';
 import AuctionsModal from '@/components/qns/AuctionsModal';
 import BuyNameModal from '@/components/qns/BuyNameModal';
 import MarketplaceModal from '@/components/qns/MarketplaceModal';
@@ -68,9 +66,6 @@ export default function UnifiedProfileScreen({
       setDecisionModalVisible(true);
     }
   }, [hasFarcaster]);
-
-  // Hypersnap signer opt-in prompt + background renewal.
-  const hypersnap = useHypersnapSignerLifecycle({ fid: user?.farcaster?.fid });
 
   const { author: farcasterAuthor } = useFarcasterProfile({
     fid: user?.farcaster?.fid ?? 0,
@@ -215,14 +210,6 @@ export default function UnifiedProfileScreen({
       <ProfileSplitModeModal
         visible={decisionModalVisible}
         onClose={() => setDecisionModalVisible(false)}
-      />
-
-      {/* Hypersnap signer opt-in (first-time prompt). Shown after the
-          split-mode modal so a brand-new Farcaster link sees the simpler
-          profile decision first. */}
-      <HypersnapSignerPromptModal
-        visible={hypersnap.promptVisible && !decisionModalVisible}
-        onClose={hypersnap.dismissPrompt}
       />
 
       {/* Edit target picker (split mode) */}

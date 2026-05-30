@@ -1,4 +1,3 @@
-import BrowserModal from '@/components/BrowserModal';
 import ListNameModal from '@/components/ListNameModal';
 import AuctionsModal from '@/components/qns/AuctionsModal';
 import MarketplaceModal from '@/components/qns/MarketplaceModal';
@@ -298,7 +297,6 @@ export default function ProfileModal({
   const [activeTab, setActiveTab] = React.useState<'profile' | 'premium' | 'settings'>('profile');
   const [usernameSearch, setUsernameSearch] = React.useState('');
   const [inviteCode, setInviteCode] = React.useState('');
-  const [qnsBrowserVisible, setQnsBrowserVisible] = React.useState(false);
   // Notifications toggle. Backed by MMKV via notificationPrefs so the
   // setting persists across launches AND is read by showMessageNotification
   // at presentation time. Previously this was plain React state with no
@@ -2293,13 +2291,6 @@ export default function ProfileModal({
           {profileContent}
         </View>
 
-        {/* QNS Website Browser Modal */}
-        <BrowserModal
-          visible={qnsBrowserVisible}
-          url="https://names.quilibrium.com/"
-          onClose={() => setQnsBrowserVisible(false)}
-        />
-
         {/* Registration Payment Modal */}
         <RegisterPaymentModal
           visible={registerPaymentVisible}
@@ -2438,12 +2429,6 @@ export default function ProfileModal({
       </BaseModal>
 
       {/* QNS Website Browser Modal */}
-      <BrowserModal
-        visible={qnsBrowserVisible}
-        url="https://names.quilibrium.com/"
-        onClose={() => setQnsBrowserVisible(false)}
-      />
-
       {/* Registration Payment Modal */}
       <RegisterPaymentModal
         visible={registerPaymentVisible}

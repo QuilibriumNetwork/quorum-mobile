@@ -1,6 +1,8 @@
 import FarcasterReimportSheet from '@/components/FarcasterReimportSheet';
+import HypersnapSignerPromptModal from '@/components/HypersnapSignerPromptModal';
 import SocialFeedModal, { type SocialFeedModalHandle } from '@/components/SocialFeedModal';
 import { useAuth } from '@/context/AuthContext';
+import { useHypersnapSignerLifecycle } from '@/hooks/useHypersnapSignerLifecycle';
 import { getFarcasterCustodyKey, getFarcasterFid } from '@/services/onboarding/secureStorage';
 import { feedActiveTabBus } from '@/services/ui/feedActiveTab';
 import { useTheme } from '@/theme';
@@ -39,6 +41,10 @@ export default function FeedScreen() {
       feedModalRef.current?.handleActiveTabTap();
     });
   }, []);
+
+  // Hypersnap signer opt-in prompt + background renewal. Mounted on the
+  // feed view since that's where the user is when they'd act on it.
+  const hypersnap = useHypersnapSignerLifecycle({ fid: user?.farcaster?.fid });
 
   type FcState =
     | { kind: 'checking' }
@@ -92,8 +98,11 @@ export default function FeedScreen() {
     void attempt();
   }, [farcasterAuthToken, attempt]);
 
-  const initialThread = params.username && params.castHashPrefix
-    ? { username: params.username, castHashPrefix: params.castHashPrefix }
+  // `username` is optional now — miniapp `viewCast` and other surfaces
+  // give us just the hash. The thread fetcher's hypersnap path doesn't
+  // need a username; the legacy fallback won't fire in that case.
+  const initialThread = params.castHashPrefix
+    ? { username: params.username ?? '', castHashPrefix: params.castHashPrefix }
     : undefined;
   const initialChannel = params.channelKey ? { channelKey: params.channelKey } : undefined;
   const initialProfile = (() => {
@@ -179,6 +188,10 @@ export default function FeedScreen() {
         initialChannel={initialChannel}
         initialProfile={initialProfile}
         isRouteMode={true}
+      />
+      <HypersnapSignerPromptModal
+        visible={hypersnap.promptVisible}
+        onClose={hypersnap.dismissPrompt}
       />
     </View>
   );

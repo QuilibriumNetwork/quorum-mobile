@@ -1,12 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
   <uses-permission android:name="android.permission.CAMERA"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-  <!-- Android 14+ requires a type-specific foreground service permission alongside
-       FOREGROUND_SERVICE. We use the "microphone" type for ongoing voice/video
-       calls because phoneCall would require MANAGE_OWN_CALLS / default-dialer
-       status that Quorum doesn't have. The service still keeps the WebRTC
-       pipeline alive in background; the "microphone" tag is the accurate
-       attribution for what the user permitted by joining the call. -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
   <uses-permission android:name="android.permission.INTERNET"/>
   <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
@@ -36,14 +30,7 @@
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ALWAYS"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATE_URL" android:value="https://u.expo.dev/5a410554-fd1e-4845-80bb-5f929202f1b2"/>
-    <!-- Foreground service that keeps an active voice/video call running
-         when the app is backgrounded. JS code in SpaceCallContext /
-         CallContext starts it on call connect and stops it on hangup.
-         See modules/quorum-crypto/.../QuorumCallService.kt. -->
-    <service
-      android:name="expo.modules.quorumcrypto.QuorumCallService"
-      android:foregroundServiceType="microphone"
-      android:exported="false"/>
+    <service android:name="expo.modules.quorumcrypto.QuorumCallService" android:foregroundServiceType="microphone" android:exported="false"/>
     <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true" android:screenOrientation="portrait">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>

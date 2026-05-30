@@ -12,6 +12,7 @@ import { getFarcasterCustodyKey } from '@/services/onboarding/secureStorage';
 import { mmkvStorage } from '@/services/offline/storage';
 import { hypersnapSignerStore } from './hypersnapAdapters';
 import {
+  getDefaultHypersnapClient,
   provisionSigner as sharedProvisionSigner,
   renewIfNearExpiry as sharedRenewIfNearExpiry,
   type SignerRecord,
@@ -82,4 +83,35 @@ export async function renewHypersnapSignerIfNeeded(): Promise<SignerRecord | nul
  *  concern (we'd want a confirmation modal); this just clears the device. */
 export async function forgetHypersnapSigner(): Promise<void> {
   await hypersnapSignerStore.clear();
+}
+
+/**
+ * Verify the locally-stored signer's pubkey is one of the Ed25519
+ * keys hypersnap currently considers valid for its FID. Returns:
+ *   - `'present'`  → local pubkey is in the registered signer list
+ *   - `'absent'`   → the FID has registered signers but ours isn't
+ *                    among them (stale record; reprovision required)
+ *   - `'unknown'`  → couldn't fetch the list (hub error). The caller
+ *                    should NOT wipe the local record on `unknown`;
+ *                    transient failures shouldn't trigger destructive
+ *                    cleanup.
+ *
+ * NOTE: this checks Snapchain's native signer state (KEY_ADD messages
+ * registered through `submitMessage`), NOT Optimism's KeyRegistry
+ * contract. The two are distinct signer sets.
+ */
+export async function verifyOnChainSignerPresence(
+  record: SignerRecord,
+): Promise<'present' | 'absent' | 'unknown'> {
+  const localPub = record.publicKeyHex.toLowerCase().replace(/^0x/, '');
+  try {
+    const registered = await getDefaultHypersnapClient().listSnapchainSignersByFid(record.fid);
+    // Empty list = either the FID legitimately has no registered
+    // signers, or the lookup silently failed. Conservatively treat
+    // that as `unknown` so we don't wipe a valid local record.
+    if (registered.length === 0) return 'unknown';
+    return registered.includes(localPub) ? 'present' : 'absent';
+  } catch {
+    return 'unknown';
+  }
 }

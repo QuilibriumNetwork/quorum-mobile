@@ -43,20 +43,27 @@ export function normalizedCastToLegacy(cast: NormalizedCast): FarcasterCast {
       continue;
     }
     if (e.url) {
+      // Hypersnap returns bare-URL embeds without OG enrichment. Still
+      // populate at least openGraph.url so the renderer keeps the embed
+      // (its filter drops anything without a url/title) and shows a
+      // plain link. Frame metadata only attaches when we actually have
+      // it from upstream.
+      let domain: string | undefined;
+      try {
+        domain = new URL(e.url).hostname;
+      } catch { /* keep undefined */ }
       urls.push({
-        openGraph: e.openGraph
-          ? {
-              url: e.url,
-              sourceUrl: e.openGraph.sourceUrl,
-              title: e.openGraph.title,
-              description: e.openGraph.description,
-              domain: e.openGraph.domain,
-              image: e.openGraph.image,
-              frameEmbedNext: e.frame
-                ? { frameUrl: e.url, frameEmbed: e.frame }
-                : undefined,
-            }
-          : undefined,
+        openGraph: {
+          url: e.url,
+          sourceUrl: e.openGraph?.sourceUrl ?? e.url,
+          title: e.openGraph?.title,
+          description: e.openGraph?.description,
+          domain: e.openGraph?.domain ?? domain,
+          image: e.openGraph?.image,
+          frameEmbedNext: e.frame
+            ? { frameUrl: e.url, frameEmbed: e.frame }
+            : undefined,
+        },
       });
       continue;
     }
@@ -77,14 +84,34 @@ export function normalizedCastToLegacy(cast: NormalizedCast): FarcasterCast {
     }
   }
 
+  // Channel inference from parentUrl as a fallback. Recognized hosts:
+  //   - (farcaster|warpcast).(xyz|com)/~/channel/<key>
+  //   - farcaster.group/<key>            (alternative channels host)
+  // If cast.channel itself isn't populated we still want the badge to render.
+  const channelKeyFromUrl = (() => {
+    if (cast.channel?.key) return null;
+    if (!cast.parentUrl) return null;
+    const m = cast.parentUrl.match(
+      /(?:(?:farcaster|warpcast)\.(?:xyz|com)\/~\/channel\/|farcaster\.group\/)([^\/\?#]+)/,
+    );
+    return m ? m[1] : null;
+  })();
+
   return {
     hash: cast.hash,
     timestamp: cast.timestamp,
     text: cast.text,
+    parentHash: cast.parentHash,
+    parentUrl: cast.parentUrl,
+    parentAuthor: cast.parentAuthor
+      ? { fid: cast.parentAuthor.fid }
+      : undefined,
     author,
     channel: cast.channel
       ? { key: cast.channel.key, name: cast.channel.name }
-      : undefined,
+      : channelKeyFromUrl
+        ? { key: channelKeyFromUrl }
+        : undefined,
     embeds: (images.length || videos.length || urls.length || quoteCasts.length)
       ? {
           images: images.length ? images : undefined,

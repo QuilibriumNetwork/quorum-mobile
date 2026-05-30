@@ -1,11 +1,10 @@
-import { BaseModal } from '@/components/shared';
 import { ProfileView } from '@/components/SocialFeed/views/ProfileView';
 import { ThreadDetailView } from '@/components/SocialFeed/views/ThreadDetailView';
 import { Button } from '@/components/ui/Button';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useWalletSelection, useActiveWalletKeys } from '@/hooks/useWalletSelection';
-import { useWalletKeys } from '@/hooks/useWallet';
-import { postFarcasterCast } from '@/services/farcasterClient';
+import { useWallet, useWalletKeys, aggregateAssets, type AggregatedAsset } from '@/hooks/useWallet';
+import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
 import { useMiniAppBridge, type ComposeCastOptions, type ComposeCastResult } from '@/services/miniapp';
 import {
   TransactionForApproval,
@@ -19,15 +18,23 @@ import {
   signAndSendTransaction,
   signTransactionOnly,
 } from '@/services/miniapp/secureSigningService';
+import { likeCast, unlikeCast, followUser, unfollowUser } from '@/services/farcasterClient';
+import { resolveFidByUsername } from '@/services/farcaster/mentionExtraction';
+import { fetchFarcasterUser } from '@quilibrium/quorum-shared';
+import { useQueryClient } from '@tanstack/react-query';
 import { getFarcasterAuthToken } from '@/services/onboarding/secureStorage';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { getErrorMessage } from '@/utils/error';
 import MiniAppApprovalModal, { ApprovalRequest } from '@/components/MiniAppApprovalModal';
 import SwapModal from '@/components/wallet/SwapModal';
+import SendModal from '@/components/wallet/SendModal';
+import { addMiniapp } from '@/services/miniapp/addedMiniapps';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  Animated,
   Dimensions,
   KeyboardAvoidingView,
   Linking,
@@ -42,6 +49,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
 
@@ -55,6 +63,13 @@ interface BrowserModalProps {
   timestamp?: number;
   /** Allow bypassing SSL certificate errors for LAN IP addresses (development only) */
   allowInsecureLAN?: boolean;
+  /** When true the sheet animates off-screen but BrowserModal stays
+   *  mounted — the WebView's RN view (and its JS / DOM state) survives.
+   *  Restored by setting back to false. */
+  minimized?: boolean;
+  /** Called when the miniapp triggers a view-cast/view-profile action;
+   *  the host context typically sets `minimized=true`. */
+  onMinimize?: () => void;
 }
 
 // Check if a URL is a LAN/local IP address
@@ -80,7 +95,7 @@ function isLanUrl(url: string): boolean {
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export default function BrowserModal({ visible, url, onClose, isQNative = false, onShowTransactionWarning, timestamp = 0, allowInsecureLAN = false }: BrowserModalProps) {
+export default function BrowserModal({ visible, url, onClose, isQNative = false, onShowTransactionWarning, timestamp = 0, allowInsecureLAN = false, minimized = false, onMinimize }: BrowserModalProps) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const webViewRef = useRef<WebView>(null);
@@ -123,6 +138,13 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
     });
   }, []);
 
+  // Hypersnap-first cast publish for the miniapp compose flow. Mention
+  // extraction stays on — miniapp text typically intends @-handles as
+  // Farcaster usernames; falls back to legacy when no signer.
+  const { submitCast: submitMiniAppCast } = useFarcasterSubmitCast({
+    token: farcasterToken,
+  });
+
   // Delay source loading for LAN URLs to ensure native prop is set before WebView loads
   useEffect(() => {
     if (shouldBypassSsl && !sourceReady) {
@@ -136,6 +158,12 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
   // Get private key for warpcast wallet (available immediately) or fetch for builtin
   const { privateKey: warpcastPrivateKey } = useActiveWalletKeys();
   const { refetch: fetchBuiltinKeys } = useWalletKeys();
+  // User's wallet balances aggregated into a flat list. Used by the
+  // sendToken miniapp handler to look up the requested token's
+  // canonical entry (symbol + decimals), since miniapps pass only a
+  // CAIP-19 reference and we need real decimals for the amount field.
+  const { balances } = useWallet();
+  const allAssets = React.useMemo(() => aggregateAssets(balances), [balances]);
 
   // Helper to get private key on-demand (for signing)
   const getPrivateKeyForSigning = useCallback(async (): Promise<string | null> => {
@@ -152,6 +180,10 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
   const [showWalletSelector, setShowWalletSelector] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapInitialBuyToken, setSwapInitialBuyToken] = useState<string | undefined>(undefined);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [sendInitialAsset, setSendInitialAsset] = useState<AggregatedAsset | null>(null);
+  const [sendInitialRecipient, setSendInitialRecipient] = useState<string | undefined>(undefined);
+  const [sendInitialAmount, setSendInitialAmount] = useState<string | undefined>(undefined);
 
   // Convert active wallet to WalletInfo format for the bridge
   // SECURITY: Only pass the address, not the private key
@@ -429,11 +461,13 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
       // Build embeds array with URLs
       const embeds = composeEmbeds.map(url => url);
 
-      const result = await postFarcasterCast({
-        token,
+      const result = await submitMiniAppCast({
         text: composeText.trim(),
-        embeds,
-        parentHash: composeParentHash,
+        embedUrls: embeds,
+        parent: composeParentHash
+          ? { castHashHex: composeParentHash }
+          : undefined,
+        channelKey: composeChannelKey,
       });
 
       // Close compose modal
@@ -458,42 +492,134 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
     }
   }, [composeText, composeEmbeds, composeParentHash, composeChannelKey, composePosting]);
 
-  // Handle viewProfile from mini app SDK
-  const handleViewProfile = useCallback((opts: { fid?: number; username?: string }) => {
-    if (opts.fid) {
-      setProfileOverlay({ fid: opts.fid });
+  const queryClient = useQueryClient();
+
+  // Minimize the miniapp so the WebView's RN view + JS state survive
+  // while the user views the cast/profile. Falls back to `onClose`
+  // when the host doesn't provide a minimize callback (legacy
+  // local-state hosts that haven't been migrated to
+  // MiniappOverlayProvider).
+  const minimizeOrClose = useCallback(() => {
+    if (onMinimize) onMinimize();
+    else onClose();
+  }, [onMinimize, onClose]);
+
+  // Handle viewProfile from mini app SDK — navigate to the user's
+  // profile in the feed tab, minimize the miniapp so it's available
+  // to restore.
+  const handleViewProfile = useCallback(async (opts: { fid?: number; username?: string }) => {
+    let fid = opts.fid;
+    if (!fid && opts.username) {
+      fid = (await resolveFidByUsername(queryClient, opts.username)) ?? undefined;
     }
-    // TODO: Handle username-only case by looking up FID
-  }, []);
+    minimizeOrClose();
+    if (fid) {
+      // The feed tab consumes `?profileFid=…` and opens the profile
+      // overlay on mount.
+      router.push({
+        pathname: '/(tabs)/feed',
+        params: { profileFid: String(fid) },
+      });
+    }
+  }, [queryClient, minimizeOrClose]);
 
-  // Handle viewCast from mini app SDK
+  // Handle viewCast from mini app SDK — navigate to the cast in the
+  // feed tab, minimize the miniapp so it's available to restore.
   const handleViewCast = useCallback((opts: { hash: string }) => {
-    // Cast hash format: we need username and hash prefix for ThreadDetailView
-    // For now, we'll use a placeholder username and the hash as prefix
-    // The ThreadDetailView will fetch the actual cast data
-    setCastOverlay({ username: '', castHashPrefix: opts.hash });
-  }, []);
+    minimizeOrClose();
+    router.push({
+      pathname: '/(tabs)/feed',
+      params: { username: '', castHashPrefix: opts.hash },
+    });
+  }, [minimizeOrClose]);
 
-  // Handle like toggle in overlays
-  const handleLikeToggle = useCallback((castHash: string, currentlyLiked: boolean, currentCount: number) => {
+  // Handle like toggle in overlays — confirm + API call. Optimistically
+  // update local state, roll back on failure.
+  const handleLikeToggle = useCallback(async (castHash: string, currentlyLiked: boolean, currentCount: number) => {
+    const action = currentlyLiked ? 'Unlike' : 'Like';
+    const confirmed = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        `${action} cast?`,
+        currentlyLiked
+          ? 'Remove your like from this cast?'
+          : 'Like this cast on Farcaster?',
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: action, onPress: () => resolve(true) },
+        ],
+        { onDismiss: () => resolve(false) },
+      );
+    });
+    if (!confirmed) return;
+
+    const token = await getFarcasterAuthToken();
+    if (!token) return;
+
+    // Optimistic
     setLikeStates(prev => {
       const next = new Map(prev);
       next.set(castHash, { liked: !currentlyLiked, count: currentlyLiked ? currentCount - 1 : currentCount + 1 });
       return next;
     });
-    // TODO: Actually call the like/unlike API
+    try {
+      if (currentlyLiked) {
+        await unlikeCast({ token, castHash });
+      } else {
+        await likeCast({ token, castHash });
+      }
+    } catch {
+      // Roll back on failure.
+      setLikeStates(prev => {
+        const next = new Map(prev);
+        next.set(castHash, { liked: currentlyLiked, count: currentCount });
+        return next;
+      });
+    }
   }, []);
 
-  // Handle follow toggle in overlays
-  const handleFollow = useCallback((fid: number) => {
+  // Handle follow toggle in overlays — confirm + API call.
+  const handleFollow = useCallback(async (fid: number) => {
+    const isFollowing = followStates.get(fid) ?? false;
+    const action = isFollowing ? 'Unfollow' : 'Follow';
+    const confirmed = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        `${action} user?`,
+        isFollowing
+          ? 'Stop following this user on Farcaster?'
+          : 'Follow this user on Farcaster?',
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: action, onPress: () => resolve(true) },
+        ],
+        { onDismiss: () => resolve(false) },
+      );
+    });
+    if (!confirmed) return;
+
+    const token = await getFarcasterAuthToken();
+    if (!token) return;
+
+    // Optimistic
     setFollowStates(prev => {
       const next = new Map(prev);
-      const isFollowing = prev.get(fid) ?? false;
       next.set(fid, !isFollowing);
       return next;
     });
-    // TODO: Actually call the follow/unfollow API
-  }, []);
+    try {
+      if (isFollowing) {
+        await unfollowUser({ token, targetFid: fid });
+      } else {
+        await followUser({ token, targetFid: fid });
+      }
+    } catch {
+      // Roll back on failure.
+      setFollowStates(prev => {
+        const next = new Map(prev);
+        next.set(fid, isFollowing);
+        return next;
+      });
+    }
+  }, [followStates]);
 
   // Handle navigation within overlays (profile -> thread, thread -> profile, etc.)
   const handleOverlayOpenThread = useCallback((username: string, hashPrefix: string) => {
@@ -530,6 +656,88 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
     setShowSwapModal(true);
   }, []);
 
+  // viewToken — the SDK's read-only counterpart to swapToken. Our
+  // wallet UI doesn't have a dedicated "view token" sheet, so we route
+  // to the same Swap surface preselected as the buy side. User can
+  // dismiss without acting if they just wanted to inspect price/liquidity.
+  const handleViewToken = useCallback((opts: { token: string; chain?: string }) => {
+    handleSwapToken({ buyToken: opts.token, chain: opts.chain });
+  }, [handleSwapToken]);
+
+  // sendToken — open the send sheet with recipient + amount prefilled
+  // when the miniapp provided them. Token-level prefill (symbol/decimals)
+  // is best-effort: we look up the address in the user's existing
+  // balances and only preselect the asset when we find a match (the
+  // exact decimals matter for amount conversion — better to leave the
+  // picker open than to silently send a wrong-decimals tx).
+  const handleSendToken = useCallback(async (opts: {
+    token: string;
+    chain?: string;
+    amount?: string;
+    recipientFid?: number;
+  }) => {
+    // Resolve recipientFid → primary ETH verified address. Solana
+    // miniapps don't ride this code path today.
+    let recipient: string | undefined;
+    if (opts.recipientFid) {
+      try {
+        const user = await fetchFarcasterUser(opts.recipientFid);
+        recipient = user?.primaryEthAddress ?? user?.verifiedEthAddresses?.[0];
+      } catch {
+        // Leave recipient empty so the user can paste/enter manually.
+      }
+    }
+
+    // Parse CAIP-19 token reference (same shape handleSwapToken uses).
+    let chainName: string | undefined;
+    let contractAddress: string | undefined;
+    const caip = opts.token.match(/eip155:(\d+)\/erc20:(.+)$/);
+    if (caip) {
+      const chainId = parseInt(caip[1], 10);
+      contractAddress = caip[2].toLowerCase();
+      const idToChain: Record<number, string> = {
+        1: 'ethereum',
+        8453: 'base',
+        42161: 'arbitrum',
+        10: 'optimism',
+        137: 'polygon',
+      };
+      chainName = idToChain[chainId];
+    }
+
+    // Match against the user's holdings — only set preselectedAsset
+    // when symbol + decimals can be trusted from a real balance row.
+    const matched = contractAddress && chainName
+      ? allAssets.find(
+          (a) =>
+            a.chain === chainName &&
+            (a.contractAddress?.toLowerCase() === contractAddress),
+        )
+      : undefined;
+
+    setSendInitialAsset(matched ?? null);
+    setSendInitialRecipient(recipient);
+    setSendInitialAmount(opts.amount);
+    setShowSendModal(true);
+  }, [allAssets]);
+
+  // addMiniApp — persist the current miniapp into the user's "added"
+  // list (MMKV-backed) and confirm to the SDK. The launcher consumes
+  // that list to render the user's pinned set.
+  const handleAddMiniApp = useCallback(async () => {
+    try {
+      addMiniapp({ domain, url: currentUrl });
+      return { added: true as const };
+    } catch (e) {
+      return {
+        error: {
+          type: 'rejected_by_user',
+          message: e instanceof Error ? e.message : 'Failed to add',
+        },
+      };
+    }
+  }, [domain, currentUrl]);
+
   // MiniApp bridge - uses Comlink to expose SDK to mini apps
   // SECURITY: Only passes walletInfo (address), not private key.
   // Signing is performed via secure callbacks after user approval.
@@ -560,6 +768,9 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
     onSignMessage: handleSignMessage,
     onSignTypedData: handleSignTypedData,
     onSwapToken: handleSwapToken,
+    onViewToken: handleViewToken,
+    onSendToken: handleSendToken,
+    onAddMiniApp: handleAddMiniApp,
   });
 
   // Fallback timeout: hide splash after 2 seconds if ready() hasn't been called
@@ -688,6 +899,36 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
 
   const styles = createStyles(theme, isDark, insets, isQNative);
 
+  // ---------------------------------------------------------------
+  // Slide / backdrop animation. We don't use RN <Modal>: the WebView
+  // needs to survive minimize, and RN Modal unmounts its children when
+  // `visible` flips. Instead we render a full-screen absolute overlay
+  // whose translateY drives show/hide/minimize. The container's
+  // `pointerEvents` flips to 'box-none' while minimized so taps fall
+  // through to the app behind.
+  // ---------------------------------------------------------------
+  const SHEET_TOP = SCREEN_HEIGHT * 0.05;
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const backdropAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const shown = visible && !minimized;
+    Animated.parallel([
+      Animated.spring(slideAnim, {
+        toValue: shown ? 0 : SCREEN_HEIGHT,
+        useNativeDriver: true,
+        damping: 22,
+        mass: 0.8,
+        stiffness: 220,
+      }),
+      Animated.timing(backdropAnim, {
+        toValue: shown ? 1 : 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [visible, minimized, slideAnim, backdropAnim]);
+  const overlayPointerEvents = minimized || !visible ? 'box-none' : 'auto';
+
   const getDomain = (url: string, isQNative: boolean) => {
     try {
       const domain = new URL(url).hostname;
@@ -698,14 +939,55 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
   };
 
   return (
-    <BaseModal
-      visible={visible}
-      onClose={onClose}
-      height={0.95}
-      showHandle={true}
-      handleContainerStyle={isQNative ? styles.handleQNative : undefined}
-      fillHeight={true}
+    <View
+      pointerEvents={overlayPointerEvents}
+      style={StyleSheet.absoluteFill}
     >
+      {/* Backdrop — taps close the miniapp. Mounted-but-transparent
+          when minimized so the WebView stays visible / alive
+          underneath. */}
+      <Animated.View
+        pointerEvents={minimized ? 'none' : 'auto'}
+        style={[
+          StyleSheet.absoluteFillObject,
+          { backgroundColor: 'rgba(0,0,0,0.5)', opacity: backdropAnim },
+        ]}
+      >
+        <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
+      </Animated.View>
+      {/* Slide-up sheet. Stays in the tree across minimize so the
+          WebView's RN view (and JS state) survives. */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          top: SHEET_TOP,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: theme.colors.surface1,
+          borderTopLeftRadius: 16,
+          borderTopRightRadius: 16,
+          overflow: 'hidden',
+          transform: [{ translateY: slideAnim }],
+        }}
+      >
+        {/* Handle bar — matches the visual cue BaseModal provided */}
+        <View
+          style={[
+            {
+              alignSelf: 'center',
+              width: 36,
+              height: 4,
+              borderRadius: 2,
+              marginTop: 6,
+              marginBottom: 4,
+              backgroundColor: isQNative
+                ? theme.colors.info
+                : theme.colors.surface3,
+            },
+            isQNative ? styles.handleQNative : undefined,
+          ]}
+        />
       {/* Browser Header */}
       <View style={[styles.header, isQNative && styles.headerQNative]}>
         <View style={styles.urlContainer}>
@@ -926,8 +1208,16 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
                   variant="primary"
                   onPress={() => {
                     setShowFarcasterPrompt(false);
-                    // TODO: Navigate to settings to import Farcaster
-                    setTimeout(onClose, 100);
+                    // Deep-link to the account screen with a flag the
+                    // screen reads to auto-open the Farcaster import
+                    // (Warpcast wallet) flow.
+                    setTimeout(() => {
+                      onClose();
+                      router.push({
+                        pathname: '/(tabs)/account',
+                        params: { openWarpcastImport: '1' },
+                      });
+                    }, 100);
                   }}
                   style={styles.farcasterModalButton}
                 >
@@ -1133,7 +1423,24 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
         }}
         initialBuyToken={swapInitialBuyToken}
       />
-    </BaseModal>
+
+      {/* Send Modal - opened by mini apps requesting the send-token flow */}
+      <SendModal
+        visible={showSendModal}
+        onClose={() => {
+          setShowSendModal(false);
+          // Clear the prefill so the next open from a different
+          // surface (or no miniapp at all) starts fresh.
+          setSendInitialAsset(null);
+          setSendInitialRecipient(undefined);
+          setSendInitialAmount(undefined);
+        }}
+        preselectedAsset={sendInitialAsset}
+        initialRecipient={sendInitialRecipient}
+        initialAmount={sendInitialAmount}
+      />
+      </Animated.View>
+    </View>
   );
 }
 
