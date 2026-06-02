@@ -43,6 +43,9 @@ async function ensureAudioMode() {
 interface VideoViewerProps {
   visible: boolean;
   url: string;
+  /** Preferred URL for save-to-library (the original source). `url` is usually
+   *  the HLS manifest, which can't be saved; fall back to it only if needed. */
+  downloadUrl?: string;
   onClose: () => void;
 }
 
@@ -59,8 +62,13 @@ interface VideoViewerProps {
  * Mount it only while fullscreen is active so we don't spin up a second
  * player for every video in the feed.
  */
-export function VideoViewer({ visible, url, onClose }: VideoViewerProps) {
+export function VideoViewer({ visible, url, downloadUrl, onClose }: VideoViewerProps) {
   const [saving, setSaving] = useState(false);
+
+  // Prefer the original source for saving; `url` is usually an HLS manifest
+  // (can't be saved). Only fall back to `url` if there's no better option.
+  const isHls = (u?: string) => !!u && /\.m3u8(\?|#|$)/i.test(u);
+  const saveUrl = downloadUrl && !isHls(downloadUrl) ? downloadUrl : url;
 
   const player = useVideoPlayer(url, (p) => {
     p.loop = false;
@@ -79,9 +87,9 @@ export function VideoViewer({ visible, url, onClose }: VideoViewerProps) {
   }, [visible, player]);
 
   const handleSave = useCallback(async () => {
-    if (!url || saving) return;
+    if (!saveUrl || saving) return;
     setSaving(true);
-    const result = await saveMediaToLibrary(url, 'video');
+    const result = await saveMediaToLibrary(saveUrl, 'video');
     setSaving(false);
     if (result.ok) {
       Alert.alert('Saved', 'Video saved to your library.');
@@ -96,7 +104,7 @@ export function VideoViewer({ visible, url, onClose }: VideoViewerProps) {
               : `Couldn’t save the video${result.detail ? ` (${result.detail})` : ''}.`;
       Alert.alert('Save failed', message);
     }
-  }, [url, saving]);
+  }, [saveUrl, saving]);
 
   // Swipe down to dismiss. activeOffsetY only claims clear downward drags, and
   // failOffsetX lets horizontal scrubber drags fall through to the native

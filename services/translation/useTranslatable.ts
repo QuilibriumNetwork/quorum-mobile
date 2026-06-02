@@ -48,10 +48,23 @@ export type TranslateState =
   | 'translated'
   | 'error';
 
-/** Below this length detection is unreliable / not worth a bridge call. */
+/** Below this length detection is unreliable / not worth a bridge call — for
+ *  Latin-script text. Dense scripts (see below) carry a full message in 1–3
+ *  characters, so the gate doesn't apply to them. */
 const MIN_LENGTH = 8;
 /** Confidence floor for *auto*-offering the toggle (forced translate ignores). */
 const MIN_CONFIDENCE = 0.55;
+
+/** Scripts where a 1–3 char string is a complete, unambiguously-detectable
+ *  message (CJK, Hangul, Kana, Thai, …). The character-count min length is
+ *  Latin-centric and would wrongly hide the toggle on e.g. a 2-char 中文 chat. */
+const DENSE_SCRIPT_RE =
+  /[぀-ヿ㐀-䶿一-鿿豈-﫿ｦ-ﾟᄀ-ᇿ가-힯฀-๿]/;
+
+/** Whether `text` clears the length gate (dense scripts bypass it). */
+function longEnough(text: string): boolean {
+  return text.length >= MIN_LENGTH || DENSE_SCRIPT_RE.test(text);
+}
 
 /** Compare on the primary subtag so "zh-Hans" matches a "zh" target. */
 function primary(code: string): string {
@@ -167,7 +180,7 @@ export function useTranslatable(rawText: string, enabled: boolean): Translatable
     detectedRef.current = null;
 
     const text = (rawText ?? '').trim();
-    if (!enabled || text.length < MIN_LENGTH) return;
+    if (!enabled || !longEnough(text)) return;
 
     let cancelled = false;
     (async () => {

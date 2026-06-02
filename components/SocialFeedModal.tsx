@@ -11,6 +11,7 @@ import { useMiniappManifest } from '@/hooks/useMiniappManifest';
 import { useOgMetadata } from '@/hooks/useOgMetadata';
 import { SnapEmbed, useSnapDetection } from '@/components/SocialFeed/content/SnapEmbed';
 import { ImageViewer } from '@/components/SocialFeed/media/ImageViewer';
+import { VideoViewer } from '@/components/SocialFeed/media/VideoViewer';
 import { extractYouTubeMatchesFromText, YouTubeEmbed, parseYouTubeUrl } from '@/components/SocialFeed/media/YouTubeEmbed';
 import { MentionAutocomplete, getMentionInfo, replaceMention, type MentionInfo } from '@/components/SocialFeed/MentionAutocomplete';
 import { GovernanceView, ProposalDetailView } from '@/components/SocialFeed/views';
@@ -928,6 +929,7 @@ function ShareToChatModal({
 
 function VideoPlayer({
   url,
+  downloadUrl,
   thumbnailUrl,
   width,
   height,
@@ -935,6 +937,7 @@ function VideoPlayer({
   theme
 }: {
   url: string;
+  downloadUrl?: string;
   thumbnailUrl?: string;
   width?: number;
   height?: number;
@@ -943,6 +946,7 @@ function VideoPlayer({
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const videoRef = useRef<VideoView>(null);
   const aspectRatio = width && height ? height / width : 9 / 16;
   const calculatedHeight = Math.min(SCREEN_WIDTH * aspectRatio, SCREEN_HEIGHT * 0.7);
@@ -992,23 +996,20 @@ function VideoPlayer({
     }
   };
 
-  // Tap anywhere else on the video surface → enter fullscreen. Starts
-  // playback first if needed so the user lands in the immersive view
-  // already playing.
+  // Tap anywhere else on the video surface → open the in-app fullscreen
+  // viewer (native transport controls + close + save + swipe-to-dismiss).
+  // Native `enterFullscreen()` on a nativeControls={false} view showed no
+  // controls. Pause the inline player so the two don't play over each other.
   const handleSurfaceTap = () => {
-    if (!hasStarted) {
-      setHasStarted(true);
-      setIsPlaying(true);
-      player.play();
+    if (isPlaying) {
+      player.pause();
+      setIsPlaying(false);
     }
-    // Wait for VideoView to mount on the very first tap before calling
-    // its imperative API.
-    requestAnimationFrame(() => {
-      videoRef.current?.enterFullscreen();
-    });
+    setFullscreen(true);
   };
 
   return (
+    <>
     <Pressable onPress={handleSurfaceTap} style={{ position: 'relative' }}>
       {!hasStarted ? (
         <>
@@ -1129,6 +1130,10 @@ function VideoPlayer({
         </>
       )}
     </Pressable>
+    {fullscreen && (
+      <VideoViewer visible url={url} downloadUrl={downloadUrl} onClose={() => setFullscreen(false)} />
+    )}
+    </>
   );
 }
 
@@ -2658,6 +2663,7 @@ function ThreadDetailView({
               <VideoPlayer
                 key={index}
                 url={video.url!}
+                downloadUrl={(video as { sourceUrl?: string }).sourceUrl}
                 thumbnailUrl={video.thumbnailUrl!}
                 width={video.width}
                 height={video.height}
@@ -3574,6 +3580,7 @@ export function ProfileView({
               <VideoPlayer
                 key={index}
                 url={video.url!}
+                downloadUrl={(video as { sourceUrl?: string }).sourceUrl}
                 thumbnailUrl={video.thumbnailUrl!}
                 width={video.width}
                 height={video.height}
@@ -4142,6 +4149,7 @@ function ChannelView({
               <VideoPlayer
                 key={index}
                 url={video.url!}
+                downloadUrl={(video as { sourceUrl?: string }).sourceUrl}
                 thumbnailUrl={video.thumbnailUrl!}
                 width={video.width}
                 height={video.height}

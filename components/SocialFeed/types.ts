@@ -4,6 +4,9 @@ export type FeedFilter = 'all' | 'media' | 'governance' | 'node-ops' | 'events';
 
 export interface VideoEmbed {
   url?: string;
+  /** Original source URL (often a direct file), as opposed to `url` which is
+   *  usually the HLS playback manifest. Preferred for save-to-library. */
+  sourceUrl?: string;
   thumbnailUrl?: string;
   width?: number;
   height?: number;

@@ -93,6 +93,13 @@ export async function saveMediaToLibrary(
     return { ok: false, reason: 'invalid_url' };
   }
 
+  // HLS streams (.m3u8) are a playlist of segments, not a single file —
+  // downloading the manifest and handing it to the camera roll always fails.
+  // We can't remux on-device, so report it honestly.
+  if (kind === 'video' && /\.m3u8(\?|#|$)/i.test(url)) {
+    return { ok: false, reason: 'save_failed', detail: 'streaming video (HLS) can’t be saved' };
+  }
+
   // Permission. iOS distinguishes write-only ("add") and full access;
   // requesting `writeOnly` covers our case (we never read existing
   // photos) and prompts the least invasive system dialog.

@@ -1,14 +1,15 @@
 /**
- * MnemonicInputView - Input grid for 24-word mnemonic import
+ * MnemonicInputView — single text field for importing a BIP-39 recovery
+ * phrase. Accepts any valid length (12 / 15 / 18 / 21 / 24 words); the user
+ * just pastes or types the whole phrase.
  */
 
-import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import React, { useState } from 'react';
+import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { useTheme, type AppTheme } from '@/theme';
 import { Button } from '@/components/ui/Button';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { validateMnemonic, suggestWord } from '@/services/onboarding/keyService';
+import { validateMnemonic } from '@/services/onboarding/keyService';
 import * as Skin from '@/theme/skins/geometry';
 
 interface MnemonicInputViewProps {
@@ -17,6 +18,8 @@ interface MnemonicInputViewProps {
   isLoading?: boolean;
   error?: string | null;
 }
+
+const VALID_COUNTS = [12, 15, 18, 21, 24];
 
 export function MnemonicInputView({
   onSubmit,
@@ -27,57 +30,29 @@ export function MnemonicInputView({
   const { theme } = useTheme();
   const styles = createStyles(theme);
 
-  const [words, setWords] = useState<string[]>(Array(24).fill(''));
-  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const inputRefs = useRef<(TextInput | null)[]>([]);
+  const [phrase, setPhrase] = useState('');
 
+  // Split on any whitespace; ignore stray blanks (e.g. a trailing space).
+  const words = phrase.trim().length > 0 ? phrase.trim().split(/\s+/) : [];
   const { valid, invalidWords } = validateMnemonic(words);
-  const filledCount = words.filter(w => w.trim().length > 0).length;
 
-  const handleWordChange = (index: number, value: string) => {
-    const newWords = [...words];
-    newWords[index] = value.toLowerCase().trim();
-    setWords(newWords);
-
-    // Show suggestions
-    if (value.length >= 2) {
-      setSuggestions(suggestWord(value));
+  // A short, specific hint so the user knows what's wrong.
+  let hint = '';
+  if (words.length > 0) {
+    if (invalidWords.length > 0) {
+      hint = `Word ${invalidWords[0] + 1} ("${words[invalidWords[0]]}") isn’t a recovery word`;
+    } else if (!VALID_COUNTS.includes(words.length)) {
+      hint = `${words.length} words — a phrase is 12 or 24 words`;
+    } else if (!valid) {
+      hint = 'This recovery phrase is invalid (checksum failed)';
     } else {
-      setSuggestions([]);
+      hint = `${words.length}-word phrase ✓`;
     }
-  };
-
-  const handleSelectSuggestion = (suggestion: string) => {
-    if (focusedIndex !== null) {
-      const newWords = [...words];
-      newWords[focusedIndex] = suggestion;
-      setWords(newWords);
-      setSuggestions([]);
-
-      // Move to next input
-      if (focusedIndex < 23) {
-        inputRefs.current[focusedIndex + 1]?.focus();
-      }
-    }
-  };
+  }
 
   const handleSubmit = async () => {
     if (valid) {
       await onSubmit(words);
-    }
-  };
-
-  const handlePaste = async (index: number, text: string) => {
-    // Check if pasted text looks like a full mnemonic
-    const pastedWords = text.trim().split(/\s+/);
-    if (pastedWords.length >= 12) {
-      // Fill in all words from paste
-      const newWords = [...words];
-      for (let i = 0; i < Math.min(pastedWords.length, 24); i++) {
-        newWords[i] = pastedWords[i].toLowerCase();
-      }
-      setWords(newWords);
     }
   };
 
@@ -86,7 +61,7 @@ export function MnemonicInputView({
       <View style={styles.header}>
         <Text style={styles.title}>Enter Recovery Phrase</Text>
         <Text style={styles.subtitle}>
-          Enter your 24-word recovery phrase to restore your account.
+          Paste or type your 12- or 24-word recovery phrase to restore your account.
         </Text>
       </View>
 
@@ -97,76 +72,28 @@ export function MnemonicInputView({
         </View>
       )}
 
-      {suggestions.length > 0 && focusedIndex !== null && (
-        <View style={styles.suggestionsContainer}>
-          {suggestions.map((suggestion, idx) => (
-            <TouchableOpacity
-              key={idx}
-              style={styles.suggestionItem}
-              onPress={() => handleSelectSuggestion(suggestion)}
-            >
-              <Text style={styles.suggestionText}>{suggestion}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.wordGrid}>
-          {words.map((word, index) => {
-            const isInvalid = word.length > 0 && invalidWords.includes(index);
-            const isFocused = focusedIndex === index;
-
-            return (
-              <View
-                key={index}
-                style={[
-                  styles.wordInputContainer,
-                  isFocused && styles.wordInputFocused,
-                  isInvalid && styles.wordInputInvalid,
-                ]}
-              >
-                <Text style={styles.wordNumber}>{index + 1}</Text>
-                <TextInput
-                  ref={ref => { inputRefs.current[index] = ref; }}
-                  style={styles.wordInput}
-                  value={word}
-                  onChangeText={text => {
-                    // Check for paste (contains spaces)
-                    if (text.includes(' ')) {
-                      handlePaste(index, text);
-                    } else {
-                      handleWordChange(index, text);
-                    }
-                  }}
-                  onFocus={() => setFocusedIndex(index)}
-                  onBlur={() => {
-                    if (focusedIndex === index) {
-                      setFocusedIndex(null);
-                      setSuggestions([]);
-                    }
-                  }}
-                  placeholder="word"
-                  placeholderTextColor={theme.colors.textMuted}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  spellCheck={false}
-                  returnKeyType={index < 23 ? 'next' : 'done'}
-                  onSubmitEditing={() => {
-                    if (index < 23) {
-                      inputRefs.current[index + 1]?.focus();
-                    }
-                  }}
-                />
-              </View>
-            );
-          })}
-        </View>
-      </ScrollView>
+      <TextInput
+        style={[
+          styles.phraseInput,
+          words.length > 0 && !valid && styles.phraseInputInvalid,
+          valid && styles.phraseInputValid,
+        ]}
+        value={phrase}
+        onChangeText={(t) => setPhrase(t.toLowerCase())}
+        placeholder="word1 word2 word3 …"
+        placeholderTextColor={theme.colors.textMuted}
+        multiline
+        autoCapitalize="none"
+        autoComplete="off"
+        autoCorrect={false}
+        spellCheck={false}
+        textAlignVertical="top"
+        returnKeyType="done"
+      />
 
       <View style={styles.footer}>
-        <Text style={styles.progressText}>
-          {filledCount} of 24 words entered
+        <Text style={[styles.hint, valid && { color: theme.colors.success }, words.length > 0 && !valid && { color: theme.colors.danger }]}>
+          {hint || ' '}
         </Text>
 
         <View style={styles.buttons}>
@@ -224,70 +151,35 @@ const createStyles = (theme: AppTheme) =>
       marginLeft: Skin.space(8),
       flex: 1,
     },
-    suggestionsContainer: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: Skin.space(8),
-      marginBottom: Skin.space(12),
-    },
-    suggestionItem: {
-      backgroundColor: theme.colors.primary + '20',
-      paddingHorizontal: Skin.space(12),
-      paddingVertical: Skin.space(6),
-      borderRadius: Skin.radius(16),
-    },
-    suggestionText: {
-      color: theme.colors.primary,
-      fontSize: Skin.font(14),
-      fontFamily: theme.fonts.medium.fontFamily,
-    },
-    scrollView: {
+    phraseInput: {
       flex: 1,
-    },
-    wordGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: Skin.space(8),
-    },
-    wordInputContainer: {
-      width: '23%',
-      flexDirection: 'row',
-      alignItems: 'center',
+      minHeight: 140,
       backgroundColor: theme.colors.surface3,
-      borderRadius: Skin.radius(8),
+      borderRadius: Skin.radius(12),
       borderWidth: Skin.border(1),
       borderColor: 'transparent',
-      paddingHorizontal: Skin.space(8),
-      paddingVertical: Skin.space(8),
-    },
-    wordInputFocused: {
-      borderColor: theme.colors.primary,
-    },
-    wordInputInvalid: {
-      borderColor: theme.colors.danger,
-    },
-    wordNumber: {
-      fontSize: Skin.font(10),
-      color: theme.colors.textMuted,
-      fontFamily: theme.fonts.regular.fontFamily,
-      width: 16,
-    },
-    wordInput: {
-      flex: 1,
-      fontSize: Skin.font(12),
+      padding: Skin.space(14),
+      fontSize: Skin.font(16),
+      lineHeight: Skin.font(24),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.medium.fontFamily,
-      padding: 0,
+    },
+    phraseInputInvalid: {
+      borderColor: theme.colors.danger,
+    },
+    phraseInputValid: {
+      borderColor: theme.colors.success,
     },
     footer: {
       paddingTop: Skin.space(16),
     },
-    progressText: {
-      fontSize: Skin.font(14),
+    hint: {
+      fontSize: Skin.font(13),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
       marginBottom: Skin.space(16),
+      minHeight: Skin.font(18),
     },
     buttons: {
       flexDirection: 'row',
