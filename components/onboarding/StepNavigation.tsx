@@ -6,6 +6,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTheme, type AppTheme } from '@/theme';
 import { Button } from '@/components/ui/Button';
+import * as Skin from '@/theme/skins/geometry';
 
 interface StepNavigationProps {
   onBack?: () => void;
@@ -78,15 +79,15 @@ const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
       marginTop: 'auto',
-      paddingTop: 24,
+      paddingTop: Skin.space(24),
     },
     skipButton: {
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
       alignSelf: 'center',
     },
     mainButtons: {
       flexDirection: 'row',
-      gap: 12,
+      gap: Skin.space(12),
     },
     backButton: {
       flex: 1,

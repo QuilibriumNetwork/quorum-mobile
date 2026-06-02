@@ -1,14 +1,9 @@
 import React, { useState } from 'react';
-import {
-  ImageSourcePropType,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { ImageSourcePropType, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Image } from 'expo-image';
 import { useTheme, type AppTheme } from '@/theme';
+import * as Skin from '@/theme/skins/geometry';
 
 // expo-image caching policy for avatars
 const AVATAR_CACHE_POLICY = 'disk' as const;
@@ -167,7 +162,7 @@ const createStyles = (
       height: badgeSize,
       borderRadius: badgeSize / 2,
       backgroundColor: badgeColor || theme.colors.success,
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.background,
     },
   });

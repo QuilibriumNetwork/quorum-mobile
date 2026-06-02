@@ -7,22 +7,12 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Modal,
-  Pressable,
-  TextInput,
-  Image,
-  Keyboard,
-  Platform,
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Modal, Pressable, TextInput, Image, Keyboard, Platform } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import type { Emoji } from '@quilibrium/quorum-shared';
 import { useEmojiFrecency } from '@/hooks/useEmojiFrecency';
 import { EMOJI_KEYWORDS, searchEmojis } from '@/data/emojiData';
+import * as Skin from '@/theme/skins/geometry';
 
 // Custom emoji type for the picker (includes isCustom flag for rendering)
 type PickerEmoji = {
@@ -261,6 +251,9 @@ interface EmojiPickerProps {
   onSelectEmoji: (emoji: string) => void;
   theme: AppTheme;
   customEmojis?: Emoji[]; // Space-specific custom emojis
+  /** Render inline (no Modal/backdrop) for hosts that already own a modal —
+   *  e.g. the audio-space overlay, where a second Modal can't be shown. */
+  embedded?: boolean;
 }
 
 export function EmojiPicker({
@@ -269,6 +262,7 @@ export function EmojiPicker({
   onSelectEmoji,
   theme,
   customEmojis = [],
+  embedded = false,
 }: EmojiPickerProps) {
   const { recentEmojis, trackEmoji, refreshRecent } = useEmojiFrecency();
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>(
@@ -393,15 +387,7 @@ export function EmojiPicker({
 
   if (!visible) return null;
 
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+  const panel = (
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
@@ -481,6 +467,20 @@ export function EmojiPicker({
             )}
           </ScrollView>
         </View>
+  );
+
+  if (embedded) return panel;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        {panel}
       </View>
     </Modal>
   );
@@ -497,8 +497,8 @@ const createStyles = (theme: AppTheme, keyboardHeight: number) => StyleSheet.cre
   },
   container: {
     backgroundColor: theme.colors.surface1 ?? theme.colors.background,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: Skin.radius(16),
+    borderTopRightRadius: Skin.radius(16),
     // Match the visual size of the MessageActionSheet that precedes
     // this picker. The action sheet has no explicit cap and grows to
     // fit ~7-9 rows (Reply, React, Quick React, Edit, Pin, Delete,
@@ -513,60 +513,60 @@ const createStyles = (theme: AppTheme, keyboardHeight: number) => StyleSheet.cre
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingHorizontal: Skin.space(16),
+    paddingVertical: Skin.space(12),
+    borderBottomWidth: Skin.border(1),
     borderBottomColor: theme.colors.border ?? theme.colors.surface3,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: Skin.font(18),
     fontWeight: '600',
     color: theme.colors.textStrong ?? theme.colors.textMain,
   },
   closeButton: {
-    padding: 4,
+    padding: Skin.space(4),
   },
   closeButtonText: {
-    fontSize: 20,
+    fontSize: Skin.font(20),
     color: theme.colors.textMuted,
   },
   searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: Skin.space(16),
+    paddingVertical: Skin.space(8),
   },
   searchInput: {
     backgroundColor: theme.colors.surface2 ?? theme.colors.surface3,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 16,
+    borderRadius: Skin.radius(8),
+    paddingHorizontal: Skin.space(12),
+    paddingVertical: Skin.space(8),
+    fontSize: Skin.font(16),
     color: theme.colors.textMain,
   },
   categoryTabs: {
     maxHeight: 44,
-    borderBottomWidth: 1,
+    borderBottomWidth: Skin.border(1),
     borderBottomColor: theme.colors.border ?? theme.colors.surface3,
   },
   categoryTabsContent: {
-    paddingHorizontal: 8,
+    paddingHorizontal: Skin.space(8),
   },
   categoryTab: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginHorizontal: 2,
-    borderRadius: 8,
+    paddingHorizontal: Skin.space(12),
+    paddingVertical: Skin.space(8),
+    marginHorizontal: Skin.space(2),
+    borderRadius: Skin.radius(8),
   },
   categoryTabActive: {
     backgroundColor: theme.colors.surface3 ?? theme.colors.surface2,
   },
   categoryTabEmoji: {
-    fontSize: 22,
+    fontSize: Skin.font(22),
   },
   emojiGrid: {
     flex: 1,
   },
   emojiGridContent: {
-    padding: 8,
+    padding: Skin.space(8),
   },
   emojiRow: {
     flexDirection: 'row',
@@ -579,18 +579,18 @@ const createStyles = (theme: AppTheme, keyboardHeight: number) => StyleSheet.cre
     alignItems: 'center',
   },
   emoji: {
-    fontSize: 28,
+    fontSize: Skin.font(28),
   },
   customEmojiImage: {
     width: 28,
     height: 28,
-    borderRadius: 4,
+    borderRadius: Skin.radius(4),
   },
   emptyText: {
     textAlign: 'center',
     color: theme.colors.textMuted,
-    marginTop: 24,
-    fontSize: 14,
+    marginTop: Skin.space(24),
+    fontSize: Skin.font(14),
   },
 });
 

@@ -64,6 +64,11 @@ import {
 } from '@/services/notifications/pushRegistration';
 import { registerBackgroundNotificationTask } from '@/services/notifications/pushReceivedTask';
 import { CustomThemeProvider, useTheme } from '@/theme';
+import { AppBackground } from '@/components/ui/AppBackground';
+import { getActiveSkin } from '@/services/theme/skinPrefs';
+import { ensureSkinFontLoaded } from '@/theme/skins/fontLoader';
+import { setSkinGeometry } from '@/theme/skins/geometry';
+import { bumpStyleVersion } from '@/theme/skins/skinnableStyleSheet';
 
 // Wrapper to inject auth info into ApiClientProvider
 function AuthAwareApiProvider({ children }: { children: React.ReactNode }) {
@@ -193,7 +198,7 @@ function AuthRouter() {
   // white flash" users saw in dark mode when going back from
   // channels → spaces, spaces → list, DM → inbox, etc.
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.surface1 }}>
+    <AppBackground>
       <Slot />
       {shouldShowLoading && (
         <View style={{
@@ -209,7 +214,7 @@ function AuthRouter() {
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       )}
-    </View>
+    </AppBackground>
   );
 }
 
@@ -246,7 +251,29 @@ export default function RootLayout() {
     AtAero: require('../assets/fonts/AtAeroVARVF.ttf'),
   });
 
-  if (!loaded) {
+  // Resolve the active skin synchronously (MMKV) and preload its embedded font
+  // before revealing the UI, so a skinned launch never flashes the default
+  // theme/font. Tokens (colors/radii/borders) apply instantly; only the font
+  // is async, so the splash is held until it's ready.
+  const bootSkin = React.useMemo(() => {
+    const skin = getActiveSkin();
+    setSkinGeometry(skin); // before any static StyleSheet evaluates
+    // Force skin-reactive static stylesheets that may have evaluated at
+    // import time (eagerly-imported modules) to re-resolve with boot geometry
+    // on their first render.
+    bumpStyleVersion();
+    return skin;
+  }, []);
+  const [skinReady, setSkinReady] = React.useState(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    ensureSkinFontLoaded(bootSkin).finally(() => {
+      if (!cancelled) setSkinReady(true);
+    });
+    return () => { cancelled = true; };
+  }, [bootSkin]);
+
+  if (!loaded || !skinReady) {
     return null;
   }
 
@@ -260,7 +287,7 @@ export default function RootLayout() {
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
       }}
     >
-      <CustomThemeProvider defaultAccentColor="blue">
+      <CustomThemeProvider defaultAccentColor="blue" defaultSkin={bootSkin}>
         <StorageProvider>
           <AuthProvider>
             <AuthAwareApiProvider>

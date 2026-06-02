@@ -6,6 +6,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme, type AppTheme } from '@/theme';
 import type { OnboardingStep } from '@/context';
+import * as Skin from '@/theme/skins/geometry';
 
 const STEPS: { key: OnboardingStep; label: string }[] = [
   { key: 'account-setup', label: 'Account' },
@@ -70,12 +71,12 @@ const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
       alignItems: 'center',
-      marginBottom: 32,
+      marginBottom: Skin.space(32),
     },
     dotsContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
     },
     stepItem: {
       flexDirection: 'row',
@@ -84,7 +85,7 @@ const createStyles = (theme: AppTheme) =>
     dot: {
       width: 32,
       height: 32,
-      borderRadius: 16,
+      borderRadius: Skin.radius(16),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
@@ -99,25 +100,25 @@ const createStyles = (theme: AppTheme) =>
       width: 24,
       height: 2,
       backgroundColor: theme.colors.surface3,
-      marginHorizontal: 4,
+      marginHorizontal: Skin.space(4),
     },
     connectorCompleted: {
       backgroundColor: theme.colors.success ?? theme.colors.primary,
     },
     stepNumber: {
       color: '#fff',
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     checkmark: {
       color: '#fff',
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
     },
     stepLabel: {
       color: theme.colors.textSubtle,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
     },
   });

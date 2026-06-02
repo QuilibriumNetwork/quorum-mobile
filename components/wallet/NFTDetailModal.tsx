@@ -10,16 +10,9 @@ import { truncateAddress } from '@/utils/formatAddress';
 import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
 import React from 'react';
-import {
-  Alert,
-  Dimensions,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, Dimensions, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 interface NFTDetailModalProps {
   visible: boolean;
@@ -184,26 +177,26 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     header: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
-      paddingHorizontal: 20,
-      paddingBottom: 8,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(8),
     },
     closeButton: {
-      padding: 4,
+      padding: Skin.space(4),
     },
     content: {
       flex: 1,
     },
     contentContainer: {
-      paddingHorizontal: 20,
-      paddingBottom: 40,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(40),
     },
     imageContainer: {
       width: '100%',
       aspectRatio: 1,
-      borderRadius: 16,
+      borderRadius: Skin.radius(16),
       overflow: 'hidden',
       backgroundColor: theme.colors.surface2,
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     image: {
       width: '100%',
@@ -212,28 +205,28 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     imagePlaceholder: {
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.surface1,
     },
     infoSection: {
-      gap: 16,
+      gap: Skin.space(16),
     },
     nftName: {
-      fontSize: 24,
+      fontSize: Skin.font(24),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     collectionRow: {
-      gap: 4,
+      gap: Skin.space(4),
     },
     collectionLabel: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
     collectionName: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -244,27 +237,27 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     chainBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 16,
-      gap: 6,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(16),
+      gap: Skin.space(6),
     },
     chainDot: {
       width: 8,
       height: 8,
-      borderRadius: 4,
+      borderRadius: Skin.radius(4),
     },
     chainText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     descriptionSection: {
-      gap: 8,
-      paddingTop: 8,
+      gap: Skin.space(8),
+      paddingTop: Skin.space(8),
     },
     sectionTitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -272,34 +265,34 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       letterSpacing: 0.5,
     },
     description: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     detailsSection: {
-      gap: 12,
-      paddingTop: 8,
+      gap: Skin.space(12),
+      paddingTop: Skin.space(8),
     },
     detailRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
       backgroundColor: theme.colors.surface2,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      borderRadius: 10,
+      paddingHorizontal: Skin.space(14),
+      paddingVertical: Skin.space(12),
+      borderRadius: Skin.radius(10),
     },
     detailLabel: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
     },
     detailValueRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: Skin.space(8),
     },
     detailValue: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -308,15 +301,15 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 14,
-      borderRadius: 12,
-      borderWidth: 1,
+      gap: Skin.space(8),
+      paddingVertical: Skin.space(14),
+      borderRadius: Skin.radius(12),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.primary,
-      marginTop: 8,
+      marginTop: Skin.space(8),
     },
     explorerButtonText: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,

@@ -4,15 +4,11 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { BaseModal } from '@/components/shared';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
 
 const ICON_OPTIONS: IconSymbolName[] = [
   'number',
@@ -149,69 +145,69 @@ export function IconPicker({
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
-      paddingHorizontal: 20,
-      paddingTop: 8,
+      paddingHorizontal: Skin.space(20),
+      paddingTop: Skin.space(8),
       flex: 1,
     },
     title: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
       textAlign: 'center',
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     previewContainer: {
       alignItems: 'center',
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     previewCircle: {
       width: 56,
       height: 56,
-      borderRadius: 28,
+      borderRadius: Skin.radius(28),
       alignItems: 'center',
       justifyContent: 'center',
     },
     sectionLabel: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMuted,
       letterSpacing: 0.5,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
       textTransform: 'uppercase',
     },
     iconGrid: {
       maxHeight: 160,
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     gridRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
+      gap: Skin.space(8),
     },
     iconCell: {
       width: 44,
       height: 44,
-      borderRadius: 10,
+      borderRadius: Skin.radius(10),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: 'transparent',
     },
     colorRow: {
       flexDirection: 'row',
-      gap: 10,
-      marginBottom: 20,
+      gap: Skin.space(10),
+      marginBottom: Skin.space(20),
     },
     colorSwatch: {
       width: 32,
       height: 32,
-      borderRadius: 16,
+      borderRadius: Skin.radius(16),
     },
     colorSwatchActive: {
-      borderWidth: 3,
+      borderWidth: Skin.border(3),
       borderColor: '#fff',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
@@ -221,29 +217,29 @@ const createStyles = (theme: AppTheme) =>
     },
     actions: {
       flexDirection: 'row',
-      gap: 12,
+      gap: Skin.space(12),
     },
     clearButton: {
       flex: 1,
-      paddingVertical: 12,
-      borderRadius: 10,
+      paddingVertical: Skin.space(12),
+      borderRadius: Skin.radius(10),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
     },
     clearButtonText: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
     },
     confirmButton: {
       flex: 1,
-      paddingVertical: 12,
-      borderRadius: 10,
+      paddingVertical: Skin.space(12),
+      borderRadius: Skin.radius(10),
       alignItems: 'center',
     },
     confirmButtonText: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: '#fff',

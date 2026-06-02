@@ -14,6 +14,7 @@ import { getPrivateKey } from '@/services/onboarding/secureStorage';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useCallback, useRef } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
+import * as Skin from '@/theme/skins/geometry';
 
 export default function CompleteScreen() {
   const { theme } = useTheme();
@@ -242,31 +243,31 @@ const createStyles = (theme: AppTheme) =>
     },
     header: {
       alignItems: 'center',
-      marginBottom: 32,
+      marginBottom: Skin.space(32),
     },
     successIcon: {
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     title: {
-      fontSize: 28,
+      fontSize: Skin.font(28),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       textAlign: 'center',
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     summary: {
-      gap: 12,
+      gap: Skin.space(12),
     },
     summaryCard: {
-      padding: 16,
+      padding: Skin.space(16),
     },
     summaryRow: {
       flexDirection: 'row',
@@ -275,41 +276,41 @@ const createStyles = (theme: AppTheme) =>
     summaryIcon: {
       width: 40,
       height: 40,
-      borderRadius: 10,
+      borderRadius: Skin.radius(10),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
-      marginRight: 12,
+      marginRight: Skin.space(12),
     },
     summaryContent: {
       flex: 1,
     },
     summaryLabel: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
-      marginBottom: 2,
+      marginBottom: Skin.space(2),
     },
     summaryValue: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.medium.fontFamily,
     },
     skippedText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
     },
     footer: {
       marginTop: 'auto',
-      paddingTop: 24,
+      paddingTop: Skin.space(24),
     },
     footerNote: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     enterButton: {
       width: '100%',
@@ -318,19 +319,19 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.danger + '15',
-      borderRadius: 10,
-      padding: 12,
-      marginBottom: 16,
-      gap: 10,
+      borderRadius: Skin.radius(10),
+      padding: Skin.space(12),
+      marginBottom: Skin.space(16),
+      gap: Skin.space(10),
     },
     errorText: {
       flex: 1,
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.danger,
       fontFamily: theme.fonts.regular.fontFamily,
-      lineHeight: 18,
+      lineHeight: Skin.font(18),
     },
     startOverButton: {
-      marginTop: 12,
+      marginTop: Skin.space(12),
     },
   });

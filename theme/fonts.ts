@@ -12,24 +12,25 @@
  * always the same body text.
  */
 
-export const fonts = {
-  regular: {
-    fontFamily: 'AtAero',
-    fontWeight: '400' as const,
-  },
-  medium: {
-    fontFamily: 'AtAero',
-    fontWeight: '500' as const,
-  },
-  bold: {
-    fontFamily: 'AtAero',
-    fontWeight: '700' as const,
-  },
-  heavy: {
-    fontFamily: 'AtAero',
-    fontWeight: '900' as const,
-  },
-} as const;
+/** The bundled default font family. */
+export const DEFAULT_FONT_FAMILY = 'AtAero';
+
+/**
+ * Build the weight→{family,weight} map for a given font family. A skin swaps
+ * the family here (a single place) and every `theme.fonts.*.fontFamily`
+ * consumer picks it up. Embedded skin fonts are single-face, so all weights
+ * share one family and rely on synthetic bolding (see fontLoader).
+ */
+export function makeFonts(fontFamily: string = DEFAULT_FONT_FAMILY) {
+  return {
+    regular: { fontFamily, fontWeight: '400' as const },
+    medium: { fontFamily, fontWeight: '500' as const },
+    bold: { fontFamily, fontWeight: '700' as const },
+    heavy: { fontFamily, fontWeight: '900' as const },
+  };
+}
+
+export const fonts = makeFonts(DEFAULT_FONT_FAMILY);
 
 export const fontSizes = {
   xs: 10,
@@ -52,84 +53,55 @@ export const fontSizes = {
  * Or spread them with color:
  *   <Text style={[textStyles.body, { color: theme.colors.textMain }]}>
  */
-export const textStyles = {
-  /** 34/41 bold — large titles on list/root screens */
-  largeTitle: {
-    fontFamily: fonts.bold.fontFamily,
-    fontWeight: fonts.bold.fontWeight,
-    fontSize: 34,
-    lineHeight: 41,
-  },
-  /** 28/34 bold — screen titles, main section headers */
-  title1: {
-    fontFamily: fonts.bold.fontFamily,
-    fontWeight: fonts.bold.fontWeight,
-    fontSize: 28,
-    lineHeight: 34,
-  },
-  /** 22/28 bold — secondary titles, modal headers */
-  title2: {
-    fontFamily: fonts.bold.fontFamily,
-    fontWeight: fonts.bold.fontWeight,
-    fontSize: 22,
-    lineHeight: 28,
-  },
-  /** 20/25 bold — tertiary titles, card headers */
-  title3: {
-    fontFamily: fonts.bold.fontFamily,
-    fontWeight: fonts.bold.fontWeight,
-    fontSize: 20,
-    lineHeight: 25,
-  },
-  /** 17/22 semibold — prominent body text, list item titles */
-  headline: {
-    fontFamily: fonts.medium.fontFamily,
-    fontWeight: fonts.medium.fontWeight,
-    fontSize: 17,
-    lineHeight: 22,
-  },
-  /** 17/22 regular — default body copy */
-  body: {
-    fontFamily: fonts.regular.fontFamily,
-    fontWeight: fonts.regular.fontWeight,
-    fontSize: 17,
-    lineHeight: 22,
-  },
-  /** 16/21 regular — secondary body text */
-  callout: {
-    fontFamily: fonts.regular.fontFamily,
-    fontWeight: fonts.regular.fontWeight,
-    fontSize: 16,
-    lineHeight: 21,
-  },
-  /** 15/20 regular — subheadlines, preview text */
-  subheadline: {
-    fontFamily: fonts.regular.fontFamily,
-    fontWeight: fonts.regular.fontWeight,
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  /** 13/18 regular — footnotes, tertiary info */
-  footnote: {
-    fontFamily: fonts.regular.fontFamily,
-    fontWeight: fonts.regular.fontWeight,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  /** 12/16 regular — captions, metadata (timestamps, counts) */
-  caption1: {
-    fontFamily: fonts.regular.fontFamily,
-    fontWeight: fonts.regular.fontWeight,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  /** 11/13 medium — overline / section labels (often uppercased) */
-  caption2: {
-    fontFamily: fonts.medium.fontFamily,
-    fontWeight: fonts.medium.fontWeight,
-    fontSize: 11,
-    lineHeight: 13,
-  },
-} as const;
+type TextStyleEntry = {
+  fontFamily: string;
+  fontWeight: '400' | '500' | '700' | '900';
+  fontSize: number;
+  lineHeight: number;
+};
 
-export type TextStyleName = keyof typeof textStyles;
+/**
+ * Build the semantic type scale for a given font family + size multiplier, so
+ * a skin's font and `fontScale` flow through `theme.textStyles` (see
+ * createTheme). The base sizes/weights match iOS HIG.
+ */
+export function makeTextStyles(family: string = DEFAULT_FONT_FAMILY, scale = 1) {
+  const px = (n: number) => Math.round(n * scale);
+  const W = { regular: '400', medium: '500', bold: '700' } as const;
+  const e = (fontWeight: '400' | '500' | '700', fontSize: number, lineHeight: number): TextStyleEntry => ({
+    fontFamily: family,
+    fontWeight,
+    fontSize: px(fontSize),
+    lineHeight: px(lineHeight),
+  });
+  return {
+    /** 34/41 bold — large titles on list/root screens */
+    largeTitle: e(W.bold, 34, 41),
+    /** 28/34 bold — screen titles, main section headers */
+    title1: e(W.bold, 28, 34),
+    /** 22/28 bold — secondary titles, modal headers */
+    title2: e(W.bold, 22, 28),
+    /** 20/25 bold — tertiary titles, card headers */
+    title3: e(W.bold, 20, 25),
+    /** 17/22 semibold — prominent body text, list item titles */
+    headline: e(W.medium, 17, 22),
+    /** 17/22 regular — default body copy */
+    body: e(W.regular, 17, 22),
+    /** 16/21 regular — secondary body text */
+    callout: e(W.regular, 16, 21),
+    /** 15/20 regular — subheadlines, preview text */
+    subheadline: e(W.regular, 15, 20),
+    /** 13/18 regular — footnotes, tertiary info */
+    footnote: e(W.regular, 13, 18),
+    /** 12/16 regular — captions, metadata (timestamps, counts) */
+    caption1: e(W.regular, 12, 16),
+    /** 11/13 medium — overline / section labels (often uppercased) */
+    caption2: e(W.medium, 11, 13),
+  };
+}
+
+/** Default (unskinned) type scale. Prefer `theme.textStyles` in components so
+ *  a skin's font + fontScale apply. */
+export const textStyles = makeTextStyles();
+
+export type TextStyleName = keyof ReturnType<typeof makeTextStyles>;

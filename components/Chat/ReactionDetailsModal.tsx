@@ -13,14 +13,8 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import {
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 
 import { BaseModal } from '@/components/shared';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
@@ -30,6 +24,7 @@ import { truncateAddress } from '@/utils/formatAddress';
 import type { Emoji, SpaceMember } from '@quilibrium/quorum-shared';
 
 import type { DisplayReaction } from './types';
+import * as Skin from '@/theme/skins/geometry';
 
 interface ReactionDetailsModalProps {
   visible: boolean;
@@ -197,29 +192,29 @@ function createStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      paddingHorizontal: 16,
-      paddingTop: 4,
+      paddingHorizontal: Skin.space(16),
+      paddingTop: Skin.space(4),
     },
     title: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontWeight: '600',
       color: theme.colors.textMain,
       textAlign: 'center',
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
     },
     pillsRow: {
-      gap: 8,
-      paddingVertical: 4,
-      paddingHorizontal: 4,
+      gap: Skin.space(8),
+      paddingVertical: Skin.space(4),
+      paddingHorizontal: Skin.space(4),
     },
     pill: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 16,
-      borderWidth: 1,
+      gap: Skin.space(6),
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(8),
+      borderRadius: Skin.radius(16),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.surface3,
       backgroundColor: theme.colors.surface2,
     },
@@ -228,14 +223,14 @@ function createStyles(theme: AppTheme) {
       backgroundColor: theme.colors.accent + '22',
     },
     pillEmojiText: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
     },
     pillCustomEmoji: {
       width: 20,
       height: 20,
     },
     pillCount: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontWeight: '600',
       color: theme.colors.textMain,
     },
@@ -244,39 +239,39 @@ function createStyles(theme: AppTheme) {
     },
     list: {
       flex: 1,
-      marginTop: 12,
+      marginTop: Skin.space(12),
     },
     listContent: {
-      paddingBottom: 24,
+      paddingBottom: Skin.space(24),
     },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
-      paddingVertical: 8,
+      gap: Skin.space(12),
+      paddingVertical: Skin.space(8),
     },
     avatar: {
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: Skin.radius(18),
     },
     rowName: {
       flex: 1,
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMain,
     },
     rowEmojiText: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
     },
     rowCustomEmoji: {
       width: 22,
       height: 22,
     },
     empty: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       textAlign: 'center',
-      paddingVertical: 24,
+      paddingVertical: Skin.space(24),
     },
   });
 }

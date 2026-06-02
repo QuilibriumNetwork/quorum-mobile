@@ -22,6 +22,8 @@ import {
   type AudioRoom,
 } from '@/services/spaces/spacesClient';
 import { useTheme } from '@/theme';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 /** 5s stale, 10s refetch. Listener counts move on that cadence and
  *  tighter sync keeps the strip from drifting visibly. */
@@ -137,11 +139,11 @@ function CreateTile({ onPress }: { onPress: () => void }) {
         style={{
           width: 36,
           height: 36,
-          borderRadius: 18,
+          borderRadius: Skin.radius(18),
           backgroundColor: theme.colors.accent,
           alignItems: 'center',
           justifyContent: 'center',
-          marginBottom: 8,
+          marginBottom: Skin.space(8),
         }}
       >
         <IconSymbol name="plus" size={20} color="#fff" />
@@ -149,7 +151,7 @@ function CreateTile({ onPress }: { onPress: () => void }) {
       <Text
         style={{
           color: theme.colors.textStrong,
-          fontSize: 13,
+          fontSize: Skin.font(13),
           fontWeight: '600',
           textAlign: 'center',
         }}
@@ -159,8 +161,8 @@ function CreateTile({ onPress }: { onPress: () => void }) {
       <Text
         style={{
           color: theme.colors.textMuted,
-          fontSize: 11,
-          marginTop: 2,
+          fontSize: Skin.font(11),
+          marginTop: Skin.space(2),
           textAlign: 'center',
         }}
       >
@@ -216,7 +218,7 @@ function SpaceCard({
     >
       <View style={styles.cardHeader}>
         {isLive ? (
-          <View style={[styles.livePill, { backgroundColor: '#FF3B30' }]}>
+          <View style={[styles.livePill, { backgroundColor: theme.colors.danger }]}>
             <View style={styles.liveDot} />
             <Text style={styles.livePillText}>LIVE</Text>
           </View>
@@ -273,38 +275,38 @@ function formatCount(n: number): string {
 
 const CARD_WIDTH = 220;
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
-    paddingTop: 4,
-    paddingBottom: 8,
+    paddingTop: Skin.space(4),
+    paddingBottom: Skin.space(8),
   },
   label: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    paddingHorizontal: 16,
-    marginBottom: 8,
+    paddingHorizontal: Skin.space(16),
+    marginBottom: Skin.space(8),
   },
   scrollContent: {
-    paddingHorizontal: 12,
-    gap: 10,
+    paddingHorizontal: Skin.space(12),
+    gap: Skin.space(10),
   },
   card: {
     width: CARD_WIDTH,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 10,
+    padding: Skin.space(12),
+    borderRadius: Skin.radius(12),
+    borderWidth: Skin.border(1),
+    gap: Skin.space(10),
   },
   createTile: {
     // Narrower than a discovery card — invitation-sized rather than
     // content-sized — and dashed-styled to feel distinct from the
     // populated cards next to it.
     width: 140,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+    padding: Skin.space(12),
+    borderRadius: Skin.radius(12),
+    borderWidth: Skin.border(1),
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
@@ -317,31 +319,31 @@ const styles = StyleSheet.create({
   livePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    gap: Skin.space(4),
+    paddingHorizontal: Skin.space(6),
+    paddingVertical: Skin.space(2),
+    borderRadius: Skin.radius(4),
   },
   liveDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: Skin.radius(3),
     backgroundColor: '#fff',
   },
   livePillText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: Skin.font(10),
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   listenerCount: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontWeight: '500',
   },
   title: {
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontWeight: '600',
-    lineHeight: 18,
+    lineHeight: Skin.font(18),
   },
   avatarStack: {
     flexDirection: 'row',
@@ -350,19 +352,19 @@ const styles = StyleSheet.create({
   avatarWrap: {
     width: 24,
     height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
+    borderRadius: Skin.radius(12),
+    borderWidth: Skin.border(2),
     overflow: 'hidden',
   },
   avatar: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: Skin.radius(10),
   },
   hostName: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontWeight: '500',
-    marginLeft: 8,
+    marginLeft: Skin.space(8),
     flex: 1,
   },
-});
+}));

@@ -1,14 +1,9 @@
 import React from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme, type AppTheme } from '@/theme';
 import { IconSymbol, type IconSymbolName } from './IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
 
 type TabBarVariant = 'underline' | 'pill' | 'segmented';
 
@@ -128,13 +123,13 @@ const createStyles = (theme: AppTheme, variant: TabBarVariant) => {
     container: {
       flexDirection: 'row',
       ...(isUnderline ? {
-        borderBottomWidth: 1,
+        borderBottomWidth: Skin.border(1),
         borderBottomColor: theme.colors.border,
       } : {}),
       ...(isSegmented ? {
         backgroundColor: theme.colors.surface2,
-        borderRadius: 12,
-        padding: 4,
+        borderRadius: Skin.radius(12),
+        padding: Skin.space(4),
       } : {}),
     },
     scrollContainer: {
@@ -152,15 +147,15 @@ const createStyles = (theme: AppTheme, variant: TabBarVariant) => {
       paddingVertical: isPill ? 8 : 12,
       paddingHorizontal: isPill ? 16 : 0,
       ...(isUnderline ? {
-        borderBottomWidth: 2,
+        borderBottomWidth: Skin.border(2),
         borderBottomColor: 'transparent',
       } : {}),
       ...(isPill ? {
         backgroundColor: theme.colors.surface2,
-        borderRadius: 20,
+        borderRadius: Skin.radius(20),
       } : {}),
       ...(isSegmented ? {
-        borderRadius: 8,
+        borderRadius: Skin.radius(8),
       } : {}),
     },
     tabActive: {
@@ -175,7 +170,7 @@ const createStyles = (theme: AppTheme, variant: TabBarVariant) => {
       } : {}),
     },
     tabText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMuted,
@@ -184,7 +179,7 @@ const createStyles = (theme: AppTheme, variant: TabBarVariant) => {
       color: isPill ? '#ffffff' : theme.colors.primary,
     },
     tabIcon: {
-      marginRight: 6,
+      marginRight: Skin.space(6),
     },
   });
 };

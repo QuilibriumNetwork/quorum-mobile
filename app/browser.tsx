@@ -5,14 +5,8 @@ import type { EdgeInsets } from 'react-native-safe-area-context';
 import { getErrorMessage } from '@/utils/error';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Share,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Share, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView from 'react-native-webview';
 import { useWalletSelection, useActiveWalletKeys } from '@/hooks/useWalletSelection';
@@ -30,6 +24,7 @@ import {
   signAndSendTransaction,
   signTransactionOnly,
 } from '@/services/miniapp/secureSigningService';
+import * as Skin from '@/theme/skins/geometry';
 
 export default function BrowserScreen() {
   const { url, isQNative, name } = useLocalSearchParams<{
@@ -671,14 +666,14 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
       backgroundColor: theme.colors.background,
     },
     errorText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: theme.colors.textMain,
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     header: {
-      paddingHorizontal: 16,
-      paddingBottom: 12,
-      paddingTop: 8,
+      paddingHorizontal: Skin.space(16),
+      paddingBottom: Skin.space(12),
+      paddingTop: Skin.space(8),
     },
     headerQNative: {
       backgroundColor: theme.colors.info,
@@ -687,41 +682,41 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      borderRadius: Skin.radius(12),
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(10),
     },
     closeButton: {
-      marginRight: 12,
-      padding: 4,
+      marginRight: Skin.space(12),
+      padding: Skin.space(4),
     },
     headerButton: {
-      padding: 4,
+      padding: Skin.space(4),
     },
     backButton: {
-      marginRight: 12,
-      padding: 4,
+      marginRight: Skin.space(12),
+      padding: Skin.space(4),
     },
     backButtonText: {
       color: theme.colors.primary,
-      fontSize: 16,
+      fontSize: Skin.font(16),
     },
     secureIndicator: {
-      marginRight: 8,
+      marginRight: Skin.space(8),
     },
     urlTextContainer: {
       flex: 1,
     },
     domainText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
     },
     pageTitle: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     loadingBar: {
       height: 2,
@@ -763,19 +758,19 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
       zIndex: 10,
     },
     splashText: {
-      marginTop: 16,
-      fontSize: 16,
+      marginTop: Skin.space(16),
+      fontSize: Skin.font(16),
       color: theme.colors.textMuted,
     },
     primaryButtonContainer: {
-      padding: 16,
-      paddingBottom: 8,
+      padding: Skin.space(16),
+      paddingBottom: Skin.space(8),
       backgroundColor: theme.colors.background,
     },
     primaryButton: {
       backgroundColor: theme.colors.primary,
-      borderRadius: 12,
-      paddingVertical: 14,
+      borderRadius: Skin.radius(12),
+      paddingVertical: Skin.space(14),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -784,7 +779,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     },
     primaryButtonText: {
       color: '#fff',
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -792,13 +787,13 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
       flexDirection: 'row',
       justifyContent: 'space-around',
       alignItems: 'center',
-      paddingVertical: 12,
+      paddingVertical: Skin.space(12),
       paddingBottom: Math.max(12, insets.bottom),
-      borderTopWidth: 1,
+      borderTopWidth: Skin.border(1),
       borderTopColor: theme.colors.border,
       backgroundColor: theme.colors.background,
     },
     navButton: {
-      padding: 8,
+      padding: Skin.space(8),
     },
   });

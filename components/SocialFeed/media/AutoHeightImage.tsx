@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Image as RNImage, ImageStyle, TouchableOpacity, StyleProp } from 'react-native';
+import { Image as RNImage, ImageStyle, StyleProp } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Image as ExpoImage } from 'expo-image';
 import { SCREEN_WIDTH, imageDimensionCache } from '../utils';
 

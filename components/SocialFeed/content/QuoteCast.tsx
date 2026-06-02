@@ -1,9 +1,12 @@
 import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Image } from 'expo-image';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import type { EmbeddedCast } from '@/hooks/useFarcasterFeed';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface QuoteCastProps {
   cast: EmbeddedCast;
@@ -59,48 +62,48 @@ export function QuoteCast({ cast, theme, onPress }: QuoteCastProps) {
   );
 }
 
-const staticStyles = StyleSheet.create({
+const staticStyles = createSkinnable(() => StyleSheet.create({
   padding12: {
-    padding: 12,
+    padding: Skin.space(12),
   },
   authorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: Skin.space(8),
   },
-});
+}));
 
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
       overflow: 'hidden',
-      marginHorizontal: 12,
-      borderWidth: 1,
+      marginHorizontal: Skin.space(12),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.surface3,
     },
     avatar: {
       width: 24,
       height: 24,
-      borderRadius: 12,
-      marginRight: 8,
+      borderRadius: Skin.radius(12),
+      marginRight: Skin.space(8),
       backgroundColor: theme.colors.surface3,
     },
     displayName: {
       color: theme.colors.textStrong,
       fontWeight: '600',
-      fontSize: 14,
+      fontSize: Skin.font(14),
     },
     username: {
       color: theme.colors.textMuted,
-      fontSize: 13,
-      marginLeft: 4,
+      fontSize: Skin.font(13),
+      marginLeft: Skin.space(4),
     },
     castText: {
       color: theme.colors.textMain,
-      fontSize: 14,
-      lineHeight: 20,
+      fontSize: Skin.font(14),
+      lineHeight: Skin.font(20),
     },
     image: {
       width: '100%',

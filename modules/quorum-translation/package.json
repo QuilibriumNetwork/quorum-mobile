@@ -1,0 +1,13 @@
+{
+  "name": "quorum-translation",
+  "version": "0.1.0",
+  "description": "On-device language detection + translation for Quorum mobile (Apple Translation / NaturalLanguage on iOS, ML Kit on Android)",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "author": "Quilibrium",
+  "license": "MIT",
+  "homepage": "https://github.com/quilibrium/quorum-mobile",
+  "peerDependencies": {
+    "expo": "*"
+  }
+}

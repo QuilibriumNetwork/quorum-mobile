@@ -5,15 +5,8 @@
 import type { AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  Image,
-  StyleSheet,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Text, Image, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
@@ -21,6 +14,7 @@ import { MessagesList } from './MessagesList';
 import { MessageInput } from './MessageInput';
 import type { DisplayMessage } from './types';
 import type { Conversation } from '@/hooks/chat/useConversations';
+import * as Skin from '@/theme/skins/geometry';
 
 interface DirectMessageViewProps {
   conversation: Conversation;
@@ -148,37 +142,37 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       flexDirection: 'row',
       alignItems: 'center',
       paddingTop: insets.top + 8,
-      paddingHorizontal: 12,
-      paddingBottom: 12,
+      paddingHorizontal: Skin.space(12),
+      paddingBottom: Skin.space(12),
       backgroundColor: theme.colors.surface2,
-      borderBottomWidth: 1,
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface3,
     },
     backButton: {
-      padding: 8,
-      marginRight: 8,
+      padding: Skin.space(8),
+      marginRight: Skin.space(8),
     },
     headerAvatar: {
       width: 40,
       height: 40,
-      borderRadius: 20,
+      borderRadius: Skin.radius(20),
       backgroundColor: theme.colors.surface3,
     },
     headerInfo: {
       flex: 1,
-      marginLeft: 12,
+      marginLeft: Skin.space(12),
     },
     headerName: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textStrong,
     },
     headerAddress: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     messagesContainer: {
       flex: 1,

@@ -4,17 +4,13 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { BaseModal } from '@/components/shared/BaseModal';
 import { formatTime } from './types';
 import type { DisplayMessage } from './types';
+import * as Skin from '@/theme/skins/geometry';
 
 interface PinnedMessagesPanelProps {
   visible: boolean;
@@ -115,89 +111,89 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
+      paddingHorizontal: Skin.space(20),
+      paddingVertical: Skin.space(12),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.border ?? theme.colors.surface3,
     },
     headerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: Skin.space(8),
     },
     headerTitle: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textStrong,
     },
     emptyState: {
       alignItems: 'center',
-      paddingVertical: 40,
-      paddingHorizontal: 32,
+      paddingVertical: Skin.space(40),
+      paddingHorizontal: Skin.space(32),
     },
     emptyText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
-      marginTop: 12,
+      marginTop: Skin.space(12),
     },
     emptySubtext: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
       textAlign: 'center',
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
     scrollView: {
       flex: 1,
     },
     scrollContent: {
-      padding: 12,
+      padding: Skin.space(12),
     },
     pinnedMessage: {
       backgroundColor: theme.colors.surface3 ?? theme.colors.surface2,
-      borderRadius: 10,
-      padding: 12,
-      marginBottom: 8,
+      borderRadius: Skin.radius(10),
+      padding: Skin.space(12),
+      marginBottom: Skin.space(8),
     },
     messageHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
     },
     messageSender: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textStrong,
       flex: 1,
     },
     messageTime: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginLeft: 8,
+      marginLeft: Skin.space(8),
     },
     messageContent: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     unpinButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      marginTop: 8,
-      paddingTop: 8,
-      borderTopWidth: 1,
+      gap: Skin.space(4),
+      marginTop: Skin.space(8),
+      paddingTop: Skin.space(8),
+      borderTopWidth: Skin.border(1),
       borderTopColor: theme.colors.border ?? theme.colors.surface5,
     },
     unpinText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
     },

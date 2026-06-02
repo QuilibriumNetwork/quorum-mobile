@@ -79,18 +79,9 @@ import { useTheme, type AppTheme } from '@/theme';
 import { getErrorMessage } from '@/utils/error';
 import { loadPref, savePref } from '@/services/wallet/walletPrefs';
 import React from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  InteractionManager,
-  Keyboard,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, InteractionManager, Keyboard, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 interface SwapModalProps {
   visible: boolean;
@@ -1885,7 +1876,7 @@ export default function SwapModal({ visible, onClose, initialBuyToken }: SwapMod
                         autoCorrect={false}
                       />
                     </View>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
+                    <View style={{ flex: 1, marginLeft: Skin.space(12) }}>
                       <Text style={styles.manualEntryLabel}>Decimals</Text>
                       <TextInput
                         style={styles.manualEntryInput}
@@ -1999,7 +1990,7 @@ export default function SwapModal({ visible, onClose, initialBuyToken }: SwapMod
             {parseFloat(jupiterQuote.priceImpactPct) > 1 && (
               <View style={styles.quoteRow}>
                 <Text style={styles.quoteLabel}>Price Impact</Text>
-                <Text style={[styles.quoteValue, { color: '#EF4444' }]}>
+                <Text style={[styles.quoteValue, { color: theme.colors.danger }]}>
                   {parseFloat(jupiterQuote.priceImpactPct).toFixed(2)}%
                 </Text>
               </View>
@@ -2081,7 +2072,7 @@ export default function SwapModal({ visible, onClose, initialBuyToken }: SwapMod
             {relayQuote.details.totalImpact && Math.abs(parseFloat(relayQuote.details.totalImpact.percent)) > 1 && (
               <View style={styles.quoteRow}>
                 <Text style={styles.quoteLabel}>Price Impact</Text>
-                <Text style={[styles.quoteValue, { color: '#EF4444' }]}>
+                <Text style={[styles.quoteValue, { color: theme.colors.danger }]}>
                   {relayQuote.details.totalImpact.percent}%
                 </Text>
               </View>
@@ -2125,7 +2116,7 @@ export default function SwapModal({ visible, onClose, initialBuyToken }: SwapMod
             label={`Hold to Swap${swapUsdValue > 0 ? ` ($${swapUsdValue.toFixed(2)})` : ''}`}
             holdingLabel="Keep holding..."
             holdDuration={1500}
-            style={{ marginTop: 20 }}
+            style={{ marginTop: Skin.space(20) }}
           />
         )}
 
@@ -2140,53 +2131,53 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingBottom: 16,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(16),
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     content: {
       flex: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
     },
     searchContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.colors.surface,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      marginBottom: 8,
-      gap: 8,
+      backgroundColor: theme.colors.surface1,
+      borderRadius: Skin.radius(10),
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(8),
+      marginBottom: Skin.space(8),
+      gap: Skin.space(8),
     },
     searchInput: {
       flex: 1,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       padding: 0,
     },
     swapSection: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 8,
+      borderRadius: Skin.radius(16),
+      padding: Skin.space(16),
+      marginBottom: Skin.space(8),
     },
     swapSectionHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
     },
     swapLabel: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
     },
     maxButton: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.primary,
@@ -2194,18 +2185,18 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     swapInputRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: Skin.space(12),
     },
     swapAmountInput: {
       flex: 1,
-      fontSize: 28,
-      lineHeight: 36,
+      fontSize: Skin.font(28),
+      lineHeight: Skin.font(36),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
       paddingHorizontal: 0,
-      paddingTop: 8,
-      paddingBottom: 4,
+      paddingTop: Skin.space(8),
+      paddingBottom: Skin.space(4),
       minHeight: 44,
     },
     swapAmountOutput: {
@@ -2213,7 +2204,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       minHeight: 40,
     },
     swapAmountText: {
-      fontSize: 28,
+      fontSize: Skin.font(28),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
@@ -2225,119 +2216,119 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.background,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderRadius: 20,
-      gap: 6,
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(12),
+      borderRadius: Skin.radius(20),
+      gap: Skin.space(6),
     },
     selectedToken: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Skin.space(6),
     },
     tokenDot: {
       width: 8,
       height: 8,
-      borderRadius: 4,
+      borderRadius: Skin.radius(4),
     },
     tokenSymbol: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     selectTokenText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.primary,
     },
     balanceText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginTop: 8,
+      marginTop: Skin.space(8),
     },
     balanceTextError: {
-      color: '#EF4444',
+      color: theme.colors.danger,
     },
     assetPickerDropdown: {
-      marginTop: 12,
+      marginTop: Skin.space(12),
       backgroundColor: theme.colors.background,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
       maxHeight: 180,
       overflow: 'hidden',
     },
     assetPickerList: {
-      padding: 8,
+      padding: Skin.space(8),
     },
     assetPickerItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 10,
-      borderRadius: 8,
-      gap: 12,
+      padding: Skin.space(10),
+      borderRadius: Skin.radius(8),
+      gap: Skin.space(12),
     },
     assetIcon: {
       width: 32,
       height: 32,
-      borderRadius: 16,
+      borderRadius: Skin.radius(16),
       alignItems: 'center',
       justifyContent: 'center',
     },
     assetIconText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
     },
     assetInfo: {
       flex: 1,
-      gap: 2,
+      gap: Skin.space(2),
     },
     assetNameRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: Skin.space(4),
     },
     assetName: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
     },
     verifiedBadge: {
-      marginLeft: 2,
+      marginLeft: Skin.space(2),
     },
     warningBadge: {
-      marginLeft: 2,
+      marginLeft: Skin.space(2),
     },
     assetBalance: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
     },
     contractAddress: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       color: theme.colors.textMuted,
       fontFamily: 'monospace',
       opacity: 0.7,
     },
     noAssetsText: {
-      padding: 16,
+      padding: Skin.space(16),
       textAlign: 'center',
       color: theme.colors.textMuted,
-      fontSize: 13,
+      fontSize: Skin.font(13),
     },
     swapDirectionContainer: {
       alignItems: 'center',
-      marginVertical: -16,
+      marginVertical: Skin.space(-16),
       zIndex: 1,
     },
     swapDirectionButton: {
       backgroundColor: theme.colors.surface2,
-      borderWidth: 3,
+      borderWidth: Skin.border(3),
       borderColor: theme.colors.background,
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: Skin.radius(18),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -2345,73 +2336,73 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: '#EF444415',
-      borderRadius: 12,
-      padding: 12,
-      gap: 8,
-      marginTop: 8,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(12),
+      gap: Skin.space(8),
+      marginTop: Skin.space(8),
     },
     errorText: {
       flex: 1,
-      fontSize: 13,
-      color: '#EF4444',
+      fontSize: Skin.font(13),
+      color: theme.colors.danger,
     },
     quoteInfo: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 14,
-      marginTop: 16,
-      gap: 8,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(14),
+      marginTop: Skin.space(16),
+      gap: Skin.space(8),
     },
     quoteRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
     },
     quoteLabel: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
     },
     quoteValue: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     gaslessBadgeRow: {
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
     },
     gaslessBadge: {
       flexDirection: 'row',
       alignItems: 'center',
       alignSelf: 'flex-start',
       backgroundColor: '#22C55E15',
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
-      gap: 4,
+      paddingHorizontal: Skin.space(10),
+      paddingVertical: Skin.space(4),
+      borderRadius: Skin.radius(12),
+      gap: Skin.space(4),
     },
     gaslessBadgeText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      color: '#22C55E',
+      color: theme.colors.success,
     },
     gaslessFree: {
-      color: '#22C55E',
+      color: theme.colors.success,
     },
     swapButton: {
       backgroundColor: theme.colors.primary,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: 20,
+      marginTop: Skin.space(20),
       minHeight: 56,
     },
     swapButtonDisabled: {
       opacity: 0.5,
     },
     swapButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',
@@ -2419,12 +2410,12 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     biometricButton: {
       flexDirection: 'row',
       backgroundColor: '#8B5CF6', // Purple for biometric
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: 20,
-      gap: 10,
+      marginTop: Skin.space(20),
+      gap: Skin.space(10),
       minHeight: 56,
     },
     // Manual Token Entry Styles
@@ -2432,70 +2423,70 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 12,
-      gap: 6,
-      marginTop: 8,
+      paddingVertical: Skin.space(12),
+      gap: Skin.space(6),
+      marginTop: Skin.space(8),
     },
     manualEntryToggleText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     manualEntryContainer: {
       backgroundColor: theme.colors.background,
-      borderRadius: 12,
-      padding: 16,
-      marginTop: 8,
-      gap: 12,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      marginTop: Skin.space(8),
+      gap: Skin.space(12),
     },
     manualEntryLabel: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginBottom: 6,
+      marginBottom: Skin.space(6),
     },
     manualEntryInput: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      fontSize: 14,
+      backgroundColor: theme.colors.surface1,
+      borderRadius: Skin.radius(10),
+      paddingHorizontal: Skin.space(14),
+      paddingVertical: Skin.space(12),
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
     },
     manualEntryRow: {
       flexDirection: 'row',
-      gap: 12,
+      gap: Skin.space(12),
     },
     manualEntryButton: {
       backgroundColor: theme.colors.primary,
-      borderRadius: 10,
-      paddingVertical: 14,
+      borderRadius: Skin.radius(10),
+      paddingVertical: Skin.space(14),
       alignItems: 'center',
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
     manualEntryButtonDisabled: {
       opacity: 0.4,
     },
     manualEntryButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',
     },
     chainSelector: {
       flexDirection: 'row',
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     chainChip: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderRadius: 16,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      marginRight: 8,
-      gap: 6,
+      backgroundColor: theme.colors.surface1,
+      borderWidth: Skin.border(1),
+      borderRadius: Skin.radius(16),
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(6),
+      marginRight: Skin.space(8),
+      gap: Skin.space(6),
     },
     chainChipActive: {
       backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
@@ -2503,10 +2494,10 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     chainChipDot: {
       width: 8,
       height: 8,
-      borderRadius: 4,
+      borderRadius: Skin.radius(4),
     },
     chainChipText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,

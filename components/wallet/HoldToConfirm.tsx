@@ -12,6 +12,7 @@ import {
   ViewStyle,
   PanResponder,
 } from 'react-native';
+import * as Skin from '@/theme/skins/geometry';
 
 interface HoldToConfirmProps {
   onConfirm: () => void;
@@ -118,7 +119,7 @@ const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
       height: 56,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
       backgroundColor: theme.colors.primary,
       justifyContent: 'center',
       alignItems: 'center',
@@ -133,10 +134,10 @@ const createStyles = (theme: AppTheme) =>
       left: 0,
       top: 0,
       bottom: 0,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
     },
     label: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',

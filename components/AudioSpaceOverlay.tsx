@@ -15,7 +15,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -31,10 +31,15 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withSequence,
+  withTiming,
+  withDelay,
 } from 'react-native-reanimated';
 import { RTCView } from 'react-native-webrtc';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
+import { EmojiPicker } from '@/components/Chat/EmojiPicker';
+import { getRecentEmojis, recordEmojiUsage } from '@/services/emojiFrecency';
 import { useAudioSpace, type ReactionEvent } from '@/context/AudioSpaceContext';
 import { useAuth } from '@/context/AuthContext';
 import { fidFromIdentity } from '@/services/spaces/livekitRoom';
@@ -44,6 +49,8 @@ import {
 } from '@/services/spaces/spacesClient';
 import { type SpaceChatCast } from '@/services/farcaster/spaceChatFetch';
 import { useTheme } from '@/theme';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 const QUICK_REACTIONS = ['❤️', '🔥', '👏', '😂', '🙌', '🎉'];
 
@@ -68,8 +75,15 @@ export function AudioSpaceOverlay() {
     leave,
     toggleMic,
     toggleHand,
+    isSpeakerOn,
+    toggleSpeaker,
     reactWith,
     sendChat,
+    replyToChat,
+    toggleChatLike,
+    toggleChatRecast,
+    chatLikeStates,
+    chatRecastStates,
     acceptStageInvite,
     declineStageInvite,
     promoteToSpeaker,
@@ -100,6 +114,30 @@ export function AudioSpaceOverlay() {
     [localFid, localCameraStreamURL, remoteVideoStreams],
   );
   const [reactionTrayOpen, setReactionTrayOpen] = React.useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = React.useState(false);
+  // Fast-pick reactions: the user's top-5 by frecency, padded with defaults.
+  const [quickReactions, setQuickReactions] = React.useState<string[]>(QUICK_REACTIONS);
+  React.useEffect(() => {
+    if (!reactionTrayOpen) return;
+    let cancelled = false;
+    getRecentEmojis(5).then((recent) => {
+      if (cancelled || recent.length === 0) return;
+      const merged = [...recent];
+      for (const d of QUICK_REACTIONS) {
+        if (merged.length >= 5) break;
+        if (!merged.includes(d)) merged.push(d);
+      }
+      setQuickReactions(merged.slice(0, 5));
+    });
+    return () => { cancelled = true; };
+  }, [reactionTrayOpen]);
+
+  // Send a reaction and record it for frecency (the full picker tracks its own).
+  const sendReaction = React.useCallback((emoji: string) => {
+    void reactWith(emoji);
+    void recordEmojiUsage(emoji);
+  }, [reactWith]);
+
   const [cameraToggling, setCameraToggling] = React.useState(false);
   const handleToggleCamera = React.useCallback(async () => {
     if (cameraToggling) return;
@@ -274,7 +312,7 @@ export function AudioSpaceOverlay() {
               </Text>
               {error && (
                 <Text
-                  style={{ color: theme.colors.danger, fontSize: 12, marginTop: 4 }}
+                  style={{ color: theme.colors.danger, fontSize: Skin.font(12), marginTop: Skin.space(4) }}
                   numberOfLines={2}
                 >
                   {error}
@@ -292,7 +330,7 @@ export function AudioSpaceOverlay() {
           </View>
 
           {!room && state !== 'error' && (
-            <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+            <View style={{ alignItems: 'center', paddingVertical: Skin.space(32) }}>
               <ActivityIndicator color={theme.colors.textMuted} />
             </View>
           )}
@@ -309,7 +347,7 @@ export function AudioSpaceOverlay() {
           )}
 
           {room && state !== 'scheduled' && !chatOpen && (
-            <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
+            <ScrollView contentContainerStyle={{ paddingBottom: Skin.space(24) }}>
               {speakers.length > 0 && (
                 <View style={styles.section}>
                   <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>
@@ -363,12 +401,18 @@ export function AudioSpaceOverlay() {
           )}
 
           {room && state !== 'scheduled' && chatOpen && (
-            // flex: 1 wrapper so the ChatPanel's inner KeyboardAvoidingView
-            // has a measurable parent inside the fixed-height sheet.
+            // flex: 1 wrapper so the ChatPanel (and its flex: 1 message
+            // list) fills the fixed-height sheet and pins the input to the
+            // bottom, where the keyboard pad lifts it.
             <View style={{ flex: 1, minHeight: 0 }}>
               <ChatPanel
                 messages={chatMessages}
                 onSend={sendChat}
+                onReply={replyToChat}
+                onLikeToggle={toggleChatLike}
+                onRecastToggle={toggleChatRecast}
+                likeStates={chatLikeStates}
+                recastStates={chatRecastStates}
                 theme={theme}
               />
             </View>
@@ -385,23 +429,62 @@ export function AudioSpaceOverlay() {
                 { backgroundColor: theme.colors.surface2, borderTopColor: theme.colors.surface3 },
               ]}
             >
-              {QUICK_REACTIONS.map((emoji) => (
+              {quickReactions.map((emoji) => (
                 <Pressable
                   key={emoji}
                   onPress={() => {
-                    void reactWith(emoji);
+                    sendReaction(emoji);
                     setReactionTrayOpen(false);
                   }}
                   hitSlop={6}
                   style={({ pressed }) => ({
-                    padding: 8,
-                    borderRadius: 24,
+                    padding: Skin.space(8),
+                    borderRadius: Skin.radius(24),
                     backgroundColor: pressed ? theme.colors.surface3 : 'transparent',
                   })}
                 >
-                  <Text style={{ fontSize: 28 }}>{emoji}</Text>
+                  <Text style={{ fontSize: Skin.font(28) }}>{emoji}</Text>
                 </Pressable>
               ))}
+              {/* Break out to the full emoji picker (inline — no second modal). */}
+              <Pressable
+                onPress={() => {
+                  setReactionTrayOpen(false);
+                  setEmojiPickerOpen(true);
+                }}
+                hitSlop={6}
+                accessibilityLabel="More emoji"
+                style={({ pressed }) => ({
+                  padding: Skin.space(8),
+                  borderRadius: Skin.radius(24),
+                  backgroundColor: pressed ? theme.colors.surface3 : theme.colors.surface3,
+                })}
+              >
+                <IconSymbol name="plus" size={24} color={theme.colors.textMain} />
+              </Pressable>
+            </View>
+          )}
+
+          {/* Full emoji picker — rendered inline within the overlay so we
+              don't stack a second Modal. Sends any emoji as a reaction. */}
+          {emojiPickerOpen && (
+            <View style={styles.emojiPickerPanel}>
+              {/* Tap outside the sheet to dismiss. */}
+              <Pressable
+                style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+                onPress={() => setEmojiPickerOpen(false)}
+              />
+              <EmojiPicker
+                embedded
+                visible
+                theme={theme}
+                onClose={() => setEmojiPickerOpen(false)}
+                onSelectEmoji={(emoji) => {
+                  // The picker records its own frecency via trackEmoji.
+                  void reactWith(emoji);
+                  setEmojiPickerOpen(false);
+                }}
+              />
             </View>
           )}
 
@@ -420,7 +503,7 @@ export function AudioSpaceOverlay() {
               <Text style={[styles.stagePromptText, { color: theme.colors.textStrong }]}>
                 The host invited you to speak.
               </Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={{ flexDirection: 'row', gap: Skin.space(8) }}>
                 <Pressable
                   onPress={() => declineStageInvite()}
                   style={[styles.stagePromptButton, { backgroundColor: theme.colors.surface3 }]}
@@ -476,6 +559,14 @@ export function AudioSpaceOverlay() {
                 </>
               );
             })()}
+            <ControlButton
+              icon={isSpeakerOn ? 'speaker.wave.2.fill' : 'speaker.wave.1.fill'}
+              label={isSpeakerOn ? 'Speaker' : 'Earpiece'}
+              theme={theme}
+              disabled={state !== 'connected'}
+              active={isSpeakerOn}
+              onPress={toggleSpeaker}
+            />
             <ControlButton
               icon="heart.fill"
               label="React"
@@ -545,27 +636,27 @@ function ScheduledPreview({
   const isRsvped = hasRsvped === true;
 
   return (
-    <View style={{ paddingHorizontal: 16, paddingVertical: 16, gap: 16 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+    <View style={{ paddingHorizontal: Skin.space(16), paddingVertical: Skin.space(16), gap: Skin.space(16) }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(12) }}>
         <CachedAvatar
           source={hostPfp ? { uri: hostPfp } : null}
           style={{
             width: 56,
             height: 56,
-            borderRadius: 28,
+            borderRadius: Skin.radius(28),
             backgroundColor: theme.colors.surface3,
           }}
         />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text
-            style={{ color: theme.colors.textStrong, fontSize: 14, fontWeight: '600' }}
+            style={{ color: theme.colors.textStrong, fontSize: Skin.font(14), fontWeight: '600' }}
             numberOfLines={1}
           >
             {hostName} · hosting
           </Text>
           {scheduledLabel && (
             <Text
-              style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 2 }}
+              style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}
             >
               {scheduledLabel}
             </Text>
@@ -574,18 +665,18 @@ function ScheduledPreview({
       </View>
 
       {room.description && (
-        <Text style={{ color: theme.colors.textMain, fontSize: 14, lineHeight: 20 }}>
+        <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(14), lineHeight: Skin.font(20) }}>
           {room.description}
         </Text>
       )}
 
-      <View style={{ flexDirection: 'row', gap: 10 }}>
+      <View style={{ flexDirection: 'row', gap: Skin.space(10) }}>
         <Pressable
           onPress={onToggleRsvp}
           style={({ pressed }) => ({
             flex: 1,
-            paddingVertical: 12,
-            borderRadius: 12,
+            paddingVertical: Skin.space(12),
+            borderRadius: Skin.radius(12),
             backgroundColor: isRsvped ? theme.colors.surface3 : theme.colors.accent,
             opacity: pressed ? 0.85 : 1,
             alignItems: 'center',
@@ -605,9 +696,9 @@ function ScheduledPreview({
             onPress={onStartScheduled}
             style={({ pressed }) => ({
               flex: 1,
-              paddingVertical: 12,
-              borderRadius: 12,
-              backgroundColor: '#FF3B30',
+              paddingVertical: Skin.space(12),
+              borderRadius: Skin.radius(12),
+              backgroundColor: theme.colors.danger,
               opacity: pressed ? 0.85 : 1,
               alignItems: 'center',
             })}
@@ -620,9 +711,9 @@ function ScheduledPreview({
       <Text
         style={{
           color: theme.colors.textMuted,
-          fontSize: 12,
+          fontSize: Skin.font(12),
           textAlign: 'center',
-          marginTop: 4,
+          marginTop: Skin.space(4),
         }}
       >
         This space goes live at the scheduled time.
@@ -631,43 +722,136 @@ function ScheduledPreview({
   );
 }
 
+/**
+ * Track the on-screen keyboard height. We can't lean on
+ * `KeyboardAvoidingView` here: this panel lives inside a bottom-anchored,
+ * fixed-height `<Modal statusBarTranslucent>`, where KAV's frame
+ * measurement is unreliable and its `behavior="padding"` ends up adding
+ * little or nothing — so the input stays pinned behind the keyboard.
+ * Measuring the keyboard directly and padding the panel ourselves is
+ * deterministic and, crucially, doesn't touch the sheet's height. iOS gets
+ * the pre-animation `will*` events for a smoother lift; Android only emits
+ * `did*`.
+ */
+function useKeyboardHeight(): number {
+  const [height, setHeight] = React.useState(0);
+  React.useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) =>
+      setHeight(e.endCoordinates?.height ?? 0),
+    );
+    const hideSub = Keyboard.addListener(hideEvt, () => setHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+  return height;
+}
+
 function ChatPanel({
   messages,
   onSend,
+  onReply,
+  onLikeToggle,
+  onRecastToggle,
+  likeStates,
+  recastStates,
   theme,
 }: {
   messages: SpaceChatCast[];
   onSend: (text: string) => Promise<void>;
+  onReply: (targetCastHash: string, text: string) => Promise<void>;
+  onLikeToggle: (castHash: string, currentlyLiked: boolean, currentCount: number) => Promise<void>;
+  onRecastToggle: (castHash: string, currentlyRecasted: boolean, currentCount: number) => Promise<void>;
+  likeStates: Map<string, { liked: boolean; count: number }>;
+  recastStates: Map<string, { recasted: boolean; count: number }>;
   theme: ReturnType<typeof useTheme>['theme'];
 }) {
   const scrollRef = React.useRef<ScrollView>(null);
+  const inputRef = React.useRef<TextInput>(null);
   const [draft, setDraft] = React.useState('');
+  // The chat message being replied to (null = top-level chat to the host cast).
+  const [replyTarget, setReplyTarget] = React.useState<SpaceChatCast | null>(null);
   const trimmed = draft.trim();
+  const keyboardHeight = useKeyboardHeight();
+
+  // Look up a message's parent (the cast it replies to) within the loaded list.
+  // Top-level chat replies to the host cast, which isn't in the list, so those
+  // resolve to undefined and show no reply indicator.
+  const byHash = React.useMemo(() => {
+    const map = new Map<string, SpaceChatCast>();
+    for (const m of messages) map.set(m.hash, m);
+    return map;
+  }, [messages]);
+
+  // y-offset of each message row within the scroll content, for tap-to-scroll.
+  const rowYRef = React.useRef<Map<string, number>>(new Map());
+  // Briefly highlight a message after scrolling to it (mirrors DM chat).
+  const [highlightedHash, setHighlightedHash] = React.useState<string | null>(null);
+  const highlightOpacity = useSharedValue(0);
+  React.useEffect(() => {
+    if (!highlightedHash) return;
+    highlightOpacity.value = withSequence(
+      withTiming(1, { duration: 0 }),
+      withDelay(200, withTiming(0, { duration: 1500 })),
+    );
+    const t = setTimeout(() => setHighlightedHash(null), 1700);
+    return () => clearTimeout(t);
+  }, [highlightedHash]);
+
+  // Accent rgb for the highlight tint (alpha animated in the worklet).
+  const accent = theme.colors.accent;
+  const ar = parseInt(accent.slice(1, 3), 16) || 88;
+  const ag = parseInt(accent.slice(3, 5), 16) || 101;
+  const ab = parseInt(accent.slice(5, 7), 16) || 242;
+  const highlightStyle = useAnimatedStyle(() => ({
+    backgroundColor: `rgba(${ar}, ${ag}, ${ab}, ${highlightOpacity.value * 0.18})`,
+  }));
+
+  const scrollToHash = React.useCallback((hash: string) => {
+    const y = rowYRef.current.get(hash);
+    if (y === undefined) return;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+    setTimeout(() => setHighlightedHash(hash), 300);
+  }, []);
+
+  const startReply = React.useCallback((m: SpaceChatCast) => {
+    setReplyTarget(m);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
 
   React.useEffect(() => {
-    // Auto-scroll to the latest as messages arrive.
+    // Auto-scroll to the latest as messages arrive, and again when the
+    // keyboard opens so the newest message stays visible above the input.
     requestAnimationFrame(() => {
       scrollRef.current?.scrollToEnd({ animated: true });
     });
-  }, [messages.length]);
+  }, [messages.length, keyboardHeight]);
 
   const submit = React.useCallback(() => {
     if (!trimmed) return;
     setDraft('');
-    void onSend(trimmed);
-  }, [onSend, trimmed]);
+    if (replyTarget) {
+      const target = replyTarget;
+      setReplyTarget(null);
+      void onReply(target.hash, trimmed);
+    } else {
+      void onSend(trimmed);
+    }
+  }, [onSend, onReply, trimmed, replyTarget]);
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={{ flex: 1, paddingBottom: keyboardHeight }}>
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8, gap: 10 }}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: Skin.space(16), paddingVertical: Skin.space(8), gap: Skin.space(10) }}
+        keyboardShouldPersistTaps="handled"
       >
         {messages.length === 0 && (
-          <Text style={{ color: theme.colors.textMuted, textAlign: 'center', paddingVertical: 24 }}>
+          <Text style={{ color: theme.colors.textMuted, textAlign: 'center', paddingVertical: Skin.space(24) }}>
             No messages yet.
           </Text>
         )}
@@ -675,52 +859,146 @@ function ChatPanel({
           const fid = m.author.fid;
           const pfpUrl = m.author.pfpUrl;
           const displayName = m.author.displayName ?? m.author.username;
+          // Optimistic stubs (not yet confirmed by the server) have no real
+          // cast hash, so they can't be liked/recast/replied to yet.
+          const isLocal = m.hash.startsWith('local-');
+          const likeOpt = likeStates.get(m.hash);
+          const liked = likeOpt?.liked ?? m.liked ?? false;
+          const likeCount = likeOpt?.count ?? m.likeCount ?? 0;
+          const recastOpt = recastStates.get(m.hash);
+          const recasted = recastOpt?.recasted ?? m.recasted ?? false;
+          const recastCount = recastOpt?.count ?? m.recastCount ?? 0;
+          const replyCount = m.replyCount ?? 0;
+          // The cast this message replies to, if it's in the loaded list.
+          const parent = m.parentHash ? byHash.get(m.parentHash) : undefined;
           return (
-            <View
+            <Animated.View
               key={m.hash ?? `${fid}-${m.timestamp}-${i}`}
-              style={{ flexDirection: 'row', gap: 8 }}
+              onLayout={(e) => rowYRef.current.set(m.hash, e.nativeEvent.layout.y)}
+              style={[
+                {
+                  flexDirection: 'row',
+                  gap: Skin.space(8),
+                  paddingHorizontal: Skin.space(6),
+                  paddingVertical: Skin.space(3),
+                  borderRadius: Skin.radius(8),
+                },
+                m.hash === highlightedHash ? highlightStyle : null,
+              ]}
             >
               <CachedAvatar
                 source={pfpUrl ? { uri: pfpUrl } : null}
-                style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: theme.colors.surface3 }}
+                style={{ width: 28, height: 28, borderRadius: Skin.radius(14), backgroundColor: theme.colors.surface3 }}
               />
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ color: theme.colors.textMain, fontWeight: '600', fontSize: 13 }}>
+                {parent && (
+                  <Pressable
+                    onPress={() => scrollToHash(parent.hash)}
+                    hitSlop={6}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4), marginBottom: Skin.space(2) }}
+                    accessibilityLabel="Go to replied message"
+                  >
+                    <IconSymbol name="arrowshape.turn.up.left.fill" size={11} color={theme.colors.textMuted} />
+                    <Text numberOfLines={1} style={{ flex: 1, color: theme.colors.textMuted, fontSize: Skin.font(12) }}>
+                      {(parent.author.displayName ?? parent.author.username ?? `fid:${parent.author.fid}`)}: {parent.text}
+                    </Text>
+                  </Pressable>
+                )}
+                <Text style={{ color: theme.colors.textMain, fontWeight: '600', fontSize: Skin.font(13) }}>
                   {displayName || `fid:${fid}`}
                 </Text>
-                <Text style={{ color: theme.colors.textMain, fontSize: 14, marginTop: 2 }}>
+                <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(14), marginTop: Skin.space(2) }}>
                   {m.text}
                 </Text>
+                {!isLocal && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(18), marginTop: Skin.space(6) }}>
+                    <Pressable
+                      onPress={() => void onLikeToggle(m.hash, liked, likeCount)}
+                      hitSlop={8}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4) }}
+                      accessibilityLabel={liked ? 'Unlike' : 'Like'}
+                    >
+                      <IconSymbol name={liked ? 'heart.fill' : 'heart'} size={14} color={liked ? theme.colors.danger : theme.colors.textMuted} />
+                      {likeCount > 0 && (
+                        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>{likeCount}</Text>
+                      )}
+                    </Pressable>
+                    <Pressable
+                      onPress={() => startReply(m)}
+                      hitSlop={8}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4) }}
+                      accessibilityLabel="Reply"
+                    >
+                      <IconSymbol name="bubble.left" size={14} color={theme.colors.textMuted} />
+                      {replyCount > 0 && (
+                        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>{replyCount}</Text>
+                      )}
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void onRecastToggle(m.hash, recasted, recastCount)}
+                      hitSlop={8}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4) }}
+                      accessibilityLabel={recasted ? 'Undo recast' : 'Recast'}
+                    >
+                      <IconSymbol name="arrowshape.turn.up.right" size={14} color={recasted ? theme.colors.success : theme.colors.textMuted} />
+                      {recastCount > 0 && (
+                        <Text style={{ color: recasted ? theme.colors.success : theme.colors.textMuted, fontSize: Skin.font(12) }}>{recastCount}</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                )}
               </View>
-            </View>
+            </Animated.View>
           );
         })}
       </ScrollView>
+      {replyTarget && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: Skin.space(12),
+            paddingVertical: Skin.space(6),
+            backgroundColor: theme.colors.surface2,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: theme.colors.surface3,
+          }}
+        >
+          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12), flex: 1 }} numberOfLines={1}>
+            Replying to {replyTarget.author.displayName ?? replyTarget.author.username ?? `fid:${replyTarget.author.fid}`}
+          </Text>
+          <Pressable onPress={() => setReplyTarget(null)} hitSlop={8} accessibilityLabel="Cancel reply">
+            <IconSymbol name="xmark" size={14} color={theme.colors.textMuted} />
+          </Pressable>
+        </View>
+      )}
       <View
         style={{
           flexDirection: 'row',
           alignItems: 'flex-end',
-          gap: 8,
-          paddingHorizontal: 12,
-          paddingVertical: 8,
+          gap: Skin.space(8),
+          paddingHorizontal: Skin.space(12),
+          paddingVertical: Skin.space(8),
           backgroundColor: theme.colors.surface2,
-          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopWidth: replyTarget ? 0 : StyleSheet.hairlineWidth,
           borderTopColor: theme.colors.surface3,
         }}
       >
         <TextInput
+          ref={inputRef}
           value={draft}
           onChangeText={setDraft}
-          placeholder="Say something"
+          placeholder={replyTarget ? 'Write a reply' : 'Say something'}
           placeholderTextColor={theme.colors.textMuted}
           style={{
             flex: 1,
             minHeight: 36,
             maxHeight: 100,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            borderRadius: 18,
-            fontSize: 14,
+            paddingHorizontal: Skin.space(12),
+            paddingVertical: Skin.space(8),
+            borderRadius: Skin.radius(18),
+            fontSize: Skin.font(14),
             color: theme.colors.textMain,
             backgroundColor: theme.colors.surface3,
           }}
@@ -738,7 +1016,7 @@ function ChatPanel({
             {
               width: 36,
               height: 36,
-              borderRadius: 18,
+              borderRadius: Skin.radius(18),
               alignItems: 'center',
               justifyContent: 'center',
               backgroundColor: theme.colors.accent,
@@ -749,7 +1027,7 @@ function ChatPanel({
           <IconSymbol name="paperplane.fill" size={18} color="#fff" />
         </Pressable>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -838,9 +1116,9 @@ function MinimizedPill({
               height: PILL_HEIGHT,
               flexDirection: 'row',
               alignItems: 'center',
-              gap: 10,
-              paddingVertical: 10,
-              paddingHorizontal: 14,
+              gap: Skin.space(10),
+              paddingVertical: Skin.space(10),
+              paddingHorizontal: Skin.space(14),
               borderRadius: PILL_HEIGHT / 2,
               backgroundColor: theme.colors.surface3,
               shadowColor: '#000',
@@ -856,8 +1134,8 @@ function MinimizedPill({
             style={{
               width: 28,
               height: 28,
-              borderRadius: 14,
-              backgroundColor: '#FF3B30',
+              borderRadius: Skin.radius(14),
+              backgroundColor: theme.colors.danger,
               alignItems: 'center',
               justifyContent: 'center',
             }}
@@ -934,8 +1212,8 @@ function ParticipantTile({
           style={{
             width: tileWidth - 8,
             height: 96,
-            borderRadius: 12,
-            borderWidth: 2,
+            borderRadius: Skin.radius(12),
+            borderWidth: Skin.border(2),
             borderColor,
             overflow: 'hidden',
             backgroundColor: theme.colors.surface3,
@@ -951,7 +1229,7 @@ function ParticipantTile({
           />
           {participant.handRaised && (
             <View style={[styles.handBadge, { backgroundColor: theme.colors.accent }]}>
-              <Text style={{ fontSize: 11 }}>✋</Text>
+              <Text style={{ fontSize: Skin.font(11) }}>✋</Text>
             </View>
           )}
           {onFlipCamera && (
@@ -964,7 +1242,7 @@ function ParticipantTile({
                 right: 6,
                 width: 26,
                 height: 26,
-                borderRadius: 13,
+                borderRadius: Skin.radius(13),
                 backgroundColor: 'rgba(0,0,0,0.55)',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -993,13 +1271,13 @@ function ParticipantTile({
             style={{
               width: 56,
               height: 56,
-              borderRadius: 28,
+              borderRadius: Skin.radius(28),
               backgroundColor: theme.colors.surface3,
             }}
           />
           {participant.handRaised && (
             <View style={[styles.handBadge, { backgroundColor: theme.colors.accent }]}>
-              <Text style={{ fontSize: 11 }}>✋</Text>
+              <Text style={{ fontSize: Skin.font(11) }}>✋</Text>
             </View>
           )}
         </View>
@@ -1043,7 +1321,7 @@ function ControlButton({
       hitSlop={8}
       style={({ pressed }) => ({
         alignItems: 'center',
-        gap: 4,
+        gap: Skin.space(4),
         opacity: disabled ? 0.4 : pressed ? 0.7 : 1,
       })}
     >
@@ -1051,7 +1329,7 @@ function ControlButton({
         style={{
           width: 48,
           height: 48,
-          borderRadius: 24,
+          borderRadius: Skin.radius(24),
           backgroundColor: active ? theme.colors.accent : theme.colors.surface2,
           alignItems: 'center',
           justifyContent: 'center',
@@ -1063,24 +1341,24 @@ function ControlButton({
           color={active ? '#fff' : theme.colors.textMain}
         />
       </View>
-      <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>{label}</Text>
+      <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(11) }}>{label}</Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
   },
   sheet: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingTop: 12,
+    borderTopLeftRadius: Skin.radius(16),
+    borderTopRightRadius: Skin.radius(16),
+    paddingTop: Skin.space(12),
     maxHeight: '90%',
   },
   sheetExpanded: {
-    // Fixed height for chat mode so the inner KeyboardAvoidingView
+    // Fixed height for chat mode so the ChatPanel's flex: 1 message list
     // has space. 85% lines up roughly with where the speaker grid
     // already lands when filled, so toggling between modes doesn't
     // make the sheet jump.
@@ -1089,38 +1367,38 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 12,
+    paddingHorizontal: Skin.space(16),
+    paddingBottom: Skin.space(12),
+    gap: Skin.space(12),
   },
   headerActionButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: Skin.space(8),
+    paddingVertical: Skin.space(4),
   },
   statePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: Skin.space(4),
     alignSelf: 'flex-start',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginBottom: 6,
+    borderRadius: Skin.radius(4),
+    paddingHorizontal: Skin.space(6),
+    paddingVertical: Skin.space(2),
+    marginBottom: Skin.space(6),
   },
   liveDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: Skin.radius(3),
     backgroundColor: '#fff',
   },
   statePillText: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: Skin.font(11),
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   title: {
-    fontSize: 18,
+    fontSize: Skin.font(18),
     fontWeight: '600',
   },
   closeButton: {
@@ -1130,26 +1408,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   section: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: Skin.space(16),
+    paddingTop: Skin.space(16),
   },
   sectionLabel: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 12,
+    marginBottom: Skin.space(12),
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    justifyContent: 'center',
+    gap: Skin.space(12),
   },
   avatarWrap: {
     width: 60,
     height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
+    borderRadius: Skin.radius(30),
+    borderWidth: Skin.border(2),
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -1160,26 +1439,34 @@ const styles = StyleSheet.create({
     right: -2,
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: Skin.radius(10),
     alignItems: 'center',
     justifyContent: 'center',
   },
   participantName: {
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: Skin.font(12),
+    marginTop: Skin.space(4),
     textAlign: 'center',
   },
   roleLabel: {
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: Skin.font(11),
+    marginTop: Skin.space(2),
   },
   reactionTray: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: Skin.space(8),
+    paddingHorizontal: Skin.space(12),
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  emojiPickerPanel: {
+    // Full-bleed overlay with the picker anchored to the bottom. The picker's
+    // own container carries `marginBottom: keyboardHeight`, so it lifts above
+    // the keyboard exactly like the chat emoji picker (a flex-end sheet).
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    zIndex: 50,
   },
   reactionStream: {
     position: 'absolute',
@@ -1187,37 +1474,37 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
-    gap: 4,
+    gap: Skin.space(4),
   },
   floatingReaction: {
-    fontSize: 32,
+    fontSize: Skin.font(32),
     opacity: 0.95,
   },
   controlBar: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingVertical: Skin.space(16),
+    paddingHorizontal: Skin.space(16),
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   stagePrompt: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginHorizontal: 12,
-    marginBottom: 8,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+    gap: Skin.space(12),
+    marginHorizontal: Skin.space(12),
+    marginBottom: Skin.space(8),
+    padding: Skin.space(12),
+    borderRadius: Skin.radius(12),
+    borderWidth: Skin.border(1),
   },
   stagePromptText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontWeight: '500',
   },
   stagePromptButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingHorizontal: Skin.space(12),
+    paddingVertical: Skin.space(8),
+    borderRadius: Skin.radius(16),
   },
-});
+}));

@@ -18,6 +18,7 @@ import { useAuth } from '@/context/AuthContext';
 import { fetchAudioRoom, type AudioRoom } from '@/services/spaces/spacesClient';
 import { useFarcasterUserPersistent } from '@/hooks/useFarcasterUserPersistent';
 import { useTheme } from '@/theme';
+import * as Skin from '@/theme/skins/geometry';
 
 interface AudioSpaceEmbedProps {
   spaceId: string;
@@ -80,10 +81,10 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
 
   const containerStyle = {
     backgroundColor: theme.colors.surface2,
-    borderRadius: 12,
-    padding: 12,
-    marginHorizontal: 12,
-    borderWidth: 1,
+    borderRadius: Skin.radius(12),
+    padding: Skin.space(12),
+    marginHorizontal: Skin.space(12),
+    borderWidth: Skin.border(1),
     borderColor: isLive ? theme.colors.danger : theme.colors.surface3,
   };
 
@@ -101,7 +102,7 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
       style={({ pressed }) => [containerStyle, { opacity: pressed ? 0.85 : 1 }]}
     >
       {/* Header: state pill + listener count */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(8), marginBottom: Skin.space(8) }}>
         <View
           style={{
             backgroundColor: isLive
@@ -109,12 +110,12 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
               : isEnded
                 ? theme.colors.surface3
                 : theme.colors.accent,
-            borderRadius: 4,
-            paddingHorizontal: 6,
-            paddingVertical: 2,
+            borderRadius: Skin.radius(4),
+            paddingHorizontal: Skin.space(6),
+            paddingVertical: Skin.space(2),
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 4,
+            gap: Skin.space(4),
           }}
         >
           {isLive && (
@@ -122,19 +123,19 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
               style={{
                 width: 6,
                 height: 6,
-                borderRadius: 3,
+                borderRadius: Skin.radius(3),
                 backgroundColor: '#fff',
               }}
             />
           )}
-          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>
+          <Text style={{ color: '#fff', fontSize: Skin.font(11), fontWeight: '700', letterSpacing: 0.5 }}>
             {isLive ? 'LIVE' : isEnded ? 'ENDED' : room?.state === 'scheduled' ? 'SCHEDULED' : 'SPACE'}
           </Text>
         </View>
         {isLive && typeof room?.listenerCount === 'number' && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4) }}>
             <IconSymbol name="person.2.fill" size={12} color={theme.colors.textMuted} />
-            <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
+            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>
               {room.listenerCount}
             </Text>
           </View>
@@ -144,25 +145,25 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
       </View>
 
       {/* Title + host */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(10) }}>
         <CachedAvatar
           source={hostPfpUrl ? { uri: hostPfpUrl } : null}
           style={{
             width: 36,
             height: 36,
-            borderRadius: 18,
+            borderRadius: Skin.radius(18),
             backgroundColor: theme.colors.surface3,
           }}
         />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text
-            style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: 14 }}
+            style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(14) }}
             numberOfLines={2}
           >
             {room?.title || 'Audio space'}
           </Text>
           {host?.username && (
-            <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12), marginTop: Skin.space(2) }} numberOfLines={1}>
               by @{host.username}
               {scheduledLabel ? ` · ${scheduledLabel}` : ''}
             </Text>
@@ -172,12 +173,12 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
           <View
             style={{
               backgroundColor: theme.colors.accent,
-              borderRadius: 16,
-              paddingVertical: 6,
-              paddingHorizontal: 14,
+              borderRadius: Skin.radius(16),
+              paddingVertical: Skin.space(6),
+              paddingHorizontal: Skin.space(14),
             }}
           >
-            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>
+            <Text style={{ color: '#fff', fontSize: Skin.font(13), fontWeight: '600' }}>
               {isLive ? 'Join' : 'Open'}
             </Text>
           </View>

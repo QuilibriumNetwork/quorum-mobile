@@ -8,7 +8,9 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { truncateAddress } from '@/utils/formatAddress';
 import type { Conversation } from '@/hooks/chat/useConversations';
 import React, { useMemo } from 'react';
-import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Image, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -86,9 +88,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: theme.colors.surface3,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingHorizontal: Skin.space(16),
+    paddingVertical: Skin.space(12),
+    borderBottomWidth: Skin.border(1),
     borderBottomColor: theme.colors.border,
     width: SCREEN_WIDTH,
   },
@@ -102,23 +104,23 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
   },
   menuButton: {
-    marginRight: 12,
+    marginRight: Skin.space(12),
   },
   avatar: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: Skin.radius(16),
     backgroundColor: theme.colors.surface5,
   },
   title: {
     color: theme.colors.textMain,
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
-    marginLeft: 10,
+    marginLeft: Skin.space(10),
     flex: 1,
   },
   headerIconButton: {
-    marginLeft: 16,
+    marginLeft: Skin.space(16),
   },
 });
 

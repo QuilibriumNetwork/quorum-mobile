@@ -7,15 +7,11 @@ import type { EdgeInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import React, { useEffect, useRef } from 'react';
-import {
-  Animated,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Animated, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from './IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
 
 export interface ToastProps {
   visible: boolean;
@@ -187,39 +183,39 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets, type: string) =>
       zIndex: 9999,
     },
     content: {
-      backgroundColor: theme.colors.surface2 || theme.colors.surface || '#1C1C1E',
-      borderRadius: 16,
-      padding: 16,
+      backgroundColor: theme.colors.surface2 || theme.colors.surface1 || '#1C1C1E',
+      borderRadius: Skin.radius(16),
+      padding: Skin.space(16),
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.3,
       shadowRadius: 16,
       elevation: 12,
-      borderWidth: 1,
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.border || 'rgba(255,255,255,0.1)',
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: Skin.space(10),
     },
     title: {
       flex: 1,
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.semiBold?.fontFamily || theme.fonts.bold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textMain,
     },
     message: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
-      marginTop: 8,
-      lineHeight: 18,
+      marginTop: Skin.space(8),
+      lineHeight: Skin.font(18),
     },
     txContainer: {
-      marginTop: 12,
-      paddingTop: 12,
-      borderTopWidth: 1,
+      marginTop: Skin.space(12),
+      paddingTop: Skin.space(12),
+      borderTopWidth: Skin.border(1),
       borderTopColor: theme.colors.border,
       flexDirection: 'row',
       alignItems: 'center',
@@ -228,19 +224,19 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets, type: string) =>
     txHashRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Skin.space(6),
     },
     txLabel: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
     },
     txHash: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
     },
     explorerLink: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium?.fontFamily || theme.fonts.regular.fontFamily,
       fontWeight: '500',

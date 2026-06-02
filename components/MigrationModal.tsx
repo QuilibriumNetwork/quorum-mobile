@@ -18,6 +18,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme, type AppTheme } from '@/theme';
+import * as Skin from '@/theme/skins/geometry';
 
 interface MigrationModalProps {
   visible: boolean;
@@ -62,31 +63,31 @@ function createStyles(theme: AppTheme) {
       backgroundColor: 'rgba(0, 0, 0, 0.6)',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingHorizontal: 24,
+      paddingHorizontal: Skin.space(24),
     },
     card: {
       width: '100%',
       maxWidth: 360,
       backgroundColor: theme.colors.surface1,
-      borderRadius: 16,
-      padding: 24,
+      borderRadius: Skin.radius(16),
+      padding: Skin.space(24),
       alignItems: 'center',
-      gap: 16,
+      gap: Skin.space(16),
     },
     title: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontWeight: '600',
       color: theme.colors.textStrong,
       textAlign: 'center',
     },
     body: {
-      fontSize: 14,
-      lineHeight: 20,
+      fontSize: Skin.font(14),
+      lineHeight: Skin.font(20),
       color: theme.colors.textMain,
       textAlign: 'center',
     },
     warn: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontWeight: '600',
       color: theme.colors.accent,
       textAlign: 'center',

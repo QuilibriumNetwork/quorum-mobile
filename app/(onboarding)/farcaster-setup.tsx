@@ -6,14 +6,8 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-} from 'react-native';
+import { View, Text, TextInput, StyleSheet, ScrollView } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme, type AppTheme } from '@/theme';
 import { useOnboarding } from '@/context';
@@ -32,6 +26,7 @@ import {
   storeFarcasterAuthToken,
 } from '@/services/onboarding/secureStorage';
 import { fetchImageAsDataUri } from '@/utils/image';
+import * as Skin from '@/theme/skins/geometry';
 
 export default function FarcasterSetupScreen() {
   const { theme } = useTheme();
@@ -297,52 +292,52 @@ const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     header: {
       alignItems: 'center',
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     iconContainer: {
       width: 64,
       height: 64,
-      borderRadius: 32,
+      borderRadius: Skin.radius(32),
       backgroundColor: theme.colors.primary + '20',
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     title: {
-      fontSize: 24,
+      fontSize: Skin.font(24),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       textAlign: 'center',
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      lineHeight: 20,
-      paddingHorizontal: 16,
+      lineHeight: Skin.font(20),
+      paddingHorizontal: Skin.space(16),
     },
     wordCountToggle: {
       flexDirection: 'row',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 10,
-      padding: 4,
-      marginBottom: 16,
+      borderRadius: Skin.radius(10),
+      padding: Skin.space(4),
+      marginBottom: Skin.space(16),
     },
     wordCountOption: {
       flex: 1,
-      paddingVertical: 8,
-      paddingHorizontal: 16,
-      borderRadius: 8,
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(16),
+      borderRadius: Skin.radius(8),
       alignItems: 'center',
     },
     wordCountOptionActive: {
       backgroundColor: theme.colors.surface1,
     },
     wordCountText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
     },
@@ -355,26 +350,26 @@ const createStyles = (theme: AppTheme) =>
     wordGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
+      gap: Skin.space(8),
     },
     wordInputContainer: {
       width: '31%',
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 8,
+      borderRadius: Skin.radius(8),
+      paddingHorizontal: Skin.space(8),
+      paddingVertical: Skin.space(8),
     },
     wordNumber: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
       width: 16,
     },
     wordInput: {
       flex: 1,
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.medium.fontFamily,
       padding: 0,
@@ -383,15 +378,15 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.danger + '15',
-      borderRadius: 8,
-      padding: 12,
-      marginBottom: 16,
+      borderRadius: Skin.radius(8),
+      padding: Skin.space(12),
+      marginBottom: Skin.space(16),
     },
     errorText: {
       color: theme.colors.danger,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      marginLeft: 8,
+      marginLeft: Skin.space(8),
       flex: 1,
     },
     pasteContainer: {
@@ -399,55 +394,55 @@ const createStyles = (theme: AppTheme) =>
     },
     pasteInput: {
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      padding: 16,
-      fontSize: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      fontSize: Skin.font(16),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.regular.fontFamily,
       minHeight: 120,
-      lineHeight: 24,
+      lineHeight: Skin.font(24),
     },
     pasteButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
-      marginTop: 12,
-      paddingVertical: 12,
+      gap: Skin.space(8),
+      marginTop: Skin.space(12),
+      paddingVertical: Skin.space(12),
       backgroundColor: theme.colors.primary + '15',
-      borderRadius: 10,
+      borderRadius: Skin.radius(10),
     },
     pasteButtonText: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium.fontFamily,
     },
     wordCountToggleSecondary: {
       flexDirection: 'row',
-      gap: 8,
-      marginBottom: 12,
+      gap: Skin.space(8),
+      marginBottom: Skin.space(12),
       justifyContent: 'center',
     },
     wordCountOptionSmall: {
-      paddingVertical: 6,
-      paddingHorizontal: 16,
-      borderRadius: 8,
+      paddingVertical: Skin.space(6),
+      paddingHorizontal: Skin.space(16),
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.surface3,
     },
     wordCountTextSmall: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
     },
     footer: {
       marginTop: 'auto',
-      paddingTop: 16,
+      paddingTop: Skin.space(16),
     },
     progressText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
   });

@@ -11,14 +11,9 @@ import { useJoinSpace, useValidateInvite } from '@/hooks/chat/useSpaceActions';
 import { useSpaces } from '@/hooks/chat/useSpaces';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 // Valid invite link prefixes for detection
 const VALID_INVITE_PREFIXES = [
@@ -261,57 +256,57 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      borderWidth: 1,
+      borderRadius: Skin.radius(12),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.border,
-      padding: 12,
-      marginTop: 8,
+      padding: Skin.space(12),
+      marginTop: Skin.space(8),
       maxWidth: 400,
     },
     iconContainer: {
-      marginRight: 12,
+      marginRight: Skin.space(12),
     },
     icon: {
       width: 44,
       height: 44,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
     },
     iconPlaceholder: {
       width: 44,
       height: 44,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.primary + '20',
       alignItems: 'center',
       justifyContent: 'center',
     },
     iconPlaceholderText: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.primary,
     },
     infoContainer: {
       flex: 1,
-      marginRight: 12,
+      marginRight: Skin.space(12),
     },
     spaceName: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textStrong,
     },
     description: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginTop: 2,
-      lineHeight: 18,
+      marginTop: Skin.space(2),
+      lineHeight: Skin.font(18),
     },
     joinButton: {
-      paddingHorizontal: 16,
-      paddingVertical: 8,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(8),
       backgroundColor: theme.colors.primary,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
       minWidth: 70,
       alignItems: 'center',
     },
@@ -322,7 +317,7 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.success ?? '#22c55e',
     },
     joinButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: '#fff',
@@ -334,13 +329,13 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: (theme.colors.warning ?? '#f59e0b') + '15',
-      borderRadius: 8,
-      padding: 10,
-      marginTop: 8,
-      gap: 8,
+      borderRadius: Skin.radius(8),
+      padding: Skin.space(10),
+      marginTop: Skin.space(8),
+      gap: Skin.space(8),
     },
     errorText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.warning ?? '#f59e0b',
     },
@@ -351,7 +346,7 @@ const createStyles = (theme: AppTheme) =>
       right: 0,
     },
     joinErrorText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.danger ?? '#ef4444',
     },
@@ -359,31 +354,31 @@ const createStyles = (theme: AppTheme) =>
     skeletonIcon: {
       width: 44,
       height: 44,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
-      marginRight: 12,
+      marginRight: Skin.space(12),
     },
     skeletonContent: {
       flex: 1,
-      marginRight: 12,
+      marginRight: Skin.space(12),
     },
     skeletonTitle: {
       width: '70%',
       height: 16,
-      borderRadius: 4,
+      borderRadius: Skin.radius(4),
       backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
     },
     skeletonDescription: {
       width: '90%',
       height: 12,
-      borderRadius: 4,
+      borderRadius: Skin.radius(4),
       backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
-      marginTop: 6,
+      marginTop: Skin.space(6),
     },
     skeletonButton: {
       width: 70,
       height: 32,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
     },
   });

@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -12,6 +13,8 @@ import { useTheme } from '@/theme';
 import { useCall } from '@/context';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 export function OutgoingCallScreen() {
   const { activeCall, hangup, toggleMute, toggleSpeaker } = useCall();
@@ -66,7 +69,7 @@ export function OutgoingCallScreen() {
       </View>
 
       <TouchableOpacity
-        style={[styles.hangupButton, { backgroundColor: '#ff3b30' }]}
+        style={[styles.hangupButton, { backgroundColor: theme.colors.danger }]}
         onPress={hangup}
       >
         <IconSymbol name="phone.down" color="#fff" size={28} />
@@ -75,42 +78,42 @@ export function OutgoingCallScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 9999,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 80,
+    paddingBottom: Skin.space(80),
   },
   callerInfo: {
     alignItems: 'center',
-    gap: 8,
+    gap: Skin.space(8),
   },
   callerName: {
-    fontSize: 28,
+    fontSize: Skin.font(28),
     fontWeight: '600',
-    marginTop: 16,
+    marginTop: Skin.space(16),
   },
   statusText: {
-    fontSize: 17,
+    fontSize: Skin.font(17),
   },
   controls: {
     flexDirection: 'row',
-    gap: 32,
+    gap: Skin.space(32),
   },
   controlButton: {
     width: 56,
     height: 56,
-    borderRadius: 28,
+    borderRadius: Skin.radius(28),
     alignItems: 'center',
     justifyContent: 'center',
   },
   hangupButton: {
     width: 72,
     height: 72,
-    borderRadius: 36,
+    borderRadius: Skin.radius(36),
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

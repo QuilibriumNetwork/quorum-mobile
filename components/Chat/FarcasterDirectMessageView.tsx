@@ -31,6 +31,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { pickImage, type ProcessedAttachment } from '@/services/media/imageAttachment';
 import { uploadFarcasterImage, type DirectCastMessageMetadata } from '@/services/farcasterClient';
+import * as Skin from '@/theme/skins/geometry';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -305,9 +306,9 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: '#8B5CF6' + '20', // Farcaster purple with opacity
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      gap: 8,
+      paddingVertical: Skin.space(6),
+      paddingHorizontal: Skin.space(12),
+      gap: Skin.space(8),
       width: SCREEN_WIDTH,
     },
     warningIcon: {
@@ -316,7 +317,7 @@ const createStyles = (theme: AppTheme) =>
       tintColor: '#8B5CF6',
     },
     warningText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: '#8B5CF6',
     },

@@ -7,6 +7,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { AutoHeightImage } from './AutoHeightImage';
 import { SCREEN_WIDTH } from '../utils';
+import * as Skin from '@/theme/skins/geometry';
 
 interface PaginationDotProps {
   index: number;
@@ -24,7 +25,7 @@ function PaginationDot({ index, activeIndex, activeColor, inactiveColor }: Pagin
   return (
     <Animated.View
       style={[
-        { width: 6, height: 6, borderRadius: 3 },
+        { width: 6, height: 6, borderRadius: Skin.radius(3) },
         animatedStyle,
       ]}
     />
@@ -92,8 +93,8 @@ export function ImageCarousel({
           flexDirection: 'row',
           justifyContent: 'center',
           alignItems: 'center',
-          paddingVertical: 12,
-          gap: 6,
+          paddingVertical: Skin.space(12),
+          gap: Skin.space(6),
         }}
       >
         {urls.map((_, index) => (

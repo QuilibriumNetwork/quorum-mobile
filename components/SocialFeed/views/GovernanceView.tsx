@@ -13,14 +13,11 @@ import {
   type VoteMap,
 } from '@/hooks/useGovernance';
 import React, { useCallback, useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import CreateProposalSheet from './CreateProposalSheet';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface GovernanceViewProps {
   theme: AppTheme;
@@ -223,59 +220,59 @@ export default function GovernanceView({ theme, onOpenProposal }: GovernanceView
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
     flex: 1,
   },
   tabRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 4,
+    paddingHorizontal: Skin.space(16),
+    paddingTop: Skin.space(12),
+    paddingBottom: Skin.space(4),
   },
   tabs: {
     flexDirection: 'row',
     flex: 1,
-    gap: 20,
+    gap: Skin.space(20),
   },
   tab: {
-    paddingVertical: 8,
+    paddingVertical: Skin.space(8),
     alignItems: 'center',
   },
   tabText: {
-    fontSize: 15,
+    fontSize: Skin.font(15),
     fontWeight: '600',
   },
   tabUnderline: {
     height: 2,
     width: '100%',
-    borderRadius: 1,
-    marginTop: 4,
+    borderRadius: Skin.radius(1),
+    marginTop: Skin.space(4),
   },
   createButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 4,
+    paddingHorizontal: Skin.space(12),
+    paddingVertical: Skin.space(6),
+    borderRadius: Skin.radius(16),
+    gap: Skin.space(4),
   },
   createButtonText: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontWeight: '600',
   },
   list: {
     flex: 1,
   },
   listContent: {
-    padding: 16,
-    gap: 12,
+    padding: Skin.space(16),
+    gap: Skin.space(12),
   },
   card: {
-    borderRadius: 12,
-    padding: 14,
-    gap: 8,
+    borderRadius: Skin.radius(12),
+    padding: Skin.space(14),
+    gap: Skin.space(8),
   },
   cardHeader: {
     flexDirection: 'row',
@@ -283,55 +280,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: Skin.space(8),
+    paddingVertical: Skin.space(3),
+    borderRadius: Skin.radius(8),
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: Skin.font(11),
     fontWeight: '600',
   },
   timeText: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
   },
   cardTitle: {
-    fontSize: 15,
+    fontSize: Skin.font(15),
     fontWeight: '600',
-    lineHeight: 20,
+    lineHeight: Skin.font(20),
   },
   cardBody: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: Skin.font(13),
+    lineHeight: Skin.font(18),
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: Skin.space(4),
   },
   voteRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: Skin.space(16),
   },
   voteButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: Skin.space(4),
   },
   voteCount: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontWeight: '500',
   },
   authorText: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 60,
-    gap: 12,
+    paddingTop: Skin.space(60),
+    gap: Skin.space(12),
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: Skin.font(15),
   },
-});
+}));

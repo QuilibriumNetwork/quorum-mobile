@@ -3,17 +3,13 @@
  */
 
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme, type AppTheme } from '@/theme';
 import { Button } from '@/components/ui/Button';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
 
 interface HexInputViewProps {
   onSubmit: (hex: string) => Promise<void>;
@@ -160,47 +156,47 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
     },
     header: {
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     title: {
-      fontSize: 24,
+      fontSize: Skin.font(24),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     errorContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.danger + '15',
-      borderRadius: 8,
-      padding: 12,
-      marginBottom: 16,
+      borderRadius: Skin.radius(8),
+      padding: Skin.space(12),
+      marginBottom: Skin.space(16),
     },
     errorText: {
       color: theme.colors.danger,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      marginLeft: 8,
+      marginLeft: Skin.space(8),
       flex: 1,
     },
     inputContainer: {
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     inputHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     inputLabel: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
     },
@@ -209,18 +205,18 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
     },
     pasteText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium.fontFamily,
-      marginLeft: 4,
+      marginLeft: Skin.space(4),
     },
     textInput: {
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      borderWidth: 1,
+      borderRadius: Skin.radius(12),
+      borderWidth: Skin.border(1),
       borderColor: 'transparent',
-      padding: 16,
-      fontSize: 14,
+      padding: Skin.space(16),
+      fontSize: Skin.font(14),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.mono?.fontFamily ?? 'monospace',
       minHeight: 120,
@@ -233,51 +229,51 @@ const createStyles = (theme: AppTheme) =>
       borderColor: theme.colors.success ?? '#22c55e',
     },
     validationError: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.danger,
       fontFamily: theme.fonts.regular.fontFamily,
-      marginTop: 8,
+      marginTop: Skin.space(8),
     },
     validIndicator: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 8,
+      marginTop: Skin.space(8),
     },
     validText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.success ?? '#22c55e',
       fontFamily: theme.fonts.regular.fontFamily,
-      marginLeft: 4,
+      marginLeft: Skin.space(4),
     },
     charCount: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
-      marginTop: 8,
+      marginTop: Skin.space(8),
       textAlign: 'right',
     },
     warning: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       backgroundColor: (theme.colors.warning ?? '#f59e0b') + '15',
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 24,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      marginBottom: Skin.space(24),
     },
     warningText: {
       flex: 1,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.regular.fontFamily,
-      marginLeft: 12,
-      lineHeight: 20,
+      marginLeft: Skin.space(12),
+      lineHeight: Skin.font(20),
     },
     footer: {
       marginTop: 'auto',
     },
     buttons: {
       flexDirection: 'row',
-      gap: 12,
+      gap: Skin.space(12),
     },
     backButton: {
       flex: 1,

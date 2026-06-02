@@ -1,8 +1,11 @@
 import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LikeIcon, getLikeIconType } from './LikeIcon';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface CastActionsProps {
   castHash: string;
@@ -89,20 +92,20 @@ export const CastActions = React.memo(function CastActions({
   );
 });
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 4,
+    gap: Skin.space(16),
+    marginTop: Skin.space(4),
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Skin.space(6),
   },
   countText: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
   },
-});
+}));
 
 export default CastActions;

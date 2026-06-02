@@ -8,22 +8,14 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Text, TextInput, StyleSheet, Image, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme, type AppTheme } from '@/theme';
 import { useOnboarding } from '@/context';
 import { OnboardingLayout, StepNavigation } from '@/components/onboarding';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
 
 export default function ProfileSetupScreen() {
   const { theme } = useTheme();
@@ -204,44 +196,44 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
     },
     scrollContent: {
-      paddingBottom: 16,
+      paddingBottom: Skin.space(16),
     },
     header: {
       alignItems: 'center',
-      marginBottom: 32,
+      marginBottom: Skin.space(32),
     },
     title: {
-      fontSize: 24,
+      fontSize: Skin.font(24),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       textAlign: 'center',
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     avatarSection: {
       alignItems: 'center',
-      marginBottom: 32,
+      marginBottom: Skin.space(32),
     },
     avatarContainer: {
       position: 'relative',
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     avatarImage: {
       width: 100,
       height: 100,
-      borderRadius: 50,
+      borderRadius: Skin.radius(50),
     },
     avatarPlaceholder: {
       width: 100,
       height: 100,
-      borderRadius: 50,
+      borderRadius: Skin.radius(50),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
@@ -252,43 +244,43 @@ const createStyles = (theme: AppTheme) =>
       right: 0,
       width: 32,
       height: 32,
-      borderRadius: 16,
+      borderRadius: Skin.radius(16),
       backgroundColor: theme.colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 3,
+      borderWidth: Skin.border(3),
       borderColor: theme.colors.background,
     },
     avatarButtons: {
       flexDirection: 'row',
-      gap: 16,
+      gap: Skin.space(16),
     },
     avatarButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Skin.space(6),
     },
     avatarButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium.fontFamily,
     },
     form: {
-      gap: 20,
+      gap: Skin.space(20),
     },
     inputGroup: {
-      gap: 8,
+      gap: Skin.space(8),
     },
     inputLabel: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
     },
     textInput: {
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      padding: 16,
-      fontSize: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      fontSize: Skin.font(16),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.regular.fontFamily,
     },
@@ -297,7 +289,7 @@ const createStyles = (theme: AppTheme) =>
       textAlignVertical: 'top',
     },
     charCount: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'right',

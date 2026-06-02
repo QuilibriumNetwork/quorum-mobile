@@ -1,14 +1,37 @@
+import { StyleSheet } from 'react-native';
 import { Theme } from '@react-navigation/native';
 import { accentThemes, colors } from './colors';
-import { fonts } from './fonts';
+import { fonts as defaultFonts, fontSizes, makeFonts, makeTextStyles } from './fonts';
+import { skinFontFamily, withAlpha } from './skins/mergeSkin';
+import { deriveGeometry } from './skins/geometry';
+import type { FrameOptions, SkinBorders, SkinColorTokens, SkinOverride, SkinRadii, SkinSpacing } from './skins/types';
 
 type AccentColor = keyof typeof accentThemes;
 
-const createTheme = (isDark: boolean, accentColor: AccentColor = 'blue'): Theme & {
+const BASE_RADII: SkinRadii = { sm: 6, md: 8, lg: 12, pill: 999 };
+const BASE_SPACING: SkinSpacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
+
+/** Scale every font-size token by a skin's `fontScale`, preserving the shape. */
+function scaleFontSizes(scale: number): typeof fontSizes {
+  if (scale === 1) return fontSizes;
+  const out: Record<string, number> = {};
+  for (const k of Object.keys(fontSizes)) {
+    out[k] = Math.round((fontSizes as Record<string, number>)[k] * scale);
+  }
+  return out as typeof fontSizes;
+}
+
+const createTheme = (
+  isDark: boolean,
+  accentColor: AccentColor = 'blue',
+  skin?: SkinOverride | null,
+): Theme & {
   colors: Theme['colors'] & {
     accent: string;
     accentLight: string;
     accentDark: string;
+    accentSoft: string;
+    accentSubtle: string;
     surface0: string;
     surface1: string;
     surface2: string;
@@ -29,8 +52,13 @@ const createTheme = (isDark: boolean, accentColor: AccentColor = 'blue'): Theme 
     success: string;
     info: string;
   };
-  fonts: typeof fonts;
-  fontSizes: typeof import('./fonts').fontSizes;
+  fonts: ReturnType<typeof makeFonts>;
+  fontSizes: typeof fontSizes;
+  textStyles: ReturnType<typeof makeTextStyles>;
+  radii: SkinRadii;
+  borders: SkinBorders;
+  spacing: SkinSpacing;
+  frame: FrameOptions;
 } => {
   const accent = accentThemes[accentColor];
   const surface = isDark ? colors.darkSurface : colors.surface;
@@ -47,39 +75,90 @@ const createTheme = (isDark: boolean, accentColor: AccentColor = 'blue'): Theme 
     info: colors.utilities.info,
   };
 
+  // Skin color overrides for the active light/dark variant (already validated).
+  const ov: Partial<SkinColorTokens> = (isDark ? skin?.colors?.dark : skin?.colors?.light) ?? {};
+  const pick = (key: keyof SkinColorTokens, fallback: string): string => ov[key] ?? fallback;
+
+  // When a wallpaper sets surfaceAlpha, surface tokens become translucent so
+  // the wallpaper shows through. Text/borders stay opaque for legibility.
+  const sa = skin?.wallpaper?.surfaceAlpha;
+  const sheer = (val: string): string => (sa !== undefined && sa < 1 ? withAlpha(val, sa) : val);
+  const surf = (key: keyof SkinColorTokens, base: string): string => sheer(pick(key, base));
+
+  const skinFamily = skinFontFamily(skin);
+  const fonts = skinFamily ? makeFonts(skinFamily) : defaultFonts;
+
+  // Named tokens flow through the same geometry scale as the app-wide
+  // radius()/space()/border() helpers, so semantic tokens and raw literals
+  // stay consistent under a skin. Explicit named overrides still win.
+  const geo = deriveGeometry(skin);
+  const rad = (n: number) =>
+    geo.radiusSet !== undefined ? (n === 0 ? 0 : geo.radiusSet) : Math.round(n * geo.radiusScale);
+  const radii: SkinRadii = {
+    sm: skin?.radii?.sm ?? rad(BASE_RADII.sm),
+    md: skin?.radii?.md ?? rad(BASE_RADII.md),
+    lg: skin?.radii?.lg ?? rad(BASE_RADII.lg),
+    pill: skin?.radii?.pill ?? BASE_RADII.pill,
+  };
+  const spacing: SkinSpacing = {
+    xs: skin?.spacing?.xs ?? Math.round(BASE_SPACING.xs * geo.spacingScale),
+    sm: skin?.spacing?.sm ?? Math.round(BASE_SPACING.sm * geo.spacingScale),
+    md: skin?.spacing?.md ?? Math.round(BASE_SPACING.md * geo.spacingScale),
+    lg: skin?.spacing?.lg ?? Math.round(BASE_SPACING.lg * geo.spacingScale),
+    xl: skin?.spacing?.xl ?? Math.round(BASE_SPACING.xl * geo.spacingScale),
+  };
+  const borders: SkinBorders = {
+    hairline: skin?.borders?.hairline ?? StyleSheet.hairlineWidth,
+    thin: skin?.borders?.thin ?? 1 * geo.borderScale,
+    thick: skin?.borders?.thick ?? 2 * geo.borderScale,
+    color: skin?.borders?.color ?? pick('surface6', surface['6']),
+  };
+
   return {
     dark: isDark,
     colors: {
-      primary: accent[500],
-      background: surface['00'],
-      card: surface['2'],
-      text: textColors.main,
-      border: surface['6'],
-      notification: accent[500],
-      
+      primary: pick('accent', accent[500]),
+      background: sheer(surface['00']),
+      card: surf('surface2', surface['2']),
+      text: pick('textMain', textColors.main),
+      border: pick('surface6', surface['6']),
+      notification: pick('accent', accent[500]),
+
       // Extended colors
-      accent: accent[500],
-      accentLight: accent[200],
-      accentDark: accent[700],
-      surface0: surface['0'],
-      surface1: surface['1'],
-      surface2: surface['2'],
-      surface3: surface['3'],
-      surface4: surface['4'],
-      surface5: surface['5'],
-      surface6: surface['6'],
-      surface7: surface['7'],
-      surface8: surface['8'],
-      surface9: surface['9'],
-      surface10: surface['10'],
-      textStrong: textColors.strong,
-      textMain: textColors.main,
-      textSubtle: textColors.subtle,
-      textMuted: textColors.muted,
-      ...utilities,
+      accent: pick('accent', accent[500]),
+      accentLight: pick('accentLight', accent[200]),
+      accentDark: pick('accentDark', accent[700]),
+      // Accent at low alpha — for tinted highlight/selected backgrounds. Follow
+      // the (possibly skinned) accent so those surfaces re-skin too.
+      accentSoft: withAlpha(pick('accent', accent[500]), 0.12),
+      accentSubtle: withAlpha(pick('accent', accent[500]), 0.06),
+      surface0: surf('surface0', surface['0']),
+      surface1: surf('surface1', surface['1']),
+      surface2: surf('surface2', surface['2']),
+      surface3: surf('surface3', surface['3']),
+      surface4: surf('surface4', surface['4']),
+      surface5: surf('surface5', surface['5']),
+      surface6: surf('surface6', surface['6']),
+      surface7: surf('surface7', surface['7']),
+      surface8: surf('surface8', surface['8']),
+      surface9: surf('surface9', surface['9']),
+      surface10: surf('surface10', surface['10']),
+      textStrong: pick('textStrong', textColors.strong),
+      textMain: pick('textMain', textColors.main),
+      textSubtle: pick('textSubtle', textColors.subtle),
+      textMuted: pick('textMuted', textColors.muted),
+      danger: pick('danger', utilities.danger),
+      warning: pick('warning', utilities.warning),
+      success: pick('success', utilities.success),
+      info: pick('info', utilities.info),
     },
     fonts,
-    fontSizes: require('./fonts').fontSizes,
+    fontSizes: scaleFontSizes(skin?.fontScale ?? 1),
+    textStyles: makeTextStyles(skinFamily ?? undefined, skin?.fontScale ?? 1),
+    radii,
+    borders,
+    spacing,
+    frame: skin?.frame ?? {},
   };
 };
 
@@ -87,8 +166,8 @@ export const LightTheme = createTheme(false);
 export const DarkTheme = createTheme(true);
 
 export const createThemedStyles = (theme: ReturnType<typeof createTheme>) => {
-  const { colors, fonts, fontSizes } = theme;
-  
+  const { colors, fonts, fontSizes, radii, spacing } = theme;
+
   return {
     text: {
       default: {
@@ -128,40 +207,40 @@ export const createThemedStyles = (theme: ReturnType<typeof createTheme>) => {
       },
       card: {
         backgroundColor: colors.card,
-        borderRadius: 8,
-        padding: 16,
+        borderRadius: radii.md,
+        padding: spacing.lg,
       },
       modal: {
         backgroundColor: colors.surface5,
-        borderRadius: 12,
+        borderRadius: radii.lg,
       },
     },
     button: {
       primary: {
         backgroundColor: colors.primary,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        borderRadius: radii.lg,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
       },
       secondary: {
         backgroundColor: colors.surface3,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        borderRadius: radii.lg,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
       },
       danger: {
         backgroundColor: colors.danger,
-        borderRadius: 12,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        borderRadius: radii.lg,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
       },
     },
     input: {
       default: {
         backgroundColor: colors.surface3,
-        borderRadius: 8,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
+        borderRadius: radii.md,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.md,
         fontSize: fontSizes.md,
         fontFamily: fonts.regular.fontFamily,
         color: colors.textMain,

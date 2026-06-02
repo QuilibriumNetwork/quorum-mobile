@@ -635,26 +635,24 @@ export class NativeCryptoProvider implements CryptoProvider {
       ciphertext: request.ciphertext,
     });
     const result = await QuorumCrypto.decryptInboxMessage(input);
-    // Rust returns base64 on success, a plain-text error string
-    // otherwise. Error prefixes include both lowercase ("invalid
-    // ephemeral key length") and capitalized ("Invalid ciphertext:
-    // ...", "Decryption failed: ...") variants. Case-insensitive
-    // match catches both without falsely treating success base64 as
-    // an error.
-    if (result.length < 200) {
-      const lower = result.toLowerCase();
-      if (
-        lower.startsWith('invalid') ||
-        lower.startsWith('error') ||
-        lower.startsWith('decryption failed') ||
-        lower.startsWith('encryption failed') ||
-        lower.includes('failed') ||
-        lower.includes(' error')
-      ) {
+    // Rust returns the decrypted bytes on success. Two formats exist
+    // in the wild depending on the binding's build vintage: a base64
+    // string (newer iOS .a, smaller wire size) or a JSON-int-array
+    // (older Android .so). Errors come back as plain-text strings.
+    // Discriminate structurally: a `[` prefix is the int-array form,
+    // the base64 alphabet is the base64 form, anything else is an
+    // error message.
+    if (result.length > 0 && result.charCodeAt(0) === 91 /* '[' */) {
+      try {
+        return JSON.parse(result) as number[];
+      } catch {
         throw new Error(result);
       }
     }
-    return Array.from(base64ToBytes(result));
+    if (/^[A-Za-z0-9+/]*={0,2}$/.test(result)) {
+      return Array.from(base64ToBytes(result));
+    }
+    throw new Error(result);
   }
 
   // Inbox Envelope Sealing

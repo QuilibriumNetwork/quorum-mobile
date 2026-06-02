@@ -17,6 +17,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useSwapModal } from '@/context/SwapModalContext';
 import { useTokenInfo } from '@/hooks/useTokenInfo';
 import type { AppTheme } from '@/theme';
+import * as Skin from '@/theme/skins/geometry';
 
 // chain slug (from the farcaster URL) → EVM chainId expected by SwapModal.
 // SwapModal accepts arbitrary chainIds but its viem-client map covers only
@@ -106,10 +107,10 @@ export function FarcasterTokenEmbed({
 
   const containerStyle = {
     backgroundColor: theme.colors.surface2,
-    borderRadius: 12,
-    padding: 12,
-    marginHorizontal: 12,
-    borderWidth: 1,
+    borderRadius: Skin.radius(12),
+    padding: Skin.space(12),
+    marginHorizontal: Skin.space(12),
+    borderWidth: Skin.border(1),
     borderColor: theme.colors.surface3,
   };
 
@@ -120,11 +121,11 @@ export function FarcasterTokenEmbed({
           ...containerStyle,
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 8,
+          gap: Skin.space(8),
         }}
       >
         <ActivityIndicator size="small" color={theme.colors.textMuted} />
-        <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>
+        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>
           Loading token…
         </Text>
       </View>
@@ -143,10 +144,10 @@ export function FarcasterTokenEmbed({
         ]}
         onPress={handlePress}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(8) }}>
           <IconSymbol name="bitcoinsign.circle" color={theme.colors.accent} size={18} />
           <Text
-            style={{ color: theme.colors.textStrong, fontSize: 13, flex: 1 }}
+            style={{ color: theme.colors.textStrong, fontSize: Skin.font(13), flex: 1 }}
             numberOfLines={1}
             ellipsizeMode="middle"
           >
@@ -175,36 +176,36 @@ export function FarcasterTokenEmbed({
       ]}
       onPress={handlePress}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(10) }}>
         <CachedAvatar
           source={data.iconUrl ? { uri: data.iconUrl } : null}
           style={{
             width: 32,
             height: 32,
-            borderRadius: 16,
+            borderRadius: Skin.radius(16),
             backgroundColor: theme.colors.surface3,
           }}
         />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: Skin.space(6) }}>
             <Text
-              style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: 14 }}
+              style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(14) }}
               numberOfLines={1}
             >
               {data.name || data.symbol || 'Token'}
             </Text>
             {data.symbol && (
-              <Text style={{ color: theme.colors.textMuted, fontSize: 12 }} numberOfLines={1}>
+              <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }} numberOfLines={1}>
                 {data.symbol}
               </Text>
             )}
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
-            <Text style={{ color: theme.colors.textMain, fontSize: 13 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: Skin.space(6), marginTop: Skin.space(2) }}>
+            <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(13) }}>
               {formatPriceUsd(data.priceUsd)}
             </Text>
             {change != null && (
-              <Text style={{ color: changeColor, fontSize: 12 }}>
+              <Text style={{ color: changeColor, fontSize: Skin.font(12) }}>
                 {formatChange(change)}
               </Text>
             )}

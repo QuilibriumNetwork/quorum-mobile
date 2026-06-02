@@ -3,19 +3,14 @@
  */
 
 import React, { useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { BaseModal } from '@/components/shared/BaseModal';
 import { formatTime } from './types';
 import type { Bookmark } from '@quilibrium/quorum-shared';
 import type { AppTheme } from '@/theme';
+import * as Skin from '@/theme/skins/geometry';
 
 interface BookmarksPanelProps {
   visible: boolean;
@@ -156,63 +151,63 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
+      paddingHorizontal: Skin.space(20),
+      paddingVertical: Skin.space(12),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.border ?? theme.colors.surface3,
     },
     headerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: Skin.space(8),
     },
     headerTitle: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textStrong,
     },
     emptyState: {
       alignItems: 'center',
-      paddingVertical: 40,
-      paddingHorizontal: 32,
+      paddingVertical: Skin.space(40),
+      paddingHorizontal: Skin.space(32),
     },
     emptyText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
-      marginTop: 12,
+      marginTop: Skin.space(12),
     },
     emptySubtext: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
       textAlign: 'center',
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
     scrollView: {
       flex: 1,
     },
     scrollContent: {
-      padding: 12,
+      padding: Skin.space(12),
     },
     bookmarkItem: {
       flexDirection: 'row',
       backgroundColor: theme.colors.surface3 ?? theme.colors.surface2,
-      borderRadius: 10,
-      padding: 12,
-      marginBottom: 8,
+      borderRadius: Skin.radius(10),
+      padding: Skin.space(12),
+      marginBottom: Skin.space(8),
       alignItems: 'flex-start',
     },
     bookmarkIconContainer: {
       width: 32,
       height: 32,
-      borderRadius: 16,
+      borderRadius: Skin.radius(16),
       backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 10,
+      marginRight: Skin.space(10),
     },
     bookmarkContent: {
       flex: 1,
@@ -221,36 +216,36 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 2,
+      marginBottom: Skin.space(2),
     },
     bookmarkSender: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textStrong,
       flex: 1,
     },
     bookmarkSource: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginLeft: 8,
+      marginLeft: Skin.space(8),
     },
     bookmarkText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     bookmarkDate: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
     removeButton: {
-      padding: 4,
-      marginLeft: 8,
+      padding: Skin.space(4),
+      marginLeft: Skin.space(8),
     },
   });
 

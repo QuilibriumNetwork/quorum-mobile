@@ -14,7 +14,9 @@ import { useOnboarding } from '@/context';
 import type { PrivacyLevel } from '@/context/OnboardingContext';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 interface PrivacyOption {
   level: PrivacyLevel;
@@ -185,43 +187,43 @@ const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     header: {
       alignItems: 'center',
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     iconContainer: {
       width: 64,
       height: 64,
-      borderRadius: 32,
+      borderRadius: Skin.radius(32),
       backgroundColor: theme.colors.primary + '20',
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     title: {
-      fontSize: 24,
+      fontSize: Skin.font(24),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       textAlign: 'center',
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      lineHeight: 20,
-      paddingHorizontal: 16,
+      lineHeight: Skin.font(20),
+      paddingHorizontal: Skin.space(16),
     },
     scrollView: {
       flex: 1,
     },
     options: {
-      gap: 12,
-      paddingBottom: 16,
+      gap: Skin.space(12),
+      paddingBottom: Skin.space(16),
     },
     optionCard: {
-      padding: 16,
-      borderWidth: 2,
+      padding: Skin.space(16),
+      borderWidth: Skin.border(2),
       borderColor: 'transparent',
     },
     optionCardSelected: {
@@ -231,16 +233,16 @@ const createStyles = (theme: AppTheme) =>
     optionHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
     },
     optionIconContainer: {
       width: 40,
       height: 40,
-      borderRadius: 10,
+      borderRadius: Skin.radius(10),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
-      marginRight: 12,
+      marginRight: Skin.space(12),
     },
     optionIconContainerSelected: {
       backgroundColor: theme.colors.primary + '20',
@@ -249,10 +251,10 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
       flexDirection: 'column',
       justifyContent: 'center',
-      gap: 4,
+      gap: Skin.space(4),
     },
     optionTitle: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -263,12 +265,12 @@ const createStyles = (theme: AppTheme) =>
     recommendedBadge: {
       alignSelf: 'flex-start',
       backgroundColor: theme.colors.primary + '20',
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: 4,
+      paddingHorizontal: Skin.space(8),
+      paddingVertical: Skin.space(2),
+      borderRadius: Skin.radius(4),
     },
     recommendedText: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium.fontFamily,
       textTransform: 'uppercase',
@@ -276,8 +278,8 @@ const createStyles = (theme: AppTheme) =>
     radioOuter: {
       width: 22,
       height: 22,
-      borderRadius: 11,
-      borderWidth: 2,
+      borderRadius: Skin.radius(11),
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.textMuted,
       alignItems: 'center',
       justifyContent: 'center',
@@ -288,26 +290,26 @@ const createStyles = (theme: AppTheme) =>
     radioInner: {
       width: 12,
       height: 12,
-      borderRadius: 6,
+      borderRadius: Skin.radius(6),
       backgroundColor: theme.colors.primary,
     },
     optionDescription: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
-      marginBottom: 12,
-      lineHeight: 20,
+      marginBottom: Skin.space(12),
+      lineHeight: Skin.font(20),
     },
     featureList: {
-      gap: 6,
+      gap: Skin.space(6),
     },
     featureItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: Skin.space(8),
     },
     featureText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
     },

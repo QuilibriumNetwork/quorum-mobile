@@ -9,18 +9,11 @@ import type { ResaleListing } from '@/services/api/qnsClient';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BuyNameModal from './BuyNameModal';
+import * as Skin from '@/theme/skins/geometry';
 
 interface MarketplaceModalProps {
   visible: boolean;
@@ -270,11 +263,11 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingBottom: 12,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(12),
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
@@ -283,31 +276,31 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      marginHorizontal: 20,
-      marginBottom: 12,
-      gap: 8,
+      borderRadius: Skin.radius(10),
+      paddingHorizontal: Skin.space(12),
+      marginHorizontal: Skin.space(20),
+      marginBottom: Skin.space(12),
+      gap: Skin.space(8),
     },
     searchInput: {
       flex: 1,
       height: 40,
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMain,
     },
     sortContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      marginBottom: 12,
-      gap: 8,
+      paddingHorizontal: Skin.space(20),
+      marginBottom: Skin.space(12),
+      gap: Skin.space(8),
     },
     sortChip: {
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 16,
+      paddingVertical: Skin.space(6),
+      paddingHorizontal: Skin.space(12),
+      borderRadius: Skin.radius(16),
       backgroundColor: theme.colors.surface2,
-      borderWidth: 1,
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.surface3,
     },
     sortChipActive: {
@@ -315,7 +308,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       borderColor: theme.colors.primary,
     },
     sortChipText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -324,29 +317,29 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       color: '#fff',
     },
     feeInfo: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
       marginLeft: 'auto',
     },
     listContent: {
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
       paddingBottom: insets.bottom + 20,
       flexGrow: 1,
     },
     listingCard: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 10,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      marginBottom: Skin.space(10),
     },
     listingHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     listingName: {
-      fontSize: 17,
+      fontSize: Skin.font(17),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.primary,
@@ -354,14 +347,14 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     lockedBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: Skin.space(4),
       backgroundColor: isDark ? 'rgba(245, 158, 11, 0.15)' : 'rgba(245, 158, 11, 0.1)',
-      paddingVertical: 2,
-      paddingHorizontal: 8,
-      borderRadius: 10,
+      paddingVertical: Skin.space(2),
+      paddingHorizontal: Skin.space(8),
+      borderRadius: Skin.radius(10),
     },
     lockedText: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.warning,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -374,46 +367,46 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     listingPrice: {
       flexDirection: 'row',
       alignItems: 'baseline',
-      gap: 4,
+      gap: Skin.space(4),
     },
     priceAmount: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     priceToken: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
     },
     listingMeta: {
       alignItems: 'flex-end',
     },
     sellerText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       fontFamily: 'monospace',
     },
     dateText: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     emptyContainer: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 60,
-      gap: 12,
+      paddingVertical: Skin.space(60),
+      gap: Skin.space(12),
     },
     emptyTitle: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     emptySubtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       textAlign: 'center',
     },

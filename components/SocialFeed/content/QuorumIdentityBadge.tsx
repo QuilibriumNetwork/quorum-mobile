@@ -15,6 +15,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { truncateAddress } from '@/utils/formatAddress';
 import { useQuorumIdentityForFid } from '@/hooks/useQuorumIdentityForFid';
 import type { AppTheme } from '@/theme';
+import * as Skin from '@/theme/skins/geometry';
 
 interface QuorumIdentityBadgeProps {
   fid: number | undefined;
@@ -52,7 +53,7 @@ function createStyles(theme: AppTheme, compact: boolean) {
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: Skin.space(4),
       // The badge is purely informational; let the parent decide
       // padding/spacing. No background — we just want a label.
     },

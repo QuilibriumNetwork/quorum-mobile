@@ -2,6 +2,8 @@ import type { AppTheme } from '@/theme';
 import React, { useMemo, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import YoutubePlayer from 'react-native-youtube-iframe';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface YouTubeEmbedProps {
   /** Video ID. May be undefined if only a playlist is provided. */
@@ -43,7 +45,7 @@ export function YouTubeEmbed({ videoId, playlistId, theme, width }: YouTubeEmbed
   if (width == null && measured == null) {
     return (
       <View
-        style={{ width: '100%', aspectRatio: 16 / 9, backgroundColor: theme.colors.surface3, borderRadius: 8 }}
+        style={{ width: '100%', aspectRatio: 16 / 9, backgroundColor: theme.colors.surface3, borderRadius: Skin.radius(8) }}
         onLayout={(e) => setMeasured(Math.floor(e.nativeEvent.layout.width))}
       />
     );
@@ -107,29 +109,29 @@ export function YouTubeEmbed({ videoId, playlistId, theme, width }: YouTubeEmbed
   );
 }
 
-const staticStyles = StyleSheet.create({
+const staticStyles = createSkinnable(() => StyleSheet.create({
   container: {
     overflow: 'hidden',
-    borderRadius: 8,
+    borderRadius: Skin.radius(8),
   },
   fallback: {
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    borderRadius: Skin.radius(8),
+    borderWidth: Skin.border(1),
+    paddingVertical: Skin.space(14),
+    paddingHorizontal: Skin.space(14),
   },
   fallbackInner: {
-    gap: 4,
+    gap: Skin.space(4),
   },
   fallbackTitle: {
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontWeight: '600',
   },
   fallbackSub: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: Skin.font(13),
+    lineHeight: Skin.font(18),
   },
-});
+}));
 
 export interface YouTubeMatch {
   videoId?: string;

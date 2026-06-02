@@ -10,14 +10,10 @@ import {
   type VoteDirection,
 } from '@/hooks/useGovernance';
 import React, { useCallback, useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface ProposalDetailViewProps {
   proposalId: string;
@@ -255,7 +251,7 @@ export function ProposalDetailView({ proposalId, theme, onClose, keyboardHeight,
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -266,131 +262,131 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Skin.space(16),
+    paddingVertical: Skin.space(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerTitle: {
-    fontSize: 17,
+    fontSize: Skin.font(17),
     fontWeight: '600',
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 24,
+    padding: Skin.space(16),
+    paddingBottom: Skin.space(24),
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: Skin.space(12),
   },
   badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: Skin.space(8),
+    paddingVertical: Skin.space(3),
+    borderRadius: Skin.radius(8),
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: Skin.font(11),
     fontWeight: '600',
   },
   timeText: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
   },
   title: {
-    fontSize: 20,
+    fontSize: Skin.font(20),
     fontWeight: '700',
-    lineHeight: 26,
-    marginBottom: 4,
+    lineHeight: Skin.font(26),
+    marginBottom: Skin.space(4),
   },
   author: {
-    fontSize: 13,
-    marginBottom: 16,
+    fontSize: Skin.font(13),
+    marginBottom: Skin.space(16),
   },
   sectionHeading: {
-    fontSize: 15,
+    fontSize: Skin.font(15),
     fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 6,
+    marginTop: Skin.space(16),
+    marginBottom: Skin.space(6),
   },
   sectionBody: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: Skin.font(14),
+    lineHeight: Skin.font(20),
   },
   voteRow: {
     flexDirection: 'row',
-    gap: 20,
-    marginTop: 20,
-    marginBottom: 8,
+    gap: Skin.space(20),
+    marginTop: Skin.space(20),
+    marginBottom: Skin.space(8),
   },
   voteButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Skin.space(6),
   },
   voteCount: {
-    fontSize: 15,
+    fontSize: Skin.font(15),
     fontWeight: '500',
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 12,
-    gap: 10,
+    marginTop: Skin.space(16),
+    marginBottom: Skin.space(12),
+    gap: Skin.space(10),
   },
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
   },
   dividerText: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontWeight: '500',
   },
   noComments: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
     textAlign: 'center',
-    paddingVertical: 16,
+    paddingVertical: Skin.space(16),
   },
   commentRow: {
-    marginBottom: 14,
+    marginBottom: Skin.space(14),
   },
   commentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 3,
+    gap: Skin.space(8),
+    marginBottom: Skin.space(3),
   },
   commentAuthor: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontWeight: '600',
   },
   commentTime: {
-    fontSize: 11,
+    fontSize: Skin.font(11),
   },
   commentText: {
-    fontSize: 14,
-    lineHeight: 19,
+    fontSize: Skin.font(14),
+    lineHeight: Skin.font(19),
   },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: Skin.space(12),
+    paddingVertical: Skin.space(6),
     borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 8,
+    gap: Skin.space(8),
   },
   input: {
     flex: 1,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 8,
-    fontSize: 14,
+    borderRadius: Skin.radius(18),
+    paddingHorizontal: Skin.space(14),
+    paddingTop: Skin.space(8),
+    paddingBottom: Skin.space(8),
+    fontSize: Skin.font(14),
     maxHeight: 100,
   },
   sendButton: {
-    padding: 6,
-    marginBottom: 2,
+    padding: Skin.space(6),
+    marginBottom: Skin.space(2),
   },
   emptyState: {
     flex: 1,
@@ -398,6 +394,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: Skin.font(15),
   },
-});
+}));

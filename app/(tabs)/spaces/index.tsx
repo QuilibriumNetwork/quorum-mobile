@@ -11,17 +11,10 @@ import type { Space } from '@quilibrium/quorum-shared';
 import { FlashList } from '@shopify/flash-list';
 import { router, Stack } from 'expo-router';
 import React, { Suspense, useCallback, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Skin from '@/theme/skins/geometry';
 
 const SpaceModal = React.lazy(() => import('@/components/SpaceModal'));
 
@@ -268,33 +261,33 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingTop: 8,
-      paddingBottom: 4,
+      paddingHorizontal: Skin.space(16),
+      paddingTop: Skin.space(8),
+      paddingBottom: Skin.space(4),
     },
-    heading: { ...textStyles.title3, color: theme.colors.textMain, textAlign: 'center' as const },
+    heading: { ...theme.textStyles.title3, color: theme.colors.textMain, textAlign: 'center' as const },
     // Side slots take their natural width; center slot flex-fills the
     // remainder. This way the title gets ~75-80% of the screen width
     // (vs. the ~33% it had under equal flex), avoiding both wrapping
     // and ellipsizing on common screen sizes.
     headerSlotLeft: { alignItems: 'flex-start' as const, flexDirection: 'row' as const },
-    headerSlotCenter: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, paddingHorizontal: 8 },
-    headerSlotRight: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'flex-end' as const, gap: 4 },
-    headerIconButton: { padding: 8 },
+    headerSlotCenter: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, paddingHorizontal: Skin.space(8) },
+    headerSlotRight: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'flex-end' as const, gap: Skin.space(4) },
+    headerIconButton: { padding: Skin.space(8) },
     searchContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-      borderRadius: 10,
-      marginHorizontal: 16,
-      marginVertical: 8,
-      paddingHorizontal: 10,
+      borderRadius: Skin.radius(10),
+      marginHorizontal: Skin.space(16),
+      marginVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(10),
       height: 36,
-      gap: 6,
+      gap: Skin.space(6),
     },
     searchInput: {
       flex: 1,
-      ...textStyles.body,
+      ...theme.textStyles.body,
       color: theme.colors.textMain,
       paddingVertical: 0,
     },
@@ -302,29 +295,29 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
-      gap: 8,
-      paddingBottom: 80,
+      gap: Skin.space(8),
+      paddingBottom: Skin.space(80),
     },
-    emptyTitle: { ...textStyles.headline, color: theme.colors.textMain, marginTop: 12 },
-    emptySubtitle: { ...textStyles.subheadline, color: theme.colors.textMuted, textAlign: 'center', paddingHorizontal: 40 },
-    emptyButton: { marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
-    emptyButtonText: { ...textStyles.subheadline, color: '#fff', fontWeight: '600' },
-    listContent: { paddingBottom: 100 },
+    emptyTitle: { ...theme.textStyles.headline, color: theme.colors.textMain, marginTop: Skin.space(12) },
+    emptySubtitle: { ...theme.textStyles.subheadline, color: theme.colors.textMuted, textAlign: 'center', paddingHorizontal: Skin.space(40) },
+    emptyButton: { marginTop: Skin.space(16), paddingHorizontal: Skin.space(20), paddingVertical: Skin.space(10), borderRadius: Skin.radius(20) },
+    emptyButtonText: { ...theme.textStyles.subheadline, color: '#fff', fontWeight: '600' },
+    listContent: { paddingBottom: Skin.space(100) },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      gap: 12,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(12),
+      gap: Skin.space(12),
     },
     avatarContainer: {},
-    avatar: { width: 48, height: 48, borderRadius: 12 },
-    rowContent: { flex: 1, gap: 2 },
+    avatar: { width: 48, height: 48, borderRadius: Skin.radius(12) },
+    rowContent: { flex: 1, gap: Skin.space(2) },
     rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    rowTitle: { ...textStyles.body, color: theme.colors.textMain, fontWeight: '600', flex: 1, marginRight: 8 },
-    rowTime: { ...textStyles.caption1, color: theme.colors.textMuted },
+    rowTitle: { ...theme.textStyles.body, color: theme.colors.textMain, fontWeight: '600', flex: 1, marginRight: Skin.space(8) },
+    rowTime: { ...theme.textStyles.caption1, color: theme.colors.textMuted },
     rowBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    rowSubtitle: { ...textStyles.subheadline, color: theme.colors.textMuted, flex: 1 },
-    badge: { minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-    badgeText: { ...textStyles.caption2, color: '#fff', fontWeight: '700' },
+    rowSubtitle: { ...theme.textStyles.subheadline, color: theme.colors.textMuted, flex: 1 },
+    badge: { minWidth: 20, height: 20, borderRadius: Skin.radius(10), alignItems: 'center', justifyContent: 'center', paddingHorizontal: Skin.space(6) },
+    badgeText: { ...theme.textStyles.caption2, color: '#fff', fontWeight: '700' },
   });

@@ -3,12 +3,14 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Share } from 'react-native';
+import { View, Text, StyleSheet, Share } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme, type AppTheme } from '@/theme';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
 
 interface MnemonicDisplayViewProps {
   mnemonic: string[];
@@ -115,60 +117,60 @@ const createStyles = (theme: AppTheme) =>
     },
     header: {
       alignItems: 'center',
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     iconContainer: {
       width: 64,
       height: 64,
-      borderRadius: 32,
+      borderRadius: Skin.radius(32),
       backgroundColor: (theme.colors.warning ?? '#f59e0b') + '20',
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     title: {
-      fontSize: 24,
+      fontSize: Skin.font(24),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       textAlign: 'center',
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     addressContainer: {
       alignItems: 'center',
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     addressLabel: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
     },
     address: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.primary,
       fontFamily: 'Courier',
       fontWeight: 'bold',
     },
     mnemonicCard: {
-      padding: 16,
-      marginBottom: 16,
+      padding: Skin.space(16),
+      marginBottom: Skin.space(16),
     },
     mnemonicHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     mnemonicTitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
     },
@@ -176,25 +178,25 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       flexWrap: 'wrap',
       justifyContent: 'space-between',
-      rowGap: 8,
+      rowGap: Skin.space(8),
     },
     wordItem: {
       width: '32%',
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 8,
-      paddingVertical: 8,
-      paddingHorizontal: 8,
+      borderRadius: Skin.radius(8),
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(8),
     },
     wordNumber: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
       width: 16,
     },
     word: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.medium.fontFamily,
       flex: 1,
@@ -206,34 +208,34 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: 16,
-      paddingVertical: 8,
+      marginTop: Skin.space(16),
+      paddingVertical: Skin.space(8),
     },
     copyText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium.fontFamily,
-      marginLeft: 8,
+      marginLeft: Skin.space(8),
     },
     warning: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       backgroundColor: (theme.colors.warning ?? '#f59e0b') + '15',
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 24,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      marginBottom: Skin.space(24),
     },
     warningText: {
       flex: 1,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.regular.fontFamily,
-      marginLeft: 12,
-      lineHeight: 20,
+      marginLeft: Skin.space(12),
+      lineHeight: Skin.font(20),
     },
     buttons: {
       flexDirection: 'row',
-      gap: 12,
+      gap: Skin.space(12),
       marginTop: 'auto',
     },
     backButton: {

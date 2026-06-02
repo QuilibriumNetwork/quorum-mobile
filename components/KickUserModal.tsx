@@ -11,18 +11,13 @@
 
 import { truncateAddress } from '@/utils/formatAddress';
 import React, { useEffect, useCallback, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Image,
-} from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { BaseModal } from '@/components/shared/BaseModal';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
 import { useUserKicking } from '@/hooks/chat/useUserKicking';
+import * as Skin from '@/theme/skins/geometry';
 
 interface KickUserModalProps {
   visible: boolean;
@@ -165,7 +160,7 @@ const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      padding: 20,
+      padding: Skin.space(20),
     },
     overlay: {
       ...StyleSheet.absoluteFillObject,
@@ -173,68 +168,68 @@ const createStyles = (theme: AppTheme) =>
       justifyContent: 'center',
       alignItems: 'center',
       zIndex: 10,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
+      borderTopLeftRadius: Skin.radius(20),
+      borderTopRightRadius: Skin.radius(20),
     },
     overlayText: {
       color: '#fff',
-      fontSize: 16,
-      marginTop: 12,
+      fontSize: Skin.font(16),
+      marginTop: Skin.space(12),
       fontFamily: theme.fonts.medium.fontFamily,
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
       textAlign: 'center',
     },
     userRow: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(12),
+      marginBottom: Skin.space(16),
     },
     avatar: {
       width: 40,
       height: 40,
-      borderRadius: 20,
-      marginRight: 12,
+      borderRadius: Skin.radius(20),
+      marginRight: Skin.space(12),
     },
     userInfo: {
       flex: 1,
       minWidth: 0,
     },
     userName: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
     },
     userAddress: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     description: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     buttonRow: {
       flexDirection: 'row',
-      gap: 12,
+      gap: Skin.space(12),
     },
     button: {
       flex: 1,
-      paddingVertical: 14,
-      borderRadius: 8,
+      paddingVertical: Skin.space(14),
+      borderRadius: Skin.radius(8),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -243,7 +238,7 @@ const createStyles = (theme: AppTheme) =>
     },
     cancelButtonText: {
       color: theme.colors.textMain,
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
     },
     kickButton: {
@@ -251,7 +246,7 @@ const createStyles = (theme: AppTheme) =>
     },
     kickButtonText: {
       color: '#fff',
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
     },
     buttonDisabled: {

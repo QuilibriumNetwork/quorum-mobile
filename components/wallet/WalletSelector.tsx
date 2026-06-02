@@ -7,12 +7,9 @@ import { useWalletSelection, WalletType } from '@/hooks/useWalletSelection';
 import { useTheme, type AppTheme } from '@/theme';
 import { truncateAddress } from '@/utils/formatAddress';
 import React from 'react';
-import {
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 interface WalletSelectorProps {
   /** Only show if multiple wallets are available */
@@ -78,46 +75,46 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(12),
+      marginBottom: Skin.space(16),
     },
     walletInfo: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: Skin.space(10),
     },
     walletDot: {
       width: 10,
       height: 10,
-      borderRadius: 5,
+      borderRadius: Skin.radius(5),
       backgroundColor: theme.colors.primary,
     },
     walletDotWarpcast: {
       backgroundColor: '#8B5CF6', // Purple for Warpcast
     },
     walletLabel: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
     },
     walletAddress: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
-      marginTop: 1,
+      marginTop: Skin.space(1),
     },
     switchButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
+      gap: Skin.space(4),
+      paddingHorizontal: Skin.space(10),
+      paddingVertical: Skin.space(6),
       backgroundColor: theme.colors.primary + '15',
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
     },
     switchText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.primary,

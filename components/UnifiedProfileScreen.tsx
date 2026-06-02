@@ -18,17 +18,10 @@ import {
 import { useTheme, type AppTheme } from '@/theme';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Skin from '@/theme/skins/geometry';
 
 interface UnifiedProfileScreenProps {
   onOpenWarpcastImport?: () => void;
@@ -295,34 +288,34 @@ function EditTargetPicker({
           right: 20,
           bottom: 40,
           backgroundColor: theme.colors.surface1,
-          borderRadius: 14,
-          padding: 16,
-          gap: 8,
+          borderRadius: Skin.radius(14),
+          padding: Skin.space(16),
+          gap: Skin.space(8),
         }}
       >
         <Text
           style={{
             color: theme.colors.textStrong,
-            fontSize: 16,
+            fontSize: Skin.font(16),
             fontWeight: '600',
-            marginBottom: 4,
+            marginBottom: Skin.space(4),
           }}
         >
           Edit which profile?
         </Text>
         <TouchableOpacity
-          style={{ paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }}
+          style={{ paddingVertical: Skin.space(12), flexDirection: 'row', alignItems: 'center', gap: Skin.space(10) }}
           onPress={() => onPick('quorum')}
         >
           <IconSymbol name="shield.fill" size={20} color={theme.colors.accent} />
-          <Text style={{ color: theme.colors.textMain, fontSize: 15 }}>Quorum profile</Text>
+          <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(15) }}>Quorum profile</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={{ paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }}
+          style={{ paddingVertical: Skin.space(12), flexDirection: 'row', alignItems: 'center', gap: Skin.space(10) }}
           onPress={() => onPick('farcaster')}
         >
           <IconSymbol name="person.2.fill" size={20} color={theme.colors.textMuted} />
-          <Text style={{ color: theme.colors.textMain, fontSize: 15 }}>Farcaster profile</Text>
+          <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(15) }}>Farcaster profile</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -336,22 +329,22 @@ function createStyles(theme: AppTheme) {
     },
     segmentBar: {
       flexDirection: 'row',
-      borderBottomWidth: 1,
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface3,
-      paddingHorizontal: 16,
+      paddingHorizontal: Skin.space(16),
     },
     segment: {
       flex: 1,
-      paddingVertical: 12,
+      paddingVertical: Skin.space(12),
       alignItems: 'center',
-      borderBottomWidth: 2,
+      borderBottomWidth: Skin.border(2),
       borderBottomColor: 'transparent',
     },
     segmentActive: {
       borderBottomColor: theme.colors.accent,
     },
     segmentLabel: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
     },
     pager: {

@@ -3,14 +3,8 @@
  */
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -20,6 +14,7 @@ import { useConversations } from '@/hooks/chat/useConversations';
 import { useStorageAdapter } from '@/context/StorageContext';
 import { useResolveName } from '@/hooks/useQNS';
 import { deriveAddress } from '@/services/onboarding/keyService';
+import * as Skin from '@/theme/skins/geometry';
 
 interface NewConversationModalProps {
   visible: boolean;
@@ -290,108 +285,108 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
     },
     header: {
-      paddingVertical: 16,
+      paddingVertical: Skin.space(16),
       alignItems: 'center',
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textStrong,
     },
     inputSection: {
-      marginTop: 8,
+      marginTop: Skin.space(8),
     },
     label: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     inputContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      paddingHorizontal: 16,
+      borderRadius: Skin.radius(12),
+      paddingHorizontal: Skin.space(16),
     },
     input: {
       flex: 1,
-      paddingVertical: 14,
-      fontSize: 16,
+      paddingVertical: Skin.space(14),
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
     },
     clearButton: {
-      padding: 4,
+      padding: Skin.space(4),
     },
     errorText: {
-      marginTop: 8,
-      fontSize: 13,
+      marginTop: Skin.space(8),
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.error ?? '#ef4444',
+      color: theme.colors.danger ?? '#ef4444',
     },
     existingBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 12,
-      padding: 12,
+      marginTop: Skin.space(12),
+      padding: Skin.space(12),
       backgroundColor: theme.colors.primary + '15',
-      borderRadius: 8,
-      gap: 8,
+      borderRadius: Skin.radius(8),
+      gap: Skin.space(8),
     },
     existingText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.primary,
     },
     resolvingBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 12,
-      padding: 12,
+      marginTop: Skin.space(12),
+      padding: Skin.space(12),
       backgroundColor: theme.colors.surface3,
-      borderRadius: 8,
-      gap: 8,
+      borderRadius: Skin.radius(8),
+      gap: Skin.space(8),
     },
     resolvingText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
     },
     resolvedBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 12,
-      padding: 12,
+      marginTop: Skin.space(12),
+      padding: Skin.space(12),
       backgroundColor: theme.colors.success + '15',
-      borderRadius: 8,
-      gap: 8,
+      borderRadius: Skin.radius(8),
+      gap: Skin.space(8),
     },
     resolvedBannerText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.success,
     },
     actions: {
       flexDirection: 'row',
-      marginTop: 24,
-      gap: 12,
+      marginTop: Skin.space(24),
+      gap: Skin.space(12),
     },
     cancelButton: {
       flex: 1,
-      paddingVertical: 14,
+      paddingVertical: Skin.space(14),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
     },
     cancelButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
@@ -399,18 +394,18 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     createButton: {
       flex: 1,
       flexDirection: 'row',
-      paddingVertical: 14,
+      paddingVertical: Skin.space(14),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.primary,
-      borderRadius: 12,
-      gap: 8,
+      borderRadius: Skin.radius(12),
+      gap: Skin.space(8),
     },
     createButtonDisabled: {
       opacity: 0.5,
     },
     createButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: '#fff',

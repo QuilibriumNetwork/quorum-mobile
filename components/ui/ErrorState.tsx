@@ -1,13 +1,9 @@
 import React from 'react';
-import {
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme, type AppTheme } from '@/theme';
 import { IconSymbol } from './IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
 
 interface ErrorStateProps {
   /** Error message to display */
@@ -76,30 +72,30 @@ const createStyles = (theme: AppTheme) =>
     container: {
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 32,
+      padding: Skin.space(32),
     },
     iconContainer: {
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     message: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      lineHeight: 20,
-      marginBottom: 16,
+      lineHeight: Skin.font(20),
+      marginBottom: Skin.space(16),
     },
     retryButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 8,
-      paddingHorizontal: 16,
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(16),
       backgroundColor: theme.colors.surface2,
-      borderRadius: 8,
-      gap: 6,
+      borderRadius: Skin.radius(8),
+      gap: Skin.space(6),
     },
     retryText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,

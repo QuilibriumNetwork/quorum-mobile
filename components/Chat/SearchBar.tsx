@@ -1,7 +1,9 @@
 import type { AppTheme } from '@/theme';
 import React, { useRef, useEffect } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View, Text } from 'react-native';
+import { StyleSheet, TextInput, View, Text } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
 
 interface SearchBarProps {
   query: string;
@@ -59,35 +61,35 @@ export const SearchBar = React.memo(function SearchBar({
 const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     backgroundColor: theme.colors.surface3,
-    borderBottomWidth: 1,
+    borderBottomWidth: Skin.border(1),
     borderBottomColor: theme.colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: Skin.space(12),
+    paddingVertical: Skin.space(8),
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.surface5,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: Skin.radius(8),
+    paddingHorizontal: Skin.space(10),
+    paddingVertical: Skin.space(6),
   },
   input: {
     flex: 1,
     color: theme.colors.textMain,
-    fontSize: 14,
-    marginLeft: 8,
+    fontSize: Skin.font(14),
+    marginLeft: Skin.space(8),
     fontFamily: theme.fonts.regular.fontFamily,
-    paddingVertical: 2,
+    paddingVertical: Skin.space(2),
   },
   resultCount: {
     color: theme.colors.textMuted,
-    fontSize: 12,
-    marginRight: 8,
+    fontSize: Skin.font(12),
+    marginRight: Skin.space(8),
     fontFamily: theme.fonts.regular.fontFamily,
   },
   closeButton: {
-    padding: 4,
+    padding: Skin.space(4),
   },
 });
 

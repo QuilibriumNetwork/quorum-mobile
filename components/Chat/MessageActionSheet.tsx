@@ -6,19 +6,17 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Modal,
-  Pressable,
-  Alert,
-  Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, Alert, Dimensions } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getRecentEmojis } from '@/services/emojiFrecency';
+import { requestTranslateText } from '@/services/translation/forceTranslate';
+import {
+  ensureAvailabilityProbed,
+  translationAvailableCached,
+} from '@/services/translation/availability';
+import * as Skin from '@/theme/skins/geometry';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -75,6 +73,16 @@ export function MessageActionSheet({
 }: MessageActionSheetProps) {
   const styles = createStyles(theme);
   const [quickEmojis, setQuickEmojis] = useState<string[]>(DEFAULT_QUICK_REACTIONS);
+
+  // "Translate" is shown only when on-device translation is available
+  // (optimistic until the one-time probe resolves).
+  const [translateAvailable, setTranslateAvailable] = useState(
+    translationAvailableCached() ?? true
+  );
+  useEffect(() => {
+    ensureAvailabilityProbed().then(setTranslateAvailable);
+  }, []);
+  const canTranslate = translateAvailable && !!messageText && messageText.trim().length > 0;
 
   // Load frecency emojis when modal opens
   useEffect(() => {
@@ -137,6 +145,11 @@ export function MessageActionSheet({
     if (messageText) {
       await Clipboard.setStringAsync(messageText);
     }
+    onClose();
+  };
+
+  const handleTranslate = () => {
+    if (messageText) requestTranslateText(messageText);
     onClose();
   };
 
@@ -290,6 +303,15 @@ export function MessageActionSheet({
                 <View style={styles.divider} />
               </>
             )}
+            {canTranslate && (
+              <>
+                <TouchableOpacity style={styles.actionButton} onPress={handleTranslate}>
+                  <IconSymbol name="globe" size={20} color={theme.colors.textMain} />
+                  <Text style={styles.actionText}>Translate</Text>
+                </TouchableOpacity>
+                <View style={styles.divider} />
+              </>
+            )}
             <TouchableOpacity style={styles.actionButton} onPress={handleReact}>
               <IconSymbol
                 name="face.smiling"
@@ -343,25 +365,25 @@ const createStyles = (theme: AppTheme) =>
     },
     container: {
       backgroundColor: theme.colors.surface1 ?? theme.colors.background,
-      borderTopLeftRadius: 16,
-      borderTopRightRadius: 16,
+      borderTopLeftRadius: Skin.radius(16),
+      borderTopRightRadius: Skin.radius(16),
       width: SCREEN_WIDTH,
-      paddingBottom: 34, // Safe area for home indicator
+      paddingBottom: Skin.space(34), // Safe area for home indicator
     },
     handleContainer: {
       alignItems: 'center',
-      paddingVertical: 10,
+      paddingVertical: Skin.space(10),
     },
     handle: {
       width: 36,
       height: 4,
-      borderRadius: 2,
+      borderRadius: Skin.radius(2),
       backgroundColor: theme.colors.border ?? theme.colors.surface3,
     },
     quickReactionsContainer: {
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderBottomWidth: 1,
+      paddingVertical: Skin.space(12),
+      paddingHorizontal: Skin.space(16),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.border ?? theme.colors.surface3,
     },
     quickReactionsContent: {
@@ -371,26 +393,26 @@ const createStyles = (theme: AppTheme) =>
     quickReactionButton: {
       width: 44,
       height: 44,
-      borderRadius: 22,
+      borderRadius: Skin.radius(22),
       backgroundColor: theme.colors.surface3 ?? theme.colors.surface2,
       justifyContent: 'center',
       alignItems: 'center',
     },
     quickReactionEmoji: {
-      fontSize: 22,
+      fontSize: Skin.font(22),
     },
     actionsContainer: {
-      paddingVertical: 4,
+      paddingVertical: Skin.space(4),
     },
     actionButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 20,
-      gap: 12,
+      paddingVertical: Skin.space(14),
+      paddingHorizontal: Skin.space(20),
+      gap: Skin.space(12),
     },
     actionText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.regular.fontFamily,
     },
@@ -400,7 +422,7 @@ const createStyles = (theme: AppTheme) =>
     divider: {
       height: 1,
       backgroundColor: theme.colors.border ?? theme.colors.surface3,
-      marginHorizontal: 16,
+      marginHorizontal: Skin.space(16),
     },
   });
 

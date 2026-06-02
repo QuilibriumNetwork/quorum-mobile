@@ -14,24 +14,15 @@ import { useWalletSelection } from '@/hooks/useWalletSelection';
 import type { NFT } from '@/services/wallet/balanceService';
 import { formatBalance, getChainName, formatUsdValue } from '@/services/wallet/balanceService';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
+import { useSurface } from '@/theme/skins/surfaces';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { useWalletPref, WALLET_PREF_KEYS } from '@/services/wallet/walletPrefs';
 import { haptics } from '@/utils/haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
 import React from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { ActionSheet, type ActionSheetAction } from '@/components/shared';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createMMKV } from 'react-native-mmkv';
@@ -39,6 +30,7 @@ import { SendModal, ReceiveModal, SwapModal } from '@/components/wallet';
 import HistoryTab from '@/components/wallet/HistoryTab';
 import AssetDetailModal from '@/components/wallet/AssetDetailModal';
 import NFTDetailModal from '@/components/wallet/NFTDetailModal';
+import * as Skin from '@/theme/skins/geometry';
 
 // Storage for wallet display preferences
 const walletDisplayStorage = createMMKV({ id: 'quorum-wallet-display' });
@@ -62,6 +54,7 @@ type ChainFilter = 'all' | 'quilibrium' | 'bitcoin' | 'ethereum' | 'solana' | 'm
 
 export default function WalletModal({ visible, onClose, isRouteMode = false, noTopInset = false }: WalletModalProps) {
   const { theme, isDark } = useTheme();
+  const walletSurface = useSurface('wallet');
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   // Persistent preferences — survive modal close/reopen and app restarts.
@@ -1219,8 +1212,10 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
   // top inset is skipped when the caller has its own header above
   // (noTopInset=true) so we don't double up the safe area.
   if (isRouteMode) {
+    // When a skin gives the wallet view its own background, go transparent so
+    // the tab-root SurfaceBackground (color/image) shows behind the content.
     return (
-      <View style={[styles.routeContainer, { paddingTop: noTopInset ? 0 : insets.top, backgroundColor: theme.colors.surface1 }]}>
+      <View style={[styles.routeContainer, { paddingTop: noTopInset ? 0 : insets.top, backgroundColor: walletSurface.empty ? theme.colors.surface1 : 'transparent' }]}>
         {walletContent}
       </View>
     );
@@ -1243,40 +1238,40 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
   StyleSheet.create({
     routeContainer: {
       flex: 1,
-      paddingBottom: 90, // Clear the blur tab bar
+      paddingBottom: Skin.space(90), // Clear the blur tab bar
     },
     header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingBottom: 16,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(16),
     },
     headerRight: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: Skin.space(12),
     },
     title: {
-      ...textStyles.title3,
+      ...theme.textStyles.title3,
       color: theme.colors.textMain,
     },
     walletSwitcher: {
       flexDirection: 'row',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 8,
-      padding: 2,
+      borderRadius: Skin.radius(8),
+      padding: Skin.space(2),
     },
     walletSwitcherOption: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 6,
+      paddingHorizontal: Skin.space(10),
+      paddingVertical: Skin.space(4),
+      borderRadius: Skin.radius(6),
     },
     walletSwitcherOptionActive: {
       backgroundColor: theme.colors.background,
     },
     walletSwitcherText: {
-      ...textStyles.caption1,
+      ...theme.textStyles.caption1,
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1286,29 +1281,29 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     scrollContent: {
       flex: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
     },
     tabSwitcher: {
       flexDirection: 'row',
-      marginHorizontal: 20,
-      marginBottom: 12,
+      marginHorizontal: Skin.space(20),
+      marginBottom: Skin.space(12),
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 3,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(3),
       justifyContent: 'space-between',
     },
     tabButton: {
-      paddingVertical: 7,
-      paddingHorizontal: 10,
+      paddingVertical: Skin.space(7),
+      paddingHorizontal: Skin.space(10),
       alignItems: 'center',
-      borderRadius: 9,
+      borderRadius: Skin.radius(9),
       flex: 1,
     },
     tabButtonActive: {
       backgroundColor: theme.colors.background,
     },
     tabButtonText: {
-      ...textStyles.footnote,
+      ...theme.textStyles.footnote,
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1321,38 +1316,38 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     evmOnlyNote: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Skin.space(6),
       backgroundColor: theme.colors.surface2,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 8,
-      marginBottom: 12,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(8),
+      borderRadius: Skin.radius(8),
+      marginBottom: Skin.space(12),
     },
     evmOnlyNoteText: {
       flex: 1,
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      lineHeight: 16,
+      lineHeight: Skin.font(16),
     },
     filterContainer: {
-      marginBottom: 16,
-      marginHorizontal: -20,
+      marginBottom: Skin.space(16),
+      marginHorizontal: Skin.space(-20),
     },
     filterContent: {
-      paddingHorizontal: 20,
-      gap: 8,
+      paddingHorizontal: Skin.space(20),
+      gap: Skin.space(8),
     },
     filterPill: {
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 20,
+      paddingHorizontal: Skin.space(14),
+      paddingVertical: Skin.space(8),
+      borderRadius: Skin.radius(20),
       backgroundColor: theme.colors.surface2,
     },
     filterPillActive: {
       backgroundColor: theme.colors.primary + '20',
     },
     filterPillText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1363,34 +1358,34 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     loadingContainer: {
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 60,
+      paddingVertical: Skin.space(60),
     },
     loadingText: {
-      marginTop: 12,
-      fontSize: 14,
+      marginTop: Skin.space(12),
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
     },
     errorContainer: {
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 60,
+      paddingVertical: Skin.space(60),
     },
     errorText: {
-      marginTop: 12,
-      fontSize: 14,
+      marginTop: Skin.space(12),
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     retryButton: {
-      marginTop: 16,
-      paddingHorizontal: 20,
-      paddingVertical: 10,
+      marginTop: Skin.space(16),
+      paddingHorizontal: Skin.space(20),
+      paddingVertical: Skin.space(10),
       backgroundColor: theme.colors.primary,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
     },
     retryButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: '#fff',
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1398,66 +1393,66 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     emptyContainer: {
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 60,
+      paddingVertical: Skin.space(60),
     },
     emptyText: {
-      marginTop: 16,
-      fontSize: 16,
+      marginTop: Skin.space(16),
+      fontSize: Skin.font(16),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     emptySubtext: {
-      marginTop: 4,
-      fontSize: 13,
+      marginTop: Skin.space(4),
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       textAlign: 'center',
     },
     assetsSection: {
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     totalBalanceContainer: {
       alignItems: 'center',
-      paddingVertical: 12,
-      marginBottom: 4,
+      paddingVertical: Skin.space(12),
+      marginBottom: Skin.space(4),
     },
     totalBalanceLabelRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      marginBottom: 4,
+      gap: Skin.space(6),
+      marginBottom: Skin.space(4),
     },
     totalBalanceLabel: {
-      ...textStyles.footnote,
+      ...theme.textStyles.footnote,
       color: theme.colors.textMuted,
     },
     hideBalanceButton: {
-      padding: 2,
+      padding: Skin.space(2),
     },
     totalBalanceAmount: {
-      ...textStyles.largeTitle,
+      ...theme.textStyles.largeTitle,
       color: theme.colors.textMain,
       letterSpacing: -0.5,
     },
     actionButtonsRow: {
       flexDirection: 'row',
       justifyContent: 'space-around',
-      marginBottom: 16,
-      paddingVertical: 4,
+      marginBottom: Skin.space(16),
+      paddingVertical: Skin.space(4),
     },
     actionButton: {
       alignItems: 'center',
-      gap: 6,
+      gap: Skin.space(6),
     },
     actionButtonIcon: {
       width: 44,
       height: 44,
-      borderRadius: 22,
+      borderRadius: Skin.radius(22),
       alignItems: 'center',
       justifyContent: 'center',
     },
     actionButtonText: {
-      ...textStyles.footnote,
+      ...theme.textStyles.footnote,
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1466,19 +1461,19 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 16,
-      borderBottomWidth: 1,
+      paddingVertical: Skin.space(16),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.border,
     },
     assetLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: Skin.space(12),
     },
     assetIcon: {
       width: 44,
       height: 44,
-      borderRadius: 22,
+      borderRadius: Skin.radius(22),
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
@@ -1486,15 +1481,15 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     assetIconImage: {
       width: 44,
       height: 44,
-      borderRadius: 22,
+      borderRadius: Skin.radius(22),
     },
     assetSymbolText: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
     },
     assetName: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1502,23 +1497,23 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     assetChainRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 2,
-      gap: 6,
+      marginTop: Skin.space(2),
+      gap: Skin.space(6),
     },
     chainDot: {
       width: 6,
       height: 6,
-      borderRadius: 3,
+      borderRadius: Skin.radius(3),
     },
     assetChain: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
     },
     assetRight: {
       alignItems: 'flex-end',
     },
     assetBalance: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1526,137 +1521,137 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     assetPriceRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 2,
-      gap: 6,
+      marginTop: Skin.space(2),
+      gap: Skin.space(6),
     },
     assetUsdValue: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
     },
     priceChange: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     priceChangePositive: {
-      color: '#22C55E', // Green
+      color: theme.colors.success, // Green
     },
     priceChangeNegative: {
-      color: '#EF4444', // Red
+      color: theme.colors.danger, // Red
     },
     pendingBalance: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     pendingPositive: {
-      color: '#F59E0B', // Amber/Orange for incoming pending
+      color: theme.colors.warning, // Amber/Orange for incoming pending
     },
     pendingNegative: {
-      color: '#F59E0B', // Amber/Orange for outgoing pending
+      color: theme.colors.warning, // Amber/Orange for outgoing pending
     },
     addressesSection: {
-      paddingTop: 8,
+      paddingTop: Skin.space(8),
     },
     addressCard: {
-      marginBottom: 16,
-      borderRadius: 16,
+      marginBottom: Skin.space(16),
+      borderRadius: Skin.radius(16),
       overflow: 'hidden',
     },
     addressCardGradient: {
-      padding: 16,
+      padding: Skin.space(16),
     },
     addressCardHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
-      marginBottom: 12,
+      gap: Skin.space(12),
+      marginBottom: Skin.space(12),
     },
     chainIconContainer: {
       width: 40,
       height: 40,
-      borderRadius: 20,
+      borderRadius: Skin.radius(20),
       alignItems: 'center',
       justifyContent: 'center',
     },
     chainLogo: {
       width: 40,
       height: 40,
-      borderRadius: 20,
+      borderRadius: Skin.radius(20),
     },
     chainIconText: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       color: '#fff',
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
     },
     addressCardTitle: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
     },
     addressCardSubtitle: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     addressRow: {
       backgroundColor: theme.colors.surface2,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderRadius: 10,
+      paddingHorizontal: Skin.space(14),
+      paddingVertical: Skin.space(10),
+      borderRadius: Skin.radius(10),
     },
     addressRowMiddle: {
-      marginTop: 8,
+      marginTop: Skin.space(8),
     },
     addressRowLast: {
-      marginTop: 8,
+      marginTop: Skin.space(8),
     },
     btcToggleRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 4,
-      marginTop: 8,
-      paddingVertical: 4,
+      gap: Skin.space(4),
+      marginTop: Skin.space(8),
+      paddingVertical: Skin.space(4),
     },
     btcToggleText: {
-      ...textStyles.footnote,
+      ...theme.textStyles.footnote,
       color: theme.colors.textMuted,
     },
     addressRowActive: {
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.primary,
     },
     activeWalletBadge: {
       backgroundColor: theme.colors.primary,
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: 4,
+      paddingHorizontal: Skin.space(8),
+      paddingVertical: Skin.space(2),
+      borderRadius: Skin.radius(4),
     },
     activeWalletBadgeText: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       color: '#fff',
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
     },
     walletHint: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
       textAlign: 'center',
-      marginTop: 10,
+      marginTop: Skin.space(10),
       fontStyle: 'italic',
     },
     addressLabelRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      marginBottom: 4,
+      gap: Skin.space(8),
+      marginBottom: Skin.space(4),
     },
     addressLabel: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1664,56 +1659,56 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       letterSpacing: 0.5,
     },
     addressRecommended: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       color: theme.colors.success || '#4CAF50',
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       backgroundColor: (theme.colors.success || '#4CAF50') + '20',
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 4,
+      paddingHorizontal: Skin.space(6),
+      paddingVertical: Skin.space(2),
+      borderRadius: Skin.radius(4),
     },
     addressValueRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 8,
+      gap: Skin.space(8),
     },
     addressText: {
       flex: 1,
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.regular.fontFamily,
     },
     infoBox: {
       flexDirection: 'row',
       backgroundColor: theme.colors.primary + '15',
-      borderRadius: 12,
-      padding: 14,
-      gap: 10,
-      marginTop: 8,
-      marginBottom: 24,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(14),
+      gap: Skin.space(10),
+      marginTop: Skin.space(8),
+      marginBottom: Skin.space(24),
     },
     infoText: {
       flex: 1,
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
-      lineHeight: 18,
+      lineHeight: Skin.font(18),
     },
     // Collectibles/NFT styles
     collectiblesSection: {
-      paddingTop: 8,
-      paddingBottom: 20,
+      paddingTop: Skin.space(8),
+      paddingBottom: Skin.space(20),
     },
     nftGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 12,
+      gap: Skin.space(12),
     },
     nftCard: {
       width: (Dimensions.get('window').width - 52) / 2, // 2 columns with gap
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
       overflow: 'hidden',
     },
     nftImageContainer: {
@@ -1723,7 +1718,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     nftImage: {
       width: '100%',
       height: '100%',
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.surface1,
     },
     nftPlaceholder: {
       alignItems: 'center',
@@ -1733,60 +1728,60 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       position: 'absolute',
       top: 8,
       right: 8,
-      paddingHorizontal: 6,
-      paddingVertical: 3,
-      borderRadius: 6,
+      paddingHorizontal: Skin.space(6),
+      paddingVertical: Skin.space(3),
+      borderRadius: Skin.radius(6),
     },
     nftChainBadgeText: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       color: '#fff',
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       textTransform: 'uppercase',
     },
     nftInfo: {
-      padding: 10,
+      padding: Skin.space(10),
     },
     nftName: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     nftCollection: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     // Show More Button styles
     showMoreButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 14,
-      marginTop: 8,
-      marginBottom: 16,
-      borderRadius: 12,
+      gap: Skin.space(8),
+      paddingVertical: Skin.space(14),
+      marginTop: Skin.space(8),
+      marginBottom: Skin.space(16),
+      borderRadius: Skin.radius(12),
       backgroundColor: theme.colors.surface2,
     },
     showMoreText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     // Settings section styles
     settingsSection: {
-      marginTop: 16,
-      marginBottom: 24,
+      marginTop: Skin.space(16),
+      marginBottom: Skin.space(24),
     },
     settingsSectionTitle: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
@@ -1794,27 +1789,27 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: 12,
-      paddingHorizontal: 14,
+      paddingVertical: Skin.space(12),
+      paddingHorizontal: Skin.space(14),
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
     },
     settingsRowLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: Skin.space(10),
     },
     settingsRowText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.regular.fontFamily,
     },
     settingsToggle: {
       width: 46,
       height: 26,
-      borderRadius: 13,
-      backgroundColor: theme.colors.surface,
-      padding: 2,
+      borderRadius: Skin.radius(13),
+      backgroundColor: theme.colors.surface1,
+      padding: Skin.space(2),
       justifyContent: 'center',
     },
     settingsToggleActive: {
@@ -1823,7 +1818,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     settingsToggleKnob: {
       width: 22,
       height: 22,
-      borderRadius: 11,
+      borderRadius: Skin.radius(11),
       backgroundColor: '#fff',
     },
     settingsToggleKnobActive: {

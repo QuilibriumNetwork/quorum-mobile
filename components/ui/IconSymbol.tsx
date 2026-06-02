@@ -3,7 +3,8 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { SymbolViewProps, SymbolWeight } from 'expo-symbols';
 import { ComponentProps } from 'react';
-import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
+import { Image, OpaqueColorValue, type ImageStyle, type StyleProp, type TextStyle } from 'react-native';
+import { useThemeOptional } from '@/theme';
 
 type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
 export type IconSymbolName = keyof typeof MAPPING;
@@ -16,6 +17,11 @@ export type IconSymbolName = keyof typeof MAPPING;
 const MAPPING = {
   'flag': 'flag',
   'flag.fill': 'flag',
+  'nosign': 'block',
+  'ellipsis': 'more-horiz',
+  'doc': 'description',
+  'paintbrush': 'brush',
+  'circle': 'radio-button-unchecked',
   'house.fill': 'home',
   'paperplane': 'send',
   'paperplane.fill': 'send',
@@ -71,6 +77,7 @@ const MAPPING = {
   'xmark': 'close',
   'line.3.horizontal': 'menu',
   'arrow.left': 'arrow-back',
+  'building.columns': 'account-balance',
   'plus': 'add',
   'face.smiling': 'emoji-emotions',
   'photo.fill': 'image',
@@ -244,6 +251,24 @@ export function IconSymbol({
   style?: StyleProp<TextStyle>;
   weight?: SymbolWeight;
 }) {
+  // Skin icon substitution: when the active skin overrides this glyph, render
+  // its (validated PNG/JPEG) image. `tint` (default true) renders it as a
+  // template tinted by the requested color; false renders it full-color.
+  const skinIcon = useThemeOptional()?.activeSkin?.icons?.[name];
+  if (skinIcon) {
+    return (
+      <Image
+        source={{ uri: skinIcon.image }}
+        style={[
+          { width: size, height: size },
+          skinIcon.tint === false ? null : { tintColor: color as string },
+          style as unknown as StyleProp<ImageStyle>,
+        ]}
+        resizeMode="contain"
+      />
+    );
+  }
+
   const mappedName = MAPPING[name];
   if (!mappedName) {
     throw new Error(`IconSymbol: No Android/Material icon mapping for SF Symbol "${name}". Add it to MAPPING in IconSymbol.tsx`);

@@ -5,23 +5,13 @@
  */
 
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import type { AppTheme } from '@/theme';
 import { useTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
 import { submitReport, type ReportReason } from '@/services/reporting/reportService';
+import * as Skin from '@/theme/skins/geometry';
 
 const REASONS: { id: ReportReason; label: string }[] = [
   { id: 'spam', label: 'Spam' },
@@ -208,43 +198,43 @@ const createStyles = (theme: AppTheme) =>
     },
     sheet: {
       backgroundColor: theme.colors.surface1,
-      paddingHorizontal: 20,
-      paddingTop: 24,
-      paddingBottom: 36,
-      borderTopLeftRadius: 16,
-      borderTopRightRadius: 16,
-      gap: 12,
+      paddingHorizontal: Skin.space(20),
+      paddingTop: Skin.space(24),
+      paddingBottom: Skin.space(36),
+      borderTopLeftRadius: Skin.radius(16),
+      borderTopRightRadius: Skin.radius(16),
+      gap: Skin.space(12),
     },
     title: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontWeight: '600',
       color: theme.colors.textMain,
     },
     subtitle: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
-      lineHeight: 18,
+      lineHeight: Skin.font(18),
     },
     reasons: {
-      gap: 8,
+      gap: Skin.space(8),
     },
     reasonRow: {
-      paddingVertical: 12,
-      paddingHorizontal: 14,
-      borderRadius: 10,
-      borderWidth: 1,
+      paddingVertical: Skin.space(12),
+      paddingHorizontal: Skin.space(14),
+      borderRadius: Skin.radius(10),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.surface3,
       backgroundColor: theme.colors.surface2,
     },
     reasonLabel: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMain,
     },
     input: {
-      borderWidth: 1,
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.surface3,
-      borderRadius: 10,
-      padding: 12,
+      borderRadius: Skin.radius(10),
+      padding: Skin.space(12),
       minHeight: 80,
       maxHeight: 160,
       color: theme.colors.textMain,
@@ -254,13 +244,13 @@ const createStyles = (theme: AppTheme) =>
     actions: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
-      gap: 12,
-      marginTop: 4,
+      gap: Skin.space(12),
+      marginTop: Skin.space(4),
     },
     button: {
-      paddingVertical: 12,
-      paddingHorizontal: 20,
-      borderRadius: 10,
+      paddingVertical: Skin.space(12),
+      paddingHorizontal: Skin.space(20),
+      borderRadius: Skin.radius(10),
       minWidth: 120,
       alignItems: 'center',
       justifyContent: 'center',
@@ -270,7 +260,7 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.surface3,
     },
     buttonLabel: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontWeight: '600',
     },
   });

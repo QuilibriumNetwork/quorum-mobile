@@ -7,11 +7,13 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Alert, Image, ActivityIndicator } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme, type AppTheme } from '@/theme';
 import { useOnboarding, useAuth } from '@/context';
 import { OnboardingLayout } from '@/components/onboarding';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
 
 const QuorumLogo = require('@/assets/images/quorum-symbol-bg-blue.png');
 import MnemonicDisplayView from '@/components/onboarding/MnemonicDisplayView';
@@ -241,68 +243,68 @@ const createStyles = (theme: AppTheme) =>
     },
     header: {
       alignItems: 'center',
-      marginBottom: 40,
+      marginBottom: Skin.space(40),
     },
     logo: {
       width: 80,
       height: 80,
-      borderRadius: 40,
-      marginBottom: 20,
+      borderRadius: Skin.radius(40),
+      marginBottom: Skin.space(20),
     },
     title: {
-      fontSize: 26,
+      fontSize: Skin.font(26),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       textAlign: 'center',
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     subtitle: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      lineHeight: 22,
+      lineHeight: Skin.font(22),
     },
     errorContainer: {
       backgroundColor: theme.colors.danger + '20',
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      marginBottom: Skin.space(16),
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
     },
     errorText: {
       color: theme.colors.danger,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       flex: 1,
     },
     errorDismiss: {
       color: theme.colors.danger,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
-      marginLeft: 12,
+      marginLeft: Skin.space(12),
     },
     mainAction: {
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     createButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.primary,
-      borderRadius: 14,
-      paddingVertical: 16,
-      paddingHorizontal: 24,
-      gap: 10,
+      borderRadius: Skin.radius(14),
+      paddingVertical: Skin.space(16),
+      paddingHorizontal: Skin.space(24),
+      gap: Skin.space(10),
     },
     buttonDisabled: {
       opacity: 0.6,
     },
     createButtonText: {
-      fontSize: 17,
+      fontSize: Skin.font(17),
       color: '#fff',
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -310,7 +312,7 @@ const createStyles = (theme: AppTheme) =>
     divider: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     dividerLine: {
       flex: 1,
@@ -318,15 +320,15 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.surface5,
     },
     dividerText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
-      paddingHorizontal: 16,
+      paddingHorizontal: Skin.space(16),
     },
     importOptions: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 12,
+      gap: Skin.space(12),
     },
     importButton: {
       flexBasis: '47%',
@@ -335,25 +337,25 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      paddingVertical: 14,
-      paddingHorizontal: 12,
-      gap: 6,
+      borderRadius: Skin.radius(12),
+      paddingVertical: Skin.space(14),
+      paddingHorizontal: Skin.space(12),
+      gap: Skin.space(6),
     },
     importButtonText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
     },
     footer: {
-      paddingTop: 24,
-      paddingBottom: 8,
+      paddingTop: Skin.space(24),
+      paddingBottom: Skin.space(8),
     },
     securityNote: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      lineHeight: 18,
+      lineHeight: Skin.font(18),
     },
   });

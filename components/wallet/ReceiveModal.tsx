@@ -11,14 +11,9 @@ import WalletSelector from './WalletSelector';
 import { useTheme, type AppTheme } from '@/theme';
 import * as Clipboard from 'expo-clipboard';
 import React from 'react';
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 // Optional QR code - will use placeholder if not installed
 let QRCode: any = null;
@@ -211,33 +206,33 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingBottom: 16,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(16),
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     content: {
       flex: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
     },
     chainSelectorScroll: {
-      marginHorizontal: -20,
-      marginBottom: 24,
+      marginHorizontal: Skin.space(-20),
+      marginBottom: Skin.space(24),
     },
     chainSelector: {
       flexDirection: 'row',
-      gap: 8,
-      paddingHorizontal: 20,
+      gap: Skin.space(8),
+      paddingHorizontal: Skin.space(20),
     },
     chainOption: {
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderRadius: 12,
-      borderWidth: 2,
+      paddingVertical: Skin.space(12),
+      paddingHorizontal: Skin.space(16),
+      borderRadius: Skin.radius(12),
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.border,
       alignItems: 'center',
       minWidth: 80,
@@ -246,24 +241,24 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       backgroundColor: theme.colors.surface2,
     },
     chainOptionText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMuted,
     },
     chainOptionSubtext: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     qrContainer: {
       alignItems: 'center',
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     qrWrapper: {
-      padding: 16,
+      padding: Skin.space(16),
       backgroundColor: 'white',
-      borderRadius: 16,
+      borderRadius: Skin.radius(16),
     },
     qrPlaceholder: {
       width: 200,
@@ -271,20 +266,20 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
     },
     qrPlaceholderText: {
-      marginTop: 8,
-      fontSize: 12,
+      marginTop: Skin.space(8),
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
     },
     addressContainer: {
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     addressLabel: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
@@ -292,28 +287,28 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 14,
-      gap: 12,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(14),
+      gap: Skin.space(12),
     },
     addressText: {
       flex: 1,
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.regular.fontFamily,
     },
     infoBox: {
       flexDirection: 'row',
       backgroundColor: theme.colors.primary + '15',
-      borderRadius: 12,
-      padding: 14,
-      gap: 10,
-      marginBottom: 24,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(14),
+      gap: Skin.space(10),
+      marginBottom: Skin.space(24),
     },
     infoText: {
       flex: 1,
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
-      lineHeight: 18,
+      lineHeight: Skin.font(18),
     },
   });

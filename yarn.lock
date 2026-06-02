@@ -4890,7 +4890,7 @@ expo-eas-client@~1.0.8:
   resolved "https://registry.npmjs.org/expo-eas-client/-/expo-eas-client-1.0.8.tgz"
   integrity sha512-5or11NJhSeDoHHI6zyvQDW2cz/yFyE+1Cz8NTs5NK8JzC7J0JrkUgptWtxyfB6Xs/21YRNifd3qgbBN3hfKVgA==
 
-expo-file-system@~19.0.21:
+expo-file-system@19.0.21, expo-file-system@~19.0.21:
   version "19.0.21"
   resolved "https://registry.npmjs.org/expo-file-system/-/expo-file-system-19.0.21.tgz"
   integrity sha512-s3DlrDdiscBHtab/6W1osrjGL+C2bvoInPJD7sOwmxfJ5Woynv2oc+Fz1/xVXaE/V7HE/+xrHC/H45tu6lZzzg==
@@ -4960,6 +4960,13 @@ expo-local-authentication@17.0.8:
   integrity sha512-Q5fXHhu6w3pVPlFCibU72SYIAN+9wX7QpFn9h49IUqs0Equ44QgswtGrxeh7fdnDqJrrYGPet5iBzjnE70uolA==
   dependencies:
     invariant "^2.2.4"
+
+expo-localization@~17.0.9:
+  version "17.0.9"
+  resolved "https://registry.yarnpkg.com/expo-localization/-/expo-localization-17.0.9.tgz#92b2827a4b68e42c0cd0ad1d3f1abf0ebe50a4a0"
+  integrity sha512-k5eYHr7iLMob3M8cHH6bgDrDRmqnZG8xKGLhpx8ST+LsFXmSgYpJ/t0VwWm0gz64C/K669XhObdG3D6QwCGqhw==
+  dependencies:
+    rtl-detect "^1.0.2"
 
 expo-manifests@~1.0.10:
   version "1.0.10"
@@ -7884,6 +7891,9 @@ queue@6.0.2:
 "quorum-crypto@file:./modules/quorum-crypto":
   version "0.1.0"
 
+"quorum-translation@file:./modules/quorum-translation":
+  version "0.1.0"
+
 range-parser@~1.2.1:
   version "1.2.1"
   resolved "https://registry.npmjs.org/range-parser/-/range-parser-1.2.1.tgz"
@@ -8366,6 +8376,11 @@ rpc-websockets@^9.0.2:
   optionalDependencies:
     bufferutil "^4.0.1"
     utf-8-validate "^5.0.2"
+
+rtl-detect@^1.0.2:
+  version "1.1.2"
+  resolved "https://registry.yarnpkg.com/rtl-detect/-/rtl-detect-1.1.2.tgz#ca7f0330af5c6bb626c15675c642ba85ad6273c6"
+  integrity sha512-PGMBq03+TTG/p/cRB7HCLKJ1MgDIi07+QU1faSjiYRfmY5UsAttV9Hs08jDAHVwcOwmVLcSJkpwyfXszVjWfIQ==
 
 run-parallel@^1.1.9:
   version "1.2.0"

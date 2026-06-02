@@ -1,21 +1,19 @@
 import type { AppTheme } from '@/theme';
 import React, { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { parseFarcasterUrl, useFarcasterThread, type FlattenedCast } from '@/hooks/useFarcasterThread';
+import { useBlockedFids } from '@/hooks/useBlockedFids';
+import { useMutedFids } from '@/hooks/useMutedFids';
 import type { EmbeddedCast } from '@/hooks/useFarcasterFeed';
 import { ImageViewer, AutoHeightImage, ImageCarousel, VideoPlayer, YouTubeEmbed, parseYouTubeUrl, extractYouTubeMatchesFromText } from '../media';
 import { CastText, LinkPreview, QuoteCast, FrameEmbed, LikeIcon, getLikeIconType, SnapEmbed, useSnapDetection } from '../content';
 import { QuorumIdentityBadge } from '../content/QuorumIdentityBadge';
 import { SCREEN_HEIGHT, formatTimestamp, lookupUserByUsername } from '../utils';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 
 interface ThreadDetailViewProps {
@@ -63,6 +61,11 @@ export function ThreadDetailView({
 
   const [viewerState, setViewerState] = useState<{ images: string[]; index: number } | null>(null);
   const [selectedThread, setSelectedThread] = useState<{ username: string; castHashPrefix: string } | null>(null);
+  // Replies from blocked/muted users are collapsed to a placeholder until
+  // tapped. Tracks the cast hashes the viewer chose to reveal this session.
+  const [revealedBlocked, setRevealedBlocked] = useState<Set<string>>(() => new Set());
+  const { fids: blockedFids } = useBlockedFids();
+  const { fids: mutedFids } = useMutedFids();
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -74,6 +77,48 @@ export function ThreadDetailView({
   };
 
   const renderCast = (cast: FlattenedCast, isMain = false) => {
+    // Blocked/muted-user replies are replaced with a tap-to-reveal
+    // placeholder. The main cast (the one the viewer navigated to) is
+    // never hidden.
+    const isBlocked =
+      !isMain && cast.author.fid > 0 && blockedFids.has(cast.author.fid);
+    const isMuted =
+      !isMain && cast.author.fid > 0 && mutedFids.has(cast.author.fid);
+    if ((isBlocked || isMuted) && !revealedBlocked.has(cast.hash)) {
+      const isNestedBlocked = cast.depth > 0;
+      const blockedBorderWidth = isNestedBlocked ? Math.min(cast.depth * 2, 6) : 0;
+      return (
+        <TouchableOpacity
+          key={cast.hash}
+          activeOpacity={0.7}
+          onPress={() =>
+            setRevealedBlocked((prev) => {
+              const next = new Set(prev);
+              next.add(cast.hash);
+              return next;
+            })
+          }
+          style={{
+            borderTopWidth: Skin.border(1),
+            borderTopColor: theme.colors.surface3,
+            paddingVertical: Skin.space(14),
+            borderLeftWidth: blockedBorderWidth,
+            borderLeftColor: theme.colors.accent,
+            paddingLeft: Skin.space(12),
+            paddingRight: Skin.space(12),
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: Skin.space(8),
+          }}
+        >
+          <IconSymbol name="nosign" color={theme.colors.textMuted} size={16} />
+          <Text style={styles.mutedText13}>
+            This user has been {isBlocked ? 'blocked' : 'muted'}, tap to show message
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
     const imageUrls = (cast.embeds?.images ?? [])
       .map((img) => img.url)
       .filter((url): url is string => Boolean(url));
@@ -126,12 +171,12 @@ export function ThreadDetailView({
           borderTopWidth: isMain ? 0 : 1,
           borderTopColor: theme.colors.surface3,
           paddingTop: isMain ? 0 : 12,
-          paddingBottom: 14,
+          paddingBottom: Skin.space(14),
           borderLeftWidth: borderWidth,
           borderLeftColor: theme.colors.accent,
           paddingLeft: isNested ? 12 : 12,
-          paddingRight: 12,
-          gap: 10,
+          paddingRight: Skin.space(12),
+          gap: Skin.space(10),
         }}
       >
         {/* Header row */}
@@ -227,6 +272,7 @@ export function ThreadDetailView({
             text={cast.text}
             style={styles.castText}
             theme={theme}
+            enableTranslate
             onMentionPress={handleMentionPress}
             onChannelPress={onOpenChannel}
           />
@@ -234,7 +280,7 @@ export function ThreadDetailView({
 
         {/* Images */}
         {hasImages && (
-          <View style={{ marginHorizontal: -12 - borderWidth }}>
+          <View style={{ marginHorizontal: Skin.space(-12) - borderWidth }}>
             {imageUrls.length === 1 ? (
               <AutoHeightImage
                 uri={imageUrls[0]}
@@ -255,7 +301,7 @@ export function ThreadDetailView({
 
         {/* Videos */}
         {hasVideos && (
-          <View style={{ marginHorizontal: -12 - borderWidth }}>
+          <View style={{ marginHorizontal: Skin.space(-12) - borderWidth }}>
             {videos.map((video, index) => (
               <VideoPlayer
                 key={index}
@@ -271,7 +317,7 @@ export function ThreadDetailView({
 
         {/* Frame embeds */}
         {frameEmbeds.length > 0 && (
-          <View style={{ marginHorizontal: -12 - borderWidth, gap: 8 }}>
+          <View style={{ marginHorizontal: Skin.space(-12) - borderWidth, gap: Skin.space(8) }}>
             {frameEmbeds.map((frame, index) => (
               <FrameEmbed
                 key={index}
@@ -372,7 +418,7 @@ export function ThreadDetailView({
       )}
 
       {mainCast ? (
-        <ScrollView style={staticStyles.flex1} contentContainerStyle={{ paddingBottom: 32 + bottomInset }}>
+        <ScrollView style={staticStyles.flex1} contentContainerStyle={{ paddingBottom: Skin.space(32) + bottomInset }}>
           {/* Parent chain — when the user taps a reply notification we
               land on the reply, but they need the conversation context
               above it to make sense of the thread. Parent casts are
@@ -387,7 +433,7 @@ export function ThreadDetailView({
           )}
           {renderCast({ ...mainCast, depth: 0 }, true)}
           {isLoading && replies.length === 0 && (
-            <View style={{ padding: 24, alignItems: 'center' }}>
+            <View style={{ padding: Skin.space(24), alignItems: 'center' }}>
               <ActivityIndicator color={theme.colors.accent} />
             </View>
           )}
@@ -516,7 +562,7 @@ function ThreadUrlEmbed({
   );
 }
 
-const staticStyles = StyleSheet.create({
+const staticStyles = createSkinnable(() => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -524,25 +570,25 @@ const staticStyles = StyleSheet.create({
   rowGap6: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Skin.space(6),
   },
   backButton: {
-    marginRight: 12,
+    marginRight: Skin.space(12),
   },
   avatarContainer: {
     position: 'relative',
-    marginRight: 12,
+    marginRight: Skin.space(12),
   },
   flex1: {
     flex: 1,
   },
   gap8: {
-    gap: 8,
+    gap: Skin.space(8),
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 4,
+    gap: Skin.space(16),
+    marginTop: Skin.space(4),
   },
   centered: {
     flex: 1,
@@ -550,9 +596,9 @@ const staticStyles = StyleSheet.create({
     alignItems: 'center',
   },
   errorContainer: {
-    padding: 20,
+    padding: Skin.space(20),
   },
-});
+}));
 
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
@@ -566,7 +612,7 @@ function createStyles(theme: AppTheme) {
     avatar: {
       width: 44,
       height: 44,
-      borderRadius: 22,
+      borderRadius: Skin.radius(22),
       backgroundColor: theme.colors.surface3,
     },
     followBadge: {
@@ -575,38 +621,38 @@ function createStyles(theme: AppTheme) {
       right: -2,
       width: 18,
       height: 18,
-      borderRadius: 9,
+      borderRadius: Skin.radius(9),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.primary,
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.background,
     },
     displayName: {
       color: theme.colors.textStrong,
       fontWeight: '600',
-      fontSize: 15,
+      fontSize: Skin.font(15),
     },
     channelName: {
       color: theme.colors.accent,
-      fontSize: 13,
+      fontSize: Skin.font(13),
     },
     usernameTimestamp: {
       color: theme.colors.textMuted,
-      fontSize: 13,
-      marginTop: 2,
+      fontSize: Skin.font(13),
+      marginTop: Skin.space(2),
     },
     mutedText13: {
       color: theme.colors.textMuted,
-      fontSize: 13,
+      fontSize: Skin.font(13),
     },
     accentText: {
       color: theme.colors.accent,
     },
     castText: {
       color: theme.colors.textMain,
-      fontSize: 15,
-      lineHeight: 20,
+      fontSize: Skin.font(15),
+      lineHeight: Skin.font(20),
     },
     imageBg: {
       backgroundColor: theme.colors.surface3,

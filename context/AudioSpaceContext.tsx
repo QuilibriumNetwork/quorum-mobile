@@ -55,7 +55,10 @@ import {
   type SpaceChatCast,
 } from '@/services/farcaster/spaceChatFetch';
 import { mmkvStorage } from '@/services/offline/storage';
+import { connectSpaceSocket } from '@/services/spaces/farcasterSpaceSocket';
+import { likeCast, unlikeCast, recastCast, unrecastCast } from '@/services/farcasterClient';
 import { logger } from '@quilibrium/quorum-shared';
+import QuorumCrypto from '../modules/quorum-crypto/src';
 
 export interface ActiveSpaceEntry {
   id: string;
@@ -106,6 +109,10 @@ interface AudioSpaceContextValue {
   micEnabled: boolean;
   /** Local hand-raised state. Listeners use this to request the stage. */
   handRaised: boolean;
+  /** Audio output route. True = loudspeaker (default for a space — you're
+   *  mostly listening), false = earpiece. Bluetooth/wired headsets
+   *  override this regardless. */
+  isSpeakerOn: boolean;
   /** Identities of remote participants currently emitting audio. UI
    *  uses this to outline the speaker tiles. */
   activeSpeakerIdentities: string[];
@@ -125,6 +132,8 @@ interface AudioSpaceContextValue {
   leave: () => void;
   toggleMic: () => Promise<void>;
   toggleHand: () => Promise<void>;
+  /** Swap the audio output between loudspeaker and earpiece. */
+  toggleSpeaker: () => void;
   reactWith: (emoji: string) => Promise<void>;
   acceptStageInvite: () => Promise<void>;
   declineStageInvite: () => Promise<void>;
@@ -159,8 +168,19 @@ interface AudioSpaceContextValue {
   minimize: () => void;
   /** Bring the modal back when minimized. */
   restore: () => void;
-  /** Send a chat message over LiveKit data tracks. */
+  /** Send a chat message (posts a reply to the space's root cast). */
   sendChat: (text: string) => Promise<void>;
+  /** Reply to a specific chat message (posts a reply to its cast hash). */
+  replyToChat: (targetCastHash: string, text: string) => Promise<void>;
+  /** Like/unlike a chat message via the Farcaster API. Toggles based on
+   *  the passed current state; optimistic with rollback. */
+  toggleChatLike: (castHash: string, currentlyLiked: boolean, currentCount: number) => Promise<void>;
+  /** Recast/unrecast a chat message via the Farcaster API. */
+  toggleChatRecast: (castHash: string, currentlyRecasted: boolean, currentCount: number) => Promise<void>;
+  /** Optimistic per-message like state (hash → {liked, count}). */
+  chatLikeStates: Map<string, { liked: boolean; count: number }>;
+  /** Optimistic per-message recast state (hash → {recasted, count}). */
+  chatRecastStates: Map<string, { recasted: boolean; count: number }>;
 
   /** Local camera publish state. Only meaningful for host/cohost/
    *  speaker roles — gated server-side. */
@@ -197,6 +217,7 @@ export function useAudioSpace(): AudioSpaceContextValue {
       error: null,
       micEnabled: false,
       handRaised: false,
+      isSpeakerOn: true,
       activeSpeakerIdentities: [],
       reactions: [],
       chatMessages: [],
@@ -208,6 +229,7 @@ export function useAudioSpace(): AudioSpaceContextValue {
       leave: () => {},
       toggleMic: async () => {},
       toggleHand: async () => {},
+      toggleSpeaker: () => {},
       reactWith: async () => {},
       acceptStageInvite: async () => {},
       declineStageInvite: async () => {},
@@ -223,6 +245,11 @@ export function useAudioSpace(): AudioSpaceContextValue {
       minimize: () => {},
       restore: () => {},
       sendChat: async () => {},
+      replyToChat: async () => {},
+      toggleChatLike: async () => {},
+      toggleChatRecast: async () => {},
+      chatLikeStates: new Map(),
+      chatRecastStates: new Map(),
       cameraEnabled: false,
       toggleCamera: async () => ({ enabled: false, reason: 'no-provider' }),
       localCameraStreamURL: null,
@@ -341,9 +368,19 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
   const [error, setError] = React.useState<string | null>(null);
   const [micEnabled, setMicEnabled] = React.useState(false);
   const [handRaised, setHandRaised] = React.useState(false);
+  // Audio output route. Default loudspeaker — a space is a listening
+  // experience, so earpiece-by-default (iOS voiceChat) would be wrong.
+  // The ref lets the connect handler apply the current preference without
+  // a stale closure.
+  const [isSpeakerOn, setIsSpeakerOn] = React.useState(true);
+  const isSpeakerOnRef = React.useRef(true);
   const [activeSpeakerIdentities, setActiveSpeakerIdentities] = React.useState<string[]>([]);
   const [reactions, setReactions] = React.useState<ReactionEvent[]>([]);
   const [chatMessages, setChatMessages] = React.useState<SpaceChatCast[]>([]);
+  // Optimistic per-message like/recast state, keyed by cast hash. Mirrors the
+  // feed's pattern so taps reflect immediately and roll back on API failure.
+  const [chatLikeStates, setChatLikeStates] = React.useState<Map<string, { liked: boolean; count: number }>>(new Map());
+  const [chatRecastStates, setChatRecastStates] = React.useState<Map<string, { recasted: boolean; count: number }>>(new Map());
   const [hasRsvped, setHasRsvped] = React.useState<boolean | null>(null);
   const [minimized, setMinimized] = React.useState(false);
   const [cameraEnabled, setCameraEnabled] = React.useState(false);
@@ -401,6 +438,8 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
     prevRoleRef.current = 'listener';
     setMicEnabled(false);
     setHandRaised(false);
+    setIsSpeakerOn(true);
+    isSpeakerOnRef.current = true;
     setActiveSpeakerIdentities([]);
     setReactions([]);
     setChatMessages([]);
@@ -417,20 +456,41 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const join = React.useCallback((id: string, opts?: { castHash?: string }) => {
-    castHashRef.current = opts?.castHash;
-    // If we have the anchor immediately (cast-embed entry), prime the
-    // pending queue from MMKV right away. The discovery-strip path
-    // (no castHash at join) defers this to the first poll tick that
-    // adopts `room.rootCastHash`.
-    if (opts?.castHash) {
-      const persisted = loadPendingChat(opts.castHash);
-      pendingChatRef.current = persisted;
-      if (persisted.length > 0) {
-        setChatMessages(mergeChat([], persisted));
+    const doJoin = () => {
+      // Never enter a new space minimized.
+      setMinimized(false);
+      castHashRef.current = opts?.castHash;
+      // If we have the anchor immediately (cast-embed entry), prime the
+      // pending queue from MMKV right away. The discovery-strip path
+      // (no castHash at join) defers this to the first poll tick that
+      // adopts `room.rootCastHash`.
+      if (opts?.castHash) {
+        const persisted = loadPendingChat(opts.castHash);
+        pendingChatRef.current = persisted;
+        if (persisted.length > 0) {
+          setChatMessages(mergeChat([], persisted));
+        }
       }
+      setActive({ id, timestamp: Date.now(), castHash: opts?.castHash });
+    };
+
+    const prevId = activeIdRef.current;
+    if (prevId && prevId !== id) {
+      // Switching from another (possibly minimized) space: fully LEAVE it
+      // first — tell the server, disconnect, and reset state — so we don't
+      // strand a ghost participant in the old room or carry its state (incl.
+      // the minimized mini-pill) into the new one. `teardown` is async and
+      // its resets would clobber the new space's state, so join only AFTER it
+      // settles.
+      activeIdRef.current = null;
+      if (farcasterAuthToken) {
+        leaveAudioRoom(prevId, farcasterAuthToken).catch(() => { /* ignore */ });
+      }
+      teardown().finally(doJoin);
+    } else {
+      doJoin();
     }
-    setActive({ id, timestamp: Date.now(), castHash: opts?.castHash });
-  }, []);
+  }, [farcasterAuthToken, teardown]);
 
   const leave = React.useCallback(() => {
     const id = active?.id;
@@ -495,12 +555,31 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
           if (castHash) {
             const chat = await fetchSpaceChat(castHash);
             if (activeIdRef.current !== roomId) return;
+            // Backfill missing author pfps. Hypersnap sometimes returns no
+            // pfp_url for a sender's own just-posted reply, which would render
+            // the placeholder. The live participant list carries each user's
+            // Farcaster pfp by fid; the current user's own profile is the
+            // authoritative source for their own messages (they may be a
+            // listener and not in `parts`).
+            const pfpByFid = new Map<number, string>();
+            for (const p of parts) {
+              const url = p.user.pfp?.url ?? p.user.pfpUrl;
+              if (p.user.fid != null && url) pfpByFid.set(p.user.fid, url);
+            }
+            if (localFid != null && user?.farcaster?.pfpUrl) {
+              pfpByFid.set(localFid, user.farcaster.pfpUrl);
+            }
+            const enriched = chat.map((c) => {
+              if (c.author.pfpUrl) return c;
+              const url = pfpByFid.get(c.author.fid);
+              return url ? { ...c, author: { ...c.author, pfpUrl: url } } : c;
+            });
             const remaining = reconcilePending(pendingChatRef.current, chat);
             if (remaining.length !== pendingChatRef.current.length) {
               pendingChatRef.current = remaining;
               savePendingChat(castHash, remaining);
             }
-            setChatMessages(mergeChat(chat, remaining));
+            setChatMessages(mergeChat(enriched, remaining));
           }
 
           if (localFid != null) {
@@ -632,6 +711,17 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
         connectedRef.current = connected;
         setState('connected');
 
+        // Apply the audio-output preference now that WebRTC owns the
+        // session. Defaults to loudspeaker so a listener doesn't have to
+        // hold the phone to their ear. Fire-and-forget — a failure just
+        // leaves the OS default route.
+        QuorumCrypto.setSpeakerphoneEnabled(isSpeakerOnRef.current).catch((e) => {
+          logger.debug(
+            '[AudioSpace] setSpeakerphoneEnabled on connect failed:',
+            e instanceof Error ? e.message : e,
+          );
+        });
+
         // Server-side keep-alive — `/v1/audio-room/heartbeat` keeps the
         // local participant in the participant list (otherwise we'd be
         // garbage-collected after ~60s and the host's view would show
@@ -684,6 +774,23 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
     const applied = await connected.setMicEnabled(next);
     setMicEnabled(applied);
   }, [canPublishLocal, micEnabled]);
+
+  // Swap loudspeaker <-> earpiece. Optimistic: flip the UI immediately and
+  // let the native override run async (mirrors SpaceCallContext). A stale
+  // icon for a moment beats a laggy control.
+  const toggleSpeaker = React.useCallback(() => {
+    setIsSpeakerOn((prev) => {
+      const next = !prev;
+      isSpeakerOnRef.current = next;
+      QuorumCrypto.setSpeakerphoneEnabled(next).catch((e) => {
+        logger.debug(
+          '[AudioSpace] setSpeakerphoneEnabled failed:',
+          e instanceof Error ? e.message : e,
+        );
+      });
+      return next;
+    });
+  }, []);
 
   const toggleCamera = React.useCallback(async () => {
     const connected = connectedRef.current;
@@ -840,17 +947,21 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
    *  `castHashRef` so the discovery-strip path — where we only learn
    *  the anchor after the first room snapshot — works the same as the
    *  cast-embed path. */
-  const sendChat = React.useCallback(async (text: string) => {
+  // Shared post path. `parentHash` is the cast being replied to (the host
+  // anchor for top-level chat, or a specific chat message's hash for a reply).
+  // The pending stub is always persisted under the host anchor so it's part of
+  // the space's pending set and reconciles when the poll picks it up.
+  const postChatReply = React.useCallback(async (parentHash: string, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const anchor = castHashRef.current;
-    if (!anchor || !farcasterAuthToken || localFid == null) return;
+    const persistAnchor = castHashRef.current;
+    if (!persistAnchor || !farcasterAuthToken || localFid == null) return;
 
     const pending: PendingChatEntry = {
       hash: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       text: trimmed,
       timestamp: Date.now(),
-      parentHash: anchor,
+      parentHash,
       author: {
         fid: localFid,
         username: user?.farcaster?.username,
@@ -862,7 +973,7 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
       },
     };
     pendingChatRef.current = [...pendingChatRef.current, pending];
-    savePendingChat(anchor, pendingChatRef.current);
+    savePendingChat(persistAnchor, pendingChatRef.current);
     // Surface immediately rather than waiting for the next poll.
     setChatMessages((prev) => [...prev, {
       hash: pending.hash,
@@ -873,16 +984,67 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
     }]);
 
     try {
-      await submitSpaceChatReply(anchor, trimmed, farcasterAuthToken);
+      await submitSpaceChatReply(parentHash, trimmed, farcasterAuthToken);
     } catch (e) {
       logger.warn('[AudioSpace] chat send failed:', e instanceof Error ? e.message : e);
       // Drop the pending stub if the send itself errored — there's
       // nothing in flight that will mirror back.
       pendingChatRef.current = pendingChatRef.current.filter((p) => p.hash !== pending.hash);
-      savePendingChat(anchor, pendingChatRef.current);
+      savePendingChat(persistAnchor, pendingChatRef.current);
       setChatMessages((prev) => prev.filter((m) => m.hash !== pending.hash));
     }
   }, [farcasterAuthToken, localFid, user?.displayName, user?.farcaster?.username, user?.farcaster?.pfpUrl]);
+
+  const sendChat = React.useCallback((text: string) => {
+    const anchor = castHashRef.current;
+    if (!anchor) return Promise.resolve();
+    return postChatReply(anchor, text);
+  }, [postChatReply]);
+
+  /** Reply to a specific chat message (its cast hash becomes the parent). */
+  const replyToChat = React.useCallback((targetCastHash: string, text: string) => {
+    return postChatReply(targetCastHash, text);
+  }, [postChatReply]);
+
+  /** Like/unlike a chat message via the Farcaster API. Optimistic + rollback. */
+  const toggleChatLike = React.useCallback(
+    async (castHash: string, currentlyLiked: boolean, currentCount: number) => {
+      if (!farcasterAuthToken) return;
+      const nextLiked = !currentlyLiked;
+      const nextCount = nextLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
+      setChatLikeStates((prev) => new Map(prev).set(castHash, { liked: nextLiked, count: nextCount }));
+      try {
+        if (nextLiked) await likeCast({ token: farcasterAuthToken, castHash });
+        else await unlikeCast({ token: farcasterAuthToken, castHash });
+      } catch {
+        setChatLikeStates((prev) =>
+          new Map(prev).set(castHash, { liked: currentlyLiked, count: currentCount }),
+        );
+      }
+    },
+    [farcasterAuthToken],
+  );
+
+  /** Recast/unrecast a chat message via the Farcaster API. Optimistic + rollback. */
+  const toggleChatRecast = React.useCallback(
+    async (castHash: string, currentlyRecasted: boolean, currentCount: number) => {
+      if (!farcasterAuthToken) return;
+      const nextRecasted = !currentlyRecasted;
+      const nextCount = nextRecasted ? currentCount + 1 : Math.max(0, currentCount - 1);
+      setChatRecastStates((prev) =>
+        new Map(prev).set(castHash, { recasted: nextRecasted, count: nextCount }),
+      );
+      try {
+        if (nextRecasted) await recastCast({ token: farcasterAuthToken, castHash });
+        else await unrecastCast({ token: farcasterAuthToken, castHash });
+      } catch {
+        setChatRecastStates((prev) =>
+          new Map(prev).set(castHash, { recasted: currentlyRecasted, count: currentCount }),
+        );
+      }
+    },
+    [farcasterAuthToken],
+  );
 
   /** Toggle RSVP for the currently active scheduled room. Updates the
    *  local flag optimistically and rolls back on failure. */
@@ -911,10 +1073,10 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
       setReactions((prev) => prev.filter((r) => r.id !== ev.id));
     }, REACTION_TTL_MS);
 
-    // Server is the source of truth; data-channel fan-out is a latency
-    // hack so other listeners see the reaction before the server gets
-    // around to broadcasting it.
-    connectedRef.current?.sendReaction(emoji).catch(() => { /* ignore */ });
+    // The server is the source of truth: it fans the reaction out to every
+    // subscriber over the Farcaster WebSocket (see the effect below). We don't
+    // use the LiveKit data channel — a listener can't publish data, so peer
+    // fan-out would silently drop their reactions.
     try {
       await sendReactionApi(active.id, emoji, farcasterAuthToken);
     } catch {
@@ -922,6 +1084,31 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
       // roll back since reactions are ephemeral.
     }
   }, [active, farcasterAuthToken]);
+
+  // Receive other participants' reactions via Farcaster's realtime socket.
+  // The reaction POST above is broadcast by the server to everyone subscribed
+  // to the room; we subscribe for the lifetime of the active space and drop
+  // our own fid (already echoed locally in reactWith).
+  React.useEffect(() => {
+    const roomId = active?.id;
+    if (!roomId || !farcasterAuthToken) return;
+    const handle = connectSpaceSocket(roomId, farcasterAuthToken, {
+      onReaction: (emoji, fid) => {
+        if (fid === localFid) return;
+        const ev: ReactionEvent = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          emoji,
+          fid,
+          receivedAt: Date.now(),
+        };
+        setReactions((prev) => [...prev, ev]);
+        setTimeout(() => {
+          setReactions((prev) => prev.filter((r) => r.id !== ev.id));
+        }, REACTION_TTL_MS);
+      },
+    });
+    return () => handle.close();
+  }, [active?.id, farcasterAuthToken, localFid]);
 
   // Final cleanup on unmount — covers the case where the provider is
   // torn down (logout, hot reload) without the user explicitly leaving.
@@ -950,6 +1137,7 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
       error,
       micEnabled,
       handRaised,
+      isSpeakerOn,
       activeSpeakerIdentities,
       reactions,
       chatMessages,
@@ -959,6 +1147,7 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
       leave,
       toggleMic,
       toggleHand,
+      toggleSpeaker,
       reactWith,
       acceptStageInvite,
       declineStageInvite,
@@ -974,6 +1163,11 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
       minimize,
       restore,
       sendChat,
+      replyToChat,
+      toggleChatLike,
+      toggleChatRecast,
+      chatLikeStates,
+      chatRecastStates,
       cameraEnabled,
       toggleCamera,
       localCameraStreamURL,
@@ -991,6 +1185,7 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
       error,
       micEnabled,
       handRaised,
+      isSpeakerOn,
       activeSpeakerIdentities,
       reactions,
       chatMessages,
@@ -1000,6 +1195,7 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
       leave,
       toggleMic,
       toggleHand,
+      toggleSpeaker,
       reactWith,
       acceptStageInvite,
       declineStageInvite,
@@ -1015,6 +1211,11 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
       minimize,
       restore,
       sendChat,
+      replyToChat,
+      toggleChatLike,
+      toggleChatRecast,
+      chatLikeStates,
+      chatRecastStates,
       cameraEnabled,
       toggleCamera,
       localCameraStreamURL,

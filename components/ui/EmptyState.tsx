@@ -1,13 +1,9 @@
 import React from 'react';
-import {
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme, type AppTheme } from '@/theme';
 import { IconSymbol, type IconSymbolName } from './IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
 
 interface EmptyStateProps {
   /** Icon to display */
@@ -83,35 +79,35 @@ const createStyles = (theme: AppTheme) =>
     container: {
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 48,
+      padding: Skin.space(48),
     },
     iconContainer: {
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     title: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
       textAlign: 'center',
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     message: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      lineHeight: 20,
-      marginBottom: 20,
+      lineHeight: Skin.font(20),
+      marginBottom: Skin.space(20),
     },
     actionButton: {
-      paddingVertical: 12,
-      paddingHorizontal: 24,
+      paddingVertical: Skin.space(12),
+      paddingHorizontal: Skin.space(24),
       backgroundColor: theme.colors.primary,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
     },
     actionText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: '#ffffff',
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,

@@ -23,15 +23,9 @@ import {
 } from '@/services/space/channelBindings';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  type ViewStyle,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, View, type ViewStyle } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 interface SpaceChannelBindingPickerProps {
   spaceId: string;
@@ -183,36 +177,36 @@ export default function SpaceChannelBindingPicker({
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
-      gap: 12,
+      gap: Skin.space(12),
     },
     subtitle: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
-      lineHeight: 18,
+      lineHeight: Skin.font(18),
     },
     searchRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 10,
-      borderWidth: 1,
+      gap: Skin.space(8),
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(8),
+      borderRadius: Skin.radius(10),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.surface3,
       backgroundColor: theme.colors.surface1,
     },
     searchInput: {
       flex: 1,
       color: theme.colors.textMain,
-      fontSize: 15,
+      fontSize: Skin.font(15),
       paddingVertical: 0,
       minHeight: 22,
     },
     activeBindings: {
-      gap: 6,
+      gap: Skin.space(6),
     },
     sectionLabel: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       fontWeight: '600',
       letterSpacing: 0.5,
       textTransform: 'uppercase',
@@ -221,34 +215,34 @@ function createStyles(theme: AppTheme) {
     chipRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 6,
+      gap: Skin.space(6),
     },
     chip: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 14,
+      gap: Skin.space(4),
+      paddingHorizontal: Skin.space(10),
+      paddingVertical: Skin.space(5),
+      borderRadius: Skin.radius(14),
       backgroundColor: theme.colors.surface2,
-      borderWidth: 1,
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.surface3,
     },
     chipText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMain,
       fontWeight: '500',
     },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
-      paddingVertical: 10,
+      gap: Skin.space(12),
+      paddingVertical: Skin.space(10),
     },
     avatar: {
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: Skin.radius(18),
       backgroundColor: theme.colors.surface3,
     },
     rowText: {
@@ -256,34 +250,34 @@ function createStyles(theme: AppTheme) {
       minWidth: 0,
     },
     rowName: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontWeight: '600',
       color: theme.colors.textStrong,
     },
     rowKey: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginTop: 1,
+      marginTop: Skin.space(1),
     },
     checkbox: {
       width: 22,
       height: 22,
-      borderRadius: 11,
-      borderWidth: 2,
+      borderRadius: Skin.radius(11),
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
     },
     loadingWrap: {
-      paddingVertical: 30,
+      paddingVertical: Skin.space(30),
       alignItems: 'center',
     },
     emptyWrap: {
-      paddingVertical: 30,
+      paddingVertical: Skin.space(30),
       alignItems: 'center',
     },
     emptyText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       textAlign: 'center',
     },

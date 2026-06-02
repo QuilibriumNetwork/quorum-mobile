@@ -1,6 +1,8 @@
 import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import { Text, TextStyle } from 'react-native';
+import { Text, TextStyle, View } from 'react-native';
+import { useTranslatable } from '@/services/translation/useTranslatable';
+import { TranslateToggle } from '@/components/translation/TranslateToggle';
 
 interface CastTextProps {
   text: string;
@@ -9,6 +11,8 @@ interface CastTextProps {
   onMentionPress?: (username: string) => void;
   onChannelPress?: (channelKey: string) => void;
   onLinkPress?: (url: string) => void;
+  /** Show an on-device "See translation" toggle for non-target-language text. */
+  enableTranslate?: boolean;
 }
 
 type TextPart = {
@@ -67,12 +71,18 @@ export const CastText = React.memo(function CastText({
   onMentionPress,
   onChannelPress,
   onLinkPress,
+  enableTranslate = false,
 }: CastTextProps) {
-  // Memoize parsing so it only runs when text changes
-  const parts = useMemo(() => parseText(text), [text]);
+  const { showToggle, displayText, state, label, errorText, toggle } = useTranslatable(
+    text,
+    enableTranslate
+  );
+  // Parse the displayed text (original or translated) so mentions/links in the
+  // translated copy still highlight.
+  const parts = useMemo(() => parseText(displayText), [displayText]);
   const accentStyle = useMemo(() => ({ color: theme.colors.accent }), [theme.colors.accent]);
 
-  return (
+  const body = (
     <Text style={style}>
       {parts.map((part, index) => {
         if (part.type === 'link') {
@@ -109,6 +119,22 @@ export const CastText = React.memo(function CastText({
         return <Text key={index}>{part.value}</Text>;
       })}
     </Text>
+  );
+
+  // Only wrap in a View (and show the toggle) when translation applies; the
+  // bare <Text> path is preserved for the common same-language case.
+  if (!showToggle) return body;
+  return (
+    <View>
+      {body}
+      <TranslateToggle
+        state={state}
+        label={label}
+        errorText={errorText}
+        onPress={toggle}
+        theme={theme}
+      />
+    </View>
   );
 });
 

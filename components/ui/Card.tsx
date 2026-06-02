@@ -1,13 +1,10 @@
 import React from 'react';
-import {
-  StyleSheet,
-  TouchableOpacity,
-  View,
-  StyleProp,
-  ViewStyle,
-} from 'react-native';
+import { StyleSheet, View, StyleProp, ViewStyle } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme, type AppTheme } from '@/theme';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Skin from '@/theme/skins/geometry';
+import { frameAccentBorder, framePanelGlow } from '@/theme/skins/frame';
 
 type CardVariant = 'default' | 'gradient' | 'bordered';
 type CardPadding = 'none' | 'sm' | 'md' | 'lg';
@@ -139,12 +136,15 @@ const createStyles = (
   return StyleSheet.create({
     card: {
       backgroundColor: getBackgroundColor(),
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
       overflow: 'hidden',
       ...(variant === 'bordered' ? {
-        borderWidth: 1,
+        borderWidth: Skin.border(1),
         borderColor: theme.colors.border,
       } : {}),
+      // Decorative skin frame (accent ring + glow) when the skin opts in.
+      ...frameAccentBorder(theme),
+      ...framePanelGlow(theme),
     },
     gradient: {
       backgroundColor: 'transparent',

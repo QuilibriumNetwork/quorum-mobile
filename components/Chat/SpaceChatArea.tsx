@@ -52,6 +52,7 @@ import { haptics } from '@/utils/haptics';
 import { ReportModal } from '@/components/ReportModal';
 import type { Channel, Emoji, Message, Space, SpaceMember, Sticker } from '@quilibrium/quorum-shared';
 import { logger } from '@quilibrium/quorum-shared';import type { Bookmark } from '@quilibrium/quorum-shared';
+import * as Skin from '@/theme/skins/geometry';
 
 interface SpaceChatAreaProps {
   spaceId: string | undefined;
@@ -656,10 +657,10 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             style={{
               flexDirection: 'row',
               alignItems: 'center',
-              gap: 8,
-              paddingTop: 10 + (Platform.OS === 'ios' ? headerHeight : 0),
-              paddingBottom: 10,
-              paddingHorizontal: 14,
+              gap: Skin.space(8),
+              paddingTop: Skin.space(10) + (Platform.OS === 'ios' ? headerHeight : 0),
+              paddingBottom: Skin.space(10),
+              paddingHorizontal: Skin.space(14),
               backgroundColor: theme.colors.surface2,
               borderBottomWidth: StyleSheet.hairlineWidth,
               borderBottomColor: theme.colors.border ?? theme.colors.surface3,
@@ -669,9 +670,9 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             <Text
               style={{
                 flex: 1,
-                fontSize: 13,
+                fontSize: Skin.font(13),
                 color: theme.colors.textMuted,
-                lineHeight: 18,
+                lineHeight: Skin.font(18),
               }}
             >
               {`Linked to /${primaryLinkedChannel}. Connect Farcaster in your profile to see casts here.`}

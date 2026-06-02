@@ -14,17 +14,10 @@ import {
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Skin from '@/theme/skins/geometry';
 
 interface MakeOfferModalProps {
   visible: boolean;
@@ -221,60 +214,60 @@ export default function MakeOfferModal({
 const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
   StyleSheet.create({
     content: {
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
       paddingBottom: insets.bottom + 20,
     },
     header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     nameContainer: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 12,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(12),
       alignItems: 'center',
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     nameLabel: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.primary,
     },
-    section: { marginBottom: 20 },
+    section: { marginBottom: Skin.space(20) },
     sectionTitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMuted,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
-    tokenSelector: { flexDirection: 'row', gap: 8 },
+    tokenSelector: { flexDirection: 'row', gap: Skin.space(8) },
     tokenOption: {
       flex: 1,
-      paddingVertical: 12,
-      borderRadius: 10,
+      paddingVertical: Skin.space(12),
+      borderRadius: Skin.radius(10),
       backgroundColor: theme.colors.surface2,
       alignItems: 'center',
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: 'transparent',
     },
     tokenOptionSelected: {
       borderColor: theme.colors.primary,
-      backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(99, 102, 241, 0.05)',
+      backgroundColor: isDark ? 'theme.colors.accentSoft' : 'theme.colors.accentSubtle',
     },
     tokenOptionText: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMuted,
@@ -284,37 +277,37 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 10,
+      borderRadius: Skin.radius(10),
     },
     priceInput: {
       flex: 1,
       height: 44,
-      paddingHorizontal: 14,
-      fontSize: 16,
+      paddingHorizontal: Skin.space(14),
+      fontSize: Skin.font(16),
       color: theme.colors.textMain,
     },
     inputToken: {
-      paddingHorizontal: 14,
-      fontSize: 14,
+      paddingHorizontal: Skin.space(14),
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
-    expirySelector: { flexDirection: 'row', gap: 8 },
+    expirySelector: { flexDirection: 'row', gap: Skin.space(8) },
     expiryOption: {
       flex: 1,
-      paddingVertical: 10,
-      borderRadius: 8,
+      paddingVertical: Skin.space(10),
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.surface2,
       alignItems: 'center',
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: 'transparent',
     },
     expiryOptionSelected: {
       borderColor: theme.colors.primary,
-      backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(99, 102, 241, 0.05)',
+      backgroundColor: isDark ? 'theme.colors.accentSoft' : 'theme.colors.accentSubtle',
     },
-    expiryText: { fontSize: 13, color: theme.colors.textMuted },
+    expiryText: { fontSize: Skin.font(13), color: theme.colors.textMuted },
     expiryTextSelected: {
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -323,20 +316,20 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     feeInfo: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      marginBottom: 20,
+      gap: Skin.space(6),
+      marginBottom: Skin.space(20),
     },
-    feeInfoText: { fontSize: 13, color: theme.colors.textMuted },
+    feeInfoText: { fontSize: Skin.font(13), color: theme.colors.textMuted },
     submitButton: {
       height: 50,
       backgroundColor: theme.colors.primary,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
       justifyContent: 'center',
       alignItems: 'center',
     },
     submitButtonDisabled: { opacity: 0.5 },
     submitButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',

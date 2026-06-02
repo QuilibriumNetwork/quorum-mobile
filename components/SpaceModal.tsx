@@ -7,15 +7,8 @@
  */
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Image,
-} from 'react-native';
+import { View, Text, TextInput, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -26,6 +19,7 @@ import { useCreateSpace, useJoinSpace, useValidateInvite } from '@/hooks/chat/us
 import { useWebSocket } from '@/context/WebSocketContext';
 import { useToast } from '@/context/ToastContext';
 import { haptics } from '@/utils/haptics';
+import * as Skin from '@/theme/skins/geometry';
 
 interface SpaceModalProps {
   visible: boolean;
@@ -456,14 +450,14 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
     },
     header: {
-      paddingVertical: 16,
+      paddingVertical: Skin.space(16),
       alignItems: 'center',
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textStrong,
@@ -471,21 +465,21 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     tabContainer: {
       flexDirection: 'row',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      padding: 4,
-      marginBottom: 20,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(4),
+      marginBottom: Skin.space(20),
     },
     tab: {
       flex: 1,
-      paddingVertical: 10,
+      paddingVertical: Skin.space(10),
       alignItems: 'center',
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
     },
     tabActive: {
       backgroundColor: theme.colors.surface1,
     },
     tabText: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMuted,
@@ -497,47 +491,47 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       flex: 1,
     },
     inputSection: {
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     label: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     inputContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      paddingHorizontal: 16,
+      borderRadius: Skin.radius(12),
+      paddingHorizontal: Skin.space(16),
     },
     textAreaContainer: {
       alignItems: 'flex-start',
-      paddingVertical: 8,
+      paddingVertical: Skin.space(8),
     },
     input: {
       flex: 1,
-      paddingVertical: 14,
-      fontSize: 16,
+      paddingVertical: Skin.space(14),
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
     },
     textArea: {
       minHeight: 80,
-      paddingVertical: 8,
+      paddingVertical: Skin.space(8),
     },
     clearButton: {
-      padding: 4,
+      padding: Skin.space(4),
     },
     charCountRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
     charCount: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
       marginLeft: 'auto',
@@ -546,85 +540,85 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       color: theme.colors.danger,
     },
     errorText: {
-      marginTop: 8,
-      fontSize: 13,
+      marginTop: Skin.space(8),
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.danger,
     },
     errorBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 12,
+      padding: Skin.space(12),
       backgroundColor: theme.colors.danger + '15',
-      borderRadius: 8,
-      marginBottom: 16,
-      gap: 8,
+      borderRadius: Skin.radius(8),
+      marginBottom: Skin.space(16),
+      gap: Skin.space(8),
     },
     errorBannerText: {
       flex: 1,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.danger,
     },
     spacePreview: {
       alignItems: 'center',
-      paddingVertical: 24,
-      marginBottom: 16,
+      paddingVertical: Skin.space(24),
+      marginBottom: Skin.space(16),
     },
     spacePreviewPlaceholder: {
       alignItems: 'center',
-      paddingVertical: 24,
-      marginBottom: 16,
+      paddingVertical: Skin.space(24),
+      marginBottom: Skin.space(16),
     },
     spaceIcon: {
       width: 64,
       height: 64,
-      borderRadius: 16,
-      marginBottom: 12,
+      borderRadius: Skin.radius(16),
+      marginBottom: Skin.space(12),
     },
     spaceIconPlaceholder: {
       width: 64,
       height: 64,
-      borderRadius: 16,
+      borderRadius: Skin.radius(16),
       backgroundColor: theme.colors.surface4,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
     },
     spaceName: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textStrong,
       textAlign: 'center',
     },
     spaceDescription: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
       textAlign: 'center',
-      marginTop: 8,
-      paddingHorizontal: 16,
+      marginTop: Skin.space(8),
+      paddingHorizontal: Skin.space(16),
     },
     placeholderText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
       textAlign: 'center',
-      marginTop: 8,
+      marginTop: Skin.space(8),
     },
     memberBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+      marginTop: Skin.space(12),
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(6),
       backgroundColor: (theme.colors.success ?? '#22c55e') + '15',
-      borderRadius: 16,
-      gap: 6,
+      borderRadius: Skin.radius(16),
+      gap: Skin.space(6),
     },
     memberBadgeText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.success ?? '#22c55e',
@@ -632,19 +626,19 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     actions: {
       flexDirection: 'row',
       marginTop: 'auto',
-      paddingTop: 16,
-      gap: 12,
+      paddingTop: Skin.space(16),
+      gap: Skin.space(12),
     },
     cancelButton: {
       flex: 1,
-      paddingVertical: 14,
+      paddingVertical: Skin.space(14),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
     },
     cancelButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
@@ -652,18 +646,18 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     primaryButton: {
       flex: 1,
       flexDirection: 'row',
-      paddingVertical: 14,
+      paddingVertical: Skin.space(14),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.primary,
-      borderRadius: 12,
-      gap: 8,
+      borderRadius: Skin.radius(12),
+      gap: Skin.space(8),
     },
     primaryButtonDisabled: {
       opacity: 0.5,
     },
     primaryButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: '#fff',

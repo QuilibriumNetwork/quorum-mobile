@@ -10,16 +10,9 @@ import { compressAvatarImage } from '@/services/media/imageAttachment';
 import { useTheme, type AppTheme } from '@/theme';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 export type EditScope = 'quorum' | 'farcaster' | 'both';
 
@@ -271,31 +264,31 @@ export default function UnifiedProfileEditModal({
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
-      paddingHorizontal: 20,
-      paddingTop: 8,
-      paddingBottom: 40,
-      gap: 16,
+      paddingHorizontal: Skin.space(20),
+      paddingTop: Skin.space(8),
+      paddingBottom: Skin.space(40),
+      gap: Skin.space(16),
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontWeight: '700',
       color: theme.colors.textStrong,
       textAlign: 'center',
     },
     subtitle: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       textAlign: 'center',
-      marginTop: -8,
+      marginTop: Skin.space(-8),
     },
     avatarWrap: {
       alignSelf: 'center',
-      marginVertical: 12,
+      marginVertical: Skin.space(12),
     },
     avatar: {
       width: 96,
       height: 96,
-      borderRadius: 48,
+      borderRadius: Skin.radius(48),
       backgroundColor: theme.colors.surface2,
     },
     avatarBadge: {
@@ -304,40 +297,40 @@ function createStyles(theme: AppTheme) {
       bottom: 0,
       width: 30,
       height: 30,
-      borderRadius: 15,
+      borderRadius: Skin.radius(15),
       backgroundColor: theme.colors.accent,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.background,
     },
     field: {
-      gap: 6,
+      gap: Skin.space(6),
     },
     fieldLabel: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontWeight: '600',
       color: theme.colors.textMuted,
     },
     input: {
-      borderWidth: 1,
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.surface3,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      fontSize: 15,
+      borderRadius: Skin.radius(10),
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(10),
+      fontSize: Skin.font(15),
       color: theme.colors.textMain,
       backgroundColor: theme.colors.surface1,
     },
     actions: {
       flexDirection: 'row',
-      gap: 10,
-      marginTop: 12,
+      gap: Skin.space(10),
+      marginTop: Skin.space(12),
     },
     button: {
       flex: 1,
-      paddingVertical: 12,
-      borderRadius: 10,
+      paddingVertical: Skin.space(12),
+      borderRadius: Skin.radius(10),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -348,7 +341,7 @@ function createStyles(theme: AppTheme) {
       backgroundColor: theme.colors.surface2,
     },
     buttonLabel: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontWeight: '600',
     },
   });

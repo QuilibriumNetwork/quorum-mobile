@@ -11,16 +11,9 @@ import { pickMedia, type ProcessedAttachment } from '@/services/media/imageAttac
 import { uploadVideoForCast } from '@/services/farcaster/videoUpload';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 interface CastComposeModalProps {
   visible: boolean;
@@ -161,7 +154,7 @@ export default function CastComposeModal({
         )}
 
         {attachments.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageRow} contentContainerStyle={{ gap: 8 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageRow} contentContainerStyle={{ gap: Skin.space(8) }}>
             {attachments.map((a, index) => (
               <View key={index} style={styles.imageWrap}>
                 <Image source={{ uri: a.thumbnailLocalUri ?? a.localUri }} style={styles.image} />
@@ -197,37 +190,37 @@ export default function CastComposeModal({
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
-      paddingHorizontal: 20,
-      paddingBottom: 40,
-      gap: 12,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(40),
+      gap: Skin.space(12),
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingTop: 4,
-      paddingBottom: 6,
+      paddingTop: Skin.space(4),
+      paddingBottom: Skin.space(6),
     },
     title: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontWeight: '600',
       color: theme.colors.textStrong,
       flex: 1,
       textAlign: 'center',
-      marginHorizontal: 12,
+      marginHorizontal: Skin.space(12),
     },
     cancelText: {
       color: theme.colors.textMuted,
-      fontSize: 15,
+      fontSize: Skin.font(15),
     },
     disabled: {
       opacity: 0.5,
     },
     postButton: {
       backgroundColor: theme.colors.accent,
-      paddingHorizontal: 14,
-      paddingVertical: 6,
-      borderRadius: 14,
+      paddingHorizontal: Skin.space(14),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(14),
       minWidth: 56,
       alignItems: 'center',
     },
@@ -237,12 +230,12 @@ function createStyles(theme: AppTheme) {
     postText: {
       color: '#fff',
       fontWeight: '600',
-      fontSize: 14,
+      fontSize: Skin.font(14),
     },
     input: {
       minHeight: 100,
       maxHeight: 240,
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: theme.colors.textMain,
       textAlignVertical: 'top',
       padding: 0,
@@ -256,7 +249,7 @@ function createStyles(theme: AppTheme) {
     image: {
       width: 100,
       height: 100,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.surface3,
     },
     videoBadge: {
@@ -264,9 +257,9 @@ function createStyles(theme: AppTheme) {
       bottom: 4,
       left: 4,
       backgroundColor: 'rgba(0,0,0,0.6)',
-      borderRadius: 10,
-      paddingHorizontal: 4,
-      paddingVertical: 2,
+      borderRadius: Skin.radius(10),
+      paddingHorizontal: Skin.space(4),
+      paddingVertical: Skin.space(2),
     },
     removeImage: {
       position: 'absolute',
@@ -276,20 +269,20 @@ function createStyles(theme: AppTheme) {
     footer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
-      paddingTop: 4,
+      gap: Skin.space(12),
+      paddingTop: Skin.space(4),
     },
     iconButton: {
-      padding: 4,
+      padding: Skin.space(4),
     },
     charCount: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
     },
     errorText: {
       color: theme.colors.danger,
-      fontSize: 12,
-      marginTop: 4,
+      fontSize: Skin.font(12),
+      marginTop: Skin.space(4),
     },
   });
 }

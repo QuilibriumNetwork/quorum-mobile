@@ -3,7 +3,9 @@ import SpaceChannelBindingPicker from '@/components/SpaceChannelBindingPicker';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 interface SpaceChannelBindingModalProps {
   visible: boolean;
@@ -41,9 +43,9 @@ export default function SpaceChannelBindingModal({
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
-      paddingHorizontal: 20,
-      paddingBottom: 40,
-      gap: 12,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(40),
+      gap: Skin.space(12),
     },
     header: {
       flexDirection: 'row',
@@ -51,7 +53,7 @@ function createStyles(theme: AppTheme) {
       justifyContent: 'space-between',
     },
     title: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontWeight: '700',
       color: theme.colors.textStrong,
     },

@@ -8,6 +8,7 @@ import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useConversation } from '@/hooks/chat/useConversations';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
+import type { Conversation } from '@quilibrium/quorum-shared';
 import { useUserPublicProfile } from '@/hooks/useUserPublicProfile';
 import { useBookmarks } from '@/hooks/useUserConfig';
 import { useCall } from '@/context';
@@ -17,8 +18,11 @@ import { useTheme } from '@/theme';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { Suspense, useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 const UserProfileModal = React.lazy(() => import('@/components/UserProfileModal'));
 const DMSettingsSheet = React.lazy(() =>
@@ -26,7 +30,15 @@ const DMSettingsSheet = React.lazy(() =>
 );
 
 export default function DMChatScreen() {
-  const params = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{
+    id: string;
+    // Optional seed for opening a Farcaster DM with someone not yet in the
+    // conversation list (e.g. from a profile "Message" button).
+    fcFid?: string;
+    fcUsername?: string;
+    fcDisplayName?: string;
+    fcPfp?: string;
+  }>();
   const conversationId = typeof params.id === 'string' ? decodeURIComponent(params.id) : undefined;
 
   const { theme } = useTheme();
@@ -57,7 +69,31 @@ export default function DMChatScreen() {
     enabled: !!conversationId && !isFarcasterConversation && !conversationFromList,
   });
 
-  const conversationBase = conversationFromList ?? conversationFromStorage;
+  // When opening a Farcaster DM with someone we've never messaged, the
+  // conversation won't be in the list/storage yet. Synthesize a minimal one
+  // from the route seed + derived conversation id so the composer can send
+  // the first message (which creates it server-side).
+  const syntheticFarcasterConversation = useMemo<Conversation | undefined>(() => {
+    if (!isFarcasterConversation || conversationFromList || !conversationId) return undefined;
+    const fcFid = params.fcFid ? parseInt(params.fcFid, 10) : NaN;
+    if (!Number.isFinite(fcFid)) return undefined;
+    return {
+      conversationId,
+      type: 'direct',
+      timestamp: Date.now(),
+      address: `fid:${fcFid}`,
+      icon: params.fcPfp || '',
+      displayName: params.fcDisplayName || (params.fcUsername ? `@${params.fcUsername}` : `fid:${fcFid}`),
+      source: 'farcaster',
+      farcasterConversationId: conversationId.slice('farcaster:'.length),
+      farcasterFid: fcFid,
+      farcasterUsername: params.fcUsername || undefined,
+      farcasterParticipantFids: [fcFid],
+      unreadCount: 0,
+    } as Conversation;
+  }, [isFarcasterConversation, conversationFromList, conversationId, params.fcFid, params.fcUsername, params.fcDisplayName, params.fcPfp]);
+
+  const conversationBase = conversationFromList ?? conversationFromStorage ?? syntheticFarcasterConversation;
 
   const recipientAddress = useMemo(() => {
     if (!conversationId || isFarcasterConversation) return undefined;
@@ -333,7 +369,7 @@ export default function DMChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -345,21 +381,21 @@ const styles = StyleSheet.create({
   headerTitle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Skin.space(8),
   },
   headerAvatar: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: Skin.radius(14),
   },
   headerName: {
-    fontSize: 17,
+    fontSize: Skin.font(17),
     fontWeight: '600',
     maxWidth: 180,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: Skin.space(16),
   },
-});
+}));

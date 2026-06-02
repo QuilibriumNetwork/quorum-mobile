@@ -74,6 +74,11 @@ export interface FeedPost {
   viewerHasLiked?: boolean;
   viewerHasRecast?: boolean;
   viewerIsFollowing?: boolean;
+  /** /hegemony governance: set when this cast is a `PROPOSAL:` cast, with the
+   *  reputation-weighted FOR/AGAINST point tallies. Drives the vote block. */
+  isProposal?: boolean;
+  votesFor?: number;
+  votesAgainst?: number;
 }
 
 export interface ThreadInfo {

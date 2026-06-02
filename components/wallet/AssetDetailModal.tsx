@@ -18,20 +18,11 @@ import {
 } from '@/services/wallet/balanceService';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import {
-  ActivityIndicator,
-  Dimensions,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  PanResponder,
-  GestureResponderEvent,
-} from 'react-native';
+import { ActivityIndicator, Dimensions, RefreshControl, ScrollView, StyleSheet, Text, View, PanResponder, GestureResponderEvent } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import Svg, { Path, Defs, LinearGradient, Stop, Circle, Line, Rect } from 'react-native-svg';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
+import * as Skin from '@/theme/skins/geometry';
 
 interface AssetDetailModalProps {
   visible: boolean;
@@ -324,10 +315,10 @@ function PriceChart({
             left: Math.min(Math.max(selectedPoint.x - 40, 0), CHART_WIDTH - 80),
             top: Math.max(selectedPoint.y - 36, 0),
             backgroundColor: theme.colors.card,
-            paddingHorizontal: 8,
-            paddingVertical: 4,
-            borderRadius: 6,
-            borderWidth: 1,
+            paddingHorizontal: Skin.space(8),
+            paddingVertical: Skin.space(4),
+            borderRadius: Skin.radius(6),
+            borderWidth: Skin.border(1),
             borderColor: lineColor,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
@@ -336,10 +327,10 @@ function PriceChart({
             elevation: 4,
           }}
         >
-          <Text style={{ color: theme.colors.textMain, fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
+          <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(12), fontWeight: '600', textAlign: 'center' }}>
             {formatAxisPrice(selectedPoint.point.price)}
           </Text>
-          <Text style={{ color: theme.colors.textMuted, fontSize: 9, textAlign: 'center' }}>
+          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(9), textAlign: 'center' }}>
             {formatAxisTime(selectedPoint.point.timestamp, timeframe)}
           </Text>
         </View>
@@ -355,7 +346,7 @@ function PriceChart({
             left: 0,
             top: label.y - 8,
             width: Y_AXIS_WIDTH - 4,
-            fontSize: 10,
+            fontSize: Skin.font(10),
             color: theme.colors.textMuted,
             textAlign: 'right',
           }}
@@ -370,7 +361,7 @@ function PriceChart({
           <Text
             key={`x-${index}`}
             style={{
-              fontSize: 10,
+              fontSize: Skin.font(10),
               color: theme.colors.textMuted,
               textAlign: index === 0 ? 'left' : index === 2 ? 'right' : 'center',
             }}
@@ -571,10 +562,10 @@ function CandleChart({
             left: Math.min(Math.max(selectedCandle.x - 50, 0), CHART_WIDTH - 100),
             top: Math.max(priceToY(selectedCandle.candle.high) - 70, 0),
             backgroundColor: theme.colors.card,
-            paddingHorizontal: 8,
-            paddingVertical: 6,
-            borderRadius: 6,
-            borderWidth: 1,
+            paddingHorizontal: Skin.space(8),
+            paddingVertical: Skin.space(6),
+            borderRadius: Skin.radius(6),
+            borderWidth: Skin.border(1),
             borderColor: selectedCandle.candle.close >= selectedCandle.candle.open ? '#22C55E' : '#EF4444',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
@@ -583,30 +574,30 @@ function CandleChart({
             elevation: 4,
           }}
         >
-          <Text style={{ color: theme.colors.textMuted, fontSize: 9, marginBottom: 2 }}>
+          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(9), marginBottom: Skin.space(2) }}>
             {formatAxisTime(selectedCandle.candle.timestamp, timeframe)}
           </Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-            <Text style={{ color: theme.colors.textMuted, fontSize: 9 }}>O</Text>
-            <Text style={{ color: theme.colors.textMain, fontSize: 10, fontWeight: '500' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: Skin.space(8) }}>
+            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(9) }}>O</Text>
+            <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(10), fontWeight: '500' }}>
               {formatOHLCPrice(selectedCandle.candle.open, priceRange)}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-            <Text style={{ color: theme.colors.textMuted, fontSize: 9 }}>H</Text>
-            <Text style={{ color: theme.colors.textMain, fontSize: 10, fontWeight: '500' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: Skin.space(8) }}>
+            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(9) }}>H</Text>
+            <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(10), fontWeight: '500' }}>
               {formatOHLCPrice(selectedCandle.candle.high, priceRange)}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-            <Text style={{ color: theme.colors.textMuted, fontSize: 9 }}>L</Text>
-            <Text style={{ color: theme.colors.textMain, fontSize: 10, fontWeight: '500' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: Skin.space(8) }}>
+            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(9) }}>L</Text>
+            <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(10), fontWeight: '500' }}>
               {formatOHLCPrice(selectedCandle.candle.low, priceRange)}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-            <Text style={{ color: theme.colors.textMuted, fontSize: 9 }}>C</Text>
-            <Text style={{ color: theme.colors.textMain, fontSize: 10, fontWeight: '500' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: Skin.space(8) }}>
+            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(9) }}>C</Text>
+            <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(10), fontWeight: '500' }}>
               {formatOHLCPrice(selectedCandle.candle.close, priceRange)}
             </Text>
           </View>
@@ -623,7 +614,7 @@ function CandleChart({
             left: 0,
             top: label.y - 8,
             width: Y_AXIS_WIDTH - 4,
-            fontSize: 10,
+            fontSize: Skin.font(10),
             color: theme.colors.textMuted,
             textAlign: 'right',
           }}
@@ -638,7 +629,7 @@ function CandleChart({
           <Text
             key={`x-${index}`}
             style={{
-              fontSize: 10,
+              fontSize: Skin.font(10),
               color: theme.colors.textMuted,
               textAlign: index === 0 ? 'left' : index === 2 ? 'right' : 'center',
             }}
@@ -1088,14 +1079,14 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flex: 1,
     },
     contentContainer: {
-      paddingHorizontal: 16,
-      paddingBottom: 32,
+      paddingHorizontal: Skin.space(16),
+      paddingBottom: Skin.space(32),
     },
     header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 16,
+      paddingVertical: Skin.space(16),
     },
     assetInfo: {
       flexDirection: 'row',
@@ -1105,88 +1096,88 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     assetIcon: {
       width: 48,
       height: 48,
-      borderRadius: 24,
+      borderRadius: Skin.radius(24),
     },
     assetIconPlaceholder: {
       width: 48,
       height: 48,
-      borderRadius: 24,
+      borderRadius: Skin.radius(24),
       alignItems: 'center',
       justifyContent: 'center',
     },
     assetIconText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
     },
     assetTitleContainer: {
-      marginLeft: 12,
+      marginLeft: Skin.space(12),
     },
     assetName: {
-      ...textStyles.title3,
+      ...theme.textStyles.title3,
       color: theme.colors.textMain,
     },
     assetSymbol: {
-      ...textStyles.subheadline,
+      ...theme.textStyles.subheadline,
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     closeButton: {
-      padding: 8,
+      padding: Skin.space(8),
     },
     priceSection: {
-      paddingVertical: 8,
+      paddingVertical: Skin.space(8),
     },
     currentPrice: {
-      ...textStyles.largeTitle,
+      ...theme.textStyles.largeTitle,
       color: theme.colors.textMain,
     },
     priceChangeRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
     priceChange: {
-      ...textStyles.callout,
+      ...theme.textStyles.callout,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     priceChangePositive: {
-      color: '#22C55E',
+      color: theme.colors.success,
     },
     priceChangeNegative: {
-      color: '#EF4444',
+      color: theme.colors.danger,
     },
     timeframeLabel: {
-      ...textStyles.subheadline,
+      ...theme.textStyles.subheadline,
       color: theme.colors.textMuted,
-      marginLeft: 8,
+      marginLeft: Skin.space(8),
     },
     noPriceText: {
-      fontSize: 24,
+      fontSize: Skin.font(24),
       color: theme.colors.textMuted,
     },
     chartTypeToggle: {
       flexDirection: 'row',
       alignSelf: 'flex-start',
       backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
-      borderRadius: 8,
-      padding: 3,
-      marginBottom: 8,
+      borderRadius: Skin.radius(8),
+      padding: Skin.space(3),
+      marginBottom: Skin.space(8),
     },
     chartTypeButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 6,
-      gap: 4,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(6),
+      gap: Skin.space(4),
     },
     chartTypeButtonActive: {
       backgroundColor: theme.colors.primary,
     },
     chartTypeText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1195,7 +1186,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       color: '#FFFFFF',
     },
     chartContainer: {
-      marginVertical: 16,
+      marginVertical: Skin.space(16),
     },
     chartPlaceholder: {
       alignItems: 'center',
@@ -1204,22 +1195,22 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     actionButtonsRow: {
       flexDirection: 'row',
       justifyContent: 'space-around',
-      marginBottom: 24,
-      paddingVertical: 8,
+      marginBottom: Skin.space(24),
+      paddingVertical: Skin.space(8),
     },
     actionButton: {
       alignItems: 'center',
-      gap: 6,
+      gap: Skin.space(6),
     },
     actionButtonIcon: {
       width: 48,
       height: 48,
-      borderRadius: 24,
+      borderRadius: Skin.radius(24),
       alignItems: 'center',
       justifyContent: 'center',
     },
     actionButtonText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1227,19 +1218,19 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     timeframeSelector: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     timeframeButton: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 8,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(8),
+      borderRadius: Skin.radius(8),
       backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
     },
     timeframeButtonActive: {
       backgroundColor: theme.colors.primary,
     },
     timeframeButtonText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1248,80 +1239,80 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       color: '#FFFFFF',
     },
     balanceSection: {
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     sectionTitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     balanceCard: {
       backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
     },
     balanceRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 8,
+      paddingVertical: Skin.space(8),
     },
     balanceLabel: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMuted,
     },
     balanceValue: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     pendingValue: {
-      color: '#F59E0B',
+      color: theme.colors.warning,
     },
     statsSection: {
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     statsCard: {
       backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
     },
     statRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 8,
+      paddingVertical: Skin.space(8),
     },
     statLabel: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMuted,
     },
     statValue: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     chainSection: {
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     chainCard: {
       backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
     },
     chainName: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     contractAddress: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
   });

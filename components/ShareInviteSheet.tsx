@@ -20,17 +20,10 @@ import { useShareInvite } from '@/hooks/chat/useInviteManagement';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Animated,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Skin from '@/theme/skins/geometry';
 
 interface ShareInviteSheetProps {
   visible: boolean;
@@ -234,71 +227,71 @@ const createStyles = (theme: AppTheme, insets: { top: number; bottom: number; le
       // already constrained, so we just claim a sane chunk of it.
       height: 460,
       backgroundColor: theme.colors.background,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
+      borderTopLeftRadius: Skin.radius(20),
+      borderTopRightRadius: Skin.radius(20),
       paddingBottom: insets.bottom,
     },
     handleContainer: {
       alignItems: 'center',
-      paddingVertical: 8,
+      paddingVertical: Skin.space(8),
     },
     handle: {
       width: 40,
       height: 4,
       backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
-      borderRadius: 2,
+      borderRadius: Skin.radius(2),
     },
     container: {
       flex: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
     },
     header: {
-      paddingVertical: 16,
+      paddingVertical: Skin.space(16),
       alignItems: 'center',
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textStrong,
     },
     subtitle: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
     list: {
       flex: 1,
     },
     listContent: {
-      paddingBottom: 12,
+      paddingBottom: Skin.space(12),
     },
     empty: {
-      paddingVertical: 40,
+      paddingVertical: Skin.space(40),
       alignItems: 'center',
-      gap: 8,
+      gap: Skin.space(8),
     },
     emptyText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
-      marginTop: 8,
+      marginTop: Skin.space(8),
     },
     emptyHint: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       textAlign: 'center',
     },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
-      paddingVertical: 10,
-      paddingHorizontal: 4,
+      gap: Skin.space(12),
+      paddingVertical: Skin.space(10),
+      paddingHorizontal: Skin.space(4),
     },
     avatar: {
       width: 40,
       height: 40,
-      borderRadius: 20,
+      borderRadius: Skin.radius(20),
       backgroundColor: theme.colors.surface3,
     },
     rowText: {
@@ -306,17 +299,17 @@ const createStyles = (theme: AppTheme, insets: { top: number; bottom: number; le
       minWidth: 0,
     },
     rowName: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontWeight: '600',
       color: theme.colors.textStrong,
     },
     rowAddress: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     footer: {
-      paddingVertical: 12,
+      paddingVertical: Skin.space(12),
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.colors.surface3,
     },
@@ -324,13 +317,13 @@ const createStyles = (theme: AppTheme, insets: { top: number; bottom: number; le
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 12,
-      borderRadius: 10,
+      gap: Skin.space(8),
+      paddingVertical: Skin.space(12),
+      borderRadius: Skin.radius(10),
       backgroundColor: theme.colors.surface2,
     },
     moreButtonText: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontWeight: '600',
       color: theme.colors.textMain,
     },

@@ -26,6 +26,8 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAudioSpace } from '@/context/AudioSpaceContext';
 import { useToast } from '@/context/ToastContext';
 import { useTheme } from '@/theme';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface StartPreset {
   /** Display label. */
@@ -266,7 +268,7 @@ export function CreateSpaceSheet({
 
             <ScrollView
               style={{ flexShrink: 1 }}
-              contentContainerStyle={{ paddingBottom: 8 }}
+              contentContainerStyle={{ paddingBottom: Skin.space(8) }}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
@@ -293,7 +295,7 @@ export function CreateSpaceSheet({
               <Text
                 style={[
                   styles.fieldLabel,
-                  { color: theme.colors.textMuted, marginTop: 16 },
+                  { color: theme.colors.textMuted, marginTop: Skin.space(16) },
                 ]}
               >
                 Description (optional)
@@ -319,7 +321,7 @@ export function CreateSpaceSheet({
               <Text
                 style={[
                   styles.fieldLabel,
-                  { color: theme.colors.textMuted, marginTop: 16 },
+                  { color: theme.colors.textMuted, marginTop: Skin.space(16) },
                 ]}
               >
                 Start
@@ -344,7 +346,7 @@ export function CreateSpaceSheet({
                         style={{
                           color: active ? '#fff' : theme.colors.textMain,
                           fontWeight: active ? '600' : '500',
-                          fontSize: 13,
+                          fontSize: Skin.font(13),
                         }}
                       >
                         {p.label}
@@ -355,8 +357,8 @@ export function CreateSpaceSheet({
               </View>
 
               {isCustom && (
-                <View style={{ marginTop: 16, gap: 12 }}>
-                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={{ marginTop: Skin.space(16), gap: Skin.space(12) }}>
+                  <View style={{ flexDirection: 'row', gap: Skin.space(12) }}>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.fieldLabel, { color: theme.colors.textMuted }]}>
                         Date
@@ -382,7 +384,7 @@ export function CreateSpaceSheet({
                       <Text style={[styles.fieldLabel, { color: theme.colors.textMuted }]}>
                         Time
                       </Text>
-                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                      <View style={{ flexDirection: 'row', gap: Skin.space(6) }}>
                         <TextInput
                           value={customTime}
                           onChangeText={(v) => setCustomTime(formatTimeInput(v))}
@@ -403,8 +405,8 @@ export function CreateSpaceSheet({
                         <View
                           style={{
                             flexDirection: 'row',
-                            borderRadius: 10,
-                            borderWidth: 1,
+                            borderRadius: Skin.radius(10),
+                            borderWidth: Skin.border(1),
                             borderColor: theme.colors.surface3,
                             overflow: 'hidden',
                           }}
@@ -416,8 +418,8 @@ export function CreateSpaceSheet({
                                 key={p}
                                 onPress={() => setCustomAmPm(p)}
                                 style={({ pressed }) => ({
-                                  paddingHorizontal: 10,
-                                  paddingVertical: 10,
+                                  paddingHorizontal: Skin.space(10),
+                                  paddingVertical: Skin.space(10),
                                   backgroundColor: active
                                     ? theme.colors.accent
                                     : theme.colors.surface2,
@@ -428,7 +430,7 @@ export function CreateSpaceSheet({
                                   style={{
                                     color: active ? '#fff' : theme.colors.textMain,
                                     fontWeight: active ? '600' : '500',
-                                    fontSize: 13,
+                                    fontSize: Skin.font(13),
                                   }}
                                 >
                                   {p}
@@ -441,11 +443,11 @@ export function CreateSpaceSheet({
                     </View>
                   </View>
                   {customResult.error ? (
-                    <Text style={{ color: theme.colors.danger, fontSize: 12 }}>
+                    <Text style={{ color: theme.colors.danger, fontSize: Skin.font(12) }}>
                       {customResult.error}
                     </Text>
                   ) : (
-                    <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>
                       Going live {formatRelative(customResult.date.toISOString())}
                     </Text>
                   )}
@@ -496,16 +498,16 @@ function formatRelative(iso: string): string {
   return `${at.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${time}`;
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
   },
   sheet: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    borderTopLeftRadius: Skin.radius(16),
+    borderTopRightRadius: Skin.radius(16),
+    paddingHorizontal: Skin.space(16),
+    paddingTop: Skin.space(16),
     // Extra bottom padding so the anchored submit button has room
     // above the home indicator on devices with a bottom inset.
     paddingBottom: Platform.OS === 'ios' ? 34 : 24,
@@ -520,25 +522,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: Skin.space(16),
   },
   title: {
-    fontSize: 18,
+    fontSize: Skin.font(18),
     fontWeight: '600',
   },
   fieldLabel: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 6,
+    marginBottom: Skin.space(6),
   },
   input: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    fontSize: 15,
+    paddingVertical: Skin.space(10),
+    paddingHorizontal: Skin.space(12),
+    borderRadius: Skin.radius(10),
+    borderWidth: Skin.border(1),
+    fontSize: Skin.font(15),
   },
   inputMultiline: {
     minHeight: 64,
@@ -547,24 +549,24 @@ const styles = StyleSheet.create({
   presetRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: Skin.space(8),
   },
   presetChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
+    paddingVertical: Skin.space(8),
+    paddingHorizontal: Skin.space(12),
+    borderRadius: Skin.radius(16),
+    borderWidth: Skin.border(1),
   },
   submitButton: {
-    marginTop: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
+    marginTop: Skin.space(24),
+    paddingVertical: Skin.space(14),
+    borderRadius: Skin.radius(12),
     alignItems: 'center',
     justifyContent: 'center',
   },
   submitButtonText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 15,
+    fontSize: Skin.font(15),
   },
-});
+}));

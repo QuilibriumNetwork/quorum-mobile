@@ -9,8 +9,11 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { useTheme, type AppTheme } from '@/theme';
 import { IconSymbol, type IconSymbolName } from './IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
+import { useSurface } from '@/theme/skins/surfaces';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 type ButtonSize = 'sm' | 'md' | 'lg';
@@ -70,12 +73,17 @@ export function Button({
   const { theme } = useTheme();
   const styles = createStyles(theme, variant, size, disabled, fullWidth);
 
+  // Per-variant skin surface: `button.<variant>` inherits the generic `button`.
+  const surface = useSurface(`button.${variant}`);
+  const surfaceColor = surface.background && !surface.backgroundIsImage ? surface.background : undefined;
+  const surfaceImage = surface.backgroundIsImage ? surface.background : undefined;
+
   const isDisabled = disabled || loading;
 
   const iconSize = size === 'sm' ? 14 : size === 'md' ? 16 : 18;
-  const iconColor = variant === 'ghost'
+  const iconColor = surface.text ?? (variant === 'ghost'
     ? (disabled ? theme.colors.textMuted : theme.colors.primary)
-    : (variant === 'secondary' ? theme.colors.textMain : '#ffffff');
+    : (variant === 'secondary' ? theme.colors.textMain : '#ffffff'));
 
   const content = (
     <>
@@ -94,7 +102,7 @@ export function Button({
         />
       ) : null}
 
-      <Text style={styles.text}>{children}</Text>
+      <Text style={[styles.text, surface.text ? { color: surface.text } : null]}>{children}</Text>
 
       {!loading && icon && iconPosition === 'right' && (
         <IconSymbol
@@ -112,9 +120,22 @@ export function Button({
       onPress={onPress}
       disabled={isDisabled}
       activeOpacity={0.7}
-      style={[styles.button, style]}
+      style={[
+        styles.button,
+        surfaceColor ? { backgroundColor: surfaceColor } : null,
+        surfaceImage ? { overflow: 'hidden' } : null,
+        style,
+      ]}
       testID={testID}
     >
+      {surfaceImage && (
+        <ExpoImage
+          source={{ uri: surfaceImage }}
+          style={[StyleSheet.absoluteFill, { opacity: surface.opacity }]}
+          contentFit={surface.fit === 'contain' ? 'contain' : 'cover'}
+          cachePolicy="memory-disk"
+        />
+      )}
       {content}
     </TouchableOpacity>
   );
@@ -157,11 +178,11 @@ const createStyles = (
   const getPadding = () => {
     switch (size) {
       case 'sm':
-        return { paddingVertical: 6, paddingHorizontal: 12 };
+        return { paddingVertical: Skin.space(6), paddingHorizontal: Skin.space(12) };
       case 'md':
-        return { paddingVertical: 12, paddingHorizontal: 20 };
+        return { paddingVertical: Skin.space(12), paddingHorizontal: Skin.space(20) };
       case 'lg':
-        return { paddingVertical: 16, paddingHorizontal: 28 };
+        return { paddingVertical: Skin.space(16), paddingHorizontal: Skin.space(28) };
     }
   };
 
@@ -194,13 +215,13 @@ const createStyles = (
       color: getTextColor(),
     } as TextStyle,
     iconLeft: {
-      marginRight: 6,
+      marginRight: Skin.space(6),
     } as TextStyle,
     iconRight: {
-      marginLeft: 6,
+      marginLeft: Skin.space(6),
     } as TextStyle,
     loader: {
-      marginRight: 8,
+      marginRight: Skin.space(8),
     } as ViewStyle,
   });
 };

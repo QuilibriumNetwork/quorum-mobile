@@ -10,12 +10,14 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useSpaceCall } from '@/context/SpaceCallContext';
 import type { AppTheme } from '@/theme';
 import type { DisplayMessage } from './types';
 import { logger } from '@quilibrium/quorum-shared';
+import * as Skin from '@/theme/skins/geometry';
 interface SpaceCallBubbleProps {
   message: DisplayMessage;
   /** Whether a matching space-call-end message exists for this callId */
@@ -139,7 +141,7 @@ export function SpaceCallBubble({
                 <IconSymbol
                   name={spaceCallState.isMuted ? 'mic.slash.fill' : 'speaker.wave.2.fill'}
                   size={14}
-                  color={spaceCallState.isMuted ? theme.colors.error : theme.colors.success}
+                  color={spaceCallState.isMuted ? theme.colors.danger : theme.colors.success}
                 />
                 <Text style={[styles.inCallText, { color: theme.colors.textMain }]}>
                   In call {'\u00B7'} {formatElapsed(elapsed)}
@@ -155,7 +157,7 @@ export function SpaceCallBubble({
                             ? theme.colors.success
                             : spaceCallState.callQuality.level === 'fair'
                               ? '#f0ad4e'
-                              : theme.colors.error,
+                              : theme.colors.danger,
                       },
                     ]}
                   />
@@ -196,14 +198,14 @@ export function SpaceCallBubble({
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
-      paddingHorizontal: 16,
-      paddingVertical: 6,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(6),
       alignItems: 'center',
     },
     bubble: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 14,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(14),
       width: '100%',
       maxWidth: 400,
       borderWidth: StyleSheet.hairlineWidth,
@@ -212,7 +214,7 @@ const createStyles = (theme: AppTheme) =>
     headerRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: Skin.space(12),
     },
     iconPulseContainer: {
       alignItems: 'center',
@@ -221,7 +223,7 @@ const createStyles = (theme: AppTheme) =>
     iconCircle: {
       width: 40,
       height: 40,
-      borderRadius: 20,
+      borderRadius: Skin.radius(20),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -229,40 +231,40 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
     },
     title: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontWeight: '600',
       color: theme.colors.textMain,
     },
     subtitle: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textSubtle,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     participantCount: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     actionsRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 12,
-      gap: 12,
+      marginTop: Skin.space(12),
+      gap: Skin.space(12),
     },
     joinButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 6,
+      gap: Skin.space(6),
       backgroundColor: theme.colors.success ?? '#34c759',
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 8,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(8),
+      borderRadius: Skin.radius(8),
       minWidth: 80,
     },
     joinButtonText: {
       color: '#fff',
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontWeight: '600',
     },
     // Compact "In call" indicator (replaces inline controls when joined)
@@ -275,40 +277,40 @@ const createStyles = (theme: AppTheme) =>
     inCallIndicator: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Skin.space(6),
     },
     inCallText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontWeight: '500',
       fontVariant: ['tabular-nums'] as any,
     },
     expandButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 8,
+      gap: Skin.space(4),
+      paddingHorizontal: Skin.space(10),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(8),
     },
     expandButtonText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontWeight: '600',
     },
     qualityDot: {
       width: 8,
       height: 8,
-      borderRadius: 4,
+      borderRadius: Skin.radius(4),
     },
     // Ended state
     endedRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 6,
-      paddingVertical: 4,
+      gap: Skin.space(6),
+      paddingVertical: Skin.space(4),
     },
     endedText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
     },
   });

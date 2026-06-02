@@ -14,6 +14,7 @@ import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { useTheme } from '@/theme';
+import * as Skin from '@/theme/skins/geometry';
 
 export function MinimizedMiniappChip() {
   const { theme } = useTheme();
@@ -45,12 +46,12 @@ export function MinimizedMiniappChip() {
         style={({ pressed }) => ({
           alignSelf: 'flex-start',
           backgroundColor: theme.colors.surface3,
-          borderRadius: 18,
-          paddingVertical: 8,
-          paddingHorizontal: 12,
+          borderRadius: Skin.radius(18),
+          paddingVertical: Skin.space(8),
+          paddingHorizontal: Skin.space(12),
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 8,
+          gap: Skin.space(8),
           opacity: pressed ? 0.85 : 1,
           shadowColor: '#000',
           shadowOpacity: 0.15,
@@ -64,12 +65,12 @@ export function MinimizedMiniappChip() {
           style={{
             width: 22,
             height: 22,
-            borderRadius: 6,
+            borderRadius: Skin.radius(6),
             backgroundColor: theme.colors.surface1,
           }}
         />
         <Text
-          style={{ color: theme.colors.textStrong, fontSize: 13 }}
+          style={{ color: theme.colors.textStrong, fontSize: Skin.font(13) }}
           numberOfLines={1}
         >
           Resume {entry.name ?? domain}

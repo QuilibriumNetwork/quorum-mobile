@@ -1,16 +1,8 @@
 import type { AppTheme } from '@/theme';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  LayoutChangeEvent,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, LayoutChangeEvent, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Image } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReanimatedModule, {
@@ -21,6 +13,8 @@ import ReanimatedModule, {
   withTiming,
 } from 'react-native-reanimated';
 import { logger } from '@quilibrium/quorum-shared';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 const ReanimatedView = ReanimatedModule.View;
 
@@ -319,23 +313,23 @@ function SnapSlider({
   );
 }
 
-const sliderStyles = StyleSheet.create({
+const sliderStyles = createSkinnable(() => StyleSheet.create({
   container: { height: 28, justifyContent: 'center' },
-  track: { height: 4, borderRadius: 2 },
-  fill: { height: 4, borderRadius: 2, position: 'absolute', left: 0, top: 0 },
+  track: { height: 4, borderRadius: Skin.radius(2) },
+  fill: { height: 4, borderRadius: Skin.radius(2), position: 'absolute', left: 0, top: 0 },
   thumb: {
     position: 'absolute',
     top: 4,
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: Skin.radius(10),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.25,
     shadowRadius: 2,
     elevation: 3,
   },
-});
+}));
 
 // ---------------------------------------------------------------------------
 // Element renderers
@@ -442,7 +436,7 @@ function SnapButton({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
           name={iconName}
           color={isPrimary ? '#fff' : ctx.theme.colors.textMain}
           size={16}
-          style={{ marginRight: 6 }}
+          style={{ marginRight: Skin.space(6) }}
         />
       )}
       <Text
@@ -484,7 +478,7 @@ function SnapImage({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
       style={{
         width: '100%',
         aspectRatio,
-        borderRadius: 8,
+        borderRadius: Skin.radius(8),
         backgroundColor: ctx.theme.colors.surface3,
       }}
       contentFit="cover"
@@ -536,7 +530,7 @@ function SnapInput({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
   return (
     <View>
       {p.label ? (
-        <Text style={{ fontSize: 13, color: ctx.theme.colors.textMuted, marginBottom: 4 }}>
+        <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMuted, marginBottom: Skin.space(4) }}>
           {String(p.label)}
         </Text>
       ) : null}
@@ -574,14 +568,14 @@ function SnapSliderElement({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx })
   return (
     <View>
       {(p.label || showValue) ? (
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: Skin.space(4) }}>
           {p.label ? (
-            <Text style={{ fontSize: 13, color: ctx.theme.colors.textMuted }}>
+            <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMuted }}>
               {String(p.label)}
             </Text>
           ) : <View />}
           {showValue && (
-            <Text style={{ fontSize: 13, color: ctx.theme.colors.textMain, fontWeight: '600' }}>
+            <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMain, fontWeight: '600' }}>
               {value}
             </Text>
           )}
@@ -610,7 +604,7 @@ function SnapSwitchElement({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx })
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
       {p.label ? (
-        <Text style={{ fontSize: 15, color: ctx.theme.colors.textMain, flex: 1 }}>
+        <Text style={{ fontSize: Skin.font(15), color: ctx.theme.colors.textMain, flex: 1 }}>
           {String(p.label)}
         </Text>
       ) : null}
@@ -635,7 +629,7 @@ function SnapProgress({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
   return (
     <View>
       {p.label ? (
-        <Text style={{ fontSize: 13, color: ctx.theme.colors.textMuted, marginBottom: 4 }}>
+        <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMuted, marginBottom: Skin.space(4) }}>
           {String(p.label)}
         </Text>
       ) : null}
@@ -659,12 +653,12 @@ function SnapBadge({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
       style={[
         elStyles.badge,
         isOutline
-          ? { borderWidth: 1, borderColor: color }
+          ? { borderWidth: Skin.border(1), borderColor: color }
           : { backgroundColor: color + '22' },
       ]}
     >
-      {iconName && <IconSymbol name={iconName} size={12} color={color} style={{ marginRight: 4 }} />}
-      <Text style={{ fontSize: 12, fontWeight: '600', color }}>{String(p.label ?? '')}</Text>
+      {iconName && <IconSymbol name={iconName} size={12} color={color} style={{ marginRight: Skin.space(4) }} />}
+      <Text style={{ fontSize: Skin.font(12), fontWeight: '600', color }}>{String(p.label ?? '')}</Text>
     </View>
   );
 }
@@ -697,17 +691,17 @@ function SnapItem({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
   return (
     <Wrapper style={[elStyles.item, { backgroundColor: ctx.theme.colors.surface2 }]} {...wrapperProps}>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 15, fontWeight: '600', color: ctx.theme.colors.textStrong }}>
+        <Text style={{ fontSize: Skin.font(15), fontWeight: '600', color: ctx.theme.colors.textStrong }}>
           {String(p.title ?? '')}
         </Text>
         {p.description ? (
-          <Text style={{ fontSize: 13, color: ctx.theme.colors.textMuted, marginTop: 2 }}>
+          <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMuted, marginTop: Skin.space(2) }}>
             {String(p.description)}
           </Text>
         ) : null}
       </View>
       {el.children && el.children.length > 0 ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(8), marginLeft: Skin.space(8) }}>
           {renderChildren(el, ctx)}
         </View>
       ) : null}
@@ -728,9 +722,9 @@ function SnapItemGroup({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
     <View
       style={[
         hasBorder && {
-          borderWidth: 1,
+          borderWidth: Skin.border(1),
           borderColor: ctx.theme.colors.surface4,
-          borderRadius: 12,
+          borderRadius: Skin.radius(12),
           overflow: 'hidden',
         },
       ]}
@@ -757,17 +751,17 @@ function SnapBarChart({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
   const defaultBarColor = resolvePaletteColor(p.color as string | undefined, ctx) ?? ctx.accent;
 
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: Skin.space(6) }}>
       {bars.map((bar, i) => {
         const pct = maxVal > 0 ? Math.min(bar.value / maxVal, 1) : 0;
         return (
-          <View key={i} style={{ gap: 2 }}>
+          <View key={i} style={{ gap: Skin.space(2) }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontSize: 13, color: ctx.theme.colors.textMain }}>{bar.label}</Text>
-              <Text style={{ fontSize: 13, color: ctx.theme.colors.textMuted }}>{bar.value}</Text>
+              <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMain }}>{bar.label}</Text>
+              <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMuted }}>{bar.value}</Text>
             </View>
             <View style={[elStyles.progressTrack, { backgroundColor: ctx.theme.colors.surface3, height: 8 }]}>
-              <View style={{ height: 8, borderRadius: 4, backgroundColor: resolvePaletteColor(bar.color, ctx) ?? defaultBarColor, width: `${pct * 100}%` }} />
+              <View style={{ height: 8, borderRadius: Skin.radius(4), backgroundColor: resolvePaletteColor(bar.color, ctx) ?? defaultBarColor, width: `${pct * 100}%` }} />
             </View>
           </View>
         );
@@ -809,11 +803,11 @@ function SnapToggleGroup({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
   return (
     <View>
       {p.label ? (
-        <Text style={{ fontSize: 13, color: ctx.theme.colors.textMuted, marginBottom: 6 }}>
+        <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMuted, marginBottom: Skin.space(6) }}>
           {String(p.label)}
         </Text>
       ) : null}
-      <View style={{ flexDirection: isVertical ? 'column' : 'row', flexWrap: 'wrap', gap: 6 }}>
+      <View style={{ flexDirection: isVertical ? 'column' : 'row', flexWrap: 'wrap', gap: Skin.space(6) }}>
         {rawOptions.map((opt) => {
           const active = isSelected(opt);
           return (
@@ -830,7 +824,7 @@ function SnapToggleGroup({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
                     : { backgroundColor: ctx.theme.colors.surface2, borderColor: ctx.theme.colors.surface4 },
               ]}
             >
-              <Text style={{ fontSize: 13, fontWeight: '500', color: active ? '#fff' : ctx.theme.colors.textMain }}>
+              <Text style={{ fontSize: Skin.font(13), fontWeight: '500', color: active ? '#fff' : ctx.theme.colors.textMain }}>
                 {opt}
               </Text>
             </TouchableOpacity>
@@ -909,7 +903,7 @@ function SnapCellGrid({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
                 style={[
                   {
                     height: rowHeight,
-                    borderRadius: 4,
+                    borderRadius: Skin.radius(4),
                     alignItems: 'center',
                     justifyContent: 'center',
                     flex: 1,
@@ -920,7 +914,7 @@ function SnapCellGrid({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
                 ]}
               >
                 {cell?.content ? (
-                  <Text style={{ fontSize: 10, color: ctx.theme.colors.textMain, textAlign: 'center' }}>
+                  <Text style={{ fontSize: Skin.font(10), color: ctx.theme.colors.textMain, textAlign: 'center' }}>
                     {cell.content}
                   </Text>
                 ) : null}
@@ -937,63 +931,63 @@ function SnapCellGrid({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
 // Element styles
 // ---------------------------------------------------------------------------
 
-const elStyles = StyleSheet.create({
+const elStyles = createSkinnable(() => StyleSheet.create({
   button: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingVertical: Skin.space(10),
+    paddingHorizontal: Skin.space(16),
+    borderRadius: Skin.radius(8),
   },
   buttonLabel: {
-    fontSize: 15,
+    fontSize: Skin.font(15),
     fontWeight: '600',
   },
   input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
+    borderWidth: Skin.border(1),
+    borderRadius: Skin.radius(8),
+    paddingHorizontal: Skin.space(12),
+    paddingVertical: Skin.space(10),
+    fontSize: Skin.font(15),
   },
   progressTrack: {
     height: 6,
-    borderRadius: 3,
+    borderRadius: Skin.radius(3),
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: Skin.radius(3),
   },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 12,
+    paddingVertical: Skin.space(3),
+    paddingHorizontal: Skin.space(8),
+    borderRadius: Skin.radius(12),
   },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: Skin.space(12),
   },
   toggleOption: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    borderWidth: 1,
+    paddingVertical: Skin.space(6),
+    paddingHorizontal: Skin.space(12),
+    borderRadius: Skin.radius(6),
+    borderWidth: Skin.border(1),
   },
   gridCell: {
     aspectRatio: 1,
-    borderRadius: 4,
+    borderRadius: Skin.radius(4),
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 20,
     minHeight: 20,
   },
-});
+}));
 
 // ---------------------------------------------------------------------------
 // Confetti effect
@@ -1312,38 +1306,38 @@ export function SnapEmbed({
   const styles = useMemo(
     () => ({
       container: {
-        borderWidth: 1,
+        borderWidth: Skin.border(1),
         borderColor: theme.colors.surface4,
-        borderRadius: 12,
+        borderRadius: Skin.radius(12),
         overflow: 'hidden' as const,
         backgroundColor: theme.colors.surface2,
       },
       content: {
-        padding: 12,
+        padding: Skin.space(12),
       },
       loadingContainer: {
-        padding: 24,
+        padding: Skin.space(24),
         alignItems: 'center' as const,
         justifyContent: 'center' as const,
       },
       errorContainer: {
-        padding: 16,
+        padding: Skin.space(16),
         alignItems: 'center' as const,
       },
       errorText: {
-        fontSize: 13,
+        fontSize: Skin.font(13),
         color: theme.colors.textMuted,
         textAlign: 'center' as const,
       },
       retryButton: {
-        marginTop: 8,
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        borderRadius: 6,
+        marginTop: Skin.space(8),
+        paddingVertical: Skin.space(6),
+        paddingHorizontal: Skin.space(12),
+        borderRadius: Skin.radius(6),
         backgroundColor: theme.colors.surface3,
       },
       retryText: {
-        fontSize: 13,
+        fontSize: Skin.font(13),
         color: theme.colors.textMain,
       },
       overlayLoading: {
@@ -1351,7 +1345,7 @@ export function SnapEmbed({
         backgroundColor: theme.dark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.5)',
         alignItems: 'center' as const,
         justifyContent: 'center' as const,
-        borderRadius: 12,
+        borderRadius: Skin.radius(12),
       },
     }),
     [theme],

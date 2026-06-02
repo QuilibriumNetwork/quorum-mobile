@@ -14,19 +14,10 @@ import { useFarcasterChannel } from '@/hooks/useFarcasterChannel';
 import { useTheme, type AppTheme } from '@/theme';
 import { router } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Animated,
-  Easing,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
-  type LayoutChangeEvent,
-} from 'react-native';
+import { ActivityIndicator, Animated, Easing, FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface BoundChannelFeedPanelProps {
   /** Linked channel keys for this space-channel. Only the first one is shown
@@ -199,7 +190,7 @@ export default function BoundChannelFeedPanel({
               )}
               ListFooterComponent={
                 isFetchingNextPage ? (
-                  <View style={{ paddingVertical: 10, alignItems: 'center' }}>
+                  <View style={{ paddingVertical: Skin.space(10), alignItems: 'center' }}>
                     <ActivityIndicator color={theme.colors.accent} size="small" />
                   </View>
                 ) : null
@@ -236,7 +227,7 @@ function ChannelTabs({
   theme: AppTheme;
 }) {
   return (
-    <View style={{ flexDirection: 'row', gap: 6 }}>
+    <View style={{ flexDirection: 'row', gap: Skin.space(6) }}>
       {channelKeys.map((k) => {
         const active = k === activeKey;
         return (
@@ -247,17 +238,17 @@ function ChannelTabs({
               setActiveKey(k);
             }}
             style={{
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-              borderRadius: 10,
+              paddingHorizontal: Skin.space(8),
+              paddingVertical: Skin.space(3),
+              borderRadius: Skin.radius(10),
               backgroundColor: active ? theme.colors.accent : theme.colors.surface2,
-              borderWidth: 1,
+              borderWidth: Skin.border(1),
               borderColor: active ? theme.colors.accent : theme.colors.surface3,
             }}
           >
             <Text
               style={{
-                fontSize: 12,
+                fontSize: Skin.font(12),
                 fontWeight: '500',
                 color: active ? '#fff' : theme.colors.textMain,
               }}
@@ -359,24 +350,24 @@ function LivePulse({ theme }: { theme: AppTheme }) {
   );
 }
 
-const livePulseStyles = StyleSheet.create({
+const livePulseStyles = createSkinnable(() => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginLeft: 6,
+    gap: Skin.space(4),
+    marginLeft: Skin.space(6),
   },
   dot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: Skin.radius(3),
   },
   label: {
-    fontSize: 9,
+    fontSize: Skin.font(9),
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-});
+}));
 
 function formatRelative(timestamp: number): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
@@ -389,69 +380,69 @@ function formatRelative(timestamp: number): string {
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
-      borderBottomWidth: 1,
+      borderBottomWidth: Skin.border(1),
       backgroundColor: theme.colors.surface2,
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderLeftWidth: 3,
+      gap: Skin.space(6),
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(10),
+      borderLeftWidth: Skin.border(3),
       borderLeftColor: theme.colors.accent,
     },
     title: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontWeight: '600',
     },
     composeBtn: {
-      paddingHorizontal: 4,
-      paddingVertical: 2,
+      paddingHorizontal: Skin.space(4),
+      paddingVertical: Skin.space(2),
     },
     body: {
       flexShrink: 1,
     },
     loadingWrap: {
-      paddingVertical: 16,
+      paddingVertical: Skin.space(16),
       alignItems: 'center',
     },
     errorText: {
-      fontSize: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      fontSize: Skin.font(12),
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(10),
     },
     emptyText: {
-      fontSize: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      fontSize: Skin.font(12),
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(10),
       textAlign: 'center',
     },
   });
 }
 
-const castRowStyles = StyleSheet.create({
+const castRowStyles = createSkinnable(() => StyleSheet.create({
   row: {
     flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: Skin.space(10),
+    paddingHorizontal: Skin.space(12),
+    paddingVertical: Skin.space(10),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   avatar: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: Skin.radius(16),
   },
   body: {
     flex: 1,
-    gap: 2,
+    gap: Skin.space(2),
     minWidth: 0,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 6,
+    gap: Skin.space(6),
   },
   authorRow: {
     flexDirection: 'row',
@@ -460,23 +451,23 @@ const castRowStyles = StyleSheet.create({
     minWidth: 0,
   },
   author: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontWeight: '600',
     flexShrink: 1,
   },
   meta: {
-    fontSize: 11,
+    fontSize: Skin.font(11),
   },
   text: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: Skin.font(13),
+    lineHeight: Skin.font(18),
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 2,
+    gap: Skin.space(12),
+    marginTop: Skin.space(2),
   },
   stat: {
-    fontSize: 11,
+    fontSize: Skin.font(11),
   },
-});
+}));

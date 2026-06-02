@@ -15,13 +15,16 @@ import { useTheme } from '@/theme';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { Suspense, useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWebSocket, useSpaceCall } from '@/context';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys, type Message } from '@quilibrium/quorum-shared';
 import { sendSpaceCallStartMessage } from '@/services/space/spaceMessageService';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 const UserProfileModal = React.lazy(() => import('@/components/UserProfileModal'));
 const InviteModal = React.lazy(() => import('@/components/InviteModal'));
@@ -319,13 +322,13 @@ export default function SpaceChannelChat() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
     flex: 1,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: Skin.space(16),
   },
-});
+}));

@@ -10,17 +10,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -40,6 +31,7 @@ import {
   useUnifiedNotifications,
   type UnifiedNotification,
 } from '@/hooks/useUnifiedNotifications';
+import * as Skin from '@/theme/skins/geometry';
 
 function formatTime(ts: number): string {
   const now = Date.now();
@@ -239,7 +231,7 @@ export default function NotificationsScreen() {
       {hasChat && (
         <View style={styles.clearRow}>
           <TouchableOpacity onPress={clearNotificationLog} hitSlop={8}>
-            <Text style={{ color: theme.colors.primary, fontSize: 13, fontWeight: '600' }}>
+            <Text style={{ color: theme.colors.primary, fontSize: Skin.font(13), fontWeight: '600' }}>
               Clear chat notifications
             </Text>
           </TouchableOpacity>
@@ -261,7 +253,7 @@ export default function NotificationsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={{ paddingBottom: Skin.space(24) }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -275,7 +267,7 @@ export default function NotificationsScreen() {
           onEndReachedThreshold={0.4}
           ListFooterComponent={
             isFetchingMore ? (
-              <View style={{ padding: 16, alignItems: 'center' }}>
+              <View style={{ padding: Skin.space(16), alignItems: 'center' }}>
                 <ActivityIndicator color={theme.colors.primary} />
               </View>
             ) : null
@@ -296,9 +288,9 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
       justifyContent: 'space-between' as const,
-      paddingHorizontal: 16,
-      paddingTop: 8,
-      paddingBottom: 4,
+      paddingHorizontal: Skin.space(16),
+      paddingTop: Skin.space(8),
+      paddingBottom: Skin.space(4),
     },
     headerSlotLeft: {
       alignItems: 'flex-start' as const,
@@ -308,7 +300,7 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
-      paddingHorizontal: 8,
+      paddingHorizontal: Skin.space(8),
     },
     headerSlotRight: {
       flexDirection: 'row' as const,
@@ -316,40 +308,40 @@ const createStyles = (theme: AppTheme) =>
       justifyContent: 'flex-end' as const,
     },
     heading: {
-      ...textStyles.title3,
+      ...theme.textStyles.title3,
       color: theme.colors.textMain,
       textAlign: 'center' as const,
     },
-    headerIconButton: { padding: 8 },
+    headerIconButton: { padding: Skin.space(8) },
     empty: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 12,
-      paddingHorizontal: 32,
+      gap: Skin.space(12),
+      paddingHorizontal: Skin.space(32),
     },
     emptyTitle: {
-      fontSize: 17,
+      fontSize: Skin.font(17),
       fontWeight: '600',
       color: theme.colors.textMain,
     },
     emptySubtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       textAlign: 'center',
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     row: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      paddingVertical: 14,
-      paddingHorizontal: 16,
-      gap: 12,
+      paddingVertical: Skin.space(14),
+      paddingHorizontal: Skin.space(16),
+      gap: Skin.space(12),
     },
     iconWrap: {
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: Skin.radius(18),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
@@ -357,72 +349,72 @@ const createStyles = (theme: AppTheme) =>
     avatar: {
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: Skin.radius(18),
       backgroundColor: theme.colors.surface3,
     },
     body: {
       flex: 1,
-      gap: 2,
+      gap: Skin.space(2),
     },
     titleRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: Skin.space(8),
     },
     title: {
       flex: 1,
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontWeight: '600',
       color: theme.colors.textMain,
     },
     sourceTag: {
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 4,
+      paddingHorizontal: Skin.space(6),
+      paddingVertical: Skin.space(2),
+      borderRadius: Skin.radius(4),
       backgroundColor: '#8B5CF6' + '22',
     },
     sourceTagLabel: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       fontWeight: '700',
       color: '#8B5CF6',
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
-      lineHeight: 18,
+      lineHeight: Skin.font(18),
     },
     time: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     trashButton: {
-      padding: 4,
+      padding: Skin.space(4),
       alignSelf: 'flex-start',
     },
     divider: {
       height: StyleSheet.hairlineWidth,
       backgroundColor: theme.colors.surface3,
-      marginLeft: 64,
+      marginLeft: Skin.space(64),
     },
     errorBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
+      gap: Skin.space(8),
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(10),
       backgroundColor: theme.colors.danger,
     },
     clearRow: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
-      paddingHorizontal: 16,
-      paddingVertical: 8,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(8),
     },
     errorText: {
       flex: 1,
       color: '#fff',
-      fontSize: 13,
-      lineHeight: 18,
+      fontSize: Skin.font(13),
+      lineHeight: Skin.font(18),
     },
   });

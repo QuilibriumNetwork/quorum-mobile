@@ -24,11 +24,13 @@
  */
 
 import React, { useCallback } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { BaseModal } from '@/components/shared/BaseModal';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { haptics } from '@/utils/haptics';
+import * as Skin from '@/theme/skins/geometry';
 
 export interface ActionSheetAction {
   label: string;
@@ -132,38 +134,38 @@ export function ActionSheet({
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
-      paddingHorizontal: 12,
-      paddingBottom: 8,
+      paddingHorizontal: Skin.space(12),
+      paddingBottom: Skin.space(8),
     },
     header: {
       alignItems: 'center',
-      paddingHorizontal: 8,
-      paddingTop: 4,
-      paddingBottom: 14,
+      paddingHorizontal: Skin.space(8),
+      paddingTop: Skin.space(4),
+      paddingBottom: Skin.space(14),
     },
     title: {
-      ...textStyles.headline,
+      ...theme.textStyles.headline,
       color: theme.colors.textStrong,
       textAlign: 'center',
     },
     message: {
-      ...textStyles.subheadline,
+      ...theme.textStyles.subheadline,
       color: theme.colors.textMuted,
       textAlign: 'center',
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     actions: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 14,
+      borderRadius: Skin.radius(14),
       overflow: 'hidden',
-      marginBottom: 10,
+      marginBottom: Skin.space(10),
     },
     actionRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 14,
-      paddingHorizontal: 16,
-      paddingVertical: 14,
+      gap: Skin.space(14),
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(14),
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: theme.colors.surface4,
     },
@@ -174,17 +176,17 @@ const createStyles = (theme: AppTheme) =>
       width: 20,
     },
     actionLabel: {
-      ...textStyles.body,
+      ...theme.textStyles.body,
       flex: 1,
     },
     cancelButton: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 14,
-      paddingVertical: 14,
+      borderRadius: Skin.radius(14),
+      paddingVertical: Skin.space(14),
       alignItems: 'center',
     },
     cancelText: {
-      ...textStyles.body,
+      ...theme.textStyles.body,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,

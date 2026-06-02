@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["QuorumTranslationModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.quorumtranslation.QuorumTranslationModule"]
+  }
+}

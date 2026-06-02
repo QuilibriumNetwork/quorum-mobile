@@ -4,18 +4,12 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  Dimensions,
-  ScrollView,
-} from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Dimensions, ScrollView } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Image } from 'expo-image';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useSearchUsers, useSearchChannels, useDebouncedValue, type SearchUser, type SearchChannel } from '@/hooks/useFarcasterSearch';
+import * as Skin from '@/theme/skins/geometry';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -230,35 +224,35 @@ export function MentionAutocomplete({
 const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     backgroundColor: theme.colors.surface2,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: Skin.radius(12),
+    borderWidth: Skin.border(1),
     borderColor: theme.colors.border ?? theme.colors.surface3,
     overflow: 'hidden',
   },
   loadingContainer: {
-    padding: 16,
+    padding: Skin.space(16),
     alignItems: 'center',
   },
   emptyContainer: {
-    padding: 16,
+    padding: Skin.space(16),
     alignItems: 'center',
   },
   emptyText: {
     color: theme.colors.textMuted,
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
   },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
+    padding: Skin.space(10),
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.colors.surface3,
   },
   avatar: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: Skin.radius(18),
     backgroundColor: theme.colors.surface3,
   },
   avatarPlaceholder: {
@@ -267,14 +261,14 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   avatarPlaceholderText: {
     color: theme.colors.textMuted,
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
   },
   channelIcon: {
     width: 36,
     height: 36,
-    borderRadius: 8,
+    borderRadius: Skin.radius(8),
     backgroundColor: theme.colors.surface3,
   },
   channelIconPlaceholder: {
@@ -283,19 +277,19 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   itemContent: {
     flex: 1,
-    marginLeft: 10,
+    marginLeft: Skin.space(10),
   },
   itemName: {
     color: theme.colors.textStrong,
-    fontSize: 15,
+    fontSize: Skin.font(15),
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
   },
   itemUsername: {
     color: theme.colors.textMuted,
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontFamily: theme.fonts.regular.fontFamily,
-    marginTop: 1,
+    marginTop: Skin.space(1),
   },
 });
 

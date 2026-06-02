@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -11,6 +12,8 @@ import { useTheme } from '@/theme';
 import { useCall } from '@/context';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 export function IncomingCallScreen() {
   const { incomingCall, acceptCall, rejectCall } = useCall();
@@ -42,7 +45,7 @@ export function IncomingCallScreen() {
 
       <View style={styles.actions}>
         <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: '#ff3b30' }]}
+          style={[styles.actionButton, { backgroundColor: theme.colors.danger }]}
           onPress={() => rejectCall(incomingCall.callId)}
         >
           <IconSymbol name="phone.down" color="#fff" size={28} />
@@ -50,7 +53,7 @@ export function IncomingCallScreen() {
 
         <Animated.View style={pulseStyle}>
           <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: '#34c759' }]}
+            style={[styles.actionButton, { backgroundColor: theme.colors.success }]}
             onPress={() => acceptCall(incomingCall.callId)}
           >
             <IconSymbol name="phone" color="#fff" size={28} />
@@ -61,36 +64,36 @@ export function IncomingCallScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 9999,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 80,
+    paddingBottom: Skin.space(80),
   },
   callerInfo: {
     alignItems: 'center',
-    gap: 12,
+    gap: Skin.space(12),
   },
   callerName: {
-    fontSize: 28,
+    fontSize: Skin.font(28),
     fontWeight: '600',
-    marginTop: 16,
+    marginTop: Skin.space(16),
   },
   callType: {
-    fontSize: 17,
+    fontSize: Skin.font(17),
   },
   actions: {
     flexDirection: 'row',
-    gap: 60,
+    gap: Skin.space(60),
     alignItems: 'center',
   },
   actionButton: {
     width: 72,
     height: 72,
-    borderRadius: 36,
+    borderRadius: Skin.radius(36),
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

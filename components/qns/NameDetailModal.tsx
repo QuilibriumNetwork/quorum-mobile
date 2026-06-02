@@ -27,17 +27,10 @@ import { getMnemonic, getPrivateKey } from '@/services/onboarding/secureStorage'
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Skin from '@/theme/skins/geometry';
 
 interface NameDetailModalProps {
   visible: boolean;
@@ -324,7 +317,7 @@ export default function NameDetailModal({
           <Text style={styles.nameLabel}>@{name}</Text>
           <View style={styles.badgeRow}>
             {isPrimary && (
-              <View style={[styles.badge, { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.15)' : 'rgba(99, 102, 241, 0.1)' }]}>
+              <View style={[styles.badge, { backgroundColor: isDark ? 'theme.colors.accentSoft' : 'theme.colors.accentSoft' }]}>
                 <IconSymbol name="star.fill" size={12} color={theme.colors.primary} />
                 <Text style={[styles.badgeText, { color: theme.colors.primary }]}>Primary</Text>
               </View>
@@ -505,81 +498,81 @@ export default function NameDetailModal({
 const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
   StyleSheet.create({
     content: {
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
       paddingBottom: insets.bottom + 20,
     },
     header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     nameContainer: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
       alignItems: 'center',
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     nameLabel: {
-      fontSize: 24,
+      fontSize: Skin.font(24),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.primary,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     badgeRow: {
       flexDirection: 'row',
-      gap: 8,
+      gap: Skin.space(8),
     },
     badge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      paddingVertical: 3,
-      paddingHorizontal: 8,
-      borderRadius: 10,
+      gap: Skin.space(4),
+      paddingVertical: Skin.space(3),
+      paddingHorizontal: Skin.space(8),
+      borderRadius: Skin.radius(10),
     },
     badgeText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     section: {
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     sectionTitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMuted,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
     infoCard: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
     },
     infoRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 6,
+      paddingVertical: Skin.space(6),
     },
     infoLabel: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
     },
     infoValue: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
@@ -587,13 +580,13 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     offerBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      backgroundColor: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(99, 102, 241, 0.05)',
-      padding: 12,
-      borderRadius: 10,
+      gap: Skin.space(8),
+      backgroundColor: isDark ? 'theme.colors.accentSoft' : 'theme.colors.accentSubtle',
+      padding: Skin.space(12),
+      borderRadius: Skin.radius(10),
     },
     offerBadgeText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.primary,
@@ -602,45 +595,45 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 10,
-      padding: 14,
-      marginBottom: 8,
-      gap: 12,
+      borderRadius: Skin.radius(10),
+      padding: Skin.space(14),
+      marginBottom: Skin.space(8),
+      gap: Skin.space(12),
     },
     actionContent: {
       flex: 1,
     },
     actionText: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
     },
     actionSubtext: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     transferContainer: {
       flexDirection: 'row',
-      gap: 8,
-      marginBottom: 8,
+      gap: Skin.space(8),
+      marginBottom: Skin.space(8),
     },
     transferInput: {
       flex: 1,
       height: 44,
       backgroundColor: theme.colors.surface2,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      fontSize: 14,
+      borderRadius: Skin.radius(10),
+      paddingHorizontal: Skin.space(12),
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: 'monospace',
     },
     transferButton: {
       height: 44,
-      paddingHorizontal: 16,
+      paddingHorizontal: Skin.space(16),
       backgroundColor: theme.colors.danger,
-      borderRadius: 10,
+      borderRadius: Skin.radius(10),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -648,7 +641,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       opacity: 0.5,
     },
     transferButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',

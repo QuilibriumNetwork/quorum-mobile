@@ -3,18 +3,13 @@
  */
 
 import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-} from 'react-native';
+import { View, Text, TextInput, StyleSheet, ScrollView } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme, type AppTheme } from '@/theme';
 import { Button } from '@/components/ui/Button';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { validateMnemonic, suggestWord } from '@/services/onboarding/keyService';
+import * as Skin from '@/theme/skins/geometry';
 
 interface MnemonicInputViewProps {
   onSubmit: (words: string[]) => Promise<void>;
@@ -199,51 +194,51 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
     },
     header: {
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     title: {
-      fontSize: 24,
+      fontSize: Skin.font(24),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     errorContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.danger + '15',
-      borderRadius: 8,
-      padding: 12,
-      marginBottom: 16,
+      borderRadius: Skin.radius(8),
+      padding: Skin.space(12),
+      marginBottom: Skin.space(16),
     },
     errorText: {
       color: theme.colors.danger,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      marginLeft: 8,
+      marginLeft: Skin.space(8),
       flex: 1,
     },
     suggestionsContainer: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
-      marginBottom: 12,
+      gap: Skin.space(8),
+      marginBottom: Skin.space(12),
     },
     suggestionItem: {
       backgroundColor: theme.colors.primary + '20',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 16,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(16),
     },
     suggestionText: {
       color: theme.colors.primary,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
     },
     scrollView: {
@@ -252,18 +247,18 @@ const createStyles = (theme: AppTheme) =>
     wordGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
+      gap: Skin.space(8),
     },
     wordInputContainer: {
       width: '23%',
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 8,
-      borderWidth: 1,
+      borderRadius: Skin.radius(8),
+      borderWidth: Skin.border(1),
       borderColor: 'transparent',
-      paddingHorizontal: 8,
-      paddingVertical: 8,
+      paddingHorizontal: Skin.space(8),
+      paddingVertical: Skin.space(8),
     },
     wordInputFocused: {
       borderColor: theme.colors.primary,
@@ -272,31 +267,31 @@ const createStyles = (theme: AppTheme) =>
       borderColor: theme.colors.danger,
     },
     wordNumber: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
       width: 16,
     },
     wordInput: {
       flex: 1,
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.medium.fontFamily,
       padding: 0,
     },
     footer: {
-      paddingTop: 16,
+      paddingTop: Skin.space(16),
     },
     progressText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     buttons: {
       flexDirection: 'row',
-      gap: 12,
+      gap: Skin.space(12),
     },
     backButton: {
       flex: 1,

@@ -60,21 +60,11 @@ import { truncateAddress } from '@/utils/formatAddress';
 import { hexToBytes, type Emoji, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
 import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
-} from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logger } from '@quilibrium/quorum-shared';
+import * as Skin from '@/theme/skins/geometry';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface SpaceSettingsModalProps {
@@ -1338,14 +1328,14 @@ export default function SpaceSettingsModal({
         Other spaces and your global profile are unaffected.
       </Text>
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Skin.space(12) }}>
         <TouchableOpacity
           onPress={handlePickSpaceProfileImage}
           activeOpacity={0.8}
           style={{
             width: 72,
             height: 72,
-            borderRadius: 36,
+            borderRadius: Skin.radius(36),
             backgroundColor: theme.colors.surface3,
             justifyContent: 'center',
             alignItems: 'center',
@@ -1358,22 +1348,22 @@ export default function SpaceSettingsModal({
             <IconSymbol name="person.crop.circle" color={theme.colors.textMuted} size={36} />
           )}
         </TouchableOpacity>
-        <View style={{ flex: 1, marginLeft: 16 }}>
-          <Text style={[styles.sectionDescription, { marginBottom: 4 }]}>Avatar</Text>
+        <View style={{ flex: 1, marginLeft: Skin.space(16) }}>
+          <Text style={[styles.sectionDescription, { marginBottom: Skin.space(4) }]}>Avatar</Text>
           <TouchableOpacity onPress={handlePickSpaceProfileImage}>
-            <Text style={{ color: theme.colors.primary, fontSize: 14 }}>
+            <Text style={{ color: theme.colors.primary, fontSize: Skin.font(14) }}>
               {spaceProfileImage ? 'Change image' : 'Choose image'}
             </Text>
           </TouchableOpacity>
           {spaceProfileImage ? (
-            <TouchableOpacity onPress={() => setSpaceProfileImage('')} style={{ marginTop: 4 }}>
-              <Text style={{ color: theme.colors.danger, fontSize: 13 }}>Remove</Text>
+            <TouchableOpacity onPress={() => setSpaceProfileImage('')} style={{ marginTop: Skin.space(4) }}>
+              <Text style={{ color: theme.colors.danger, fontSize: Skin.font(13) }}>Remove</Text>
             </TouchableOpacity>
           ) : null}
         </View>
       </View>
 
-      <Text style={[styles.sectionDescription, { marginTop: 16, marginBottom: 4 }]}>Display name</Text>
+      <Text style={[styles.sectionDescription, { marginTop: Skin.space(16), marginBottom: Skin.space(4) }]}>Display name</Text>
       <TextInput
         value={spaceProfileDisplayName}
         onChangeText={setSpaceProfileDisplayName}
@@ -1383,13 +1373,13 @@ export default function SpaceSettingsModal({
         style={{
           backgroundColor: theme.colors.surface2,
           color: theme.colors.textMain,
-          borderRadius: 10,
-          padding: 12,
-          fontSize: 15,
+          borderRadius: Skin.radius(10),
+          padding: Skin.space(12),
+          fontSize: Skin.font(15),
         }}
       />
 
-      <Text style={[styles.sectionDescription, { marginTop: 16, marginBottom: 4 }]}>Bio</Text>
+      <Text style={[styles.sectionDescription, { marginTop: Skin.space(16), marginBottom: Skin.space(4) }]}>Bio</Text>
       <TextInput
         value={spaceProfileBio}
         onChangeText={setSpaceProfileBio}
@@ -1401,9 +1391,9 @@ export default function SpaceSettingsModal({
         style={{
           backgroundColor: theme.colors.surface2,
           color: theme.colors.textMain,
-          borderRadius: 10,
-          padding: 12,
-          fontSize: 15,
+          borderRadius: Skin.radius(10),
+          padding: Skin.space(12),
+          fontSize: Skin.font(15),
           minHeight: 72,
           textAlignVertical: 'top',
         }}
@@ -1413,11 +1403,11 @@ export default function SpaceSettingsModal({
         onPress={handleSaveSpaceProfile}
         disabled={!spaceProfileDirty || spaceProfileSaving}
         style={{
-          marginTop: 12,
+          marginTop: Skin.space(12),
           alignSelf: 'flex-start',
-          paddingVertical: 10,
-          paddingHorizontal: 20,
-          borderRadius: 10,
+          paddingVertical: Skin.space(10),
+          paddingHorizontal: Skin.space(20),
+          borderRadius: Skin.radius(10),
           backgroundColor: spaceProfileDirty && !spaceProfileSaving ? theme.colors.primary : theme.colors.surface3,
           opacity: spaceProfileDirty && !spaceProfileSaving ? 1 : 0.6,
         }}
@@ -1425,15 +1415,15 @@ export default function SpaceSettingsModal({
         {spaceProfileSaving ? (
           <ActivityIndicator size="small" color="#fff" />
         ) : (
-          <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>Save profile</Text>
+          <Text style={{ color: '#fff', fontWeight: '600', fontSize: Skin.font(14) }}>Save profile</Text>
         )}
       </TouchableOpacity>
 
       <View style={styles.divider} />
 
       <Text style={styles.sectionTitle}>Notifications</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 }}>
-        <View style={{ flex: 1, paddingRight: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Skin.space(4) }}>
+        <View style={{ flex: 1, paddingRight: Skin.space(12) }}>
           <Text style={styles.sectionDescription}>
             Notify me when messages are posted in this space.
           </Text>
@@ -1453,8 +1443,8 @@ export default function SpaceSettingsModal({
           really only matters when the space is on, but we keep them
           interactive either way to make the data model obvious). */}
       {(space?.groups ?? []).some(g => (g.channels ?? []).length > 0) && (
-        <View style={{ marginTop: 8 }}>
-          <Text style={[styles.sectionDescription, { marginBottom: 8, opacity: spaceNotificationsOn ? 1 : 0.5 }]}>
+        <View style={{ marginTop: Skin.space(8) }}>
+          <Text style={[styles.sectionDescription, { marginBottom: Skin.space(8), opacity: spaceNotificationsOn ? 1 : 0.5 }]}>
             Channels
           </Text>
           {(space?.groups ?? []).map(group => (
@@ -1467,11 +1457,11 @@ export default function SpaceSettingsModal({
                     flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    paddingVertical: 6,
+                    paddingVertical: Skin.space(6),
                     opacity: spaceNotificationsOn ? 1 : 0.5,
                   }}
                 >
-                  <Text style={{ flex: 1, color: theme.colors.textMain, fontSize: 14, paddingRight: 12 }}>
+                  <Text style={{ flex: 1, color: theme.colors.textMain, fontSize: Skin.font(14), paddingRight: Skin.space(12) }}>
                     # {channel.channelName}
                   </Text>
                   <Switch
@@ -2233,7 +2223,7 @@ export default function SpaceSettingsModal({
         <TouchableOpacity
           style={[
             styles.saveButton,
-            { marginTop: 12 },
+            { marginTop: Skin.space(12) },
             (directorySubmitting || directorySubmitted) && styles.saveButtonDisabled,
           ]}
           onPress={handlePublishToDirectory}
@@ -2249,7 +2239,7 @@ export default function SpaceSettingsModal({
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.dangerSection, { marginTop: 24 }]}>
+      <View style={[styles.dangerSection, { marginTop: Skin.space(24) }]}>
         <Text style={[styles.dangerTitle, { color: theme.colors.danger }]}>
           Delete this Space
         </Text>
@@ -2282,7 +2272,7 @@ export default function SpaceSettingsModal({
       keyboardShouldPersistTaps="handled"
     >
       <Text style={styles.sectionTitle}>Linked Farcaster channels</Text>
-      <Text style={[styles.sectionDescription, { marginBottom: 12 }]}>
+      <Text style={[styles.sectionDescription, { marginBottom: Skin.space(12) }]}>
         Casts from linked channels appear inline at the top of this space's chat
         screens. Bindings are local to your device.
       </Text>
@@ -2430,49 +2420,49 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      paddingHorizontal: 16,
+      paddingHorizontal: Skin.space(16),
     },
     tabContentWrapper: {
       flex: 1,
     },
     header: {
-      paddingVertical: 12,
+      paddingVertical: Skin.space(12),
       alignItems: 'center',
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textStrong,
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
     tabBar: {
       flexGrow: 0,
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     tabBarContent: {
-      gap: 8,
-      paddingHorizontal: 4,
+      gap: Skin.space(8),
+      paddingHorizontal: Skin.space(4),
     },
     tab: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderRadius: 8,
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(12),
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.surface3,
-      gap: 6,
+      gap: Skin.space(6),
     },
     tabActive: {
       backgroundColor: theme.colors.surface1,
     },
     tabText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMuted,
@@ -2487,46 +2477,46 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       maxHeight: SCREEN_HEIGHT * 0.6,
     },
     tabContentContainer: {
-      paddingBottom: 16,
+      paddingBottom: Skin.space(16),
     },
     generalTabContainer: {
       paddingBottom: Math.max(insets.bottom, 32),
     },
     inputSection: {
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     label: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     inputContainer: {
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      paddingHorizontal: 16,
+      borderRadius: Skin.radius(12),
+      paddingHorizontal: Skin.space(16),
     },
     textAreaContainer: {
-      paddingVertical: 8,
+      paddingVertical: Skin.space(8),
     },
     input: {
-      paddingVertical: 14,
-      fontSize: 16,
+      paddingVertical: Skin.space(14),
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
     },
     textArea: {
       minHeight: 80,
-      paddingVertical: 8,
+      paddingVertical: Skin.space(8),
     },
     charCountRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
     charCount: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
       marginLeft: 'auto',
@@ -2535,8 +2525,8 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       color: theme.colors.danger,
     },
     errorText: {
-      marginTop: 8,
-      fontSize: 13,
+      marginTop: Skin.space(8),
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.danger,
     },
@@ -2544,19 +2534,19 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      padding: 12,
-      gap: 12,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(12),
+      gap: Skin.space(12),
     },
     iconPreview: {
       width: 48,
       height: 48,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
     },
     iconPlaceholder: {
       width: 48,
       height: 48,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
       backgroundColor: theme.colors.surface4,
       alignItems: 'center',
       justifyContent: 'center',
@@ -2564,18 +2554,18 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     bannerPreview: {
       width: 120,
       height: 48,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
     },
     bannerPlaceholder: {
       width: 120,
       height: 48,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.surface4,
       alignItems: 'center',
       justifyContent: 'center',
     },
     imagePickerText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.primary,
@@ -2585,84 +2575,84 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      marginBottom: Skin.space(16),
     },
     toggleInfo: {
       flex: 1,
-      marginRight: 16,
+      marginRight: Skin.space(16),
     },
     toggleLabel: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
     },
     toggleDescription: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     saveButton: {
       backgroundColor: theme.colors.primary,
-      borderRadius: 12,
-      paddingVertical: 14,
+      borderRadius: Skin.radius(12),
+      paddingVertical: Skin.space(14),
       alignItems: 'center',
     },
     generalSaveButton: {
-      marginTop: 8,
+      marginTop: Skin.space(8),
     },
     saveButtonDisabled: {
       opacity: 0.5,
     },
     saveButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: '#fff',
     },
     sectionTitle: {
-      fontSize: 17,
+      fontSize: Skin.font(17),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textStrong,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     sectionDescription: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginBottom: 16,
-      lineHeight: 20,
+      marginBottom: Skin.space(16),
+      lineHeight: Skin.font(20),
     },
     divider: {
       height: 1,
       backgroundColor: theme.colors.surface4,
-      marginVertical: 24,
+      marginVertical: Skin.space(24),
     },
     addButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      paddingVertical: 12,
-      gap: 8,
-      marginBottom: 16,
+      borderRadius: Skin.radius(12),
+      paddingVertical: Skin.space(12),
+      gap: Skin.space(8),
+      marginBottom: Skin.space(16),
     },
     addButtonText: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.primary,
     },
     roleItem: {
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 8,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(12),
+      marginBottom: Skin.space(8),
     },
     roleHeader: {
       flexDirection: 'row',
@@ -2671,86 +2661,86 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     roleColorDot: {
       width: 12,
       height: 12,
-      borderRadius: 6,
-      marginRight: 12,
+      borderRadius: Skin.radius(6),
+      marginRight: Skin.space(12),
     },
     roleInfo: {
       flex: 1,
     },
     roleTag: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
     },
     roleName: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     roleActions: {
       flexDirection: 'row',
-      gap: 8,
+      gap: Skin.space(8),
     },
     roleActionButton: {
-      padding: 8,
+      padding: Skin.space(8),
     },
     roleTagRow: {
       flexDirection: 'row',
       alignItems: 'center',
     },
     roleTagPrefix: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
     },
     roleTagInput: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
       padding: 0,
       minWidth: 60,
     },
     roleNameInput: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       padding: 0,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     rolePermissionsHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 8,
-      paddingTop: 8,
-      borderTopWidth: 1,
+      marginTop: Skin.space(8),
+      paddingTop: Skin.space(8),
+      borderTopWidth: Skin.border(1),
       borderTopColor: theme.colors.surface4,
     },
     rolePermissionsLabel: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginRight: 8,
+      marginRight: Skin.space(8),
     },
     rolePermissionsValue: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
       flex: 1,
     },
     permissionsList: {
-      marginTop: 8,
-      gap: 8,
+      marginTop: Skin.space(8),
+      gap: Skin.space(8),
     },
     permissionItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: Skin.space(10),
     },
     permissionCheckbox: {
       width: 20,
       height: 20,
-      borderRadius: 4,
-      borderWidth: 2,
+      borderRadius: Skin.radius(4),
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.surface5,
       alignItems: 'center',
       justifyContent: 'center',
@@ -2760,7 +2750,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       borderColor: theme.colors.primary,
     },
     permissionLabel: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
     },
@@ -2771,67 +2761,67 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     },
     emptyState: {
       alignItems: 'center',
-      paddingVertical: 48,
+      paddingVertical: Skin.space(48),
     },
     emptyStateText: {
-      fontSize: 17,
+      fontSize: Skin.font(17),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
-      marginTop: 16,
+      marginTop: Skin.space(16),
     },
     emptyStateDescription: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginTop: 8,
+      marginTop: Skin.space(8),
       textAlign: 'center',
     },
     emojiItem: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 8,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(12),
+      marginBottom: Skin.space(8),
     },
     emojiImage: {
       width: 32,
       height: 32,
-      borderRadius: 4,
+      borderRadius: Skin.radius(4),
     },
     emojiName: {
       flex: 1,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
-      marginLeft: 12,
+      marginLeft: Skin.space(12),
     },
     emojiDelete: {
-      padding: 8,
+      padding: Skin.space(8),
     },
     stickerItem: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 8,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(12),
+      marginBottom: Skin.space(8),
     },
     stickerImage: {
       width: 64,
       height: 64,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
     },
     stickerName: {
       flex: 1,
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
-      marginLeft: 12,
+      marginLeft: Skin.space(12),
     },
     stickerDelete: {
-      padding: 8,
+      padding: Skin.space(8),
     },
     // Emoji/sticker editing styles
     addButtonDisabled: {
@@ -2841,72 +2831,72 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      marginLeft: 12,
+      marginLeft: Skin.space(12),
     },
     emojiEditContainer: {
       flex: 1,
-      marginLeft: 12,
+      marginLeft: Skin.space(12),
     },
     emojiEditInput: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
       backgroundColor: theme.colors.surface4,
-      borderRadius: 6,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
+      borderRadius: Skin.radius(6),
+      paddingHorizontal: Skin.space(8),
+      paddingVertical: Skin.space(4),
     },
     stickerNameContainer: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      marginLeft: 12,
+      marginLeft: Skin.space(12),
     },
     stickerEditContainer: {
       flex: 1,
-      marginLeft: 12,
+      marginLeft: Skin.space(12),
     },
     stickerEditInput: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
       backgroundColor: theme.colors.surface4,
-      borderRadius: 6,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
+      borderRadius: Skin.radius(6),
+      paddingHorizontal: Skin.space(8),
+      paddingVertical: Skin.space(4),
     },
     generateButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.primary,
-      borderRadius: 12,
-      paddingVertical: 14,
-      gap: 8,
+      borderRadius: Skin.radius(12),
+      paddingVertical: Skin.space(14),
+      gap: Skin.space(8),
     },
     generateButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: '#fff',
     },
     inviteLinkContainer: {
-      marginTop: 8,
+      marginTop: Skin.space(8),
     },
     inviteLinkBox: {
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
     },
     inviteLinkText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
     },
     inviteLinkActions: {
       flexDirection: 'row',
-      marginTop: 12,
-      gap: 12,
+      marginTop: Skin.space(12),
+      gap: Skin.space(12),
     },
     inviteLinkButton: {
       flex: 1,
@@ -2914,12 +2904,12 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      paddingVertical: 12,
-      gap: 6,
+      borderRadius: Skin.radius(12),
+      paddingVertical: Skin.space(12),
+      gap: Skin.space(6),
     },
     inviteLinkButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.primary,
@@ -2927,26 +2917,26 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     inviteTypeToggle: {
       flexDirection: 'row',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      padding: 4,
-      marginBottom: 16,
-      gap: 4,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(4),
+      marginBottom: Skin.space(16),
+      gap: Skin.space(4),
     },
     inviteTypeButton: {
       flex: 1,
       flexDirection: 'row',
-      paddingVertical: 10,
-      paddingHorizontal: 12,
+      paddingVertical: Skin.space(10),
+      paddingHorizontal: Skin.space(12),
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 10,
-      gap: 6,
+      borderRadius: Skin.radius(10),
+      gap: Skin.space(6),
     },
     inviteTypeButtonActive: {
       backgroundColor: theme.colors.primary,
     },
     inviteTypeButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMuted,
@@ -2955,50 +2945,50 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       color: '#fff',
     },
     inviteHint: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginTop: 12,
+      marginTop: Skin.space(12),
       textAlign: 'center',
     },
     dangerSection: {
       backgroundColor: theme.colors.danger + '15',
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
     },
     dangerTitle: {
-      fontSize: 17,
+      fontSize: Skin.font(17),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textStrong,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     dangerDescription: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginBottom: 16,
-      lineHeight: 20,
+      marginBottom: Skin.space(16),
+      lineHeight: Skin.font(20),
     },
     dangerButton: {
       backgroundColor: theme.colors.danger,
-      borderRadius: 12,
-      paddingVertical: 14,
+      borderRadius: Skin.radius(12),
+      paddingVertical: Skin.space(14),
       alignItems: 'center',
     },
     dangerButtonOutline: {
       backgroundColor: 'transparent',
-      borderWidth: 1,
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.danger,
     },
     dangerButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: '#fff',
     },
     dangerButtonOutlineText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.danger,
@@ -3008,28 +2998,28 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 8,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(12),
+      marginBottom: Skin.space(8),
     },
     memberAvatar: {
-      marginRight: 12,
+      marginRight: Skin.space(12),
     },
     memberAvatarImage: {
       width: 44,
       height: 44,
-      borderRadius: 22,
+      borderRadius: Skin.radius(22),
     },
     memberAvatarPlaceholder: {
       width: 44,
       height: 44,
-      borderRadius: 22,
+      borderRadius: Skin.radius(22),
       backgroundColor: theme.colors.surface5,
       alignItems: 'center',
       justifyContent: 'center',
     },
     memberAvatarText: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
@@ -3038,49 +3028,49 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       flex: 1,
     },
     memberName: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
     },
     memberAddress: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     memberRolesRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 6,
-      marginTop: 6,
+      gap: Skin.space(6),
+      marginTop: Skin.space(6),
     },
     memberRoleBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 10,
-      gap: 4,
+      paddingHorizontal: Skin.space(8),
+      paddingVertical: Skin.space(3),
+      borderRadius: Skin.radius(10),
+      gap: Skin.space(4),
     },
     memberRoleDot: {
       width: 6,
       height: 6,
-      borderRadius: 3,
+      borderRadius: Skin.radius(3),
     },
     memberRoleText: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     kickedBadge: {
       backgroundColor: theme.colors.danger + '20',
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
+      paddingHorizontal: Skin.space(8),
+      paddingVertical: Skin.space(4),
+      borderRadius: Skin.radius(6),
     },
     kickedBadgeText: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.danger,
@@ -3088,12 +3078,12 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     memberActions: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
-      gap: 8,
+      gap: Skin.space(8),
     },
     muteButton: {
       width: 28,
       height: 28,
-      borderRadius: 14,
+      borderRadius: Skin.radius(14),
       backgroundColor: theme.colors.surface4,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
@@ -3103,12 +3093,12 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     },
     kickButton: {
       backgroundColor: theme.colors.danger + '20',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 6,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(6),
     },
     kickButtonText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.danger,
@@ -3116,27 +3106,27 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     // Channel management styles
     channelGroupContainer: {
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      marginBottom: 12,
+      borderRadius: Skin.radius(12),
+      marginBottom: Skin.space(12),
       overflow: 'hidden',
     },
     channelGroupHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderBottomWidth: 1,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(10),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface4,
     },
     channelGroupNameContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: Skin.space(8),
       flex: 1,
     },
     channelGroupName: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMuted,
@@ -3144,91 +3134,91 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       letterSpacing: 0.5,
     },
     channelGroupNameInput: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
       backgroundColor: theme.colors.surface4,
-      borderRadius: 6,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
+      borderRadius: Skin.radius(6),
+      paddingHorizontal: Skin.space(8),
+      paddingVertical: Skin.space(4),
       flex: 1,
     },
     channelGroupActions: {
       flexDirection: 'row',
-      gap: 4,
+      gap: Skin.space(4),
     },
     channelGroupActionButton: {
-      padding: 6,
+      padding: Skin.space(6),
     },
     channelItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderBottomWidth: 1,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(8),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface4,
     },
     channelHashSymbol: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMuted,
-      marginRight: 4,
+      marginRight: Skin.space(4),
     },
     channelIconButton: {
       width: 28,
       height: 28,
-      borderRadius: 6,
+      borderRadius: Skin.radius(6),
       backgroundColor: theme.colors.surface4,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
-      marginRight: 6,
+      marginRight: Skin.space(6),
     },
     channelNameContainer: {
       flex: 1,
     },
     channelName: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
     },
     channelNameInput: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
       backgroundColor: theme.colors.surface4,
-      borderRadius: 6,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
+      borderRadius: Skin.radius(6),
+      paddingHorizontal: Skin.space(8),
+      paddingVertical: Skin.space(4),
       flex: 1,
     },
     channelActions: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 2,
+      gap: Skin.space(2),
     },
     channelArrowButton: {
-      padding: 6,
+      padding: Skin.space(6),
     },
     channelArrowDisabled: {
       opacity: 0.3,
     },
     channelDeleteButton: {
-      padding: 6,
-      marginLeft: 4,
+      padding: Skin.space(6),
+      marginLeft: Skin.space(4),
     },
     defaultChannelBadge: {
       backgroundColor: theme.colors.primary + '20',
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 4,
-      marginRight: 8,
+      paddingHorizontal: Skin.space(6),
+      paddingVertical: Skin.space(2),
+      borderRadius: Skin.radius(4),
+      marginRight: Skin.space(8),
     },
     defaultChannelText: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.primary,
@@ -3237,40 +3227,40 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     newChannelRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(8),
       backgroundColor: theme.colors.surface4,
     },
     newChannelInput: {
       flex: 1,
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
-      paddingVertical: 4,
+      paddingVertical: Skin.space(4),
     },
     newChannelCancel: {
-      padding: 6,
+      padding: Skin.space(6),
     },
     emptyGroupText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
       textAlign: 'center',
-      paddingVertical: 16,
+      paddingVertical: Skin.space(16),
     },
     editingInputRow: {
       flexDirection: 'row',
       alignItems: 'center',
       flex: 1,
-      gap: 4,
+      gap: Skin.space(4),
     },
     confirmButton: {
-      padding: 6,
+      padding: Skin.space(6),
       backgroundColor: theme.colors.primary + '20',
-      borderRadius: 6,
+      borderRadius: Skin.radius(6),
     },
     cancelButton: {
-      padding: 6,
+      padding: Skin.space(6),
     },
   });

@@ -16,7 +16,6 @@
 
 import {
   ConnectionState,
-  DataPacket_Kind,
   Room,
   RoomEvent,
   Track,
@@ -157,8 +156,11 @@ export async function connectToSpace(
   room.on(RoomEvent.ParticipantConnected, emitCount);
   room.on(RoomEvent.ParticipantDisconnected, emitCount);
 
-  room.on(RoomEvent.DataReceived, safe('DataReceived', (payload, participant, kind) => {
-    if (kind !== DataPacket_Kind.RELIABLE) return;
+  room.on(RoomEvent.DataReceived, safe('DataReceived', (payload, participant) => {
+    // Don't gate on DataPacket_Kind: in livekit-client v2 the `kind` argument
+    // is frequently undefined, and since RELIABLE === 0 a `kind !== RELIABLE`
+    // guard would drop every received packet (which is why remote reactions
+    // never showed). The `type === 'reaction'` check below is enough.
     try {
       const text = new TextDecoder().decode(payload);
       const obj = JSON.parse(text);

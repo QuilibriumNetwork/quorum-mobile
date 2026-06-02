@@ -5,7 +5,9 @@ import type { ProfileAuthor } from '@/hooks/useFarcasterProfile';
 import { truncateAddress } from '@/utils/formatAddress';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 interface UnifiedProfileHeaderProps {
   user: UserInfo;
@@ -210,18 +212,18 @@ function createStyles(theme: AppTheme) {
   return StyleSheet.create({
     mergedContainer: {
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingTop: 16,
-      paddingBottom: 20,
-      gap: 6,
+      paddingHorizontal: Skin.space(20),
+      paddingTop: Skin.space(16),
+      paddingBottom: Skin.space(20),
+      gap: Skin.space(6),
     },
     mergedAvatarWrap: {
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
     },
     mergedAvatar: {
       width: 96,
       height: 96,
-      borderRadius: 48,
+      borderRadius: Skin.radius(48),
       backgroundColor: theme.colors.surface2,
     },
     editBadge: {
@@ -230,15 +232,15 @@ function createStyles(theme: AppTheme) {
       right: 0,
       width: 28,
       height: 28,
-      borderRadius: 14,
+      borderRadius: Skin.radius(14),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.accent,
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.background,
     },
     mergedDisplayName: {
-      fontSize: 22,
+      fontSize: Skin.font(22),
       fontWeight: '700',
       color: theme.colors.textStrong,
     },
@@ -247,42 +249,42 @@ function createStyles(theme: AppTheme) {
       alignItems: 'center',
       flexWrap: 'wrap',
       justifyContent: 'center',
-      gap: 8,
+      gap: Skin.space(8),
     },
     handleText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
     },
     addressText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       fontFamily: 'Menlo',
     },
     bioText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       textAlign: 'center',
-      marginTop: 6,
-      lineHeight: 19,
+      marginTop: Skin.space(6),
+      lineHeight: Skin.font(19),
     },
     splitContainer: {
       flexDirection: 'row',
-      paddingHorizontal: 12,
-      paddingTop: 10,
-      paddingBottom: 12,
-      gap: 8,
+      paddingHorizontal: Skin.space(12),
+      paddingTop: Skin.space(10),
+      paddingBottom: Skin.space(12),
+      gap: Skin.space(8),
     },
     card: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 10,
-      paddingHorizontal: 10,
-      borderRadius: 12,
+      paddingVertical: Skin.space(10),
+      paddingHorizontal: Skin.space(10),
+      borderRadius: Skin.radius(12),
       backgroundColor: theme.colors.surface1,
-      borderWidth: 1,
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.surface3,
-      gap: 10,
+      gap: Skin.space(10),
     },
     cardText: {
       flex: 1,
@@ -291,10 +293,10 @@ function createStyles(theme: AppTheme) {
     cardLabelRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 3,
+      gap: Skin.space(3),
     },
     cardLabel: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       fontWeight: '600',
       letterSpacing: 0.4,
       textTransform: 'uppercase',
@@ -302,20 +304,20 @@ function createStyles(theme: AppTheme) {
     cardAvatar: {
       width: 40,
       height: 40,
-      borderRadius: 20,
+      borderRadius: Skin.radius(20),
       backgroundColor: theme.colors.surface2,
     },
     cardDisplayName: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontWeight: '600',
       color: theme.colors.textStrong,
     },
     cardHandle: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontWeight: '500',
     },
     cardHandleMuted: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
     },
   });

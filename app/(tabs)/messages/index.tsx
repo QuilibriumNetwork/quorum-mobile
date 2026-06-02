@@ -18,18 +18,10 @@ import { isValidAvatarUri } from '@/utils/validation';
 import { FlashList } from '@shopify/flash-list';
 import { router, Stack } from 'expo-router';
 import React, { Suspense, useCallback, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  Platform,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, Platform, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Skin from '@/theme/skins/geometry';
 
 const NewConversationModal = React.lazy(() => import('@/components/NewConversationModal'));
 
@@ -324,11 +316,11 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(12),
     },
     heading: {
-      ...textStyles.title3,
+      ...theme.textStyles.title3,
       color: theme.colors.textStrong,
       textAlign: 'center' as const,
     },
@@ -342,7 +334,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flex: 1,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
-      paddingHorizontal: 8,
+      paddingHorizontal: Skin.space(8),
     },
     headerSlotRight: {
       flexDirection: 'row' as const,
@@ -351,38 +343,38 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     headerActions: {
       flexDirection: 'row',
-      gap: 16,
+      gap: Skin.space(16),
       alignItems: 'center',
     },
     headerIconButton: {
-      padding: 4,
+      padding: Skin.space(4),
     },
     searchContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      marginHorizontal: 16,
-      marginBottom: 8,
-      gap: 8,
+      borderRadius: Skin.radius(12),
+      paddingHorizontal: Skin.space(12),
+      marginHorizontal: Skin.space(16),
+      marginBottom: Skin.space(8),
+      gap: Skin.space(8),
     },
     searchInput: {
       flex: 1,
       paddingVertical: Platform.OS === 'ios' ? 10 : 6,
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
     },
     listContent: {
-      paddingBottom: 120,
+      paddingBottom: Skin.space(120),
     },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      gap: 12,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(10),
+      gap: Skin.space(12),
     },
     avatarContainer: {
       position: 'relative',
@@ -390,12 +382,12 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     spaceAvatar: {
       width: 48,
       height: 48,
-      borderRadius: 12, // legacy — no longer used (spaces now in rail)
+      borderRadius: Skin.radius(12), // legacy — no longer used (spaces now in rail)
     },
     dmAvatar: {
       width: 48,
       height: 48,
-      borderRadius: 24, // full circle for people
+      borderRadius: Skin.radius(24), // full circle for people
     },
     farcasterBadge: {
       position: 'absolute',
@@ -403,7 +395,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       right: -2,
       width: 18,
       height: 18,
-      borderRadius: 9,
+      borderRadius: Skin.radius(9),
       backgroundColor: theme.colors.surface1,
       alignItems: 'center',
       justifyContent: 'center',
@@ -411,33 +403,33 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     farcasterLogo: {
       width: 14,
       height: 14,
-      borderRadius: 7,
+      borderRadius: Skin.radius(7),
     },
     rowContent: {
       flex: 1,
       justifyContent: 'center',
-      gap: 2,
+      gap: Skin.space(2),
     },
     rowTop: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 8,
+      gap: Skin.space(8),
     },
     rowBottom: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 8,
+      gap: Skin.space(8),
     },
     title: {
       flex: 1,
-      ...textStyles.headline,
+      ...theme.textStyles.headline,
       color: theme.colors.textStrong,
     },
     subtitle: {
       flex: 1,
-      ...textStyles.subheadline,
+      ...theme.textStyles.subheadline,
       color: theme.colors.textMuted,
     },
     subtitlePrefix: {
@@ -450,20 +442,20 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       color: theme.colors.textMuted,
     },
     time: {
-      ...textStyles.footnote,
+      ...theme.textStyles.footnote,
       color: theme.colors.textMuted,
     },
     unreadBadge: {
       minWidth: 20,
       height: 20,
-      borderRadius: 10,
-      paddingHorizontal: 6,
+      borderRadius: Skin.radius(10),
+      paddingHorizontal: Skin.space(6),
       backgroundColor: theme.colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
     },
     unreadText: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',
@@ -472,27 +464,27 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 24,
-      gap: 8,
+      padding: Skin.space(24),
+      gap: Skin.space(8),
     },
     emptyTitle: {
-      ...textStyles.headline,
+      ...theme.textStyles.headline,
       color: theme.colors.textMain,
     },
     emptySubtitle: {
-      ...textStyles.subheadline,
+      ...theme.textStyles.subheadline,
       color: theme.colors.textMuted,
       textAlign: 'center',
     },
     emptyAction: {
-      marginTop: 12,
-      paddingHorizontal: 20,
-      paddingVertical: 10,
-      borderRadius: 20,
+      marginTop: Skin.space(12),
+      paddingHorizontal: Skin.space(20),
+      paddingVertical: Skin.space(10),
+      borderRadius: Skin.radius(20),
       backgroundColor: theme.colors.primary,
     },
     emptyActionText: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',
@@ -500,35 +492,35 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
 
     // Spaces rail
     spacesRailContainer: {
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
     },
     spacesRailHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingTop: 4,
-      paddingBottom: 8,
+      paddingHorizontal: Skin.space(16),
+      paddingTop: Skin.space(4),
+      paddingBottom: Skin.space(8),
     },
     spacesRailTitle: {
-      ...textStyles.caption2,
+      ...theme.textStyles.caption2,
       letterSpacing: 0.8,
       color: theme.colors.textMuted,
     },
     spacesRailCount: {
-      ...textStyles.caption2,
+      ...theme.textStyles.caption2,
       color: theme.colors.textMuted,
       letterSpacing: 0.4,
     },
     spacesRailContent: {
-      paddingHorizontal: 12,
-      gap: 12,
-      paddingBottom: 8,
+      paddingHorizontal: Skin.space(12),
+      gap: Skin.space(12),
+      paddingBottom: Skin.space(8),
     },
     spaceTile: {
       alignItems: 'center',
       width: 64,
-      gap: 4,
+      gap: Skin.space(4),
     },
     spaceAvatarContainer: {
       position: 'relative',
@@ -536,21 +528,21 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     spaceTileAvatar: {
       width: 56,
       height: 56,
-      borderRadius: 14,
+      borderRadius: Skin.radius(14),
     },
     spaceAddTile: {
       width: 56,
       height: 56,
-      borderRadius: 14,
+      borderRadius: Skin.radius(14),
       backgroundColor: theme.colors.surface3,
-      borderWidth: 1,
+      borderWidth: Skin.border(1),
       borderStyle: 'dashed',
       borderColor: theme.colors.surface4,
       alignItems: 'center',
       justifyContent: 'center',
     },
     spaceTileName: {
-      ...textStyles.caption1,
+      ...theme.textStyles.caption1,
       color: theme.colors.textMuted,
       textAlign: 'center',
     },
@@ -560,16 +552,16 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       right: -4,
       minWidth: 18,
       height: 18,
-      borderRadius: 9,
-      paddingHorizontal: 5,
+      borderRadius: Skin.radius(9),
+      paddingHorizontal: Skin.space(5),
       backgroundColor: theme.colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,
     },
     spaceUnreadText: {
-      fontSize: 10,
+      fontSize: Skin.font(10),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',

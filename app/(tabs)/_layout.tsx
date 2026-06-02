@@ -10,6 +10,7 @@ import { useTheme } from '@/theme';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform, Text, View } from 'react-native';
+import * as Skin from '@/theme/skins/geometry';
 
 function ProfileTabIcon({ color, focused }: { color: string; focused: boolean }) {
   // The tab now defaults to the notifications inbox; profile/account is
@@ -30,7 +31,7 @@ function ProfileTabIcon({ color, focused }: { color: string; focused: boolean })
             right: -2,
             width: 10,
             height: 10,
-            borderRadius: 5,
+            borderRadius: Skin.radius(5),
             backgroundColor: '#FF3B30',
           }}
         />

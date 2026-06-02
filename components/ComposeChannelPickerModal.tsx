@@ -16,15 +16,9 @@ import {
 } from '@/hooks/useFarcasterSearch';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 interface ComposeChannelPickerModalProps {
   visible: boolean;
@@ -165,9 +159,9 @@ export default function ComposeChannelPickerModal({
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
-      paddingHorizontal: 20,
-      paddingBottom: 40,
-      gap: 12,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(40),
+      gap: Skin.space(12),
     },
     header: {
       flexDirection: 'row',
@@ -175,30 +169,30 @@ function createStyles(theme: AppTheme) {
       justifyContent: 'space-between',
     },
     title: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontWeight: '700',
       color: theme.colors.textStrong,
     },
     searchRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 10,
-      borderWidth: 1,
+      gap: Skin.space(8),
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(8),
+      borderRadius: Skin.radius(10),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.surface3,
       backgroundColor: theme.colors.surface1,
     },
     searchInput: {
       flex: 1,
       color: theme.colors.textMain,
-      fontSize: 15,
+      fontSize: Skin.font(15),
       paddingVertical: 0,
       minHeight: 22,
     },
     sectionLabel: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       fontWeight: '600',
       letterSpacing: 0.5,
       textTransform: 'uppercase',
@@ -207,20 +201,20 @@ function createStyles(theme: AppTheme) {
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
-      paddingVertical: 10,
+      gap: Skin.space(12),
+      paddingVertical: Skin.space(10),
     },
     homeIconWrap: {
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: Skin.radius(18),
       alignItems: 'center',
       justifyContent: 'center',
     },
     avatar: {
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: Skin.radius(18),
       backgroundColor: theme.colors.surface3,
     },
     rowText: {
@@ -228,25 +222,25 @@ function createStyles(theme: AppTheme) {
       minWidth: 0,
     },
     rowName: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontWeight: '600',
       color: theme.colors.textStrong,
     },
     rowKey: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginTop: 1,
+      marginTop: Skin.space(1),
     },
     loadingWrap: {
-      paddingVertical: 30,
+      paddingVertical: Skin.space(30),
       alignItems: 'center',
     },
     emptyWrap: {
-      paddingVertical: 30,
+      paddingVertical: Skin.space(30),
       alignItems: 'center',
     },
     emptyText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       textAlign: 'center',
     },

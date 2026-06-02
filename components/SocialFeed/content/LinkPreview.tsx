@@ -1,7 +1,10 @@
 import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Image } from 'expo-image';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface LinkPreviewProps {
   url?: string;
@@ -110,23 +113,23 @@ export function LinkPreview({
   );
 }
 
-const staticStyles = StyleSheet.create({
+const staticStyles = createSkinnable(() => StyleSheet.create({
   padding12: {
-    padding: 12,
+    padding: Skin.space(12),
   },
   contentSmall: {
     flex: 1,
-    padding: 12,
+    padding: Skin.space(12),
     justifyContent: 'center',
   },
-});
+}));
 
 const createStyles = (theme: AppTheme) => StyleSheet.create({
   containerLarge: {
     backgroundColor: theme.colors.surface2,
-    borderRadius: 12,
+    borderRadius: Skin.radius(12),
     overflow: 'hidden',
-    marginHorizontal: 12,
+    marginHorizontal: Skin.space(12),
   },
   imageLarge: {
     width: '100%',
@@ -135,25 +138,25 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   titleLarge: {
     color: theme.colors.textStrong,
-    fontSize: 15,
+    fontSize: Skin.font(15),
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: Skin.space(4),
   },
   descriptionLarge: {
     color: theme.colors.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 4,
+    fontSize: Skin.font(13),
+    lineHeight: Skin.font(18),
+    marginBottom: Skin.space(4),
   },
   domainLarge: {
     color: theme.colors.textMuted,
-    fontSize: 12,
+    fontSize: Skin.font(12),
   },
   containerSmall: {
     backgroundColor: theme.colors.surface2,
-    borderRadius: 12,
+    borderRadius: Skin.radius(12),
     overflow: 'hidden',
-    marginHorizontal: 12,
+    marginHorizontal: Skin.space(12),
     flexDirection: 'row',
   },
   imageSmall: {
@@ -163,19 +166,19 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   titleSmall: {
     color: theme.colors.textStrong,
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: Skin.space(4),
   },
   descriptionSmall: {
     color: theme.colors.textMuted,
-    fontSize: 12,
-    lineHeight: 16,
-    marginBottom: 4,
+    fontSize: Skin.font(12),
+    lineHeight: Skin.font(16),
+    marginBottom: Skin.space(4),
   },
   domainSmall: {
     color: theme.colors.textMuted,
-    fontSize: 11,
+    fontSize: Skin.font(11),
   },
 });
 

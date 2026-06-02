@@ -6,19 +6,12 @@ import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
 import { useAssignRole, useRemoveFromRole, useSpaces } from '@/hooks/chat';
 import React, { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import type { Role } from '@quilibrium/quorum-shared';
+import * as Skin from '@/theme/skins/geometry';
 
 export interface UserProfileInfo {
   userId: string;
@@ -292,79 +285,79 @@ export default function UserProfileModal({
 const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
   StyleSheet.create({
     scrollContent: {
-      paddingHorizontal: 20,
-      paddingTop: 8,
+      paddingHorizontal: Skin.space(20),
+      paddingTop: Skin.space(8),
     },
     profileHeader: {
       alignItems: 'center',
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     avatarContainer: {
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     avatar: {
       width: 100,
       height: 100,
-      borderRadius: 50,
+      borderRadius: Skin.radius(50),
     },
     displayName: {
-      fontSize: 24,
+      fontSize: Skin.font(24),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
       textAlign: 'center',
     },
     username: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.primary,
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
       textAlign: 'center',
     },
     userId: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       textAlign: 'center',
     },
     addressRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Skin.space(6),
     },
     farcasterRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      marginTop: 8,
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 16,
+      gap: Skin.space(6),
+      marginTop: Skin.space(8),
+      paddingVertical: Skin.space(6),
+      paddingHorizontal: Skin.space(12),
+      borderRadius: Skin.radius(16),
       backgroundColor: theme.colors.surface2,
     },
     farcasterText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMain,
     },
     section: {
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     sectionTitle: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
     },
     bioContainer: {
       backgroundColor: theme.colors.surface2,
-      padding: 12,
-      borderRadius: 8,
+      padding: Skin.space(12),
+      borderRadius: Skin.radius(8),
     },
     bioText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     bioPlaceholder: {
       color: theme.colors.textMuted,
@@ -373,58 +366,58 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     rolesRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
-      marginBottom: 8,
+      gap: Skin.space(8),
+      marginBottom: Skin.space(8),
     },
     roleBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      borderWidth: 1,
-      borderRadius: 14,
-      paddingVertical: 4,
-      paddingHorizontal: 10,
+      gap: Skin.space(6),
+      borderWidth: Skin.border(1),
+      borderRadius: Skin.radius(14),
+      paddingVertical: Skin.space(4),
+      paddingHorizontal: Skin.space(10),
     },
     roleBadgeText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     addRoleBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      borderWidth: 1,
+      gap: Skin.space(4),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.surface4,
       borderStyle: 'dashed',
-      borderRadius: 14,
-      paddingVertical: 4,
-      paddingHorizontal: 10,
+      borderRadius: Skin.radius(14),
+      paddingVertical: Skin.space(4),
+      paddingHorizontal: Skin.space(10),
     },
     addRoleBadgeText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
     },
     actionsContainer: {
-      marginBottom: 24,
-      gap: 10,
+      marginBottom: Skin.space(24),
+      gap: Skin.space(10),
     },
     actionButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.primary,
-      paddingVertical: 14,
-      paddingHorizontal: 24,
-      borderRadius: 12,
-      gap: 8,
+      paddingVertical: Skin.space(14),
+      paddingHorizontal: Skin.space(24),
+      borderRadius: Skin.radius(12),
+      gap: Skin.space(8),
     },
     muteButton: {
       backgroundColor: theme.colors.surface4,
     },
     actionButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: '#fff',
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,

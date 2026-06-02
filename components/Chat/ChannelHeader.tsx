@@ -1,7 +1,9 @@
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import type { AppTheme } from '@/theme';
 import React from 'react';
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -80,9 +82,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: theme.colors.surface3,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingHorizontal: Skin.space(16),
+    paddingVertical: Skin.space(12),
+    borderBottomWidth: Skin.border(1),
     borderBottomColor: theme.colors.border,
     width: SCREEN_WIDTH,
   },
@@ -95,29 +97,29 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
   },
   menuButton: {
-    marginRight: 12,
+    marginRight: Skin.space(12),
   },
   title: {
     color: theme.colors.textMain,
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
-    marginLeft: 8,
+    marginLeft: Skin.space(8),
   },
   headerIconButton: {
-    marginRight: 16,
+    marginRight: Skin.space(16),
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.surface5,
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderRadius: Skin.radius(4),
+    paddingHorizontal: Skin.space(8),
+    paddingVertical: Skin.space(4),
   },
   searchInput: {
     color: theme.colors.textMain,
-    fontSize: 14,
-    marginLeft: 8,
+    fontSize: Skin.font(14),
+    marginLeft: Skin.space(8),
     width: 80,
     fontFamily: theme.fonts.regular.fontFamily,
   },

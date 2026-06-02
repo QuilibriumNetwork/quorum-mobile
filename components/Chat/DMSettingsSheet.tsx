@@ -4,18 +4,11 @@
 
 import type { AppTheme } from '@/theme';
 import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Modal,
-  Pressable,
-  Alert,
-  Switch,
-} from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, Alert, Switch } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { resetDMSession } from '@/hooks/chat/useSendDirectMessage';
+import * as Skin from '@/theme/skins/geometry';
 
 interface DMSettingsSheetProps {
   visible: boolean;
@@ -154,7 +147,7 @@ export function DMSettingsSheet({
             <IconSymbol
               name="trash"
               size={20}
-              color={theme.colors.danger ?? theme.colors.error}
+              color={theme.colors.danger ?? theme.colors.danger}
             />
             <View style={styles.actionContent}>
               <Text style={[styles.actionText, styles.dangerText]}>Delete Conversation</Text>
@@ -180,17 +173,17 @@ const createStyles = (theme: AppTheme) =>
     },
     container: {
       backgroundColor: theme.colors.surface1 ?? theme.colors.background,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
       minWidth: 280,
       maxWidth: 320,
       overflow: 'hidden',
     },
     header: {
-      paddingVertical: 14,
-      paddingHorizontal: 20,
+      paddingVertical: Skin.space(14),
+      paddingHorizontal: Skin.space(20),
     },
     headerText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontWeight: '600',
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium?.fontFamily ?? theme.fonts.regular.fontFamily,
@@ -199,33 +192,33 @@ const createStyles = (theme: AppTheme) =>
     actionButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 20,
-      gap: 12,
+      paddingVertical: Skin.space(14),
+      paddingHorizontal: Skin.space(20),
+      gap: Skin.space(12),
     },
     actionContent: {
       flex: 1,
     },
     actionText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.regular.fontFamily,
     },
     actionSubtext: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     dangerText: {
-      color: theme.colors.danger ?? theme.colors.error,
+      color: theme.colors.danger ?? theme.colors.danger,
     },
     toggleRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 20,
-      gap: 12,
+      paddingVertical: Skin.space(14),
+      paddingHorizontal: Skin.space(20),
+      gap: Skin.space(12),
     },
     divider: {
       height: 1,

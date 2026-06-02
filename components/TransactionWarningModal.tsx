@@ -3,13 +3,10 @@ import { BaseModal } from '@/components/shared';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
-import {
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Skin from '@/theme/skins/geometry';
 
 type WarningType = 'simulation-failed' | 'no-entitlements' | 'not-declared' | 'ok';
 type WarningSeverity = 'low' | 'medium' | 'high';
@@ -175,101 +172,101 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, seve
   StyleSheet.create({
     warningHeader: {
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingVertical: 20,
+      paddingHorizontal: Skin.space(20),
+      paddingVertical: Skin.space(20),
     },
     warningIconContainer: {
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     warningTitle: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
       textAlign: 'center',
     },
     warningMessage: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       textAlign: 'center',
-      lineHeight: 20,
-      paddingHorizontal: 20,
+      lineHeight: Skin.font(20),
+      paddingHorizontal: Skin.space(20),
     },
     transactionSection: {
-      paddingHorizontal: 20,
-      marginBottom: 20,
+      paddingHorizontal: Skin.space(20),
+      marginBottom: Skin.space(20),
     },
     sectionTitle: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
     },
     transactionCard: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
     },
     transactionRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 8,
-      borderBottomWidth: 1,
+      paddingVertical: Skin.space(8),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.border,
     },
     transactionLabel: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     transactionValue: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       textAlign: 'right',
       flex: 1,
-      marginLeft: 16,
+      marginLeft: Skin.space(16),
     },
     simulationSection: {
-      paddingHorizontal: 20,
-      marginBottom: 20,
+      paddingHorizontal: Skin.space(20),
+      marginBottom: Skin.space(20),
     },
     simulationCard: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
     },
     simulationResult: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
     },
     simulationText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
-      marginLeft: 8,
+      marginLeft: Skin.space(8),
       fontFamily: theme.fonts.regular.fontFamily,
     },
     buttonContainer: {
       flexDirection: 'row',
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
       paddingBottom: insets.bottom + 16,
-      gap: 12,
+      gap: Skin.space(12),
     },
     cancelButton: {
       flex: 1,
       backgroundColor: theme.colors.surface3,
-      paddingVertical: 16,
-      borderRadius: 12,
+      paddingVertical: Skin.space(16),
+      borderRadius: Skin.radius(12),
       alignItems: 'center',
     },
     cancelButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -277,12 +274,12 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, seve
     proceedButton: {
       flex: 1,
       backgroundColor: severity === 'high' ? theme.colors.danger : theme.colors.primary,
-      paddingVertical: 16,
-      borderRadius: 12,
+      paddingVertical: Skin.space(16),
+      borderRadius: Skin.radius(12),
       alignItems: 'center',
     },
     proceedButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: '#ffffff',
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,

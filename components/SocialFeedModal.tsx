@@ -14,6 +14,10 @@ import { ImageViewer } from '@/components/SocialFeed/media/ImageViewer';
 import { extractYouTubeMatchesFromText, YouTubeEmbed, parseYouTubeUrl } from '@/components/SocialFeed/media/YouTubeEmbed';
 import { MentionAutocomplete, getMentionInfo, replaceMention, type MentionInfo } from '@/components/SocialFeed/MentionAutocomplete';
 import { GovernanceView, ProposalDetailView } from '@/components/SocialFeed/views';
+import { ProposalVoteBlock } from '@/components/SocialFeed/views/ProposalVoteBlock';
+import { useHegemonyGovernance } from '@/hooks/useHegemonyGovernance';
+import type { ChannelCast as GovernanceChannelCast, CastReply as GovernanceCastReply } from '@/services/governance/governanceClient';
+import { parseVote as parseGovernanceVote } from '@/services/governance/governanceClient';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context/AuthContext';
@@ -24,6 +28,13 @@ import { useSendSpaceMessage } from '@/hooks/chat/useSendSpaceMessage';
 import { useSpaces } from '@/hooks/chat/useSpaces';
 import { useFarcasterChannel, type ChannelCast } from '@/hooks/useFarcasterChannel';
 import { useFarcasterFeed, type EmbeddedCast } from '@/hooks/useFarcasterFeed';
+import { useBlockedFids } from '@/hooks/useBlockedFids';
+import { useMutedFids } from '@/hooks/useMutedFids';
+import { ProfileOverflowButton } from '@/components/SocialFeed/ProfileOverflowButton';
+import { CastOverflowButton } from '@/components/SocialFeed/CastOverflowButton';
+import { Translatable } from '@/components/translation/Translatable';
+import { useSurface } from '@/theme/skins/surfaces';
+import { ProfileActionButtons } from '@/components/SocialFeed/ProfileActionButtons';
 import { useFarcasterProfile, type ProfileCast } from '@/hooks/useFarcasterProfile';
 import {
   useDebouncedValue,
@@ -60,35 +71,14 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { setAudioModeAsync } from 'expo-audio';
 import { Image as ExpoImage } from 'expo-image';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Animated,
-  BackHandler,
-  Dimensions,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  type ImageStyle,
-  type KeyboardEvent,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { ActivityIndicator, Alert, Animated, BackHandler, Dimensions, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View, type ImageStyle, type KeyboardEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReanimatedModule, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { ReportModal } from '@/components/ReportModal';
+import * as Skin from '@/theme/skins/geometry';
 
 const ReanimatedView = ReanimatedModule.View;
 
@@ -205,8 +195,8 @@ function ImageCarousel({ urls, maxHeight, theme, onImagePress }: { urls: string[
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
-        paddingVertical: 12,
-        gap: 6,
+        paddingVertical: Skin.space(12),
+        gap: Skin.space(6),
       }}>
         {urls.map((_, index) => (
           <View
@@ -214,7 +204,7 @@ function ImageCarousel({ urls, maxHeight, theme, onImagePress }: { urls: string[
             style={{
               width: 6,
               height: 6,
-              borderRadius: 3,
+              borderRadius: Skin.radius(3),
               backgroundColor: index === activeIndex ? theme.colors.textMain : theme.colors.surface4,
             }}
           />
@@ -339,7 +329,7 @@ function CastText({
     }
 
     return (
-      <View style={{ gap: 8 }}>
+      <View style={{ gap: Skin.space(8) }}>
         {blocks.map((block, blockIndex) => {
           if (block.type === 'inviteLink') {
             return <InviteLinkCard key={blockIndex} inviteLink={block.value!} />;
@@ -429,7 +419,8 @@ function CastText({
   );
 }
 
-// Share action sheet for recast/quote/share options
+// Share action sheet for recast/quote/share options. Moderation
+// (report/mute/block) lives in its own CastOverflowButton menu, not here.
 interface ShareActionSheetProps {
   visible: boolean;
   castHash: string;
@@ -444,7 +435,6 @@ interface ShareActionSheetProps {
   onQuote: () => void;
   onShareToChat: () => void;
   onNativeShare: () => void;
-  onReport?: () => void;
 }
 
 function ShareActionSheet({
@@ -461,7 +451,6 @@ function ShareActionSheet({
   onQuote,
   onShareToChat,
   onNativeShare,
-  onReport,
 }: ShareActionSheetProps) {
   if (!visible) return null;
 
@@ -494,17 +483,6 @@ function ShareActionSheet({
       onPress: onNativeShare,
       disabled: false,
     },
-    ...(onReport
-      ? [
-          {
-            icon: 'flag' as const,
-            label: 'Report',
-            color: theme.colors.danger,
-            onPress: onReport,
-            disabled: false,
-          },
-        ]
-      : []),
   ];
 
   return (
@@ -525,9 +503,9 @@ function ShareActionSheet({
         <View
           style={{
             backgroundColor: theme.colors.surface1,
-            borderTopLeftRadius: 16,
-            borderTopRightRadius: 16,
-            paddingTop: 12,
+            borderTopLeftRadius: Skin.radius(16),
+            borderTopRightRadius: Skin.radius(16),
+            paddingTop: Skin.space(12),
             paddingBottom: bottomInset + 12,
           }}
         >
@@ -537,9 +515,9 @@ function ShareActionSheet({
               width: 36,
               height: 4,
               backgroundColor: theme.colors.surface4,
-              borderRadius: 2,
+              borderRadius: Skin.radius(2),
               alignSelf: 'center',
-              marginBottom: 16,
+              marginBottom: Skin.space(16),
             }}
           />
 
@@ -549,8 +527,8 @@ function ShareActionSheet({
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                paddingVertical: 14,
-                paddingHorizontal: 20,
+                paddingVertical: Skin.space(14),
+                paddingHorizontal: Skin.space(20),
                 opacity: action.disabled ? 0.5 : 1,
               }}
               onPress={async () => {
@@ -570,8 +548,8 @@ function ShareActionSheet({
               />
               <Text
                 style={{
-                  marginLeft: 16,
-                  fontSize: 16,
+                  marginLeft: Skin.space(16),
+                  fontSize: Skin.font(16),
                   color: action.color,
                   fontWeight: '500',
                 }}
@@ -584,18 +562,18 @@ function ShareActionSheet({
           {/* Cancel button */}
           <TouchableOpacity
             style={{
-              marginTop: 8,
-              marginHorizontal: 16,
-              paddingVertical: 14,
+              marginTop: Skin.space(8),
+              marginHorizontal: Skin.space(16),
+              paddingVertical: Skin.space(14),
               backgroundColor: theme.colors.surface2,
-              borderRadius: 12,
+              borderRadius: Skin.radius(12),
               alignItems: 'center',
             }}
             onPress={onClose}
           >
             <Text
               style={{
-                fontSize: 16,
+                fontSize: Skin.font(16),
                 fontWeight: '600',
                 color: theme.colors.textMain,
               }}
@@ -732,10 +710,10 @@ function ShareToChatModal({
         <View
           style={{
             flex: 1,
-            marginTop: 100,
+            marginTop: Skin.space(100),
             backgroundColor: theme.colors.background,
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
+            borderTopLeftRadius: Skin.radius(20),
+            borderTopRightRadius: Skin.radius(20),
           }}
         >
           {/* Header */}
@@ -744,24 +722,24 @@ function ShareToChatModal({
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'space-between',
-              paddingHorizontal: 16,
-              paddingVertical: 16,
-              borderBottomWidth: 1,
+              paddingHorizontal: Skin.space(16),
+              paddingVertical: Skin.space(16),
+              borderBottomWidth: Skin.border(1),
               borderBottomColor: theme.colors.surface3,
             }}
           >
             {selectedSpace ? (
               <TouchableOpacity
                 onPress={() => setSelectedSpace(null)}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(8) }}
               >
                 <IconSymbol name="chevron.left" size={20} color={theme.colors.textMain} />
-                <Text style={{ fontSize: 17, fontWeight: '600', color: theme.colors.textMain }}>
+                <Text style={{ fontSize: Skin.font(17), fontWeight: '600', color: theme.colors.textMain }}>
                   {selectedSpace.spaceName}
                 </Text>
               </TouchableOpacity>
             ) : (
-              <Text style={{ fontSize: 17, fontWeight: '600', color: theme.colors.textMain }}>
+              <Text style={{ fontSize: Skin.font(17), fontWeight: '600', color: theme.colors.textMain }}>
                 Share to Chat
               </Text>
             )}
@@ -771,9 +749,9 @@ function ShareToChatModal({
           </View>
 
           {isSending && (
-            <View style={{ padding: 20, alignItems: 'center' }}>
+            <View style={{ padding: Skin.space(20), alignItems: 'center' }}>
               <ActivityIndicator color={theme.colors.accent} />
-              <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>Sending...</Text>
+              <Text style={{ color: theme.colors.textMuted, marginTop: Skin.space(8) }}>Sending...</Text>
             </View>
           )}
 
@@ -784,12 +762,12 @@ function ShareToChatModal({
                 <>
                   <Text
                     style={{
-                      fontSize: 13,
+                      fontSize: Skin.font(13),
                       fontWeight: '600',
                       color: theme.colors.textMuted,
-                      paddingHorizontal: 16,
-                      paddingTop: 16,
-                      paddingBottom: 8,
+                      paddingHorizontal: Skin.space(16),
+                      paddingTop: Skin.space(16),
+                      paddingBottom: Skin.space(8),
                     }}
                   >
                     SPACES
@@ -800,9 +778,9 @@ function ShareToChatModal({
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
-                        paddingHorizontal: 16,
-                        paddingVertical: 12,
-                        gap: 12,
+                        paddingHorizontal: Skin.space(16),
+                        paddingVertical: Skin.space(12),
+                        gap: Skin.space(12),
                       }}
                       onPress={() => setSelectedSpace(space)}
                     >
@@ -810,21 +788,21 @@ function ShareToChatModal({
                         style={{
                           width: 40,
                           height: 40,
-                          borderRadius: 8,
+                          borderRadius: Skin.radius(8),
                           backgroundColor: theme.colors.accent,
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}
                       >
-                        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
+                        <Text style={{ color: '#fff', fontSize: Skin.font(16), fontWeight: '600' }}>
                           {space.spaceName?.charAt(0).toUpperCase() ?? 'S'}
                         </Text>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 15, fontWeight: '500', color: theme.colors.textMain }}>
+                        <Text style={{ fontSize: Skin.font(15), fontWeight: '500', color: theme.colors.textMain }}>
                           {space.spaceName}
                         </Text>
-                        <Text style={{ fontSize: 13, color: theme.colors.textMuted }}>
+                        <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMuted }}>
                           {space.groups?.reduce((acc, g) => acc + (g.channels?.length ?? 0), 0) ?? 0} channels
                         </Text>
                       </View>
@@ -839,12 +817,12 @@ function ShareToChatModal({
                 <>
                   <Text
                     style={{
-                      fontSize: 13,
+                      fontSize: Skin.font(13),
                       fontWeight: '600',
                       color: theme.colors.textMuted,
-                      paddingHorizontal: 16,
-                      paddingTop: 16,
-                      paddingBottom: 8,
+                      paddingHorizontal: Skin.space(16),
+                      paddingTop: Skin.space(16),
+                      paddingBottom: Skin.space(8),
                     }}
                   >
                     DIRECT MESSAGES
@@ -857,9 +835,9 @@ function ShareToChatModal({
                         style={{
                           flexDirection: 'row',
                           alignItems: 'center',
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                          gap: 12,
+                          paddingHorizontal: Skin.space(16),
+                          paddingVertical: Skin.space(12),
+                          gap: Skin.space(12),
                         }}
                         onPress={() => isFarcaster ? handleSelectFarcasterDM(conv) : handleSelectDM(conv)}
                       >
@@ -867,24 +845,24 @@ function ShareToChatModal({
                           style={{
                             width: 40,
                             height: 40,
-                            borderRadius: 20,
+                            borderRadius: Skin.radius(20),
                             backgroundColor: theme.colors.surface3,
                             alignItems: 'center',
                             justifyContent: 'center',
                           }}
                         >
                           {conv.icon ? (
-                            <Image source={{ uri: conv.icon }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                            <Image source={{ uri: conv.icon }} style={{ width: 40, height: 40, borderRadius: Skin.radius(20) }} />
                           ) : (
                             <IconSymbol name="person.fill" size={20} color={theme.colors.textMuted} />
                           )}
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 15, fontWeight: '500', color: theme.colors.textMain }}>
+                          <Text style={{ fontSize: Skin.font(15), fontWeight: '500', color: theme.colors.textMain }}>
                             {conv.displayName || (isFarcaster ? conv.farcasterUsername : conv.address?.slice(0, 12) + '...') || 'Unknown'}
                           </Text>
                           {isFarcaster && conv.farcasterUsername && conv.displayName !== conv.farcasterUsername && (
-                            <Text style={{ fontSize: 13, color: theme.colors.textMuted }}>
+                            <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMuted }}>
                               @{conv.farcasterUsername}
                             </Text>
                           )}
@@ -902,7 +880,7 @@ function ShareToChatModal({
               )}
 
               {spaces.length === 0 && allDMs.length === 0 && (
-                <View style={{ padding: 40, alignItems: 'center' }}>
+                <View style={{ padding: Skin.space(40), alignItems: 'center' }}>
                   <Text style={{ color: theme.colors.textMuted, textAlign: 'center' }}>
                     No conversations yet.{'\n'}Start a chat to share to it.
                   </Text>
@@ -920,20 +898,20 @@ function ShareToChatModal({
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    gap: 12,
+                    paddingHorizontal: Skin.space(16),
+                    paddingVertical: Skin.space(12),
+                    gap: Skin.space(12),
                   }}
                   onPress={() => handleSelectChannel(channel)}
                 >
                   <IconSymbol name="number" size={20} color={theme.colors.textMuted} />
-                  <Text style={{ fontSize: 15, color: theme.colors.textMain }}>
+                  <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>
                     {channel.channelName}
                   </Text>
                 </TouchableOpacity>
               ))}
               {channels.length === 0 && (
-                <View style={{ padding: 40, alignItems: 'center' }}>
+                <View style={{ padding: Skin.space(40), alignItems: 'center' }}>
                   <Text style={{ color: theme.colors.textMuted }}>No channels in this space</Text>
                 </View>
               )}
@@ -1077,7 +1055,7 @@ function VideoPlayer({
               style={{
                 width: 60,
                 height: 60,
-                borderRadius: 30,
+                borderRadius: Skin.radius(30),
                 backgroundColor: 'rgba(0, 0, 0, 0.6)',
                 justifyContent: 'center',
                 alignItems: 'center',
@@ -1093,11 +1071,11 @@ function VideoPlayer({
               bottom: 8,
               right: 8,
               backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              paddingHorizontal: 6,
-              paddingVertical: 2,
-              borderRadius: 4,
+              paddingHorizontal: Skin.space(6),
+              paddingVertical: Skin.space(2),
+              borderRadius: Skin.radius(4),
             }}>
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>
+              <Text style={{ color: '#fff', fontSize: Skin.font(12), fontWeight: '500' }}>
                 {formatDuration(duration)}
               </Text>
             </View>
@@ -1138,7 +1116,7 @@ function VideoPlayer({
                 style={{
                   width: 60,
                   height: 60,
-                  borderRadius: 30,
+                  borderRadius: Skin.radius(30),
                   backgroundColor: 'rgba(0, 0, 0, 0.6)',
                   justifyContent: 'center',
                   alignItems: 'center',
@@ -1186,20 +1164,20 @@ function LinkPreview({
       <TouchableOpacity
         style={{
           backgroundColor: theme.colors.surface2,
-          borderRadius: 12,
-          paddingVertical: 10,
-          paddingHorizontal: 12,
-          marginHorizontal: 12,
+          borderRadius: Skin.radius(12),
+          paddingVertical: Skin.space(10),
+          paddingHorizontal: Skin.space(12),
+          marginHorizontal: Skin.space(12),
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 8,
+          gap: Skin.space(8),
         }}
         onPress={handlePress}
         activeOpacity={0.8}
       >
         <IconSymbol name="link" color={theme.colors.textMuted} size={14} />
         <Text
-          style={{ color: theme.colors.textStrong, fontSize: 13, flex: 1 }}
+          style={{ color: theme.colors.textStrong, fontSize: Skin.font(13), flex: 1 }}
           numberOfLines={1}
           ellipsizeMode="middle"
         >
@@ -1216,9 +1194,9 @@ function LinkPreview({
       <TouchableOpacity
         style={{
           backgroundColor: theme.colors.surface2,
-          borderRadius: 12,
+          borderRadius: Skin.radius(12),
           overflow: 'hidden',
-          marginHorizontal: 12,
+          marginHorizontal: Skin.space(12),
         }}
         onPress={handlePress}
         activeOpacity={0.8}
@@ -1232,13 +1210,13 @@ function LinkPreview({
           }}
           resizeMode="cover"
         />
-        <View style={{ padding: 12 }}>
+        <View style={{ padding: Skin.space(12) }}>
           <Text
             style={{
               color: theme.colors.textStrong,
-              fontSize: 15,
+              fontSize: Skin.font(15),
               fontWeight: '600',
-              marginBottom: 4,
+              marginBottom: Skin.space(4),
             }}
             numberOfLines={2}
           >
@@ -1248,9 +1226,9 @@ function LinkPreview({
             <Text
               style={{
                 color: theme.colors.textMuted,
-                fontSize: 13,
-                lineHeight: 18,
-                marginBottom: 4,
+                fontSize: Skin.font(13),
+                lineHeight: Skin.font(18),
+                marginBottom: Skin.space(4),
               }}
               numberOfLines={2}
             >
@@ -1258,7 +1236,7 @@ function LinkPreview({
             </Text>
           )}
           {domain && (
-            <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
+            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>
               {domain}
             </Text>
           )}
@@ -1271,9 +1249,9 @@ function LinkPreview({
     <TouchableOpacity
       style={{
         backgroundColor: theme.colors.surface2,
-        borderRadius: 12,
+        borderRadius: Skin.radius(12),
         overflow: 'hidden',
-        marginHorizontal: 12,
+        marginHorizontal: Skin.space(12),
         flexDirection: 'row',
       }}
       onPress={handlePress}
@@ -1290,13 +1268,13 @@ function LinkPreview({
           resizeMode="cover"
         />
       )}
-      <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
+      <View style={{ flex: 1, padding: Skin.space(12), justifyContent: 'center' }}>
         <Text
           style={{
             color: theme.colors.textStrong,
-            fontSize: 14,
+            fontSize: Skin.font(14),
             fontWeight: '600',
-            marginBottom: 4,
+            marginBottom: Skin.space(4),
           }}
           numberOfLines={2}
         >
@@ -1306,9 +1284,9 @@ function LinkPreview({
           <Text
             style={{
               color: theme.colors.textMuted,
-              fontSize: 12,
-              lineHeight: 16,
-              marginBottom: 4,
+              fontSize: Skin.font(12),
+              lineHeight: Skin.font(16),
+              marginBottom: Skin.space(4),
             }}
             numberOfLines={2}
           >
@@ -1316,7 +1294,7 @@ function LinkPreview({
           </Text>
         )}
         {domain && (
-          <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(11) }}>
             {domain}
           </Text>
         )}
@@ -1420,7 +1398,7 @@ function ChannelBadge({
   return (
     <TouchableOpacity onPress={() => onOpenChannel(finalKey)}>
       <Text
-        style={{ color: theme.colors.accent, fontSize: 13 }}
+        style={{ color: theme.colors.accent, fontSize: Skin.font(13) }}
         numberOfLines={1}
       >
         /{finalName ?? finalKey}
@@ -1516,23 +1494,23 @@ function ParentContextLine({
     return (
       <Wrapper
         style={{
-          borderRadius: 8,
-          borderWidth: 1,
+          borderRadius: Skin.radius(8),
+          borderWidth: Skin.border(1),
           borderColor: theme.colors.surface3,
           backgroundColor: theme.colors.surface1,
           overflow: 'hidden',
         }}
       >
-        <View style={{ padding: 8, gap: 2 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <View style={{ padding: Skin.space(8), gap: Skin.space(2) }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
             <IconSymbol name="arrowshape.turn.up.left" color={theme.colors.textMuted} size={12} />
-            <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
+            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>
               replying to <Text style={{ color: theme.colors.accent }}>{handle}</Text>
             </Text>
           </View>
           {parentCast.text.trim().length > 0 && (
             <Text
-              style={{ color: theme.colors.textMain, fontSize: 13, lineHeight: 18 }}
+              style={{ color: theme.colors.textMain, fontSize: Skin.font(13), lineHeight: Skin.font(18) }}
               numberOfLines={3}
             >
               {parentCast.text}
@@ -1551,15 +1529,15 @@ function ParentContextLine({
   }
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: Skin.space(6) }}>
       <IconSymbol
         name={showUrlContext ? 'link' : 'arrowshape.turn.up.left'}
         color={theme.colors.textMuted}
         size={14}
-        style={{ marginTop: 2 }}
+        style={{ marginTop: Skin.space(2) }}
       />
       {showUrlContext ? (
-        <Text style={{ color: theme.colors.textMuted, fontSize: 13, flex: 1 }} numberOfLines={1}>
+        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), flex: 1 }} numberOfLines={1}>
           replying to{' '}
           <Text style={{ color: theme.colors.accent }}>
             {(() => {
@@ -1573,7 +1551,7 @@ function ParentContextLine({
         </Text>
       ) : (
         // showUserContext, mini-preview-still-loading, or showGenericReply
-        <Text style={{ color: theme.colors.textMuted, fontSize: 13, flex: 1 }}>
+        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), flex: 1 }}>
           replying to{' '}
           <Text style={{ color: theme.colors.accent }}>
             {cast.parentAuthor?.username
@@ -1802,7 +1780,7 @@ function InlineYouTubeFromText({
   );
   if (matches.length === 0) return null;
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: Skin.space(8) }}>
       {matches.map(({ url, match }) => (
         <YouTubeEmbed
           key={url}
@@ -1857,18 +1835,18 @@ function QuoteCast({
       <View
         style={{
           backgroundColor: theme.colors.surface2,
-          borderRadius: 12,
-          padding: 12,
-          marginHorizontal: 12,
-          borderWidth: 1,
+          borderRadius: Skin.radius(12),
+          padding: Skin.space(12),
+          marginHorizontal: Skin.space(12),
+          borderWidth: Skin.border(1),
           borderColor: theme.colors.surface3,
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 8,
+          gap: Skin.space(8),
         }}
       >
         <ActivityIndicator size="small" color={theme.colors.textMuted} />
-        <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>
+        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>
           Loading quoted cast…
         </Text>
       </View>
@@ -1879,33 +1857,33 @@ function QuoteCast({
     <TouchableOpacity
       style={{
         backgroundColor: theme.colors.surface2,
-        borderRadius: 12,
+        borderRadius: Skin.radius(12),
         overflow: 'hidden',
-        marginHorizontal: 12,
-        borderWidth: 1,
+        marginHorizontal: Skin.space(12),
+        borderWidth: Skin.border(1),
         borderColor: theme.colors.surface3,
       }}
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <View style={{ padding: 12 }}>
+      <View style={{ padding: Skin.space(12) }}>
         {/* Author row */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Skin.space(8) }}>
           <CachedAvatar
             source={pfpUrl ? { uri: pfpUrl } : null}
             style={{
               width: 24,
               height: 24,
-              borderRadius: 12,
-              marginRight: 8,
+              borderRadius: Skin.radius(12),
+              marginRight: Skin.space(8),
               backgroundColor: theme.colors.surface3,
             }}
           />
-          <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: 14 }}>
+          <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(14) }}>
             {displayName}
           </Text>
           {username && (
-            <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginLeft: 4 }}>
+            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginLeft: Skin.space(4) }}>
               @{username}
             </Text>
           )}
@@ -1915,8 +1893,8 @@ function QuoteCast({
           <Text
             style={{
               color: theme.colors.textMain,
-              fontSize: 14,
-              lineHeight: 20,
+              fontSize: Skin.font(14),
+              lineHeight: Skin.font(20),
             }}
             numberOfLines={4}
           >
@@ -1997,18 +1975,18 @@ function FarcasterCastUrlEmbed({
       <View
         style={{
           backgroundColor: theme.colors.surface2,
-          borderRadius: 12,
-          padding: 12,
-          marginHorizontal: 12,
-          borderWidth: 1,
+          borderRadius: Skin.radius(12),
+          padding: Skin.space(12),
+          marginHorizontal: Skin.space(12),
+          borderWidth: Skin.border(1),
           borderColor: theme.colors.surface3,
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 8,
+          gap: Skin.space(8),
         }}
       >
         <ActivityIndicator size="small" color={theme.colors.textMuted} />
-        <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>
+        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>
           Loading quoted cast…
         </Text>
       </View>
@@ -2021,14 +1999,14 @@ function FarcasterCastUrlEmbed({
     <TouchableOpacity
       style={{
         backgroundColor: theme.colors.surface2,
-        borderRadius: 12,
-        padding: 12,
-        borderWidth: 1,
+        borderRadius: Skin.radius(12),
+        padding: Skin.space(12),
+        borderWidth: Skin.border(1),
         borderColor: theme.colors.surface3,
       }}
       onPress={onPress}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(8) }}>
         <IconSymbol name="bubble.left.and.bubble.right" color={theme.colors.accent} size={16} />
         <Text style={{ color: theme.colors.textStrong, fontWeight: '600', flex: 1 }} numberOfLines={1}>
           {fallbackTitle || 'View cast'}
@@ -2036,7 +2014,7 @@ function FarcasterCastUrlEmbed({
         <IconSymbol name="chevron.right" color={theme.colors.textMuted} size={14} />
       </View>
       {fallbackDescription && (
-        <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 4 }} numberOfLines={2}>
+        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(4) }} numberOfLines={2}>
           {fallbackDescription}
         </Text>
       )}
@@ -2075,19 +2053,19 @@ function FrameEmbed({
       <View
         style={{
           backgroundColor: theme.colors.surface2,
-          paddingVertical: 12,
-          paddingHorizontal: 16,
+          paddingVertical: Skin.space(12),
+          paddingHorizontal: Skin.space(16),
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'center',
-          borderTopWidth: 1,
+          borderTopWidth: Skin.border(1),
           borderTopColor: theme.colors.surface3,
         }}
       >
         <Text
           style={{
             color: theme.colors.textStrong,
-            fontSize: 15,
+            fontSize: Skin.font(15),
             fontWeight: '600',
           }}
         >
@@ -2097,7 +2075,7 @@ function FrameEmbed({
           name="arrow.up.right"
           color={theme.colors.textMuted}
           size={14}
-          style={{ marginLeft: 6 }}
+          style={{ marginLeft: Skin.space(6) }}
         />
       </View>
     </TouchableOpacity>
@@ -2128,6 +2106,8 @@ function ThreadDetailView({
   currentUserFid,
   maxCastLength = DEFAULT_CAST_LENGTH,
   regularCastByteLimit = DEFAULT_CAST_LENGTH,
+  governanceByHash,
+  onGovernanceVoted,
 }: {
   username: string;
   castHashPrefix: string;
@@ -2155,6 +2135,10 @@ function ThreadDetailView({
   currentUserFid?: number;
   maxCastLength?: number;
   regularCastByteLimit?: number;
+  /** /hegemony proposals keyed by 0x hash — overlays vote tallies + voter
+   *  points onto a proposal's thread. Absent for normal threads. */
+  governanceByHash?: Map<string, GovernanceChannelCast>;
+  onGovernanceVoted?: () => void;
 }) {
   const { parentCasts, mainCast: fetchedMainCast, replies, isLoading, error, channelContext, refetch } = useFarcasterThread({
     username,
@@ -2167,6 +2151,23 @@ function ThreadDetailView({
   // channel are structurally compatible enough that the renderer below
   // tolerates either — it reads optional fields lazily.
   const mainCast = fetchedMainCast ?? (placeholderCast as typeof fetchedMainCast | undefined);
+
+  // /hegemony overlay: when the thread's root cast is a proposal, surface the
+  // weighted tally + per-voter points (normal threads show none of this).
+  const govProposal = (mainCast as { hash?: string } | undefined)?.hash
+    ? governanceByHash?.get(((mainCast as { hash: string }).hash).toLowerCase())
+    : undefined;
+  const govFidPoints = React.useMemo(() => {
+    const m = new Map<number, number>();
+    const walk = (rs: GovernanceCastReply[]) => {
+      for (const r of rs) {
+        m.set(r.authorFid, r.points);
+        if (r.replies?.length) walk(r.replies);
+      }
+    };
+    if (govProposal) walk(govProposal.directReplies);
+    return m;
+  }, [govProposal]);
 
   // Get current user info for inline reply editor
   const { user: currentUser } = useAuth();
@@ -2192,6 +2193,13 @@ function ThreadDetailView({
   // without focusing yet).
   const editorYRef = useRef<number | null>(null);
   const [isEditorVisible, setIsEditorVisible] = useState(false);
+
+  // Blocked/muted-user replies are collapsed to a tap-to-reveal placeholder
+  // in the thread (the main cast is never hidden — you navigated to it).
+  // `revealedBlocked` holds the hashes the viewer chose to expand.
+  const { fids: blockedFids } = useBlockedFids();
+  const { fids: mutedFids } = useMutedFids();
+  const [revealedBlocked, setRevealedBlocked] = useState<Set<string>>(() => new Set());
 
   // Tap target for both the floating FAB and the auto-scroll-on-mount
   // useEffect below. Focus first so the keyboard starts opening, then
@@ -2369,6 +2377,51 @@ function ThreadDetailView({
     // crash here at `cast.author.fid`. Render nothing instead of
     // throwing — the real cast replaces this on fetch completion.
     if (!cast || !cast.author) return null;
+
+    // Governance: annotate FOR/AGAINST vote replies with the voter's points,
+    // but only inside a proposal thread (never in a normal thread).
+    const govVote = !isMain && govProposal ? parseGovernanceVote(cast.text ?? '') : null;
+    const govVotePts = govVote ? govFidPoints.get(cast.author.fid) ?? 0 : 0;
+
+    // Blocked/muted authors' replies render as a tap-to-reveal placeholder.
+    // Never applied to the main cast (the one the viewer opened).
+    const isBlockedAuthor = !isMain && cast.author.fid > 0 && blockedFids.has(cast.author.fid);
+    const isMutedAuthor = !isMain && cast.author.fid > 0 && mutedFids.has(cast.author.fid);
+    if ((isBlockedAuthor || isMutedAuthor) && !revealedBlocked.has(cast.hash)) {
+      const blockedBorderWidth = cast.depth > 0 ? Math.min(cast.depth * 2, 6) : 0;
+      const verb = isBlockedAuthor ? 'blocked' : 'muted';
+      return (
+        <TouchableOpacity
+          key={cast.hash}
+          activeOpacity={0.7}
+          onPress={() =>
+            setRevealedBlocked((prev) => {
+              const next = new Set(prev);
+              next.add(cast.hash);
+              return next;
+            })
+          }
+          style={{
+            borderTopWidth: Skin.border(1),
+            borderTopColor: theme.colors.surface3,
+            paddingVertical: Skin.space(14),
+            borderLeftWidth: blockedBorderWidth,
+            borderLeftColor: theme.colors.accent,
+            paddingLeft: Skin.space(12),
+            paddingRight: Skin.space(12),
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: Skin.space(8),
+          }}
+        >
+          <IconSymbol name="nosign" color={theme.colors.textMuted} size={16} />
+          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>
+            This user has been {verb}, tap to show message
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
     const imageUrls = (cast.embeds?.images ?? [])
       .map((img) => img.url)
       .filter((url): url is string => Boolean(url));
@@ -2414,12 +2467,12 @@ function ThreadDetailView({
           borderTopWidth: isMain ? 0 : 1,
           borderTopColor: theme.colors.surface3,
           paddingTop: isMain ? 0 : 12,
-          paddingBottom: 14,
+          paddingBottom: Skin.space(14),
           borderLeftWidth: borderWidth,
           borderLeftColor: theme.colors.accent,
           paddingLeft: isNested ? 12 : 12,
-          paddingRight: 12,
-          gap: 10,
+          paddingRight: Skin.space(12),
+          gap: Skin.space(10),
         }}
       >
         {/* Header row */}
@@ -2427,19 +2480,19 @@ function ThreadDetailView({
           {showBackArrow && (
             <TouchableOpacity
               onPress={onClose}
-              style={{ marginRight: 12 }}
+              style={{ marginRight: Skin.space(12) }}
             >
               <IconSymbol name="chevron.left" color={theme.colors.textMain} size={24} />
             </TouchableOpacity>
           )}
-          <View style={{ position: 'relative', marginRight: 12 }}>
+          <View style={{ position: 'relative', marginRight: Skin.space(12) }}>
             <TouchableOpacity onPress={() => onOpenProfile(cast.author.fid, cast.author.username)}>
               <CachedAvatar
                 source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
                 style={{
                   width: 44,
                   height: 44,
-                  borderRadius: 22,
+                  borderRadius: Skin.radius(22),
                   backgroundColor: theme.colors.surface3,
                 }}
               />
@@ -2456,11 +2509,11 @@ function ThreadDetailView({
                     right: -2,
                     width: 18,
                     height: 18,
-                    borderRadius: 9,
+                    borderRadius: Skin.radius(9),
                     alignItems: 'center',
                     justifyContent: 'center',
                     backgroundColor: theme.colors.primary,
-                    borderWidth: 2,
+                    borderWidth: Skin.border(2),
                     borderColor: theme.colors.background,
                   }}
                   onPress={() => onFollow(cast.author.fid)}
@@ -2482,15 +2535,15 @@ function ThreadDetailView({
 
               return (
                 <>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
                     <TouchableOpacity onPress={() => onOpenProfile(cast.author.fid, cast.author.username)}>
-                      <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: 15 }}>
+                      <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}>
                         {cast.author.displayName}
                       </Text>
                     </TouchableOpacity>
                     {channelName ? (
                       <TouchableOpacity onPress={() => onOpenChannel(channelName)}>
-                        <Text style={{ color: theme.colors.accent, fontSize: 13 }}>
+                        <Text style={{ color: theme.colors.accent, fontSize: Skin.font(13) }}>
                           /{channelDisplayName || channelName}
                         </Text>
                       </TouchableOpacity>
@@ -2508,13 +2561,21 @@ function ThreadDetailView({
                       />
                     )}
                   </View>
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 2 }}>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>
                     @{cast.author.username} • {formatTimestamp(cast.timestamp)}
                   </Text>
                 </>
               );
             })()}
           </View>
+          <CastOverflowButton
+            castHash={cast.hash}
+            authorFid={cast.author.fid}
+            authorUsername={cast.author.username}
+            castText={cast.text}
+            onReport={(hash, castAuthorFid) => setReportCastTarget({ castHash: hash, castAuthorFid })}
+            theme={theme}
+          />
         </View>
 
         {/* Parent context - URL (non-channel), reply to user, or generic
@@ -2531,21 +2592,47 @@ function ThreadDetailView({
           />
         )}
 
+        {/* Governance vote badge (proposal threads only) */}
+        {govVote && (
+          <Text
+            style={{
+              alignSelf: 'flex-start',
+              marginBottom: Skin.space(4),
+              fontSize: Skin.font(11),
+              fontWeight: '700',
+              borderWidth: 1,
+              borderRadius: Skin.radius(4),
+              paddingHorizontal: Skin.space(6),
+              paddingVertical: Skin.space(1),
+              color: govVote === 'for' ? theme.colors.accent : theme.colors.warning,
+              borderColor: govVote === 'for' ? theme.colors.accent : theme.colors.warning,
+            }}
+          >
+            {govVote === 'for' ? 'FOR' : 'AGAINST'} — {Math.floor(govVotePts).toLocaleString()} pts
+          </Text>
+        )}
+
         {/* Content */}
         {cast.text.trim().length > 0 && (
-          <CastText
+          <Translatable
             text={cast.text}
-            style={{ color: theme.colors.textMain, fontSize: 15, lineHeight: 20 }}
             theme={theme}
-            onMentionPress={handleMentionPress}
-            onChannelPress={onOpenChannel}
-            onLinkPress={onOpenMiniApp}
+            renderText={(t) => (
+              <CastText
+                text={t}
+                style={{ color: theme.colors.textMain, fontSize: Skin.font(15), lineHeight: Skin.font(20) }}
+                theme={theme}
+                onMentionPress={handleMentionPress}
+                onChannelPress={onOpenChannel}
+                onLinkPress={onOpenMiniApp}
+              />
+            )}
           />
         )}
 
         {/* Images - edge to edge */}
         {hasImages && (
-          <View style={{ marginHorizontal: -12 - borderWidth }}>
+          <View style={{ marginHorizontal: Skin.space(-12) - borderWidth }}>
             {imageUrls.length === 1 ? (
               <AutoHeightImage
                 uri={imageUrls[0]}
@@ -2566,7 +2653,7 @@ function ThreadDetailView({
 
         {/* Videos - edge to edge */}
         {hasVideos && (
-          <View style={{ marginHorizontal: -12 - borderWidth }}>
+          <View style={{ marginHorizontal: Skin.space(-12) - borderWidth }}>
             {videos.map((video, index) => (
               <VideoPlayer
                 key={index}
@@ -2582,7 +2669,7 @@ function ThreadDetailView({
 
         {/* Frame embeds (mini apps) */}
         {frameEmbeds.length > 0 && (
-          <View style={{ marginHorizontal: -12 - borderWidth, gap: 8 }}>
+          <View style={{ marginHorizontal: Skin.space(-12) - borderWidth, gap: Skin.space(8) }}>
             {frameEmbeds.map((frame, index) => (
               <FrameEmbed
                 key={index}
@@ -2598,7 +2685,7 @@ function ThreadDetailView({
 
         {/* URL previews (non-frame) — snap-aware */}
         {urlPreviews.length > 0 && (
-          <View style={{ gap: 8 }}>
+          <View style={{ gap: Skin.space(8) }}>
             {urlPreviews.map((urlEmbed, index) => {
               const linkUrl = urlEmbed.openGraph?.url || urlEmbed.openGraph?.sourceUrl;
               const isQuorumInvite = linkUrl && containsInviteLink(linkUrl);
@@ -2683,7 +2770,7 @@ function ThreadDetailView({
 
         {/* Embedded casts (quote casts) */}
         {cast.embeds?.casts && cast.embeds.casts.length > 0 && (
-          <View style={{ gap: 8 }}>
+          <View style={{ gap: Skin.space(8) }}>
             {cast.embeds.casts.map((embeddedCast, index) => (
               <QuoteCast
                 key={index}
@@ -2704,9 +2791,9 @@ function ThreadDetailView({
           const isRecasted = recastOptimistic?.recasted ?? cast.viewerContext?.recast ?? false;
           const recastCount = recastOptimistic?.count ?? (cast.recasts?.count ?? 0);
           return (
-            <View style={{ flexDirection: 'row', gap: 16, marginTop: 4 }}>
+            <View style={{ flexDirection: 'row', gap: Skin.space(16), marginTop: Skin.space(4) }}>
               <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
                 onPress={() => onLikeToggle(cast.hash, isLiked, likeCount)}
                 hitSlop={12}
               >
@@ -2718,21 +2805,21 @@ function ThreadDetailView({
                   size={16}
                 />
                 {likeCount > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>{likeCount}</Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4, paddingHorizontal: 2 }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6), paddingVertical: Skin.space(4), paddingHorizontal: Skin.space(2) }}
                 onPress={() => onOpenThread(cast.author.username, cast.hash.slice(0, 10), cast)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={16} />
                 {(cast.replies?.count ?? 0) > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>{cast.replies?.count}</Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4, paddingHorizontal: 2 }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6), paddingVertical: Skin.space(4), paddingHorizontal: Skin.space(2) }}
                 onPress={() => {
                   setShareSheetCast({
                     hash: cast.hash,
@@ -2751,7 +2838,7 @@ function ThreadDetailView({
                   size={16}
                 />
                 {recastCount > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>{recastCount}</Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{recastCount}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -2775,7 +2862,7 @@ function ThreadDetailView({
     >
     <View style={{ flex: 1, backgroundColor: theme.colors.surface1 }}>
       {error && (
-        <View style={{ padding: 20 }}>
+        <View style={{ padding: Skin.space(20) }}>
           <Text style={{ color: theme.colors.danger }}>{error}</Text>
         </View>
       )}
@@ -2785,7 +2872,7 @@ function ThreadDetailView({
           ref={scrollViewRef}
           style={{ flex: 1 }}
           contentContainerStyle={{
-            paddingBottom: 16,
+            paddingBottom: Skin.space(16),
           }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
@@ -2825,13 +2912,26 @@ function ThreadDetailView({
             parentCasts.length === 0,
           )}
 
+          {/* Governance: weighted FOR/AGAINST tally + voting, only when this
+              thread's root cast is a /hegemony proposal. */}
+          {govProposal && mainCast && (
+            <ProposalVoteBlock
+              hash={(mainCast as { hash: string }).hash}
+              votesFor={govProposal.votesFor}
+              votesAgainst={govProposal.votesAgainst}
+              token={token}
+              theme={theme}
+              onVoted={onGovernanceVoted}
+            />
+          )}
+
           {/* Replies-loading spinner — sits between the root cast and
               the replies area so the root cast (placeholder or real)
               stays at the top of the view, exactly where the user
               tapped. Previously the full-screen spinner above split
               the layout in half. */}
           {isLoading && replies.length === 0 && (
-            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+            <View style={{ paddingVertical: Skin.space(24), alignItems: 'center' }}>
               <ActivityIndicator color={theme.colors.accent} />
             </View>
           )}
@@ -2851,18 +2951,18 @@ function ThreadDetailView({
                 editorYRef.current = e.nativeEvent.layout.y;
               }}
               style={{
-                borderTopWidth: 1,
+                borderTopWidth: Skin.border(1),
                 borderTopColor: theme.colors.surface3,
-                paddingTop: 12,
-                paddingBottom: 14,
-                paddingLeft: 12,
-                paddingRight: 12,
-                gap: 10,
+                paddingTop: Skin.space(12),
+                paddingBottom: Skin.space(14),
+                paddingLeft: Skin.space(12),
+                paddingRight: Skin.space(12),
+                gap: Skin.space(10),
               }}
             >
               {/* Mention autocomplete - positioned above the editor */}
               {replyMentionInfo && (
-                <View style={{ zIndex: 10, marginBottom: -2 }}>
+                <View style={{ zIndex: 10, marginBottom: Skin.space(-2) }}>
                   <MentionAutocomplete
                     mentionInfo={replyMentionInfo}
                     token={token}
@@ -2876,23 +2976,23 @@ function ThreadDetailView({
 
               {/* Header row - avatar + name, matching cast layout */}
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ marginRight: 12 }}>
+                <View style={{ marginRight: Skin.space(12) }}>
                   <CachedAvatar
                     source={replyAvatarUri ? { uri: replyAvatarUri } : null}
                     style={{
                       width: 44,
                       height: 44,
-                      borderRadius: 22,
+                      borderRadius: Skin.radius(22),
                       backgroundColor: theme.colors.surface3,
                     }}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: 15 }}>
+                  <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}>
                     {currentUser?.displayName || currentUser?.farcaster?.username || 'You'}
                   </Text>
                   {currentUser?.farcaster?.username && (
-                    <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 2 }}>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>
                       @{currentUser.farcaster.username}
                     </Text>
                   )}
@@ -2900,7 +3000,7 @@ function ThreadDetailView({
               </View>
 
               {/* Text input - styled like cast body text, no border/background */}
-              <View style={{ marginLeft: 56 }}>
+              <View style={{ marginLeft: Skin.space(56) }}>
                 <TextInput
                   ref={replyInputRef}
                   onFocus={() => setIsEditorFocused(true)}
@@ -2908,8 +3008,8 @@ function ThreadDetailView({
                   style={{
                     minHeight: 40,
                     color: theme.colors.textMain,
-                    fontSize: 15,
-                    lineHeight: 20,
+                    fontSize: Skin.font(15),
+                    lineHeight: Skin.font(20),
                     padding: 0,
                     textAlignVertical: 'top',
                   }}
@@ -2936,8 +3036,8 @@ function ThreadDetailView({
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    style={{ marginTop: 10 }}
-                    contentContainerStyle={{ gap: 8 }}
+                    style={{ marginTop: Skin.space(10) }}
+                    contentContainerStyle={{ gap: Skin.space(8) }}
                   >
                     {replyImages.map((image, index) => (
                       <View key={index} style={{ position: 'relative' }}>
@@ -2946,7 +3046,7 @@ function ThreadDetailView({
                           style={{
                             width: 80,
                             height: 80,
-                            borderRadius: 8,
+                            borderRadius: Skin.radius(8),
                             backgroundColor: theme.colors.surface3,
                           }}
                           resizeMode="cover"
@@ -2972,7 +3072,7 @@ function ThreadDetailView({
                             right: 4,
                             width: 22,
                             height: 22,
-                            borderRadius: 11,
+                            borderRadius: Skin.radius(11),
                             backgroundColor: 'rgba(0,0,0,0.6)',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -2987,7 +3087,7 @@ function ThreadDetailView({
 
                 {/* Error message */}
                 {replyError && (
-                  <Text style={{ color: theme.colors.danger, fontSize: 13, marginTop: 6 }}>
+                  <Text style={{ color: theme.colors.danger, fontSize: Skin.font(13), marginTop: Skin.space(6) }}>
                     {replyError}
                   </Text>
                 )}
@@ -2997,7 +3097,7 @@ function ThreadDetailView({
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    marginTop: 10,
+                    marginTop: Skin.space(10),
                   }}
                 >
                   <TouchableOpacity
@@ -3005,7 +3105,7 @@ function ThreadDetailView({
                     disabled={isPosting || replyImages.length >= 2}
                     style={{
                       opacity: replyImages.length >= 2 ? 0.4 : 1,
-                      padding: 4,
+                      padding: Skin.space(4),
                     }}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
@@ -3016,8 +3116,8 @@ function ThreadDetailView({
 
                   {replyText.length > 0 && (
                     <Text style={{
-                      fontSize: 12,
-                      marginRight: 10,
+                      fontSize: Skin.font(12),
+                      marginRight: Skin.space(10),
                       color: replyText.length > regularCastByteLimit && replyText.length <= maxCastLength
                         ? (theme.colors.warning || '#FFA500')
                         : theme.colors.textMuted,
@@ -3030,9 +3130,9 @@ function ThreadDetailView({
                     onPress={handleSubmitReply}
                     disabled={!canReply}
                     style={{
-                      paddingHorizontal: 16,
-                      paddingVertical: 8,
-                      borderRadius: 16,
+                      paddingHorizontal: Skin.space(16),
+                      paddingVertical: Skin.space(8),
+                      borderRadius: Skin.radius(16),
                       backgroundColor: canReply ? theme.colors.accent : theme.colors.surface3,
                     }}
                   >
@@ -3041,7 +3141,7 @@ function ThreadDetailView({
                     ) : (
                       <Text style={{
                         color: canReply ? '#fff' : theme.colors.textMuted,
-                        fontSize: 14,
+                        fontSize: Skin.font(14),
                         fontWeight: '600',
                       }}>
                         Post
@@ -3066,7 +3166,7 @@ function ThreadDetailView({
             bottom: bottomInset + 16,
             width: 48,
             height: 48,
-            borderRadius: 24,
+            borderRadius: Skin.radius(24),
             backgroundColor: theme.colors.accent,
             alignItems: 'center',
             justifyContent: 'center',
@@ -3132,13 +3232,6 @@ function ThreadDetailView({
             } catch {
               // User cancelled share — no action needed
             }
-          }
-        }}
-        onReport={() => {
-          if (shareSheetCast) {
-            const { hash, authorFid } = shareSheetCast;
-            setShareSheetCast(null);
-            setReportCastTarget({ castHash: hash, castAuthorFid: authorFid });
           }
         }}
       />
@@ -3230,7 +3323,7 @@ export function ProfileView({
         </TouchableOpacity>
 
         {/* Avatar */}
-        <View style={{ paddingHorizontal: 16, marginTop: -40 }}>
+        <View style={{ paddingHorizontal: Skin.space(16), marginTop: Skin.space(-40) }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
             <TouchableOpacity
               activeOpacity={0.8}
@@ -3241,66 +3334,76 @@ export function ProfileView({
                 style={{
                   width: 80,
                   height: 80,
-                  borderRadius: 40,
-                  borderWidth: 4,
+                  borderRadius: Skin.radius(40),
+                  borderWidth: Skin.border(4),
                   borderColor: theme.colors.background,
                   backgroundColor: theme.colors.surface3,
                 }}
               />
             </TouchableOpacity>
+            <ProfileOverflowButton targetFid={fid} username={author.username} theme={theme} />
           </View>
 
           {/* Name and username */}
-          <View style={{ marginTop: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={{ color: theme.colors.textStrong, fontSize: 22, fontWeight: '700' }}>
+          <View style={{ marginTop: Skin.space(12) }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
+              <Text style={{ color: theme.colors.textStrong, fontSize: Skin.font(22), fontWeight: '700' }}>
                 {author.displayName}
               </Text>
               {author.profile?.accountLevel === 'pro' && (
                 <IconSymbol name="star.fill" color={theme.colors.warning} size={16} />
               )}
             </View>
-            <Text style={{ color: theme.colors.textMuted, fontSize: 15, marginTop: 2 }}>
+            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(15), marginTop: Skin.space(2) }}>
               @{author.username}
             </Text>
           </View>
 
           {/* Bio */}
           {author.profile?.bio?.text && (
-            <Text style={{ color: theme.colors.textMain, fontSize: 15, lineHeight: 21, marginTop: 12 }}>
+            <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(15), lineHeight: Skin.font(21), marginTop: Skin.space(12) }}>
               {author.profile.bio.text}
             </Text>
           )}
 
           {/* Location */}
           {author.profile?.location?.description && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4), marginTop: Skin.space(8) }}>
               <IconSymbol name="mappin" color={theme.colors.textMuted} size={14} />
-              <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>
+              <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>
                 {author.profile.location.description}
               </Text>
             </View>
           )}
 
           {/* Follower/Following counts */}
-          <View style={{ flexDirection: 'row', gap: 16, marginTop: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: 15 }}>
+          <View style={{ flexDirection: 'row', gap: Skin.space(16), marginTop: Skin.space(12) }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4) }}>
+              <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}>
                 {(author.followingCount ?? 0).toLocaleString()}
               </Text>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>Following</Text>
+              <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(14) }}>Following</Text>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: 15 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4) }}>
+              <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}>
                 {(author.followerCount ?? 0).toLocaleString()}
               </Text>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>Followers</Text>
+              <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(14) }}>Followers</Text>
             </View>
           </View>
+
+          <ProfileActionButtons
+            fid={fid}
+            username={author.username}
+            displayName={author.displayName}
+            pfpUrl={author.pfp?.url}
+            isFollowing={author.viewerContext?.following}
+            theme={theme}
+          />
         </View>
 
         {/* Separator */}
-        <View style={{ height: 1, backgroundColor: theme.colors.surface3, marginTop: 16 }} />
+        <View style={{ height: 1, backgroundColor: theme.colors.surface3, marginTop: Skin.space(16) }} />
       </View>
     );
   };
@@ -3374,12 +3477,12 @@ export function ProfileView({
       <View
         key={cast.hash}
         style={{
-          borderBottomWidth: 1,
+          borderBottomWidth: Skin.border(1),
           borderBottomColor: theme.colors.surface3,
-          paddingTop: 12,
-          paddingBottom: 14,
-          paddingHorizontal: 12,
-          gap: 10,
+          paddingTop: Skin.space(12),
+          paddingBottom: Skin.space(14),
+          paddingHorizontal: Skin.space(12),
+          gap: Skin.space(10),
         }}
       >
         <Pressable onPress={navigateToThread}>
@@ -3392,16 +3495,16 @@ export function ProfileView({
                 style={{
                   width: 44,
                   height: 44,
-                  borderRadius: 22,
-                  marginRight: 12,
+                  borderRadius: Skin.radius(22),
+                  marginRight: Skin.space(12),
                   backgroundColor: theme.colors.surface3,
                 }}
               />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
                 <TouchableOpacity onPress={() => onOpenProfile(cast.author.fid, cast.author.username)}>
-                  <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: 15 }}>
+                  <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}>
                     {cast.author.displayName}
                   </Text>
                 </TouchableOpacity>
@@ -3410,14 +3513,14 @@ export function ProfileView({
                   if (!chip) return null;
                   return (
                     <TouchableOpacity onPress={() => onOpenChannel(chip.key)}>
-                      <Text style={{ color: theme.colors.accent, fontSize: 13 }} numberOfLines={1}>
+                      <Text style={{ color: theme.colors.accent, fontSize: Skin.font(13) }} numberOfLines={1}>
                         /{chip.display}
                       </Text>
                     </TouchableOpacity>
                   );
                 })()}
               </View>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 2 }}>
+              <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>
                 @{cast.author.username} • {formatTimestamp(cast.timestamp)}
               </Text>
             </View>
@@ -3426,20 +3529,26 @@ export function ProfileView({
 
         {cast.text.trim().length > 0 && (
           <Pressable onPress={navigateToThread}>
-            <CastText
+            <Translatable
               text={cast.text}
-              style={{ color: theme.colors.textMain, fontSize: 15, lineHeight: 20 }}
               theme={theme}
-              onMentionPress={handleMentionPress}
-              onChannelPress={onOpenChannel}
-              onLinkPress={onOpenMiniApp}
+              renderText={(t) => (
+                <CastText
+                  text={t}
+                  style={{ color: theme.colors.textMain, fontSize: Skin.font(15), lineHeight: Skin.font(20) }}
+                  theme={theme}
+                  onMentionPress={handleMentionPress}
+                  onChannelPress={onOpenChannel}
+                  onLinkPress={onOpenMiniApp}
+                />
+              )}
             />
           </Pressable>
         )}
 
         {/* Images */}
         {hasImages && (
-          <View style={{ marginHorizontal: -12 }}>
+          <View style={{ marginHorizontal: Skin.space(-12) }}>
             {imageUrls.length === 1 ? (
               <AutoHeightImage
                 uri={imageUrls[0]}
@@ -3460,7 +3569,7 @@ export function ProfileView({
 
         {/* Videos */}
         {hasVideos && (
-          <View style={{ marginHorizontal: -12 }}>
+          <View style={{ marginHorizontal: Skin.space(-12) }}>
             {videos.map((video, index) => (
               <VideoPlayer
                 key={index}
@@ -3477,7 +3586,7 @@ export function ProfileView({
 
         {/* Frame embeds (mini apps) */}
         {frameEmbeds.length > 0 && (
-          <View style={{ marginHorizontal: -12, gap: 8 }}>
+          <View style={{ marginHorizontal: Skin.space(-12), gap: Skin.space(8) }}>
             {frameEmbeds.map((frame, index) => (
               <FrameEmbed
                 key={index}
@@ -3493,7 +3602,7 @@ export function ProfileView({
 
         {/* URL previews — snap-aware */}
         {urlPreviews.length > 0 && (
-          <View style={{ gap: 8 }}>
+          <View style={{ gap: Skin.space(8) }}>
             {urlPreviews.map((urlEmbed, index) => {
               const linkUrl = urlEmbed.openGraph?.url || urlEmbed.openGraph?.sourceUrl;
               const isQuorumInvite = linkUrl && containsInviteLink(linkUrl);
@@ -3578,7 +3687,7 @@ export function ProfileView({
 
         {/* Quote casts */}
         {quoteCasts.length > 0 && (
-          <View style={{ gap: 8 }}>
+          <View style={{ gap: Skin.space(8) }}>
             {quoteCasts.map((embeddedCast, index) => (
               <QuoteCast
                 key={index}
@@ -3596,9 +3705,9 @@ export function ProfileView({
           const isLiked = optimistic?.liked ?? cast.viewerContext?.reacted ?? false;
           const likeCount = optimistic?.count ?? (cast.reactions?.count ?? 0);
           return (
-            <View style={{ flexDirection: 'row', gap: 16, marginTop: 4 }}>
+            <View style={{ flexDirection: 'row', gap: Skin.space(16), marginTop: Skin.space(4) }}>
               <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
                 onPress={() => onLikeToggle(cast.hash, isLiked, likeCount)}
                 hitSlop={12}
               >
@@ -3610,26 +3719,26 @@ export function ProfileView({
                   size={16}
                 />
                 {likeCount > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>{likeCount}</Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
                 onPress={navigateToThread}
               >
                 <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={16} />
                 {(cast.replies?.count ?? 0) > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>{cast.replies?.count}</Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
                 )}
               </TouchableOpacity>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
                 <IconSymbol
                   name={cast.viewerContext?.recast ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right'}
                   color={cast.viewerContext?.recast ? theme.colors.success : theme.colors.textMuted}
                   size={16}
                 />
                 {(cast.recasts?.count ?? 0) > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>{cast.recasts?.count}</Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.recasts?.count}</Text>
                 )}
               </View>
             </View>
@@ -3648,7 +3757,7 @@ export function ProfileView({
       )}
 
       {error && (
-        <View style={{ padding: 20 }}>
+        <View style={{ padding: Skin.space(20) }}>
           <Text style={{ color: theme.colors.danger }}>{error}</Text>
         </View>
       )}
@@ -3660,7 +3769,7 @@ export function ProfileView({
         ListHeaderComponent={renderProfileHeader}
         renderItem={({ item }) => renderCast(item)}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 32 + bottomInset }}
+        contentContainerStyle={{ paddingBottom: Skin.space(32) + bottomInset }}
         onEndReached={() => {
           if (hasNextPage && !isFetchingNextPage) {
             fetchNextPage();
@@ -3669,7 +3778,7 @@ export function ProfileView({
         onEndReachedThreshold={0.5}
         ListFooterComponent={
           isFetchingNextPage ? (
-            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+            <View style={{ paddingVertical: Skin.space(20), alignItems: 'center' }}>
               <ActivityIndicator color={theme.colors.accent} />
             </View>
           ) : null
@@ -3685,8 +3794,8 @@ export function ProfileView({
             top: 12,
             left: 12,
             backgroundColor: 'rgba(0,0,0,0.5)',
-            borderRadius: 20,
-            padding: 8,
+            borderRadius: Skin.radius(20),
+            padding: Skin.space(8),
             zIndex: 10,
           }}
         >
@@ -3770,8 +3879,8 @@ function ChannelView({
             top: 12,
             left: 12,
             backgroundColor: 'rgba(0,0,0,0.5)',
-            borderRadius: 20,
-            padding: 8,
+            borderRadius: Skin.radius(20),
+            padding: Skin.space(8),
             zIndex: 10,
           }}
         >
@@ -3779,7 +3888,7 @@ function ChannelView({
         </TouchableOpacity>
 
         {/* Channel Info */}
-        <View style={{ padding: 16, marginTop: channel?.headerImageUrl ? -24 : 0 }}>
+        <View style={{ padding: Skin.space(16), marginTop: channel?.headerImageUrl ? -24 : 0 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
             {channel?.imageUrl ? (
               <Image
@@ -3787,8 +3896,8 @@ function ChannelView({
                 style={{
                   width: 64,
                   height: 64,
-                  borderRadius: 12,
-                  marginRight: 12,
+                  borderRadius: Skin.radius(12),
+                  marginRight: Skin.space(12),
                   backgroundColor: theme.colors.surface3,
                   borderWidth: channel?.headerImageUrl ? 3 : 0,
                   borderColor: theme.colors.surface1,
@@ -3798,19 +3907,19 @@ function ChannelView({
               <View style={{
                 width: 64,
                 height: 64,
-                borderRadius: 12,
-                marginRight: 12,
+                borderRadius: Skin.radius(12),
+                marginRight: Skin.space(12),
                 backgroundColor: theme.colors.accent,
                 justifyContent: 'center',
                 alignItems: 'center',
               }}>
-                <Text style={{ color: '#fff', fontSize: 24, fontWeight: '700' }}>
+                <Text style={{ color: '#fff', fontSize: Skin.font(24), fontWeight: '700' }}>
                   /{channelKey.charAt(0).toUpperCase()}
                 </Text>
               </View>
             )}
-            <View style={{ flex: 1, paddingBottom: 4 }}>
-              <Text style={{ color: theme.colors.textStrong, fontSize: 22, fontWeight: '700' }}>
+            <View style={{ flex: 1, paddingBottom: Skin.space(4) }}>
+              <Text style={{ color: theme.colors.textStrong, fontSize: Skin.font(22), fontWeight: '700' }}>
                 /{channel?.name || channelKey}
               </Text>
             </View>
@@ -3818,27 +3927,27 @@ function ChannelView({
 
           {/* Description */}
           {channel?.description && (
-            <Text style={{ color: theme.colors.textMain, fontSize: 15, lineHeight: 21, marginTop: 12 }}>
+            <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(15), lineHeight: Skin.font(21), marginTop: Skin.space(12) }}>
               {channel.description}
             </Text>
           )}
 
           {/* Channel stats */}
-          <View style={{ flexDirection: 'row', gap: 16, marginTop: 12 }}>
+          <View style={{ flexDirection: 'row', gap: Skin.space(16), marginTop: Skin.space(12) }}>
             {channel?.followerCount !== undefined && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: 15 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4) }}>
+                <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}>
                   {channel.followerCount.toLocaleString()}
                 </Text>
-                <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>Followers</Text>
+                <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(14) }}>Followers</Text>
               </View>
             )}
             {channel?.memberCount !== undefined && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: 15 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4) }}>
+                <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}>
                   {channel.memberCount.toLocaleString()}
                 </Text>
-                <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>Members</Text>
+                <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(14) }}>Members</Text>
               </View>
             )}
           </View>
@@ -3849,18 +3958,18 @@ function ChannelView({
               onPress={() => onOpenMiniApp(miniAppUrl)}
               style={{
                 backgroundColor: theme.colors.accent,
-                borderRadius: 20,
-                paddingVertical: 10,
-                paddingHorizontal: 20,
-                marginTop: 16,
+                borderRadius: Skin.radius(20),
+                paddingVertical: Skin.space(10),
+                paddingHorizontal: Skin.space(20),
+                marginTop: Skin.space(16),
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 8,
+                gap: Skin.space(8),
               }}
             >
               <IconSymbol name="play.fill" color="#fff" size={16} />
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>
+              <Text style={{ color: '#fff', fontSize: Skin.font(15), fontWeight: '600' }}>
                 {miniAppTitle}
               </Text>
             </TouchableOpacity>
@@ -3947,12 +4056,12 @@ function ChannelView({
       <View
         key={cast.hash}
         style={{
-          borderBottomWidth: 1,
+          borderBottomWidth: Skin.border(1),
           borderBottomColor: theme.colors.surface3,
-          paddingTop: 12,
-          paddingBottom: 14,
-          paddingHorizontal: 12,
-          gap: 10,
+          paddingTop: Skin.space(12),
+          paddingBottom: Skin.space(14),
+          paddingHorizontal: Skin.space(12),
+          gap: Skin.space(10),
         }}
       >
         <Pressable onPress={navigateToThread}>
@@ -3965,21 +4074,21 @@ function ChannelView({
                 style={{
                   width: 44,
                   height: 44,
-                  borderRadius: 22,
-                  marginRight: 12,
+                  borderRadius: Skin.radius(22),
+                  marginRight: Skin.space(12),
                   backgroundColor: theme.colors.surface3,
                 }}
               />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
                 <TouchableOpacity onPress={() => onOpenProfile(cast.author.fid, cast.author.username)}>
-                  <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: 15 }}>
+                  <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}>
                     {cast.author.displayName}
                   </Text>
                 </TouchableOpacity>
               </View>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 2 }}>
+              <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>
                 @{cast.author.username} • {formatTimestamp(cast.timestamp)}
               </Text>
             </View>
@@ -3988,20 +4097,26 @@ function ChannelView({
 
         {cast.text.trim().length > 0 && (
           <Pressable onPress={navigateToThread}>
-            <CastText
+            <Translatable
               text={cast.text}
-              style={{ color: theme.colors.textMain, fontSize: 15, lineHeight: 20 }}
               theme={theme}
-              onMentionPress={handleMentionPress}
-              onChannelPress={onOpenChannel}
-              onLinkPress={onOpenMiniApp}
+              renderText={(t) => (
+                <CastText
+                  text={t}
+                  style={{ color: theme.colors.textMain, fontSize: Skin.font(15), lineHeight: Skin.font(20) }}
+                  theme={theme}
+                  onMentionPress={handleMentionPress}
+                  onChannelPress={onOpenChannel}
+                  onLinkPress={onOpenMiniApp}
+                />
+              )}
             />
           </Pressable>
         )}
 
         {/* Images */}
         {hasImages && (
-          <View style={{ marginHorizontal: -12 }}>
+          <View style={{ marginHorizontal: Skin.space(-12) }}>
             {imageUrls.length === 1 ? (
               <AutoHeightImage
                 uri={imageUrls[0]}
@@ -4022,7 +4137,7 @@ function ChannelView({
 
         {/* Videos */}
         {hasVideos && (
-          <View style={{ marginHorizontal: -12 }}>
+          <View style={{ marginHorizontal: Skin.space(-12) }}>
             {videos.map((video, index) => (
               <VideoPlayer
                 key={index}
@@ -4039,7 +4154,7 @@ function ChannelView({
 
         {/* Frame embeds (mini apps) */}
         {frameEmbeds.length > 0 && (
-          <View style={{ marginHorizontal: -12, gap: 8 }}>
+          <View style={{ marginHorizontal: Skin.space(-12), gap: Skin.space(8) }}>
             {frameEmbeds.map((frame, index) => (
               <FrameEmbed
                 key={index}
@@ -4055,7 +4170,7 @@ function ChannelView({
 
         {/* URL previews — snap-aware */}
         {urlPreviews.length > 0 && (
-          <View style={{ gap: 8 }}>
+          <View style={{ gap: Skin.space(8) }}>
             {urlPreviews.map((urlEmbed, index) => {
               const linkUrl = urlEmbed.openGraph?.url || urlEmbed.openGraph?.sourceUrl;
               const isQuorumInvite = linkUrl && containsInviteLink(linkUrl);
@@ -4140,7 +4255,7 @@ function ChannelView({
 
         {/* Quote casts */}
         {quoteCasts.length > 0 && (
-          <View style={{ gap: 8 }}>
+          <View style={{ gap: Skin.space(8) }}>
             {quoteCasts.map((embeddedCast, index) => (
               <QuoteCast
                 key={index}
@@ -4158,9 +4273,9 @@ function ChannelView({
           const isLiked = optimistic?.liked ?? cast.viewerContext?.reacted ?? false;
           const likeCount = optimistic?.count ?? (cast.reactions?.count ?? 0);
           return (
-            <View style={{ flexDirection: 'row', gap: 16, marginTop: 4 }}>
+            <View style={{ flexDirection: 'row', gap: Skin.space(16), marginTop: Skin.space(4) }}>
               <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
                 onPress={() => onLikeToggle(cast.hash, isLiked, likeCount)}
                 hitSlop={12}
               >
@@ -4172,26 +4287,26 @@ function ChannelView({
                   size={16}
                 />
                 {likeCount > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>{likeCount}</Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
                 onPress={navigateToThread}
               >
                 <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={16} />
                 {(cast.replies?.count ?? 0) > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>{cast.replies?.count}</Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
                 )}
               </TouchableOpacity>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
                 <IconSymbol
                   name={cast.viewerContext?.recast ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right'}
                   color={cast.viewerContext?.recast ? theme.colors.success : theme.colors.textMuted}
                   size={16}
                 />
                 {(cast.recasts?.count ?? 0) > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>{cast.recasts?.count}</Text>
+                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.recasts?.count}</Text>
                 )}
               </View>
             </View>
@@ -4204,7 +4319,7 @@ function ChannelView({
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.surface1 }}>
       {error && (
-        <View style={{ padding: 20 }}>
+        <View style={{ padding: Skin.space(20) }}>
           <Text style={{ color: theme.colors.danger }}>{error}</Text>
         </View>
       )}
@@ -4220,14 +4335,14 @@ function ChannelView({
         // screen and pushing the header down to fill the rest.
         ListEmptyComponent={
           isLoading ? (
-            <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+            <View style={{ paddingVertical: Skin.space(32), alignItems: 'center' }}>
               <ActivityIndicator color={theme.colors.accent} />
             </View>
           ) : null
         }
         renderItem={({ item }) => renderCast(item)}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 32 + bottomInset }}
+        contentContainerStyle={{ paddingBottom: Skin.space(32) + bottomInset }}
         onEndReached={() => {
           if (hasNextPage && !isFetchingNextPage) {
             fetchNextPage();
@@ -4236,7 +4351,7 @@ function ChannelView({
         onEndReachedThreshold={0.5}
         ListFooterComponent={
           isFetchingNextPage ? (
-            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+            <View style={{ paddingVertical: Skin.space(20), alignItems: 'center' }}>
               <ActivityIndicator color={theme.colors.accent} />
             </View>
           ) : null
@@ -4316,8 +4431,9 @@ interface FeedPostCardProps {
   onLinkPress: (url: string) => void;
   onImagePress: (images: string[], index: number) => void;
   onLikeToggle: (hash: string, isLiked: boolean, count: number) => void;
-  onOpenShareSheet: (hash: string, author: string, text: string, isRecasted: boolean, recastCount: number) => void;
+  onOpenShareSheet: (hash: string, author: string, text: string, isRecasted: boolean, recastCount: number, authorFid?: number) => void;
   onFollow: (fid: number) => void;
+  onReport: (castHash: string, authorFid?: number) => void;
 }
 
 // Square media-grid cell — used by the "Media" filter to render the
@@ -4510,6 +4626,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
   onLikeToggle,
   onOpenShareSheet,
   onFollow,
+  onReport,
 }: FeedPostCardProps) {
   const queryClient = useQueryClient();
   const navigateToThread = useCallback(() => {
@@ -4561,8 +4678,27 @@ const FeedPostCard = React.memo(function FeedPostCard({
   // But if viewerIsFollowing is explicitly false, show the button
   const isFollowing = followState ?? (post.viewerIsFollowing === false ? false : true);
 
+  // Skin "cast" surface — its own background (color or image).
+  const castSurface = useSurface('cast');
+  const castColor = castSurface.background && !castSurface.backgroundIsImage ? castSurface.background : undefined;
+  const castImage = castSurface.backgroundIsImage ? castSurface.background : undefined;
+
   return (
-    <View style={styles.postCard}>
+    <View
+      style={[
+        styles.postCard,
+        castColor ? { backgroundColor: castColor } : null,
+        castImage ? { backgroundColor: 'transparent', overflow: 'hidden' } : null,
+      ]}
+    >
+      {castImage && (
+        <ExpoImage
+          source={{ uri: castImage }}
+          style={[StyleSheet.absoluteFill, { opacity: castSurface.opacity }]}
+          contentFit={castSurface.fit === 'contain' ? 'contain' : 'cover'}
+          cachePolicy="memory-disk"
+        />
+      )}
       <Pressable onPress={navigateToThread} style={styles.postHeader}>
         <TouchableOpacity onPress={navigateToProfile} style={styles.avatarContainer}>
           <Image
@@ -4598,6 +4734,14 @@ const FeedPostCard = React.memo(function FeedPostCard({
             {post.authorHandle} • {post.time}
           </Text>
         </View>
+        <CastOverflowButton
+          castHash={post.hash}
+          authorFid={post.authorFid}
+          authorUsername={post.username}
+          castText={post.content}
+          onReport={onReport}
+          theme={theme}
+        />
       </Pressable>
 
       <ParentContextLine
@@ -4612,13 +4756,19 @@ const FeedPostCard = React.memo(function FeedPostCard({
 
       {post.content.trim().length > 0 && (
         <Pressable onPress={navigateToThread}>
-          <CastText
+          <Translatable
             text={post.content}
-            style={styles.postContent}
             theme={theme}
-            onMentionPress={onMentionPress}
-            onChannelPress={onOpenChannel}
-            onLinkPress={onLinkPress}
+            renderText={(t) => (
+              <CastText
+                text={t}
+                style={styles.postContent}
+                theme={theme}
+                onMentionPress={onMentionPress}
+                onChannelPress={onOpenChannel}
+                onLinkPress={onLinkPress}
+              />
+            )}
           />
         </Pressable>
       )}
@@ -4677,7 +4827,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
       )}
 
       {post.quoteCasts.length > 0 && (
-        <View style={{ gap: 8 }}>
+        <View style={{ gap: Skin.space(8) }}>
           {post.quoteCasts.map((qc, index) => (
             <QuoteCast
               key={index}
@@ -4690,7 +4840,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
       )}
 
       {post.urlPreviews.length > 0 && (
-        <View style={{ gap: 8, paddingHorizontal: 12 }}>
+        <View style={{ gap: Skin.space(8), paddingHorizontal: Skin.space(12) }}>
           {post.urlPreviews.map((preview, index) => {
             if (preview.isQuorumInvite && preview.url) {
               return <InviteLinkCard key={index} inviteLink={preview.url} />;
@@ -4798,7 +4948,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
         <TouchableOpacity
           style={styles.statButton}
           hitSlop={12}
-          onPress={() => onOpenShareSheet(post.hash, post.username ?? '', post.content ?? '', isRecasted, recastCount)}
+          onPress={() => onOpenShareSheet(post.hash, post.username ?? '', post.content ?? '', isRecasted, recastCount, post.authorFid)}
         >
           <IconSymbol
             name={isRecasted ? "arrowshape.turn.up.right.fill" : "arrowshape.turn.up.right"}
@@ -4903,6 +5053,9 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   const [composeVisible, setComposeVisible] = useState(false);
   const [composeChannelKey, setComposeChannelKey] = useState<string | undefined>(undefined);
   const [composeChannelPickerVisible, setComposeChannelPickerVisible] = useState(false);
+  // Governance proposal compose: blank /hegemony cast that gets a `PROPOSAL: `
+  // prefix on submit (the user never types it). Locks the channel to hegemony.
+  const [composeProposalMode, setComposeProposalMode] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   // Mini app compose state
@@ -5073,9 +5226,15 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   const [feedShareSheet, setFeedShareSheet] = useState<{
     hash: string;
     author: string;
+    authorFid?: number;
     text: string;
     isRecasted: boolean;
     recastCount: number;
+  } | null>(null);
+  // Report target for the main feed (mirrors the thread view's flow).
+  const [feedReportTarget, setFeedReportTarget] = useState<{
+    castHash: string;
+    castAuthorFid?: number;
   } | null>(null);
 
   const handleLikeToggle = useCallback(async (castHash: string, currentlyLiked: boolean, currentCount: number) => {
@@ -5197,6 +5356,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     setSelectedImages([]);
     setCastText('');
     setComposeChannelKey(undefined);
+    setComposeProposalMode(false);
 
     // Reject mini app promise if compose was triggered by mini app
     if (miniAppComposeResolverRef.current) {
@@ -5233,8 +5393,12 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     pushScreen({ type: 'profile', fid, username });
   }, [pushScreen]);
 
-  const handleOpenShareSheet = useCallback((hash: string, author: string, text: string, isRecasted: boolean, recastCount: number) => {
-    setFeedShareSheet({ hash, author, text, isRecasted, recastCount });
+  const handleOpenShareSheet = useCallback((hash: string, author: string, text: string, isRecasted: boolean, recastCount: number, authorFid?: number) => {
+    setFeedShareSheet({ hash, author, authorFid, text, isRecasted, recastCount });
+  }, []);
+
+  const handleReportCast = useCallback((castHash: string, castAuthorFid?: number) => {
+    setFeedReportTarget({ castHash, castAuthorFid });
   }, []);
 
   const {
@@ -5250,6 +5414,19 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     token,
     enabled: visible,
   });
+
+  // Warm the viewer's block + mute lists as soon as the social feed opens
+  // (rather than waiting until a thread is opened). Persisted to MMKV +
+  // refreshed in the background by the hooks; thread views read the same
+  // cached sets to collapse blocked/muted replies behind a tap-to-show
+  // placeholder.
+  useBlockedFids();
+  useMutedFids();
+
+  // Skin "feed" surface — a background for the whole social area.
+  const feedSurface = useSurface('feed');
+  const feedColor = feedSurface.background && !feedSurface.backgroundIsImage ? feedSurface.background : undefined;
+  const feedImage = feedSurface.backgroundIsImage ? feedSurface.background : undefined;
 
   // Live scroll position of the home feed list — used to decide
   // whether tapping the active feed tab should scroll-to-top or
@@ -5621,12 +5798,12 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             style={styles.searchResultAvatar}
           />
           <View style={styles.searchResultInfo}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4) }}>
               <Text style={styles.searchResultName}>{cast.author.displayName}</Text>
               <Text style={styles.searchResultUsername}>@{cast.author.username}</Text>
             </View>
             <Text style={styles.searchResultBio} numberOfLines={3}>{cast.text}</Text>
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
+            <View style={{ flexDirection: 'row', gap: Skin.space(12), marginTop: Skin.space(4) }}>
               <Text style={styles.searchResultFollowers}>
                 {cast.replies?.count ?? 0} replies
               </Text>
@@ -5661,14 +5838,72 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   const filters: { id: FeedFilter; label: string; icon: IconSymbolName }[] = [
     { id: 'all', label: 'All', icon: 'rectangle.stack.fill' },
     { id: 'media', label: 'Media', icon: 'play.rectangle.fill' },
+    { id: 'governance', label: 'Governance', icon: 'building.columns' },
     // { id: 'events', label: 'Events', icon: 'calendar' },
   ];
+
+  // /hegemony governance: render proposals as regular feed casts (only on the
+  // Governance tab). A proposal is a `PROPOSAL:` cast; non-proposals are
+  // omitted. Vote tallies ride along on the FeedPost for the vote block.
+  const { casts: governanceCasts, refetch: refetchGovernance } = useHegemonyGovernance({
+    enabled: activeFilter === 'governance',
+  });
+  const channelCastToFeedPost = React.useCallback((c: GovernanceChannelCast): FeedPost => {
+    // The governance API returns BARE hashes (no 0x); the Farcaster
+    // like/recast/reply (/v2/casts) endpoints — and thread fetch — expect the
+    // 0x-prefixed form, so normalize here (else votes 400).
+    const lower = c.hash.toLowerCase();
+    const hash = lower.startsWith('0x') ? lower : `0x${lower}`;
+    return {
+    id: hash,
+    hash,
+    username: c.authorUsername,
+    authorFid: c.authorFid,
+    authorName: c.authorDisplayName || c.authorUsername,
+    authorHandle: `@${c.authorUsername}`,
+    authorAvatar: c.authorPfpUrl || undefined,
+    channel: 'hegemony',
+    time: formatTimestamp(Date.parse(c.timestamp) || undefined),
+    content: c.text,
+    stats: { likes: String(c.likes), replies: String(c.replies), shares: String(c.recasts) },
+    tags: [],
+    mediaUrls: [],
+    videos: [],
+    urlPreviews: [],
+    quoteCasts: [],
+    frameEmbeds: [],
+    filter: 'governance',
+    viewerHasLiked: false,
+    viewerHasRecast: false,
+    viewerIsFollowing: true,
+    isProposal: c.isProposal,
+    votesFor: c.votesFor,
+    votesAgainst: c.votesAgainst,
+    };
+  }, []);
+  const governanceProposals = React.useMemo(
+    () => governanceCasts.filter((c) => c.isProposal).map(channelCastToFeedPost),
+    [governanceCasts, channelCastToFeedPost],
+  );
+  // 0x-keyed lookup so the thread view can overlay vote tallies + per-voter
+  // points onto a proposal's thread (governance API hashes are bare).
+  const governanceByHash = React.useMemo(() => {
+    const m = new Map<string, GovernanceChannelCast>();
+    for (const c of governanceCasts) {
+      const h = c.hash.toLowerCase();
+      m.set(h.startsWith('0x') ? h : `0x${h}`, c);
+    }
+    return m;
+  }, [governanceCasts]);
 
   if (!rendered) {
     return null;
   }
 
-  const showEmpty = !isLoading && !error && filteredPosts.length === 0;
+  const showEmpty =
+    activeFilter === 'governance'
+      ? governanceProposals.length === 0
+      : !isLoading && !error && filteredPosts.length === 0;
   // Allow posting if there's text, images, or mini app embeds (not requiring all)
   const canPost = Boolean(token && (castText.trim().length > 0 || selectedImages.length > 0 || miniAppEmbeds.length > 0) && !posting);
 
@@ -5735,8 +5970,16 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         }
       }
 
+      // A /hegemony proposal must start with `PROPOSAL:` — prepend it here so
+      // the user never has to type it.
+      const trimmedText = castText.trim();
+      const finalText =
+        composeProposalMode && !/^PROPOSAL:/i.test(trimmedText)
+          ? `PROPOSAL: ${trimmedText}`
+          : trimmedText;
+
       const result = await submitMainCast({
-        text: castText.trim(),
+        text: finalText,
         embedUrls: embeds,
         channelKey: composeChannelKey,
       });
@@ -5747,13 +5990,19 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         miniAppComposeResolverRef.current = null;
       }
 
+      const wasProposal = composeProposalMode;
       setCastText('');
       setSelectedImages([]); // Clear images after posting
       setMiniAppEmbeds([]); // Clear mini app embeds after posting
       setQuoteCastEmbed(null); // Clear quote embed after posting
       setComposeChannelKey(undefined); // Clear channel target after posting
+      setComposeProposalMode(false);
       setComposeVisible(false); // Close compose modal
-      await refetch();
+      if (wasProposal) {
+        refetchGovernance();
+      } else {
+        await refetch();
+      }
     } catch (err: unknown) {
       logger.warn(
         '[SocialFeedModal] main cast submit threw:',
@@ -5766,6 +6015,10 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   };
 
   const handleRefresh = () => {
+    if (activeFilter === 'governance') {
+      refetchGovernance();
+      return;
+    }
     refetch();
   };
 
@@ -5783,10 +6036,31 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
           },
         ]}
       />
-      <View style={styles.container} pointerEvents="box-none">
+      <View
+        style={[
+          styles.container,
+          feedColor ? { backgroundColor: feedColor } : null,
+          feedImage ? { backgroundColor: 'transparent' } : null,
+        ]}
+        pointerEvents="box-none"
+      >
+        {feedImage && (
+          <ExpoImage
+            source={{ uri: feedImage }}
+            style={StyleSheet.absoluteFill}
+            contentFit={feedSurface.fit === 'contain' ? 'contain' : 'cover'}
+            pointerEvents="none"
+            cachePolicy="memory-disk"
+          />
+        )}
         <Animated.View
           style={[
             styles.modalContent,
+            // Let the feed surface show through behind the cast cards: a color
+            // replaces the panel bg; an image makes the panel transparent so
+            // the image rendered on the container shows through.
+            feedColor ? { backgroundColor: feedColor } : null,
+            feedImage ? { backgroundColor: 'transparent' } : null,
             {
               transform: [{ translateY: slideAnim }],
             },
@@ -5810,7 +6084,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               <>
                 {/* Search Input */}
                 <View style={styles.searchContainer}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(12) }}>
                     {/* Avatar (top-left) — only in route mode, the modal
                         presentation has its own dismiss affordance. */}
                     {isRouteMode && <HeaderAvatar />}
@@ -5913,7 +6187,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                           />
                         ) : (
                           <View style={styles.channelChipPlaceholder}>
-                            <Text style={{ color: theme.colors.textMuted, fontSize: 13, fontWeight: '600' }}>
+                            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), fontWeight: '600' }}>
                               /{channel.key.charAt(0).toUpperCase()}
                             </Text>
                           </View>
@@ -5941,7 +6215,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
 
                 {!searchActive && showEmpty && (
                   <View style={styles.stateCard}>
-                    <Text style={styles.stateText}>No casts match this filter yet.</Text>
+                    <Text style={styles.stateText}>
+                      {activeFilter === 'governance'
+                        ? 'No proposals yet.'
+                        : 'No casts match this filter yet.'}
+                    </Text>
                   </View>
                 )}
 
@@ -5963,65 +6241,10 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             }
             renderItem={renderSearchResultItem}
           />
-          ) : activeFilter === 'governance' ? (
-            <View style={{ flex: 1 }}>
-              {/* Search + filter row above governance */}
-              <View style={[styles.searchContainer, { flexShrink: 0 }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <View style={[styles.searchInputContainer, { flex: 1 }]}>
-                    <IconSymbol name="magnifyingglass" size={18} color={theme.colors.textMuted} />
-                    <TextInput
-                      style={styles.searchInput}
-                      placeholder="Search users, channels, casts..."
-                      placeholderTextColor={theme.colors.textMuted}
-                      value={searchQuery}
-                      onChangeText={setSearchQuery}
-                      onFocus={() => setSearchActive(true)}
-                      returnKeyType="search"
-                    />
-                    {searchQuery.length > 0 && (
-                      <TouchableOpacity onPress={() => setSearchQuery('')}>
-                        <IconSymbol name="xmark.circle.fill" size={18} color={theme.colors.textMuted} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.filtersRow, { flexShrink: 0, flexGrow: 0 }]}>
-                <View style={{width:16}}/>
-                {filters.map((filter) => {
-                  const isActive = activeFilter === filter.id;
-                  return (
-                    <TouchableOpacity
-                      key={filter.id}
-                      style={[styles.filterChip, isActive && styles.filterChipActive]}
-                      onPress={() => setActiveFilter(filter.id)}
-                    >
-                      <IconSymbol
-                        name={filter.icon}
-                        color={isActive ? theme.colors.surface0 : theme.colors.accent}
-                        size={14}
-                      />
-                      <Text
-                        style={[
-                          styles.filterChipText,
-                          { color: isActive ? theme.colors.surface0 : theme.colors.accent },
-                        ]}
-                      >
-                        {filter.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-                <View style={{width:16}}/>
-              </ScrollView>
-              <GovernanceView
-                theme={theme}
-                onOpenProposal={(id) => pushScreen({ type: 'proposal', proposalId: id })}
-              />
-            </View>
           ) : (
-            /* Regular Feed FlashList — flips to a 3-wide Instagram-
+            /* Regular Feed FlashList — also serves the Governance tab
+               (proposals rendered as normal casts) and the Media grid.
+               Flips to a 3-wide Instagram-
                style grid when the user selects the "Media" filter.
                Same underlying data + pagination + refresh control;
                only the cell renderer and column count change. */
@@ -6029,9 +6252,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               ref={feedListRef}
               key={activeFilter === 'media' ? 'media-grid' : 'list'}
               data={
-                activeFilter === 'media'
-                  ? filteredPosts.filter((p) => p.mediaUrls.length > 0 || p.videos.some((v) => v.thumbnailUrl))
-                  : filteredPosts
+                activeFilter === 'governance'
+                  ? governanceProposals
+                  : activeFilter === 'media'
+                    ? filteredPosts.filter((p) => p.mediaUrls.length > 0 || p.videos.some((v) => v.thumbnailUrl))
+                    : filteredPosts
               }
               numColumns={activeFilter === 'media' ? 3 : 1}
               // Hint FlashList with the row size so recycling computes
@@ -6043,9 +6268,14 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               extraData={likeStates}
               keyExtractor={(item) => item.id}
               showsVerticalScrollIndicator={false}
+              // Let taps reach buttons (e.g. the proposal "Post vote") while a
+              // text input's keyboard is open, instead of being swallowed to
+              // dismiss it.
+              keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.contentContainer}
               onEndReached={() => {
-                if (hasNextPage && !isFetchingNextPage) {
+                // Governance is a single non-paginated fetch.
+                if (activeFilter !== 'governance' && hasNextPage && !isFetchingNextPage) {
                   fetchNextPage();
                 }
               }}
@@ -6075,7 +6305,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                       searchBarHeightRef.current = e.nativeEvent.layout.height;
                     }}
                   >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(12) }}>
                       {/* Avatar (top-left) — only in route mode. The
                           modal presentation has its own dismiss
                           affordance and doesn't need a header avatar. */}
@@ -6143,7 +6373,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                           />
                         ) : (
                           <View style={styles.channelChipPlaceholder}>
-                            <Text style={{ color: theme.colors.textMuted, fontSize: 13, fontWeight: '600' }}>
+                            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), fontWeight: '600' }}>
                               /{channel.key.charAt(0).toUpperCase()}
                             </Text>
                           </View>
@@ -6197,25 +6427,38 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                     }
                   />
                 ) : (
-                  <FeedPostCard
-                    post={post}
-                    theme={theme}
-                    styles={styles}
-                    likeState={likeStates.get(post.hash)}
-                    recastState={recastStates.get(post.hash)}
-                    followState={followStates.get(post.authorFid)}
-                    token={token}
-                    currentUserFid={currentUserFid}
-                    onNavigateToThread={handleNavigateToThread}
-                    onNavigateToProfile={handleNavigateToProfile}
-                    onOpenChannel={openChannel}
-                    onMentionPress={handleMentionPress}
-                    onLinkPress={openMiniApp}
-                    onImagePress={(images, index) => setFeedViewerState({ images, index })}
-                    onLikeToggle={handleLikeToggle}
-                    onOpenShareSheet={handleOpenShareSheet}
-                    onFollow={handleFollow}
-                  />
+                  <>
+                    <FeedPostCard
+                      post={post}
+                      theme={theme}
+                      styles={styles}
+                      likeState={likeStates.get(post.hash)}
+                      recastState={recastStates.get(post.hash)}
+                      followState={followStates.get(post.authorFid)}
+                      token={token}
+                      currentUserFid={currentUserFid}
+                      onNavigateToThread={handleNavigateToThread}
+                      onNavigateToProfile={handleNavigateToProfile}
+                      onOpenChannel={openChannel}
+                      onMentionPress={handleMentionPress}
+                      onLinkPress={openMiniApp}
+                      onImagePress={(images, index) => setFeedViewerState({ images, index })}
+                      onLikeToggle={handleLikeToggle}
+                      onOpenShareSheet={handleOpenShareSheet}
+                      onFollow={handleFollow}
+                      onReport={handleReportCast}
+                    />
+                    {post.isProposal && (
+                      <ProposalVoteBlock
+                        hash={post.hash}
+                        votesFor={post.votesFor ?? 0}
+                        votesAgainst={post.votesAgainst ?? 0}
+                        token={token}
+                        theme={theme}
+                        onVoted={refetchGovernance}
+                      />
+                    )}
+                  </>
                 )
               }
             />
@@ -6235,17 +6478,31 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
           )}
 
           {/* Floating Action Button */}
-          {token && activeFilter !== 'governance' && (
+          {token && (
             <TouchableOpacity
               style={styles.fab}
               onPress={() => {
-                // Pre-fill the channel target if the user opened compose from a channel screen
-                setComposeChannelKey(selectedChannel?.channelKey);
-                setComposeVisible(true);
+                if (activeFilter === 'governance') {
+                  // New proposal: blank /hegemony cast; `PROPOSAL:` is prepended
+                  // on submit so the user never has to type it.
+                  setComposeProposalMode(true);
+                  setCastText('');
+                  setComposeChannelKey('hegemony');
+                  setComposeVisible(true);
+                } else {
+                  // Pre-fill the channel target if the user opened compose from a channel screen
+                  setComposeProposalMode(false);
+                  setComposeChannelKey(selectedChannel?.channelKey);
+                  setComposeVisible(true);
+                }
               }}
               activeOpacity={0.8}
             >
-              <IconSymbol name="plus" color={theme.colors.surface0} size={20} />
+              <IconSymbol
+                name={activeFilter === 'governance' ? 'building.columns' : 'plus'}
+                color={theme.colors.surface0}
+                size={20}
+              />
             </TouchableOpacity>
           )}
 
@@ -6266,9 +6523,9 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                 right: 16,
                 width: 40,
                 height: 40,
-                borderRadius: 20,
+                borderRadius: Skin.radius(20),
                 backgroundColor: theme.colors.surface2,
-                borderWidth: 1,
+                borderWidth: Skin.border(1),
                 borderColor: theme.colors.surface3,
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -6297,13 +6554,13 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                 right: 16,
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 8,
+                gap: Skin.space(8),
                 backgroundColor: theme.colors.surface2,
-                borderWidth: 1,
+                borderWidth: Skin.border(1),
                 borderColor: theme.colors.surface3,
-                borderRadius: 20,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
+                borderRadius: Skin.radius(20),
+                paddingHorizontal: Skin.space(12),
+                paddingVertical: Skin.space(8),
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.25,
@@ -6314,7 +6571,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               <IconSymbol name="magnifyingglass" size={18} color={theme.colors.textMuted} />
               <TextInput
                 ref={floatingSearchInputRef}
-                style={{ flex: 1, fontSize: 15, color: theme.colors.textMain, paddingVertical: 0, minHeight: 24 }}
+                style={{ flex: 1, fontSize: Skin.font(15), color: theme.colors.textMain, paddingVertical: 0, minHeight: 24 }}
                 placeholder="Search users, channels, casts..."
                 placeholderTextColor={theme.colors.textMuted}
                 value={searchQuery}
@@ -6388,6 +6645,8 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   currentUserFid={currentUserFid}
                   maxCastLength={maxCastLength}
                   regularCastByteLimit={regularCastByteLimit}
+                  governanceByHash={governanceByHash}
+                  onGovernanceVoted={refetchGovernance}
                 />,
                 `thread-${screen.castHashPrefix}-${stackIndex}`
               );
@@ -6482,7 +6741,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                 <View style={{ position: 'relative' }}>
                   {/* Mention autocomplete for compose */}
                   {composeMentionInfo && (
-                    <View style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 10 }}>
+                    <View style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: Skin.space(4), zIndex: 10 }}>
                       <MentionAutocomplete
                         mentionInfo={composeMentionInfo}
                         token={token}
@@ -6496,7 +6755,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   <TextInput
                     multiline
                     autoFocus
-                    placeholder={composeChannelKey ? `Cast in /${composeChannelKey}…` : "What's happening?"}
+                    placeholder={composeProposalMode ? 'Write your proposal…' : composeChannelKey ? `Cast in /${composeChannelKey}…` : "What's happening?"}
                     placeholderTextColor={theme.colors.textMuted}
                     style={styles.composeInput}
                     value={castText}
@@ -6508,17 +6767,18 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   />
                 </View>
                 {/* Channel target chip — tap to open picker; long-press clears. */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Skin.space(8) }}>
                   <TouchableOpacity
+                    disabled={composeProposalMode}
                     onPress={() => setComposeChannelPickerVisible(true)}
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
-                      gap: 4,
-                      paddingHorizontal: 10,
-                      paddingVertical: 5,
-                      borderRadius: 14,
-                      borderWidth: 1,
+                      gap: Skin.space(4),
+                      paddingHorizontal: Skin.space(10),
+                      paddingVertical: Skin.space(5),
+                      borderRadius: Skin.radius(14),
+                      borderWidth: Skin.border(1),
                       borderColor: theme.colors.surface3,
                       backgroundColor: composeChannelKey ? theme.colors.surface2 : 'transparent',
                     }}
@@ -6528,10 +6788,13 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                       size={11}
                       color={composeChannelKey ? theme.colors.accent : theme.colors.textMuted}
                     />
-                    <Text style={{ fontSize: 12, color: composeChannelKey ? theme.colors.textMain : theme.colors.textMuted, fontWeight: '500' }}>
+                    <Text style={{ fontSize: Skin.font(12), color: composeChannelKey ? theme.colors.textMain : theme.colors.textMuted, fontWeight: '500' }}>
                       {composeChannelKey ? `/${composeChannelKey}` : 'Home feed'}
+                      {composeProposalMode ? ' · Proposal' : ''}
                     </Text>
-                    <IconSymbol name="chevron.down" size={10} color={theme.colors.textMuted} />
+                    {!composeProposalMode && (
+                      <IconSymbol name="chevron.down" size={10} color={theme.colors.textMuted} />
+                    )}
                   </TouchableOpacity>
                 </View>
                 {quoteCastEmbed && (
@@ -6552,8 +6815,8 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    style={{ marginBottom: 12 }}
-                    contentContainerStyle={{ gap: 8 }}
+                    style={{ marginBottom: Skin.space(12) }}
+                    contentContainerStyle={{ gap: Skin.space(8) }}
                   >
                     {selectedImages.map((image, index) => (
                       <View key={index} style={{ position: 'relative' }}>
@@ -6562,7 +6825,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                           style={{
                             width: 100,
                             height: 100,
-                            borderRadius: 8,
+                            borderRadius: Skin.radius(8),
                             backgroundColor: theme.colors.surface3,
                           }}
                           resizeMode="cover"
@@ -6588,7 +6851,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                             right: 4,
                             width: 24,
                             height: 24,
-                            borderRadius: 12,
+                            borderRadius: Skin.radius(12),
                             backgroundColor: 'rgba(0,0,0,0.6)',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -6602,7 +6865,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                 )}
                 {/* Mini app embed previews */}
                 {miniAppEmbeds.length > 0 && (
-                  <View style={{ marginBottom: 12, gap: 8 }}>
+                  <View style={{ marginBottom: Skin.space(12), gap: Skin.space(8) }}>
                     {miniAppEmbeds.map((embedUrl, index) => (
                       <View
                         key={index}
@@ -6610,17 +6873,17 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                           flexDirection: 'row',
                           alignItems: 'center',
                           backgroundColor: theme.colors.surface2,
-                          borderRadius: 8,
-                          padding: 10,
+                          borderRadius: Skin.radius(8),
+                          padding: Skin.space(10),
                         }}
                       >
                         <IconSymbol name="link" size={16} color={theme.colors.textMuted} />
                         <Text
                           style={{
                             flex: 1,
-                            marginLeft: 8,
+                            marginLeft: Skin.space(8),
                             color: theme.colors.text,
-                            fontSize: 13,
+                            fontSize: Skin.font(13),
                           }}
                           numberOfLines={1}
                         >
@@ -6628,7 +6891,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                         </Text>
                         <TouchableOpacity
                           onPress={() => setMiniAppEmbeds(prev => prev.filter((_, i) => i !== index))}
-                          style={{ marginLeft: 8 }}
+                          style={{ marginLeft: Skin.space(8) }}
                         >
                           <IconSymbol name="xmark.circle.fill" size={20} color={theme.colors.textMuted} />
                         </TouchableOpacity>
@@ -6656,7 +6919,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                       {castText.length}/{maxCastLength}
                     </Text>
                     {castText.length > regularCastByteLimit && castText.length <= maxCastLength && (
-                      <Text style={{ fontSize: 11, color: theme.colors.warning || '#FFA500', marginTop: 2 }}>
+                      <Text style={{ fontSize: Skin.font(11), color: theme.colors.warning || '#FFA500', marginTop: Skin.space(2) }}>
                         Only first {regularCastByteLimit} chars visible on timeline
                       </Text>
                     )}
@@ -6733,6 +6996,14 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             }}
           />
 
+          {/* Feed report modal — same flow as the thread view. */}
+          <ReportModal
+            visible={!!feedReportTarget}
+            onClose={() => setFeedReportTarget(null)}
+            target={feedReportTarget ? { type: 'cast', ...feedReportTarget } : null}
+            onSubmitted={() => setFeedReportTarget(null)}
+          />
+
           {/* Share to Chat Modal */}
           <ShareToChatModal
             visible={shareToChatUrl !== null}
@@ -6775,10 +7046,10 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     contentContainer: {
       flexGrow: 1,
-      paddingBottom: 32,
+      paddingBottom: Skin.space(32),
     },
     loadingMore: {
-      paddingVertical: 20,
+      paddingVertical: Skin.space(20),
       alignItems: 'center',
     },
     header: {
@@ -6788,31 +7059,31 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     title: {
       color: theme.colors.textStrong,
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
     },
     subtitle: {
       color: theme.colors.textMuted,
-      marginTop: 2,
-      fontSize: 13,
+      marginTop: Skin.space(2),
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
     },
     refreshButton: {
-      padding: 10,
-      borderRadius: 999,
+      padding: Skin.space(10),
+      borderRadius: Skin.radius(999),
       backgroundColor: theme.colors.surface3,
     },
     trendingCard: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 18,
-      padding: 16,
+      borderRadius: Skin.radius(18),
+      padding: Skin.space(16),
     },
     trendingHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 12,
-      gap: 8,
+      marginBottom: Skin.space(12),
+      gap: Skin.space(8),
     },
     trendingTitle: {
       color: theme.colors.textStrong,
@@ -6820,7 +7091,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       fontWeight: theme.fonts.medium.fontWeight,
     },
     trendingList: {
-      gap: 10,
+      gap: Skin.space(10),
     },
     trendingRow: {
       flexDirection: 'row',
@@ -6836,13 +7107,13 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       fontWeight: theme.fonts.medium.fontWeight,
     },
     filtersRow: {
-      marginTop: 4,
+      marginTop: Skin.space(4),
       // Bottom padding so the filter pills don't butt directly against
       // the content below — particularly the media grid, which would
       // otherwise touch the active filter chip without any breathing
       // room. Card-list mode has the post card's own padding, but the
       // grid cells run edge-to-edge so the row needs its own gap.
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     filterChip: {
       // Round icon-only button. Width = height for a perfect circle.
@@ -6850,12 +7121,12 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       // overflow: hidden so the channel image clips to the circle.
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: Skin.radius(18),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
-      marginRight: 10,
+      marginRight: Skin.space(10),
     },
     channelChipImage: {
       width: 36,
@@ -6873,22 +7144,22 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     filterChipText: {
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      fontSize: 13,
+      fontSize: Skin.font(13),
     },
     stateCard: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 16,
-      padding: 20,
-      marginHorizontal: 20,
+      borderRadius: Skin.radius(16),
+      padding: Skin.space(20),
+      marginHorizontal: Skin.space(20),
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
+      gap: Skin.space(8),
     },
     /** Lightweight loading indicator — bare spinner, no card/text.
      *  Replaces the "Loading Farcaster feed…" panel that was visually
      *  too heavy for what's a transient state. */
     stateSpinner: {
-      paddingVertical: 32,
+      paddingVertical: Skin.space(32),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -6899,12 +7170,12 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     errorCard: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 16,
-      padding: 16,
-      marginHorizontal: 20,
-      borderWidth: 1,
+      borderRadius: Skin.radius(16),
+      padding: Skin.space(16),
+      marginHorizontal: Skin.space(20),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.danger,
-      gap: 4,
+      gap: Skin.space(4),
     },
     errorText: {
       color: theme.colors.danger,
@@ -6913,16 +7184,16 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     errorHint: {
       color: theme.colors.textMuted,
-      fontSize: 12,
+      fontSize: Skin.font(12),
     },
     postCard: {
       backgroundColor: 'transparent',
-      borderBottomWidth: 1,
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface3,
-      paddingTop: 12,
-      paddingBottom: 14,
-      paddingHorizontal: 12,
-      gap: 10,
+      paddingTop: Skin.space(12),
+      paddingBottom: Skin.space(14),
+      paddingHorizontal: Skin.space(12),
+      gap: Skin.space(10),
     },
     postHeader: {
       flexDirection: 'row',
@@ -6930,12 +7201,12 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     avatarContainer: {
       position: 'relative',
-      marginRight: 12,
+      marginRight: Skin.space(12),
     },
     avatar: {
       width: 44,
       height: 44,
-      borderRadius: 22,
+      borderRadius: Skin.radius(22),
       backgroundColor: theme.colors.surface4,
     },
     followButton: {
@@ -6944,10 +7215,10 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       right: -2,
       width: 18,
       height: 18,
-      borderRadius: 9,
+      borderRadius: Skin.radius(9),
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.background,
     },
     postAuthor: {
@@ -6956,33 +7227,33 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     authorRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: Skin.space(8),
     },
     authorName: {
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      fontSize: 15,
+      fontSize: Skin.font(15),
     },
     channelLabel: {
       color: theme.colors.textMuted,
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
       opacity: 0.7,
     },
     authorHandle: {
       color: theme.colors.textMuted,
-      fontSize: 13,
-      marginTop: 2,
+      fontSize: Skin.font(13),
+      marginTop: Skin.space(2),
     },
     postContent: {
       color: theme.colors.textMain,
-      fontSize: 15,
-      lineHeight: 20,
+      fontSize: Skin.font(15),
+      lineHeight: Skin.font(20),
       fontFamily: theme.fonts.regular.fontFamily,
     },
     mediaContainer: {
-      marginHorizontal: -16,
+      marginHorizontal: Skin.space(-16),
     },
     postMedia: {
       backgroundColor: theme.colors.surface3,
@@ -6996,28 +7267,28 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     tagsRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
+      gap: Skin.space(8),
     },
     tagPill: {
       backgroundColor: theme.colors.surface3,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 999,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(999),
     },
     tagText: {
       color: theme.colors.textMuted,
-      fontSize: 12,
+      fontSize: Skin.font(12),
     },
     postStats: {
       flexDirection: 'row',
       justifyContent: 'flex-start',
-      gap: 16,
-      marginTop: 4,
+      gap: Skin.space(16),
+      marginTop: Skin.space(4),
     },
     statButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Skin.space(6),
     },
     statText: {
       color: theme.colors.textMain,
@@ -7030,7 +7301,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       right: 16,
       width: 48,
       height: 48,
-      borderRadius: 24,
+      borderRadius: Skin.radius(24),
       backgroundColor: theme.colors.accent,
       alignItems: 'center',
       justifyContent: 'center',
@@ -7051,9 +7322,9 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     composeModal: {
       backgroundColor: theme.colors.surface1,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      paddingHorizontal: 20,
+      borderTopLeftRadius: Skin.radius(20),
+      borderTopRightRadius: Skin.radius(20),
+      paddingHorizontal: Skin.space(20),
       paddingBottom: insets.bottom + 20,
       minHeight: 200,
     },
@@ -7061,25 +7332,25 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 16,
+      paddingVertical: Skin.space(16),
     },
     composeCancel: {
       color: theme.colors.textMuted,
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.regular.fontFamily,
     },
     composePostButton: {
       backgroundColor: theme.colors.accent,
-      paddingHorizontal: 20,
-      paddingVertical: 8,
-      borderRadius: 999,
+      paddingHorizontal: Skin.space(20),
+      paddingVertical: Skin.space(8),
+      borderRadius: Skin.radius(999),
     },
     composePostButtonDisabled: {
       backgroundColor: theme.colors.surface4,
     },
     composePostText: {
       color: theme.colors.surface0,
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -7088,9 +7359,9 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     composeInput: {
       color: theme.colors.textMain,
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.regular.fontFamily,
-      lineHeight: 24,
+      lineHeight: Skin.font(24),
       minHeight: 100,
       maxHeight: 200,
       textAlignVertical: 'top',
@@ -7099,47 +7370,47 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingTop: 12,
-      borderTopWidth: 1,
+      paddingTop: Skin.space(12),
+      borderTopWidth: Skin.border(1),
       borderTopColor: theme.colors.surface3,
     },
     composeCharCount: {
       color: theme.colors.textMuted,
-      fontSize: 13,
+      fontSize: Skin.font(13),
     },
     composeError: {
       color: theme.colors.danger,
-      fontSize: 13,
-      marginTop: 8,
+      fontSize: Skin.font(13),
+      marginTop: Skin.space(8),
     },
     quotePreview: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 8,
-      borderLeftWidth: 3,
+      borderRadius: Skin.radius(8),
+      borderLeftWidth: Skin.border(3),
       borderLeftColor: theme.colors.primary,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      marginBottom: 8,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(10),
+      marginBottom: Skin.space(8),
     },
     quotePreviewContent: {
       flex: 1,
     },
     quotePreviewAuthor: {
       color: theme.colors.primary,
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.medium.fontFamily,
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
     },
     quotePreviewText: {
       color: theme.colors.textMain,
-      fontSize: 13,
-      lineHeight: 18,
+      fontSize: Skin.font(13),
+      lineHeight: Skin.font(18),
     },
     quotePreviewRemove: {
-      marginLeft: 8,
-      padding: 4,
+      marginLeft: Skin.space(8),
+      padding: Skin.space(4),
     },
     threadOverlay: {
       ...StyleSheet.absoluteFillObject,
@@ -7165,80 +7436,80 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       backgroundColor: 'rgba(0, 0, 0, 0.85)',
       justifyContent: 'center',
       alignItems: 'center',
-      padding: 24,
+      padding: Skin.space(24),
       zIndex: 100,
     },
     farcasterRequiredContent: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 16,
-      padding: 24,
+      backgroundColor: theme.colors.surface1,
+      borderRadius: Skin.radius(16),
+      padding: Skin.space(24),
       width: '100%',
       maxWidth: 340,
       alignItems: 'center',
     },
     farcasterRequiredTitle: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
       textAlign: 'center',
-      marginTop: 16,
-      marginBottom: 12,
+      marginTop: Skin.space(16),
+      marginBottom: Skin.space(12),
     },
     farcasterRequiredMessage: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       textAlign: 'center',
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     // Search styles
     searchContainer: {
-      paddingHorizontal: 16,
-      paddingTop: 8,
-      paddingBottom: 4,
+      paddingHorizontal: Skin.space(16),
+      paddingTop: Skin.space(8),
+      paddingBottom: Skin.space(4),
     },
     searchInputContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 12,
-      paddingHorizontal: 12,
+      borderRadius: Skin.radius(12),
+      paddingHorizontal: Skin.space(12),
       height: 40,
     },
     searchInput: {
       flex: 1,
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMain,
-      marginLeft: 8,
+      marginLeft: Skin.space(8),
       paddingVertical: 0,
     },
     searchCancelButton: {
-      paddingLeft: 12,
-      paddingVertical: 8,
+      paddingLeft: Skin.space(12),
+      paddingVertical: Skin.space(8),
     },
     searchCancelText: {
       color: theme.colors.accent,
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
     },
     searchTabsContainer: {
       flexDirection: 'row',
-      paddingHorizontal: 16,
-      paddingTop: 12,
-      paddingBottom: 8,
-      gap: 8,
+      paddingHorizontal: Skin.space(16),
+      paddingTop: Skin.space(12),
+      paddingBottom: Skin.space(8),
+      gap: Skin.space(8),
     },
     searchTab: {
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 20,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(8),
+      borderRadius: Skin.radius(20),
       backgroundColor: theme.colors.surface3,
     },
     searchTabActive: {
       backgroundColor: theme.colors.primary,
     },
     searchTabText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
     },
@@ -7248,49 +7519,49 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     searchResultItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      gap: 12,
-      borderBottomWidth: 1,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(12),
+      gap: Skin.space(12),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface3,
     },
     searchResultAvatar: {
       width: 44,
       height: 44,
-      borderRadius: 22,
+      borderRadius: Skin.radius(22),
       backgroundColor: theme.colors.surface4,
     },
     searchResultInfo: {
       flex: 1,
     },
     searchResultName: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       color: theme.colors.textMain,
     },
     searchResultUsername: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     searchResultBio: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
-      marginTop: 4,
-      lineHeight: 18,
+      marginTop: Skin.space(4),
+      lineHeight: Skin.font(18),
     },
     searchResultFollowers: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
     searchSectionHeader: {
-      paddingHorizontal: 16,
-      paddingTop: 16,
-      paddingBottom: 8,
+      paddingHorizontal: Skin.space(16),
+      paddingTop: Skin.space(16),
+      paddingBottom: Skin.space(8),
     },
     searchSectionTitle: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.medium.fontFamily,
       color: theme.colors.textMuted,
       textTransform: 'uppercase',
@@ -7299,13 +7570,13 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     channelImage: {
       width: 44,
       height: 44,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.surface4,
     },
     channelTabImage: {
       width: 24,
       height: 24,
-      borderRadius: 4,
+      borderRadius: Skin.radius(4),
       backgroundColor: theme.colors.surface4,
     },
   });

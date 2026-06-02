@@ -6,7 +6,10 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { setAudioModeAsync } from 'expo-audio';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { saveMediaToLibrary } from '@/services/media/saveToLibrary';
+import { VideoViewer } from './VideoViewer';
 import { SCREEN_WIDTH, SCREEN_HEIGHT, formatDuration } from '../utils';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 // Configure audio mode for silent switch (one-time setup)
 let audioModeConfigured = false;
@@ -25,7 +28,7 @@ async function ensureAudioMode() {
 }
 
 // Static styles that don't depend on theme or dynamic values
-const staticStyles = StyleSheet.create({
+const staticStyles = createSkinnable(() => StyleSheet.create({
   container: {
     position: 'relative',
   },
@@ -41,7 +44,7 @@ const staticStyles = StyleSheet.create({
   playButton: {
     width: 60,
     height: 60,
-    borderRadius: 30,
+    borderRadius: Skin.radius(30),
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -51,13 +54,13 @@ const staticStyles = StyleSheet.create({
     bottom: 8,
     right: 8,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: Skin.space(6),
+    paddingVertical: Skin.space(2),
+    borderRadius: Skin.radius(4),
   },
   durationText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontWeight: '500',
   },
   saveButton: {
@@ -65,10 +68,10 @@ const staticStyles = StyleSheet.create({
     top: 8,
     right: 8,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    borderRadius: 18,
-    padding: 8,
+    borderRadius: Skin.radius(18),
+    padding: Skin.space(8),
   },
-});
+}));
 
 interface VideoPlayerProps {
   url: string;
@@ -93,6 +96,7 @@ export function VideoPlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const handleSave = useCallback(async () => {
     if (!url || saving) return;
@@ -166,21 +170,19 @@ export function VideoPlayer({
     }
   };
 
-  // Tap outside the play button enters fullscreen (and starts playback if it
-  // hasn't begun yet).
+  // Tap outside the play button opens the in-app fullscreen viewer (which has
+  // its own player, close button, swipe-to-dismiss, and save button). Pause
+  // the inline player so the two don't play over each other.
   const handleSurfaceTap = () => {
-    if (!hasStarted) {
-      setHasStarted(true);
-      setIsPlaying(true);
-      player.play();
+    if (isPlaying) {
+      player.pause();
+      setIsPlaying(false);
     }
-    // Defer until the VideoView is mounted (first start case).
-    requestAnimationFrame(() => {
-      videoRef.current?.enterFullscreen();
-    });
+    setFullscreen(true);
   };
 
   return (
+    <>
     <Pressable onPress={handleSurfaceTap} style={staticStyles.container}>
       {!hasStarted ? (
         <>
@@ -249,6 +251,10 @@ export function VideoPlayer({
         </>
       )}
     </Pressable>
+    {fullscreen && (
+      <VideoViewer visible url={url} onClose={() => setFullscreen(false)} />
+    )}
+    </>
   );
 }
 

@@ -36,16 +36,9 @@ import { getErrorMessage } from '@/utils/error';
 import { addRecentRecipient, getRecentRecipients, type RecentRecipient } from '@/services/wallet/walletPrefs';
 import { haptics } from '@/utils/haptics';
 import React from 'react';
-import {
-  ActivityIndicator,
-  Keyboard,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 interface SendModalProps {
   visible: boolean;
@@ -805,7 +798,7 @@ export default function SendModal({ visible, onClose, preselectedAsset, initialR
             label={getButtonLabel()}
             holdingLabel="Keep holding..."
             holdDuration={1500}
-            style={{ marginTop: 16 }}
+            style={{ marginTop: Skin.space(16) }}
           />
         )}
       </ScrollView>
@@ -819,26 +812,26 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingBottom: 16,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(16),
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     content: {
       flex: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
     },
     inputGroup: {
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     inputLabel: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
@@ -847,103 +840,103 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 14,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(14),
     },
     selectedAsset: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: Skin.space(12),
     },
     assetIcon: {
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: Skin.radius(18),
       alignItems: 'center',
       justifyContent: 'center',
     },
     assetIconText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
     },
     assetInfo: {
-      gap: 2,
+      gap: Skin.space(2),
     },
     assetName: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
     },
     assetBalance: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
     },
     placeholderText: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMuted,
     },
     assetPickerDropdown: {
-      marginTop: 8,
+      marginTop: Skin.space(8),
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
       maxHeight: 200,
       overflow: 'hidden',
     },
     assetPickerList: {
-      padding: 8,
+      padding: Skin.space(8),
     },
     assetPickerItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 10,
-      borderRadius: 8,
-      gap: 12,
+      padding: Skin.space(10),
+      borderRadius: Skin.radius(8),
+      gap: Skin.space(12),
     },
     textInput: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      fontSize: 15,
-      lineHeight: 20,
+      borderRadius: Skin.radius(12),
+      paddingHorizontal: Skin.space(14),
+      paddingVertical: Skin.space(12),
+      fontSize: Skin.font(15),
+      lineHeight: Skin.font(20),
       color: theme.colors.textMain,
       textAlignVertical: 'center',
       minHeight: 48,
     },
     errorText: {
-      fontSize: 12,
-      color: '#EF4444',
-      marginTop: 6,
+      fontSize: Skin.font(12),
+      color: theme.colors.danger,
+      marginTop: Skin.space(6),
     },
     recentsContainer: {
-      marginTop: 10,
+      marginTop: Skin.space(10),
     },
     recentsLabel: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       letterSpacing: 0.6,
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      marginBottom: 6,
+      marginBottom: Skin.space(6),
     },
     recentsRow: {
       flexDirection: 'row',
-      gap: 8,
-      paddingRight: 8,
+      gap: Skin.space(8),
+      paddingRight: Skin.space(8),
     },
     recentChip: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 14,
+      gap: Skin.space(4),
+      paddingHorizontal: Skin.space(10),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(14),
       backgroundColor: theme.colors.surface2,
     },
     recentChipText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -952,10 +945,10 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     maxButton: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.primary,
@@ -964,39 +957,39 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
+      borderRadius: Skin.radius(12),
     },
     amountInput: {
       flex: 1,
       backgroundColor: 'transparent',
     },
     amountSymbol: {
-      paddingRight: 14,
-      fontSize: 15,
+      paddingRight: Skin.space(14),
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMuted,
     },
     balanceHint: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginTop: 6,
+      marginTop: Skin.space(6),
     },
     sendButton: {
       backgroundColor: theme.colors.primary,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: 16,
-      marginBottom: 24,
+      marginTop: Skin.space(16),
+      marginBottom: Skin.space(24),
       minHeight: 56,
     },
     sendButtonDisabled: {
       opacity: 0.5,
     },
     sendButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',
@@ -1004,13 +997,13 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     biometricButton: {
       flexDirection: 'row',
       backgroundColor: '#8B5CF6',
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: 16,
-      marginBottom: 24,
-      gap: 10,
+      marginTop: Skin.space(16),
+      marginBottom: Skin.space(24),
+      gap: Skin.space(10),
       minHeight: 56,
     },
   });

@@ -15,15 +15,10 @@ import { haptics } from '@/utils/haptics';
 import type { Group } from '@quilibrium/quorum-shared';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { Suspense, useCallback, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Skin from '@/theme/skins/geometry';
 
 const SpaceSettingsModal = React.lazy(() => import('@/components/SpaceSettingsModal'));
 const InviteModal = React.lazy(() => import('@/components/InviteModal'));
@@ -187,7 +182,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       justifyContent: 'center',
     },
     error: {
-      ...textStyles.body,
+      ...theme.textStyles.body,
       color: theme.colors.danger,
     },
     scrollContent: {
@@ -195,35 +190,35 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       // transparent large-title header, so top padding isn't needed there.
       // Android Stack header is opaque and takes layout space, so no extra
       // padding required either.
-      paddingTop: 8,
+      paddingTop: Skin.space(8),
       paddingBottom: insets.bottom + 100, // clear blur tab bar
     },
     description: {
-      ...textStyles.subheadline,
+      ...theme.textStyles.subheadline,
       color: theme.colors.textMuted,
-      paddingHorizontal: 16,
-      paddingBottom: 16,
+      paddingHorizontal: Skin.space(16),
+      paddingBottom: Skin.space(16),
     },
     groupSection: {
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     groupTitle: {
-      ...textStyles.caption2,
+      ...theme.textStyles.caption2,
       color: theme.colors.textMuted,
-      paddingHorizontal: 16,
-      marginBottom: 4,
+      paddingHorizontal: Skin.space(16),
+      marginBottom: Skin.space(4),
       letterSpacing: 0.8,
     },
     channelRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      gap: 10,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(12),
+      gap: Skin.space(10),
     },
     channelName: {
       flex: 1,
-      ...textStyles.body,
+      ...theme.textStyles.body,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
@@ -231,23 +226,23 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     unreadBadge: {
       minWidth: 20,
       height: 20,
-      borderRadius: 10,
-      paddingHorizontal: 6,
+      borderRadius: Skin.radius(10),
+      paddingHorizontal: Skin.space(6),
       backgroundColor: theme.colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
     },
     unreadText: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',
     },
     headerActions: {
       flexDirection: 'row',
-      gap: 12,
+      gap: Skin.space(12),
     },
     headerButton: {
-      padding: 4,
+      padding: Skin.space(4),
     },
   });

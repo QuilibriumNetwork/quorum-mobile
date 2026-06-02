@@ -14,6 +14,10 @@ import React, { useMemo } from 'react';
 import { Text, Image, StyleSheet, TextStyle, View } from 'react-native';
 import type { Emoji, SpaceMember, Channel } from '@quilibrium/quorum-shared';
 import { getEmojiByName } from '@/data/emojiNames';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
+import { useTranslatable } from '@/services/translation/useTranslatable';
+import { TranslateToggle } from '@/components/translation/TranslateToggle';
 
 interface MentionableTextProps {
   text: string;
@@ -30,6 +34,8 @@ interface MentionableTextProps {
   onChannelPress?: (channelId: string) => void;
   onLinkPress?: (url: string) => void;
   theme?: AppTheme;
+  /** Show an on-device "See translation" toggle for non-target-language text. */
+  enableTranslate?: boolean;
 }
 
 // Regex patterns for @mentions, URLs, and :emoji:
@@ -64,7 +70,7 @@ interface TextPart {
 const EMOJI_ONLY_REGEX = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\s]+$/u;
 
 export function MentionableText({
-  text,
+  text: rawText,
   customEmojis,
   members = [],
   channels = [],
@@ -78,7 +84,34 @@ export function MentionableText({
   onChannelPress,
   onLinkPress,
   theme,
+  enableTranslate = false,
 }: MentionableTextProps) {
+  // On-device translation. `text` below is the displayed copy (original or
+  // translated), so all parsing/rendering downstream is unchanged.
+  const { showToggle, displayText, state, label, errorText, toggle } = useTranslatable(
+    rawText,
+    enableTranslate
+  );
+  const text = displayText;
+
+  // Wrap a rendered text node with the translation toggle when applicable.
+  // Requires a theme to style the toggle; without one we render text only.
+  const renderWithToggle = (node: React.ReactElement): React.ReactElement => {
+    if (!showToggle || !theme) return node;
+    return (
+      <View>
+        {node}
+        <TranslateToggle
+          state={state}
+          label={label}
+          errorText={errorText}
+          onPress={toggle}
+          theme={theme}
+        />
+      </View>
+    );
+  };
+
   // Create lookup maps
   const emojiMap = useMemo(() => {
     const map: Record<string, Emoji> = {};
@@ -321,9 +354,11 @@ export function MentionableText({
     // Check if text is only Unicode emojis
     const isEmojiOnly = text && EMOJI_ONLY_REGEX.test(text.trim());
     if (isEmojiOnly) {
-      return <Text style={[style, { fontSize: (style?.fontSize || 16) * 2 }]}>{text}</Text>;
+      return renderWithToggle(
+        <Text style={[style, { fontSize: (style?.fontSize || 16) * 2 }]}>{text}</Text>
+      );
     }
-    return <Text style={style}>{text}</Text>;
+    return renderWithToggle(<Text style={style}>{text}</Text>);
   }
 
   // Check if message is emoji-only
@@ -342,8 +377,8 @@ export function MentionableText({
   const defaultMentionStyle: TextStyle = {
     color: theme?.colors?.primary || '#5865F2',
     backgroundColor: (theme?.colors?.primary || '#5865F2') + '20',
-    borderRadius: 3,
-    paddingHorizontal: 2,
+    borderRadius: Skin.radius(3),
+    paddingHorizontal: Skin.space(2),
   };
 
   const selfMentionStyle: TextStyle = {
@@ -360,7 +395,7 @@ export function MentionableText({
     textDecorationLine: 'underline',
   };
 
-  return (
+  return renderWithToggle(
     <Text style={effectiveStyle}>
       {parts.map((part, index) => {
         if (part.type === 'mention') {
@@ -447,11 +482,12 @@ export function MentionableText({
   );
 }
 
-const localStyles = StyleSheet.create({
+
+const localStyles = createSkinnable(() => StyleSheet.create({
   emojiContainer: {
-    marginBottom: -4,
+    marginBottom: Skin.space(-4),
   },
   emoji: {},
-});
+}));
 
 export default MentionableText;

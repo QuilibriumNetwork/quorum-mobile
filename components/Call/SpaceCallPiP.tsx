@@ -3,7 +3,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { RTCView } from 'react-native-webrtc';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -16,6 +17,8 @@ import Animated, {
 import { useTheme } from '@/theme';
 import { useSpaceCall } from '@/context/SpaceCallContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -162,11 +165,11 @@ export function SpaceCallPiP({ onExpand }: SpaceCallPiPProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
     position: 'absolute',
     zIndex: 9998,
-    borderRadius: 12,
+    borderRadius: Skin.radius(12),
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -176,7 +179,7 @@ const styles = StyleSheet.create({
   },
   videoContainer: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: Skin.radius(12),
     overflow: 'hidden',
   },
   video: {
@@ -187,13 +190,13 @@ const styles = StyleSheet.create({
     bottom: 4,
     left: 4,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 4,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
+    borderRadius: Skin.radius(4),
+    paddingHorizontal: Skin.space(4),
+    paddingVertical: Skin.space(1),
   },
   timerText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: Skin.font(10),
     fontVariant: ['tabular-nums'],
   },
   mutedBadge: {
@@ -201,7 +204,7 @@ const styles = StyleSheet.create({
     top: 4,
     right: 4,
     backgroundColor: 'rgba(255,59,48,0.8)',
-    borderRadius: 8,
+    borderRadius: Skin.radius(8),
     width: 16,
     height: 16,
     alignItems: 'center',
@@ -209,13 +212,13 @@ const styles = StyleSheet.create({
   },
   audioCircle: {
     flex: 1,
-    borderRadius: 30,
+    borderRadius: Skin.radius(30),
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    gap: Skin.space(2),
   },
   audioTimer: {
-    fontSize: 9,
+    fontSize: Skin.font(9),
     fontVariant: ['tabular-nums'],
   },
   leaveButton: {
@@ -223,10 +226,10 @@ const styles = StyleSheet.create({
     top: -12,
     right: -12,
     backgroundColor: '#ff3b30',
-    borderRadius: 12,
+    borderRadius: Skin.radius(12),
     width: 24,
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

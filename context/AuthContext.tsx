@@ -19,7 +19,7 @@ import { InteractionManager } from 'react-native';
 import { mmkvStorage, clearAllMMKVStorage } from '../services/offline/storage';
 import { getPrivateKey, getDeviceKeyset, clearAllSecureStorage, getFarcasterAuthToken, getFarcasterCustodyKey, storeFarcasterAuthToken, storeFarcasterCustodyKey, storeFarcasterSignerKey, storeFarcasterFid, getMnemonic } from '../services/onboarding/secureStorage';
 import { deriveFarcasterKeys, lookupFarcasterAccount, validateFarcasterMnemonic } from '../services/onboarding/farcasterService';
-import { refreshFarcasterAuthToken } from '../services/onboarding/farcasterService';
+import { refreshFarcasterAuthToken, fetchFarcasterProfileByFid } from '../services/onboarding/farcasterService';
 import { initializeEncryptionKeys, uploadUserRegistration, deriveQuilibriumAddressWithMnemonic, ensurePrivateKey } from '../services/onboarding/keyService';
 import { NativeSigningProvider } from '../services/crypto';
 import { getConfig, saveConfig } from '../services/config';
@@ -248,8 +248,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
               }
             })();
 
+            // Backfill the Farcaster pfp for accounts onboarded before it was
+            // persisted (older builds dropped it). Without this, the user's
+            // own avatar renders as the placeholder in surfaces like space
+            // chat. Merges onto the freshest stored copy to avoid clobbering
+            // configTask's write.
+            const farcasterPfpTask = (async () => {
+              try {
+                const fc = parsedUser.farcaster;
+                if (!fc?.fid || fc.pfpUrl) return;
+                const profile = await fetchFarcasterProfileByFid(fc.fid);
+                const pfpUrl = profile?.pfpUrl;
+                if (!pfpUrl) return;
+                setUser((prev) =>
+                  prev?.farcaster ? { ...prev, farcaster: { ...prev.farcaster, pfpUrl } } : prev,
+                );
+                const raw = mmkvStorage.getItem(STORAGE_KEYS.USER);
+                if (raw) {
+                  const cur = JSON.parse(raw) as UserInfo;
+                  if (cur.farcaster) {
+                    cur.farcaster.pfpUrl = pfpUrl;
+                    mmkvStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(cur));
+                  }
+                }
+              } catch {
+                // Best-effort.
+              }
+            })();
+
             // Wait for all tasks to complete
-            await Promise.all([encryptionTask, configTask, tokenTask]);
+            await Promise.all([encryptionTask, configTask, tokenTask, farcasterPfpTask]);
           });
         } else {
           setAuthState('unauthenticated');

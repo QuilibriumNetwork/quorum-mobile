@@ -9,7 +9,8 @@
  */
 
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { router } from 'expo-router';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { useAuth } from '@/context';

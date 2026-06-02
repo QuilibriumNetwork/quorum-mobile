@@ -10,14 +10,10 @@ import { useFarcasterThread, parseFarcasterUrl, type ThreadCast } from '@/hooks/
 import { useTheme, type AppTheme } from '@/theme';
 import { isScamCast } from '@/services/farcaster/scamFilter';
 import React from 'react';
-import {
-  Linking,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Linking, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Image } from 'expo-image';
+import * as Skin from '@/theme/skins/geometry';
 
 // Valid Farcaster URL patterns
 const FARCASTER_URL_PATTERNS = [
@@ -246,22 +242,22 @@ const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      borderWidth: 1,
+      borderRadius: Skin.radius(12),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.border,
       overflow: 'hidden',
-      marginTop: 8,
+      marginTop: Skin.space(8),
       maxWidth: 320,
     },
     channelTag: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 12,
-      paddingTop: 8,
+      gap: Skin.space(4),
+      paddingHorizontal: Skin.space(12),
+      paddingTop: Skin.space(8),
     },
     channelTagText: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       fontWeight: '600',
       color: theme.colors.accent,
       letterSpacing: 0.3,
@@ -269,43 +265,43 @@ const createStyles = (theme: AppTheme) =>
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 12,
-      paddingBottom: 8,
+      padding: Skin.space(12),
+      paddingBottom: Skin.space(8),
     },
     avatar: {
       width: 32,
       height: 32,
-      borderRadius: 16,
+      borderRadius: Skin.radius(16),
       backgroundColor: theme.colors.surface3,
-      marginRight: 8,
+      marginRight: Skin.space(8),
     },
     authorInfo: {
       flex: 1,
     },
     displayName: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textStrong,
     },
     username: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
     },
     timestamp: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginRight: 4,
+      marginRight: Skin.space(4),
     },
     castText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
-      lineHeight: 20,
-      paddingHorizontal: 12,
-      paddingBottom: 8,
+      lineHeight: Skin.font(20),
+      paddingHorizontal: Skin.space(12),
+      paddingBottom: Skin.space(8),
     },
     image: {
       width: '100%',
@@ -314,19 +310,19 @@ const createStyles = (theme: AppTheme) =>
     },
     footer: {
       flexDirection: 'row',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderTopWidth: 1,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(8),
+      borderTopWidth: Skin.border(1),
       borderTopColor: theme.colors.surface3,
-      gap: 16,
+      gap: Skin.space(16),
     },
     statItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: Skin.space(4),
     },
     statText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
     },
@@ -334,15 +330,15 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      borderRadius: 8,
-      padding: 10,
-      marginTop: 8,
-      gap: 8,
+      borderRadius: Skin.radius(8),
+      padding: Skin.space(10),
+      marginTop: Skin.space(8),
+      gap: Skin.space(8),
       maxWidth: 320,
     },
     errorText: {
       flex: 1,
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
     },
@@ -350,37 +346,37 @@ const createStyles = (theme: AppTheme) =>
     skeletonHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 12,
-      paddingBottom: 8,
+      padding: Skin.space(12),
+      paddingBottom: Skin.space(8),
     },
     skeletonAvatar: {
       width: 32,
       height: 32,
-      borderRadius: 16,
+      borderRadius: Skin.radius(16),
       backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
-      marginRight: 8,
+      marginRight: Skin.space(8),
     },
     skeletonName: {
       width: 120,
       height: 16,
-      borderRadius: 4,
+      borderRadius: Skin.radius(4),
       backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
     },
     skeletonText: {
       width: '90%',
       height: 14,
-      borderRadius: 4,
+      borderRadius: Skin.radius(4),
       backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
-      marginHorizontal: 12,
-      marginBottom: 6,
+      marginHorizontal: Skin.space(12),
+      marginBottom: Skin.space(6),
     },
     skeletonTextShort: {
       width: '60%',
       height: 14,
-      borderRadius: 4,
+      borderRadius: Skin.radius(4),
       backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
-      marginHorizontal: 12,
-      marginBottom: 12,
+      marginHorizontal: Skin.space(12),
+      marginBottom: Skin.space(12),
     },
   });
 

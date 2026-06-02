@@ -7,14 +7,10 @@ import type {
   ProposalScope,
 } from '@/hooks/useGovernance';
 import React, { useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface CreateProposalSheetProps {
   visible: boolean;
@@ -285,68 +281,68 @@ export default function CreateProposalSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
+    padding: Skin.space(20),
+    paddingBottom: Skin.space(40),
   },
   sheetTitle: {
-    fontSize: 20,
+    fontSize: Skin.font(20),
     fontWeight: '700',
-    marginBottom: 16,
+    marginBottom: Skin.space(16),
   },
   segmentedControl: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
+    gap: Skin.space(8),
+    marginBottom: Skin.space(20),
   },
   segment: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: Skin.space(8),
+    borderRadius: Skin.radius(10),
     alignItems: 'center',
   },
   segmentText: {
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontWeight: '600',
   },
   label: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontWeight: '500',
-    marginBottom: 6,
-    marginTop: 12,
+    marginBottom: Skin.space(6),
+    marginTop: Skin.space(12),
   },
   pillRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: Skin.space(8),
   },
   pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingHorizontal: Skin.space(12),
+    paddingVertical: Skin.space(6),
+    borderRadius: Skin.radius(14),
   },
   pillText: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontWeight: '500',
   },
   textInput: {
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 14,
-    borderWidth: 1,
+    borderRadius: Skin.radius(10),
+    padding: Skin.space(12),
+    fontSize: Skin.font(14),
+    borderWidth: Skin.border(1),
   },
   submitButton: {
-    marginTop: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
+    marginTop: Skin.space(24),
+    paddingVertical: Skin.space(14),
+    borderRadius: Skin.radius(12),
     alignItems: 'center',
   },
   submitText: {
-    fontSize: 16,
+    fontSize: Skin.font(16),
     fontWeight: '600',
   },
-});
+}));

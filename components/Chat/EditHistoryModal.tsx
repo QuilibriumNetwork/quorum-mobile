@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { formatTime } from './types';
+import * as Skin from '@/theme/skins/geometry';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -121,23 +122,23 @@ const createStyles = (theme: AppTheme) =>
     },
     container: {
       backgroundColor: theme.colors.surface1 ?? theme.colors.background,
-      borderTopLeftRadius: 16,
-      borderTopRightRadius: 16,
+      borderTopLeftRadius: Skin.radius(16),
+      borderTopRightRadius: Skin.radius(16),
       maxHeight: '70%',
       width: SCREEN_WIDTH,
-      paddingBottom: 34,
+      paddingBottom: Skin.space(34),
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 20,
-      paddingVertical: 16,
-      borderBottomWidth: 1,
+      paddingHorizontal: Skin.space(20),
+      paddingVertical: Skin.space(16),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.border ?? theme.colors.surface3,
     },
     headerTitle: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textStrong,
@@ -146,38 +147,38 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
     },
     scrollContent: {
-      padding: 16,
+      padding: Skin.space(16),
     },
     editEntry: {
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
     },
     editHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 6,
+      marginBottom: Skin.space(6),
     },
     editLabel: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.primary,
     },
     editTimestamp: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
     },
     editText: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
-      lineHeight: 22,
+      lineHeight: Skin.font(22),
     },
     divider: {
       height: 1,
       backgroundColor: theme.colors.border ?? theme.colors.surface3,
-      marginVertical: 12,
+      marginVertical: Skin.space(12),
     },
   });
 

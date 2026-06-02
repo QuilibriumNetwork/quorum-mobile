@@ -3,6 +3,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/theme';
 import { IconSymbol } from './IconSymbol';
 import { useNetworkState } from '@/hooks/useNetworkState';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface OfflineBannerProps {
   /** Optional pending mutation count to display */
@@ -32,20 +34,20 @@ export function OfflineBanner({ pendingCount }: OfflineBannerProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    gap: 6,
+    paddingVertical: Skin.space(6),
+    paddingHorizontal: Skin.space(12),
+    gap: Skin.space(6),
   },
   text: {
     color: '#000',
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontWeight: '600',
   },
-});
+}));
 
 export default OfflineBanner;

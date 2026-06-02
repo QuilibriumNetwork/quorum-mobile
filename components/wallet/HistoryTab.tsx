@@ -15,13 +15,9 @@ import {
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import * as WebBrowser from 'expo-web-browser';
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 interface HistoryTabProps {
   selectedChain: string;
@@ -404,12 +400,12 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 8,
-      gap: 8,
-      marginBottom: 8,
+      paddingVertical: Skin.space(8),
+      gap: Skin.space(8),
+      marginBottom: Skin.space(8),
     },
     loadingText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
     },
     emptyContainer: {
@@ -419,41 +415,41 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 60,
+      paddingVertical: Skin.space(60),
     },
     emptyTitle: {
-      fontSize: 17,
+      fontSize: Skin.font(17),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
-      marginTop: 16,
+      marginTop: Skin.space(16),
     },
     emptySubtitle: {
-      ...textStyles.subheadline,
+      ...theme.textStyles.subheadline,
       color: theme.colors.textMuted,
-      marginTop: 4,
+      marginTop: Skin.space(4),
       textAlign: 'center',
     },
     transactionRow: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 14,
-      marginBottom: 10,
-      gap: 12,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(14),
+      marginBottom: Skin.space(10),
+      gap: Skin.space(12),
     },
     transactionIcon: {
       width: 40,
       height: 40,
-      borderRadius: 20,
+      borderRadius: Skin.radius(20),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
     },
     transactionInfo: {
       flex: 1,
-      gap: 4,
+      gap: Skin.space(4),
     },
     transactionHeader: {
       flexDirection: 'row',
@@ -461,13 +457,13 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       alignItems: 'center',
     },
     transactionType: {
-      fontSize: 15,
+      fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
     },
     transactionStatus: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -477,17 +473,17 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       alignItems: 'center',
     },
     transactionAmount: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMain,
       flex: 1,
     },
     transactionChain: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
       backgroundColor: theme.colors.surface3,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 4,
+      paddingHorizontal: Skin.space(6),
+      paddingVertical: Skin.space(2),
+      borderRadius: Skin.radius(4),
       overflow: 'hidden',
     },
     transactionFooter: {
@@ -496,12 +492,12 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       alignItems: 'center',
     },
     transactionTo: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
       flex: 1,
     },
     transactionTime: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
     },
   });

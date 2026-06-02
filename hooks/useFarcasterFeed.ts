@@ -1,8 +1,15 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
+import { useMMKVBoolean } from 'react-native-mmkv';
 import { isScamCast } from '@/services/farcaster/scamFilter';
 import { normalizedCastToLegacy } from '@/services/farcaster/hypersnapToLegacyShape';
 import { useAuth } from '@/context/AuthContext';
+import { useFollowingFids } from '@/hooks/useFollowingFids';
+import {
+  feedPrefsStore,
+  K_SHOW_REPLIES_IN_FEED,
+  K_SHOW_NON_FOLLOW_REPLIES,
+} from '@/services/farcaster/feedPrefs';
 import {
   getDefaultHypersnapClient,
   fromHypersnapCast,
@@ -343,7 +350,45 @@ export function useFarcasterFeed({ token, enabled = true }: UseFarcasterFeedOpti
   });
 
   // Flatten all pages into a single array
-  const data = query.data?.pages.flatMap((page) => page.items) ?? [];
+  const allItems = query.data?.pages.flatMap((page) => page.items) ?? [];
+
+  // Main-feed reply filtering, in two layers (a reply is any cast with a
+  // parentHash):
+  //   1. showRepliesInFeed OFF → drop every reply, leaving only top-level
+  //      casts. Default ON.
+  //   2. otherwise, showNonFollowReplies OFF → drop replies authored by
+  //      people the viewer doesn't follow (own replies always stay).
+  //      Default OFF. We only apply this once the follow set is loaded —
+  //      before that, "not in set" doesn't mean "not followed", and we'd
+  //      wrongly hide everything.
+  // Thread views are unaffected by both — they always show every reply.
+  const [showRepliesInFeedRaw] = useMMKVBoolean(
+    K_SHOW_REPLIES_IN_FEED,
+    feedPrefsStore,
+  );
+  const showRepliesInFeed = showRepliesInFeedRaw ?? true;
+  const [showNonFollowReplies] = useMMKVBoolean(
+    K_SHOW_NON_FOLLOW_REPLIES,
+    feedPrefsStore,
+  );
+  const { fids: followingFids, isLoaded: followsLoaded } = useFollowingFids();
+
+  const data = useMemo(() => {
+    if (!showRepliesInFeed) {
+      // Hide all replies outright.
+      return allItems.filter((item) => !item.cast?.parentHash);
+    }
+    if (showNonFollowReplies || !followsLoaded) return allItems;
+    return allItems.filter((item) => {
+      const cast = item.cast;
+      const isReply = Boolean(cast?.parentHash);
+      if (!isReply) return true;
+      const authorFid = cast?.author?.fid;
+      if (authorFid === fid) return true; // always show the viewer's own replies
+      return typeof authorFid === 'number' && followingFids.has(authorFid);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allItems, showRepliesInFeed, showNonFollowReplies, followsLoaded, followingFids, fid]);
 
   // Track the top item hash for refresh requests
   if (data.length > 0 && data[0].cast?.hash) {

@@ -15,6 +15,7 @@ import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import StepIndicator from './StepIndicator';
 import type { OnboardingStep } from '@/context';
+import * as Skin from '@/theme/skins/geometry';
 
 interface OnboardingLayoutProps {
   children: React.ReactNode;
@@ -81,7 +82,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flex: 1,
       paddingTop: insets.top + 16,
       paddingBottom: insets.bottom + 16,
-      paddingHorizontal: 24,
+      paddingHorizontal: Skin.space(24),
     },
   });
 

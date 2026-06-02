@@ -1,22 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import {
-  Animated,
-  Dimensions,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  StyleSheet,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { Animated, Dimensions, Keyboard, KeyboardAvoidingView, Modal, Platform, StyleSheet, TouchableWithoutFeedback, View, ViewStyle } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets, EdgeInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 import { useModalAnimation, SCREEN_HEIGHT } from '@/hooks/useModalAnimation';
 import { usePanResponder } from '@/hooks/usePanResponder';
 import { createTheme } from '@/theme/themes';
+import * as Skin from '@/theme/skins/geometry';
+import { frameAccentBorder } from '@/theme/skins/frame';
 
 type ThemeType = ReturnType<typeof createTheme>;
 
@@ -190,8 +181,9 @@ const createStyles = (
       left: 0,
       right: 0,
       backgroundColor: theme.colors.background,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
+      borderTopLeftRadius: Skin.radius(20),
+      borderTopRightRadius: Skin.radius(20),
+      ...frameAccentBorder(theme),
       ...(fillHeight ? { height: SCREEN_HEIGHT * height } : {}),
       ...(minHeight ? { minHeight: SCREEN_HEIGHT * minHeight } : {}),
       maxHeight: SCREEN_HEIGHT * height,
@@ -199,13 +191,13 @@ const createStyles = (
     },
     handleContainer: {
       alignItems: 'center',
-      paddingVertical: 8,
+      paddingVertical: Skin.space(8),
     },
     handle: {
       width: 40,
       height: 4,
       backgroundColor: theme.colors.surface5,
-      borderRadius: 2,
+      borderRadius: Skin.radius(2),
     },
   });
 

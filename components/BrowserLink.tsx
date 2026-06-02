@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleProp, Text, TextStyle, TouchableOpacity, ViewStyle } from 'react-native';
+import { StyleProp, Text, TextStyle, ViewStyle } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme } from '@/theme';
 import { useRouter } from 'expo-router';
 

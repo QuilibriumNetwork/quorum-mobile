@@ -9,18 +9,11 @@ import type { Auction } from '@/services/api/qnsClient';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AuctionDetailModal from './AuctionDetailModal';
+import * as Skin from '@/theme/skins/geometry';
 
 interface AuctionsModalProps {
   visible: boolean;
@@ -68,7 +61,7 @@ function AuctionCountdown({ endTime }: { endTime: string }) {
 
   return (
     <Text style={{
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: isUrgent ? theme.colors.danger : theme.colors.textMuted,
@@ -239,11 +232,11 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingBottom: 12,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(12),
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
@@ -252,37 +245,37 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      marginHorizontal: 20,
-      marginBottom: 12,
-      gap: 8,
+      borderRadius: Skin.radius(10),
+      paddingHorizontal: Skin.space(12),
+      marginHorizontal: Skin.space(20),
+      marginBottom: Skin.space(12),
+      gap: Skin.space(8),
     },
     searchInput: {
       flex: 1,
       height: 40,
-      fontSize: 15,
+      fontSize: Skin.font(15),
       color: theme.colors.textMain,
     },
     listContent: {
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
       paddingBottom: insets.bottom + 20,
       flexGrow: 1,
     },
     auctionCard: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 10,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      marginBottom: Skin.space(10),
     },
     auctionHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 10,
+      marginBottom: Skin.space(10),
     },
     auctionName: {
-      fontSize: 17,
+      fontSize: Skin.font(17),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.primary,
@@ -293,52 +286,52 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       alignItems: 'flex-end',
     },
     bidLabel: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginBottom: 2,
+      marginBottom: Skin.space(2),
     },
     bidRow: {
       flexDirection: 'row',
       alignItems: 'baseline',
-      gap: 4,
+      gap: Skin.space(4),
     },
     bidAmount: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     bidToken: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
     },
     auctionMeta: {
       alignItems: 'flex-end',
     },
     bidCount: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
     },
     instantBuyText: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.success,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     emptyContainer: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 60,
-      gap: 12,
+      paddingVertical: Skin.space(60),
+      gap: Skin.space(12),
     },
     emptyTitle: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     emptySubtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       textAlign: 'center',
     },

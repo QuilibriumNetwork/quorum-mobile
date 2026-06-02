@@ -12,15 +12,8 @@
  */
 
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Modal,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Modal, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme } from '@/theme';
 import {
   deriveFarcasterKeys,
@@ -33,6 +26,8 @@ import {
   storeFarcasterFid,
   storeFarcasterSignerKey,
 } from '@/services/onboarding/secureStorage';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface Props {
   visible: boolean;
@@ -123,7 +118,7 @@ export default function FarcasterReimportSheet({ visible, onClose, onImported }:
             ]}
           />
           {error ? (
-            <Text style={[styles.error, { color: theme.colors.error ?? '#FF3B30' }]}>
+            <Text style={[styles.error, { color: theme.colors.danger ?? '#FF3B30' }]}>
               {error}
             </Text>
           ) : null}
@@ -159,37 +154,37 @@ export default function FarcasterReimportSheet({ visible, onClose, onImported }:
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
   },
   card: {
-    padding: 20,
-    paddingBottom: 32,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    gap: 12,
+    padding: Skin.space(20),
+    paddingBottom: Skin.space(32),
+    borderTopLeftRadius: Skin.radius(16),
+    borderTopRightRadius: Skin.radius(16),
+    gap: Skin.space(12),
   },
-  title: { fontSize: 18, fontWeight: '600' },
-  body: { fontSize: 14, lineHeight: 20 },
+  title: { fontSize: Skin.font(18), fontWeight: '600' },
+  body: { fontSize: Skin.font(14), lineHeight: Skin.font(20) },
   input: {
     minHeight: 100,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 15,
+    borderWidth: Skin.border(1),
+    borderRadius: Skin.radius(10),
+    padding: Skin.space(12),
+    fontSize: Skin.font(15),
     textAlignVertical: 'top',
   },
-  error: { fontSize: 13 },
-  actionRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  error: { fontSize: Skin.font(13) },
+  actionRow: { flexDirection: 'row', gap: Skin.space(8), marginTop: Skin.space(4) },
   action: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
+    paddingVertical: Skin.space(12),
+    borderRadius: Skin.radius(10),
+    borderWidth: Skin.border(1),
     borderColor: 'transparent',
     alignItems: 'center',
   },
-  actionText: { fontSize: 15, fontWeight: '600' },
-});
+  actionText: { fontSize: Skin.font(15), fontWeight: '600' },
+}));

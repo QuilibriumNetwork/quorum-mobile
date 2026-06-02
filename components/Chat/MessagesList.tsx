@@ -1,16 +1,7 @@
 import type { AppTheme } from '@/theme';
 import React, { useCallback, useState, useRef, useMemo, forwardRef, useImperativeHandle, useEffect } from 'react';
-import {
-  Image,
-  Text,
-  View,
-  StyleSheet,
-  ImageSourcePropType,
-  ActivityIndicator,
-  TouchableOpacity,
-  Pressable,
-  useWindowDimensions,
-} from 'react-native';
+import { Image, Text, View, StyleSheet, ImageSourcePropType, ActivityIndicator, Pressable, useWindowDimensions } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, withSequence } from 'react-native-reanimated';
 import BrowserLink from '@/components/BrowserLink';
@@ -30,6 +21,7 @@ import { ReactionDetailsModal } from './ReactionDetailsModal';
 import { SpaceCallBubble } from './SpaceCallBubble';
 import type { DisplayMessage, DisplayReaction } from './types';
 import { logger, type Emoji, type Sticker, type SpaceMember, type Channel } from '@quilibrium/quorum-shared';
+import * as Skin from '@/theme/skins/geometry';
 // MESSAGE_IMAGE_MAX_WIDTH computed inside the component via useWindowDimensions
 
 // User info for profile display
@@ -499,7 +491,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         item.systemEventType === 'join'
           ? theme.colors.success ?? '#22c55e'
           : item.systemEventType === 'kick'
-          ? theme.colors.error ?? '#ef4444'
+          ? theme.colors.danger ?? '#ef4444'
           : theme.colors.textMuted;
 
       return (
@@ -662,6 +654,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               {item.content ? (
                 <MentionableText
                   text={item.content}
+                  enableTranslate
                   customEmojis={customEmojis}
                   members={members}
                   channels={channels}
@@ -793,7 +786,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                 <Text style={styles.messageUser} numberOfLines={1}>{item.userName}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
                 {item.originalMessage?.isPinned && (
-                  <IconSymbol name="pin.fill" size={10} color={theme.colors.textMuted} style={{ marginLeft: 4 }} />
+                  <IconSymbol name="pin.fill" size={10} color={theme.colors.textMuted} style={{ marginLeft: Skin.space(4) }} />
                 )}
                 {item.isEdited && (
                   <Text style={styles.editedIndicator}>(edited)</Text>
@@ -829,6 +822,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                 <View style={styles.messageWithLink}>
                   <MentionableText
                     text={item.content}
+                    enableTranslate
                     customEmojis={customEmojis}
                     members={members}
                     channels={channels}
@@ -846,6 +840,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               ) : messageTextWithoutLink ? (
                 <MentionableText
                   text={messageTextWithoutLink}
+                  enableTranslate
                   customEmojis={customEmojis}
                   members={members}
                   channels={channels}
@@ -876,7 +871,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   <IconSymbol
                     name="exclamationmark.circle.fill"
                     size={14}
-                    color={theme.colors.error ?? '#ef4444'}
+                    color={theme.colors.danger ?? '#ef4444'}
                   />
                   <Text style={styles.failedText}>
                     {item.sendError || 'Failed to send'}
@@ -907,7 +902,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         setActionSheetMessageId(item.id);
       };
       return (
-        <View style={{ paddingHorizontal: 12, paddingVertical: 4 }}>
+        <View style={{ paddingHorizontal: Skin.space(12), paddingVertical: Skin.space(4) }}>
           <FarcasterCastCard
             cast={item.cast}
             channelKey={item.castChannelKey}
@@ -1118,18 +1113,18 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: Skin.space(32),
   },
   message: {
     flexDirection: 'row',
-    padding: 16,
+    padding: Skin.space(16),
     width: '100%',
   },
   messageAvatar: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    marginRight: 12,
+    borderRadius: Skin.radius(20),
+    marginRight: Skin.space(12),
   },
   messageContent: {
     flex: 1,
@@ -1142,22 +1137,22 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: theme.colors.textStrong,
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
-    marginRight: 8,
+    marginRight: Skin.space(8),
     flexShrink: 1,
   },
   messageTime: {
     color: theme.colors.textMuted,
-    fontSize: 12,
+    fontSize: Skin.font(12),
   },
   messageText: {
     color: theme.colors.textMain,
-    marginTop: 4,
+    marginTop: Skin.space(4),
     fontFamily: theme.fonts.regular.fontFamily,
   },
   messageWithLink: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginTop: 4,
+    marginTop: Skin.space(4),
     flexWrap: 'wrap',
   },
   linkText: {
@@ -1166,70 +1161,70 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontFamily: theme.fonts.regular.fontFamily,
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: Skin.space(12),
     color: theme.colors.textMuted,
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
   },
   errorText: {
-    color: theme.colors.error ?? theme.colors.accent,
-    fontSize: 16,
+    color: theme.colors.danger ?? theme.colors.accent,
+    fontSize: Skin.font(16),
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
     textAlign: 'center',
   },
   errorDetail: {
-    marginTop: 8,
+    marginTop: Skin.space(8),
     color: theme.colors.textMuted,
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
     textAlign: 'center',
   },
   emptyText: {
     color: theme.colors.textMain,
-    fontSize: 18,
+    fontSize: Skin.font(18),
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
     textAlign: 'center',
   },
   emptySubtext: {
-    marginTop: 8,
+    marginTop: Skin.space(8),
     color: theme.colors.textMuted,
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
     textAlign: 'center',
   },
   loadingMore: {
-    paddingVertical: 16,
+    paddingVertical: Skin.space(16),
     alignItems: 'center',
   },
   messageSending: {
     opacity: 0.6,
   },
   sendingIndicator: {
-    marginLeft: 8,
+    marginLeft: Skin.space(8),
   },
   failedRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: Skin.space(6),
   },
   failedText: {
-    color: theme.colors.error ?? '#ef4444',
-    fontSize: 12,
+    color: theme.colors.danger ?? '#ef4444',
+    fontSize: Skin.font(12),
     fontFamily: theme.fonts.regular.fontFamily,
-    marginLeft: 4,
+    marginLeft: Skin.space(4),
   },
   retryButton: {
-    marginLeft: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    marginLeft: Skin.space(8),
+    paddingHorizontal: Skin.space(8),
+    paddingVertical: Skin.space(2),
     backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
-    borderRadius: 4,
+    borderRadius: Skin.radius(4),
   },
   retryText: {
     color: theme.colors.primary,
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontFamily: theme.fonts.medium.fontFamily,
   },
   // System message styles
@@ -1237,69 +1232,69 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: Skin.space(8),
+    paddingHorizontal: Skin.space(16),
   },
   systemMessageText: {
     color: theme.colors.textMuted,
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontFamily: theme.fonts.regular.fontFamily,
-    marginHorizontal: 8,
+    marginHorizontal: Skin.space(8),
     fontStyle: 'italic',
   },
   systemMessageTime: {
     color: theme.colors.textMuted,
-    fontSize: 11,
+    fontSize: Skin.font(11),
     fontFamily: theme.fonts.regular.fontFamily,
   },
   // Deleted message styles
   deletedMessage: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: Skin.space(16),
     opacity: 0.6,
   },
   deletedMessageText: {
     color: theme.colors.textMuted,
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
     fontStyle: 'italic',
-    marginLeft: 8,
+    marginLeft: Skin.space(8),
   },
   // Edited indicator
   editedIndicator: {
     color: theme.colors.textMuted,
-    fontSize: 11,
+    fontSize: Skin.font(11),
     fontFamily: theme.fonts.regular.fontFamily,
-    marginLeft: 6,
+    marginLeft: Skin.space(6),
   },
   // Reply indicator
   replyIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: Skin.space(4),
   },
   replyIndicatorText: {
     color: theme.colors.textMuted,
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontFamily: theme.fonts.regular.fontFamily,
-    marginLeft: 4,
+    marginLeft: Skin.space(4),
   },
   // Reactions styles
   reactionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 6,
-    gap: 6,
+    marginTop: Skin.space(6),
+    gap: Skin.space(6),
   },
   reactionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.surface3 ?? theme.colors.surface2,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
+    paddingHorizontal: Skin.space(8),
+    paddingVertical: Skin.space(4),
+    borderRadius: Skin.radius(12),
+    borderWidth: Skin.border(1),
     borderColor: 'transparent',
   },
   reactionBadgeActive: {
@@ -1307,68 +1302,68 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     backgroundColor: theme.colors.surface4 ?? theme.colors.surface3,
   },
   reactionEmoji: {
-    fontSize: 14,
+    fontSize: Skin.font(14),
   },
   reactionCustomEmoji: {
     width: 16,
     height: 16,
-    borderRadius: 2,
+    borderRadius: Skin.radius(2),
   },
   reactionCount: {
     color: theme.colors.textMuted,
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontFamily: theme.fonts.medium.fontFamily,
-    marginLeft: 4,
+    marginLeft: Skin.space(4),
   },
   reactionCountActive: {
     color: theme.colors.primary,
   },
   // Embed/media styles
   embedImageContainer: {
-    marginTop: 8,
-    borderRadius: 8,
+    marginTop: Skin.space(8),
+    borderRadius: Skin.radius(8),
     overflow: 'hidden',
   },
   embedImage: {
-    borderRadius: 8,
+    borderRadius: Skin.radius(8),
   },
   videoPlaceholder: {
     width: '100%',
     maxWidth: 300,
     height: 180,
-    borderRadius: 8,
-    marginTop: 8,
+    borderRadius: Skin.radius(8),
+    marginTop: Skin.space(8),
     backgroundColor: theme.colors.surface3 ?? '#1a1a1a',
     justifyContent: 'center',
     alignItems: 'center',
   },
   videoPlaceholderText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontFamily: theme.fonts.regular.fontFamily,
-    marginTop: 8,
+    marginTop: Skin.space(8),
   },
   // Sticker styles
   stickerContainer: {
-    marginTop: 8,
+    marginTop: Skin.space(8),
   },
   stickerImage: {
     width: 128,
     height: 128,
-    borderRadius: 8,
+    borderRadius: Skin.radius(8),
   },
   stickerPlaceholder: {
     width: 128,
     height: 128,
-    marginTop: 8,
-    borderRadius: 8,
+    marginTop: Skin.space(8),
+    borderRadius: Skin.radius(8),
     backgroundColor: theme.colors.surface3 ?? '#1a1a1a',
     justifyContent: 'center',
     alignItems: 'center',
   },
   stickerPlaceholderText: {
     color: theme.colors.textMuted,
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
   },
 });

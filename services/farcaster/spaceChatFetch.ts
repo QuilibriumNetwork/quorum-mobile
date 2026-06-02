@@ -34,40 +34,71 @@ export interface SpaceChatCast {
     displayName?: string;
     pfpUrl?: string;
   };
+  /** Farcaster reaction/reply counts + the viewer's own reaction state.
+   *  Default 0/false for optimistic stubs that haven't been confirmed. */
+  likeCount?: number;
+  recastCount?: number;
+  replyCount?: number;
+  liked?: boolean;
+  recasted?: boolean;
+}
+
+/** The hypersnap conversation endpoint returns hashes WITHOUT the `0x`
+ *  prefix, but the like/recast/reply (`cast-likes`, `recasts`, `/v2/casts`)
+ *  endpoints — and the rest of the app — use the `0x`-prefixed form. Without
+ *  this, liking/recasting/replying to a chat message hits the API with a bare
+ *  hash and is rejected. */
+function ensure0x(h?: string): string | undefined {
+  if (!h) return h;
+  const lower = h.toLowerCase();
+  return lower.startsWith('0x') ? lower : `0x${lower}`;
 }
 
 function normalizeReply(c: HypersnapConversationCast): SpaceChatCast {
   return {
-    hash: c.hash,
+    hash: ensure0x(c.hash)!,
     text: c.text,
     timestamp: Date.parse(c.timestamp) || 0,
-    parentHash: c.parent_hash,
+    parentHash: ensure0x(c.parent_hash),
     author: {
       fid: c.author.fid,
       username: c.author.username,
       displayName: c.author.display_name,
       pfpUrl: c.author.pfp_url,
     },
+    likeCount: c.reactions?.likes_count ?? 0,
+    recastCount: c.reactions?.recasts_count ?? 0,
+    replyCount: c.replies?.count ?? 0,
+    liked: c.viewer_context?.liked ?? false,
+    recasted: c.viewer_context?.recasted ?? false,
   };
 }
 
+/** Flatten the conversation tree (host's replies + their replies) into a
+ *  single time-ordered list. Replying to a chat message posts a depth-2
+ *  reply, so we go two levels deep to surface those inline. */
+function flatten(casts: HypersnapConversationCast[], out: SpaceChatCast[]): void {
+  for (const c of casts) {
+    out.push(normalizeReply(c));
+    if (c.direct_replies?.length) flatten(c.direct_replies, out);
+  }
+}
+
 /**
- * Fetch direct replies to the space's root cast. Hypersnap returns
- * the conversation tree rooted at the queried cast; we keep only the
- * depth-1 children — first-level replies become chat messages,
- * deeper threads are ignored.
+ * Fetch replies to the space's root cast as chat messages. We pull two
+ * levels deep and flatten so that replies to individual chat messages
+ * appear inline alongside top-level chat.
  */
 export async function fetchSpaceChat(rootCastHash: string): Promise<SpaceChatCast[]> {
   const stripped = rootCastHash.toLowerCase().replace(/^0x/, '');
   if (stripped.length < 40) return [];
   const client = getDefaultHypersnapClient();
   try {
-    // depth 1 is all we need for chat; deeper threads aren't displayed.
-    const res = await client.getCastConversation(stripped, { replyDepth: 1 });
+    const res = await client.getCastConversation(stripped, { replyDepth: 2 });
     const replies = res.conversation.cast.direct_replies ?? [];
-    return replies
-      .map(normalizeReply)
-      .sort((a, b) => a.timestamp - b.timestamp);
+    const out: SpaceChatCast[] = [];
+    flatten(replies, out);
+    return out.sort((a, b) => a.timestamp - b.timestamp);
   } catch {
     return [];
   }

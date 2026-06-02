@@ -3,7 +3,9 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { setProfileSplitMode } from '@/services/profile/profilePrefs';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 interface ProfileSplitModeModalProps {
   visible: boolean;
@@ -71,60 +73,60 @@ export default function ProfileSplitModeModal({
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
-      paddingHorizontal: 20,
-      paddingBottom: 24,
-      gap: 16,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(24),
+      gap: Skin.space(16),
     },
     title: {
-      fontSize: 22,
+      fontSize: Skin.font(22),
       fontWeight: '700',
       color: theme.colors.textStrong,
       textAlign: 'center',
-      marginTop: 8,
+      marginTop: Skin.space(8),
     },
     subtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       textAlign: 'center',
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     option: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      gap: 12,
-      padding: 14,
-      borderRadius: 12,
-      borderWidth: 1,
+      gap: Skin.space(12),
+      padding: Skin.space(14),
+      borderRadius: Skin.radius(12),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.surface3,
       backgroundColor: theme.colors.surface1,
     },
     optionIcon: {
       width: 40,
       height: 40,
-      borderRadius: 20,
+      borderRadius: Skin.radius(20),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface2,
     },
     optionTextWrap: {
       flex: 1,
-      gap: 2,
+      gap: Skin.space(2),
     },
     optionTitle: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontWeight: '600',
       color: theme.colors.textStrong,
     },
     optionDesc: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
-      lineHeight: 18,
+      lineHeight: Skin.font(18),
     },
     footer: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       textAlign: 'center',
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
   });
 }

@@ -6,14 +6,8 @@
  */
 
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { BaseModal } from '@/components/shared';
@@ -32,6 +26,7 @@ import {
 import { getFarcasterCustodyKey, getFarcasterFid } from '@/services/onboarding/secureStorage';
 import { useWarpcastWallet } from '@/hooks/useWarpcastWallet';
 import { deriveMultiChainKeys, deriveMultiChainKeysFromPrivateKey } from '@/services/wallet/multiChainWallet';
+import * as Skin from '@/theme/skins/geometry';
 
 const RECOVERY_WEBAPP_URL = 'https://wallet-export.farcaster.xyz/';
 const WEBVIEW_ORIGIN_WHITELIST = [
@@ -460,7 +455,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 24,
+      padding: Skin.space(24),
     },
     webViewContainer: {
       flex: 1,
@@ -468,35 +463,35 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 16,
-      gap: 8,
+      padding: Skin.space(16),
+      gap: Skin.space(8),
     },
     headerTitle: {
-      fontSize: 18,
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     infoText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
-      paddingHorizontal: 16,
-      paddingBottom: 12,
-      lineHeight: 20,
+      paddingHorizontal: Skin.space(16),
+      paddingBottom: Skin.space(12),
+      lineHeight: Skin.font(20),
     },
     pasteButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.primary,
-      borderRadius: 12,
-      padding: 14,
-      marginHorizontal: 16,
-      marginBottom: 12,
-      gap: 8,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(14),
+      marginHorizontal: Skin.space(16),
+      marginBottom: Skin.space(12),
+      gap: Skin.space(8),
     },
     pasteButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',
@@ -506,72 +501,72 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       backgroundColor: theme.colors.background,
     },
     statusText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: theme.colors.textMuted,
-      marginTop: 16,
+      marginTop: Skin.space(16),
       textAlign: 'center',
     },
     errorText: {
-      fontSize: 16,
-      color: '#EF4444',
-      marginTop: 16,
+      fontSize: Skin.font(16),
+      color: theme.colors.danger,
+      marginTop: Skin.space(16),
       textAlign: 'center',
     },
     successTitle: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
-      marginTop: 16,
+      marginTop: Skin.space(16),
     },
     addressContainer: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 16,
-      marginTop: 24,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      marginTop: Skin.space(24),
       width: '100%',
     },
     addressLabel: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
     },
     addressText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: 'monospace',
       color: theme.colors.textMain,
     },
     importButton: {
       backgroundColor: theme.colors.primary,
-      borderRadius: 12,
-      padding: 16,
-      marginTop: 24,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      marginTop: Skin.space(24),
       width: '100%',
       alignItems: 'center',
     },
     importButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',
     },
     skipButton: {
-      padding: 16,
-      marginTop: 8,
+      padding: Skin.space(16),
+      marginTop: Skin.space(8),
     },
     skipButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
     },
     retryButton: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 16,
-      marginTop: 24,
-      paddingHorizontal: 32,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      marginTop: Skin.space(24),
+      paddingHorizontal: Skin.space(32),
     },
     retryButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,

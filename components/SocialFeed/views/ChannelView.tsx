@@ -1,13 +1,7 @@
 import type { AppTheme } from '@/theme';
 import React, { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Image } from 'expo-image';
 import { FlashList } from '@shopify/flash-list';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
@@ -18,6 +12,8 @@ import { ImageViewer, AutoHeightImage, ImageCarousel, VideoPlayer } from '../med
 import { CastText, LinkPreview, QuoteCast, FrameEmbed, LikeIcon, getLikeIconType } from '../content';
 import { QuorumIdentityBadge } from '../content/QuorumIdentityBadge';
 import { SCREEN_WIDTH, SCREEN_HEIGHT, formatTimestamp, lookupUserByUsername } from '../utils';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface ChannelViewProps {
   channelKey: string;
@@ -231,6 +227,7 @@ export function ChannelView({
               text={cast.text}
               style={styles.castText}
               theme={theme}
+              enableTranslate
               onMentionPress={handleMentionPress}
               onChannelPress={onOpenChannel}
             />
@@ -382,7 +379,7 @@ export function ChannelView({
         ListHeaderComponent={renderChannelHeader}
         renderItem={({ item }) => renderCast(item)}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 32 + bottomInset }}
+        contentContainerStyle={{ paddingBottom: Skin.space(32) + bottomInset }}
         onEndReached={() => {
           if (hasNextPage && !isFetchingNextPage) {
             fetchNextPage();
@@ -410,18 +407,18 @@ export function ChannelView({
 
 export default ChannelView;
 
-const staticStyles = StyleSheet.create({
+const staticStyles = createSkinnable(() => StyleSheet.create({
   backButton: {
     position: 'absolute',
     top: 12,
     left: 12,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
-    padding: 8,
+    borderRadius: Skin.radius(20),
+    padding: Skin.space(8),
     zIndex: 10,
   },
   channelInfoContainer: {
-    padding: 16,
+    padding: Skin.space(16),
   },
   channelInfoRow: {
     flexDirection: 'row',
@@ -429,26 +426,26 @@ const staticStyles = StyleSheet.create({
   },
   channelImagePlaceholderText: {
     color: '#fff',
-    fontSize: 24,
+    fontSize: Skin.font(24),
     fontWeight: '700',
   },
   channelNameContainer: {
     flex: 1,
-    paddingBottom: 4,
+    paddingBottom: Skin.space(4),
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 12,
+    gap: Skin.space(16),
+    marginTop: Skin.space(12),
   },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: Skin.space(4),
   },
   miniAppButtonText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: Skin.font(15),
     fontWeight: '600',
   },
   castHeaderRow: {
@@ -461,27 +458,27 @@ const staticStyles = StyleSheet.create({
   castAuthorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Skin.space(6),
   },
   mediaContainer: {
-    marginHorizontal: -12,
+    marginHorizontal: Skin.space(-12),
   },
   frameEmbedsContainer: {
-    marginHorizontal: -12,
-    gap: 8,
+    marginHorizontal: Skin.space(-12),
+    gap: Skin.space(8),
   },
   gap8: {
-    gap: 8,
+    gap: Skin.space(8),
   },
   actionsRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 4,
+    gap: Skin.space(16),
+    marginTop: Skin.space(4),
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Skin.space(6),
   },
   loadingContainer: {
     flex: 1,
@@ -489,13 +486,13 @@ const staticStyles = StyleSheet.create({
     alignItems: 'center',
   },
   errorContainer: {
-    padding: 20,
+    padding: Skin.space(20),
   },
   footerLoading: {
-    paddingVertical: 20,
+    paddingVertical: Skin.space(20),
     alignItems: 'center',
   },
-});
+}));
 
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
@@ -514,91 +511,91 @@ function createStyles(theme: AppTheme) {
     channelImage: {
       width: 64,
       height: 64,
-      borderRadius: 12,
-      marginRight: 12,
+      borderRadius: Skin.radius(12),
+      marginRight: Skin.space(12),
       backgroundColor: theme.colors.surface3,
       borderColor: theme.colors.background,
     },
     channelImagePlaceholder: {
       width: 64,
       height: 64,
-      borderRadius: 12,
-      marginRight: 12,
+      borderRadius: Skin.radius(12),
+      marginRight: Skin.space(12),
       backgroundColor: theme.colors.accent,
       justifyContent: 'center',
       alignItems: 'center',
     },
     channelName: {
       color: theme.colors.textStrong,
-      fontSize: 22,
+      fontSize: Skin.font(22),
       fontWeight: '700',
     },
     channelDescription: {
       color: theme.colors.textMain,
-      fontSize: 15,
-      lineHeight: 21,
-      marginTop: 12,
+      fontSize: Skin.font(15),
+      lineHeight: Skin.font(21),
+      marginTop: Skin.space(12),
     },
     statCount: {
       color: theme.colors.textStrong,
       fontWeight: '600',
-      fontSize: 15,
+      fontSize: Skin.font(15),
     },
     statLabel: {
       color: theme.colors.textMuted,
-      fontSize: 14,
+      fontSize: Skin.font(14),
     },
     miniAppButton: {
       backgroundColor: theme.colors.accent,
-      borderRadius: 20,
-      paddingVertical: 10,
-      paddingHorizontal: 20,
-      marginTop: 16,
+      borderRadius: Skin.radius(20),
+      paddingVertical: Skin.space(10),
+      paddingHorizontal: Skin.space(20),
+      marginTop: Skin.space(16),
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
+      gap: Skin.space(8),
     },
     headerDivider: {
       height: 1,
       backgroundColor: theme.colors.surface3,
     },
     castContainer: {
-      borderBottomWidth: 1,
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface3,
-      paddingTop: 12,
-      paddingBottom: 14,
-      paddingHorizontal: 12,
-      gap: 10,
+      paddingTop: Skin.space(12),
+      paddingBottom: Skin.space(14),
+      paddingHorizontal: Skin.space(12),
+      gap: Skin.space(10),
     },
     castAvatar: {
       width: 44,
       height: 44,
-      borderRadius: 22,
-      marginRight: 12,
+      borderRadius: Skin.radius(22),
+      marginRight: Skin.space(12),
       backgroundColor: theme.colors.surface3,
     },
     castAuthorName: {
       color: theme.colors.textStrong,
       fontWeight: '600',
-      fontSize: 15,
+      fontSize: Skin.font(15),
     },
     castAuthorMeta: {
       color: theme.colors.textMuted,
-      fontSize: 13,
-      marginTop: 2,
+      fontSize: Skin.font(13),
+      marginTop: Skin.space(2),
     },
     castText: {
       color: theme.colors.textMain,
-      fontSize: 15,
-      lineHeight: 20,
+      fontSize: Skin.font(15),
+      lineHeight: Skin.font(20),
     },
     imagePlaceholderBg: {
       backgroundColor: theme.colors.surface3,
     },
     actionCount: {
       color: theme.colors.textMuted,
-      fontSize: 13,
+      fontSize: Skin.font(13),
     },
     errorText: {
       color: theme.colors.danger,

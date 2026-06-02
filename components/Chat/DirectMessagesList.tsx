@@ -8,17 +8,10 @@ import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import type { Conversation } from '@/hooks/chat';
 import React, { useCallback, useMemo } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from 'react-native';
+import { ActivityIndicator, Alert, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { FlashList } from '@shopify/flash-list';
+import * as Skin from '@/theme/skins/geometry';
 
 // Farcaster logo for non-E2EE indicator
 const FarcasterLogo = require('@/assets/images/farcaster.png');
@@ -174,7 +167,7 @@ const DMConversationItem = React.memo(function DMConversationItem({
       <View style={styles.conversationContent}>
         <View style={styles.conversationHeader}>
           {favorite && (
-            <IconSymbol name="star.fill" size={12} color="#f59e0b" style={{ marginRight: 4 }} />
+            <IconSymbol name="star.fill" size={12} color="#f59e0b" style={{ marginRight: Skin.space(4) }} />
           )}
           <Text
             style={[styles.userName, hasUnread && !muted && styles.userNameUnread]}
@@ -183,7 +176,7 @@ const DMConversationItem = React.memo(function DMConversationItem({
             {displayName}
           </Text>
           {muted && (
-            <IconSymbol name="bell.slash.fill" size={12} color={theme.colors.textMuted} style={{ marginLeft: 4 }} />
+            <IconSymbol name="bell.slash.fill" size={12} color={theme.colors.textMuted} style={{ marginLeft: Skin.space(4) }} />
           )}
           <Text style={styles.timestamp}>
             {formatRelativeTime(item.timestamp)}
@@ -395,19 +388,19 @@ const createStyles = (theme: AppTheme) =>
     centerContent: {
       justifyContent: 'center',
       alignItems: 'center',
-      paddingHorizontal: 32,
+      paddingHorizontal: Skin.space(32),
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(12),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface3,
     },
     headerTitle: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textStrong,
@@ -415,33 +408,33 @@ const createStyles = (theme: AppTheme) =>
     headerActions: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: Skin.space(4),
     },
     headerActionButton: {
-      padding: 8,
+      padding: Skin.space(8),
     },
     newButton: {
-      padding: 8,
+      padding: Skin.space(8),
     },
     filterContainer: {
       flexDirection: 'row',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      gap: 8,
-      borderBottomWidth: 1,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(8),
+      gap: Skin.space(8),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface3,
     },
     filterChip: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 16,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(16),
       backgroundColor: theme.colors.surface3 ?? theme.colors.surface2,
     },
     filterChipActive: {
       backgroundColor: theme.colors.primary,
     },
     filterChipText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMuted,
@@ -452,9 +445,9 @@ const createStyles = (theme: AppTheme) =>
     conversationItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(12),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface3,
     },
     conversationItemSelected: {
@@ -462,12 +455,12 @@ const createStyles = (theme: AppTheme) =>
     },
     avatarContainer: {
       position: 'relative',
-      marginRight: 12,
+      marginRight: Skin.space(12),
     },
     avatar: {
       width: 48,
       height: 48,
-      borderRadius: 24,
+      borderRadius: Skin.radius(24),
       backgroundColor: theme.colors.surface3,
     },
     unreadBadge: {
@@ -476,9 +469,9 @@ const createStyles = (theme: AppTheme) =>
       right: 0,
       width: 12,
       height: 12,
-      borderRadius: 6,
+      borderRadius: Skin.radius(6),
       backgroundColor: theme.colors.primary,
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,
     },
     farcasterBadge: {
@@ -487,9 +480,9 @@ const createStyles = (theme: AppTheme) =>
       right: -2,
       width: 18,
       height: 18,
-      borderRadius: 9,
+      borderRadius: Skin.radius(9),
       backgroundColor: '#8B5CF6', // Farcaster purple
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,
       alignItems: 'center',
       justifyContent: 'center',
@@ -506,10 +499,10 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
     },
     userName: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textStrong,
@@ -520,13 +513,13 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: theme.fonts.bold.fontWeight,
     },
     timestamp: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
-      marginLeft: 8,
+      marginLeft: Skin.space(8),
     },
     messagePreview: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
     },
@@ -538,37 +531,37 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: theme.fonts.medium.fontWeight,
     },
     loadingText: {
-      marginTop: 12,
-      fontSize: 14,
+      marginTop: Skin.space(12),
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
     },
     errorText: {
-      marginTop: 16,
-      fontSize: 16,
+      marginTop: Skin.space(16),
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
       textAlign: 'center',
     },
     errorDetail: {
-      marginTop: 8,
-      fontSize: 14,
+      marginTop: Skin.space(8),
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
       textAlign: 'center',
     },
     emptyTitle: {
-      marginTop: 16,
-      fontSize: 18,
+      marginTop: Skin.space(16),
+      fontSize: Skin.font(18),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
       textAlign: 'center',
     },
     emptySubtext: {
-      marginTop: 8,
-      fontSize: 14,
+      marginTop: Skin.space(8),
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
       textAlign: 'center',
@@ -576,21 +569,21 @@ const createStyles = (theme: AppTheme) =>
     newConversationButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 24,
-      paddingHorizontal: 20,
-      paddingVertical: 12,
+      marginTop: Skin.space(24),
+      paddingHorizontal: Skin.space(20),
+      paddingVertical: Skin.space(12),
       backgroundColor: theme.colors.primary,
-      borderRadius: 24,
-      gap: 8,
+      borderRadius: Skin.radius(24),
+      gap: Skin.space(8),
     },
     newConversationButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: '#fff',
     },
     loadingFooter: {
-      paddingVertical: 16,
+      paddingVertical: Skin.space(16),
       alignItems: 'center',
     },
   });

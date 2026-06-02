@@ -8,14 +8,17 @@
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { HeaderAvatar } from '@/components/HeaderAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { SurfaceBackground } from '@/theme/skins/surfaces';
 import WalletModal from '@/components/WalletModal';
 import MiniAppsModal from '@/components/MiniAppsModal';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as Skin from '@/theme/skins/geometry';
 
 type Section = 'wallet' | 'apps';
 
@@ -49,7 +52,7 @@ export default function WalletTab() {
   const toggleLabel = section === 'wallet' ? 'Open mini apps' : 'Back to wallet';
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.surface1 }]}>
+    <SurfaceBackground slot="wallet" fallbackColor={theme.colors.surface1} style={styles.container}>
       <View style={[styles.headerBar, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerSlotLeft}>
           <HeaderAvatar />
@@ -89,7 +92,7 @@ export default function WalletTab() {
           />
         )}
       </View>
-    </View>
+    </SurfaceBackground>
   );
 }
 
@@ -102,8 +105,8 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
       justifyContent: 'space-between' as const,
-      paddingHorizontal: 16,
-      paddingBottom: 4,
+      paddingHorizontal: Skin.space(16),
+      paddingBottom: Skin.space(4),
       backgroundColor: theme.colors.surface1,
     },
     headerSlotLeft: {
@@ -114,7 +117,7 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
-      paddingHorizontal: 8,
+      paddingHorizontal: Skin.space(8),
     },
     headerSlotRight: {
       flexDirection: 'row' as const,
@@ -122,11 +125,11 @@ const createStyles = (theme: AppTheme) =>
       justifyContent: 'flex-end' as const,
     },
     heading: {
-      ...textStyles.title3,
+      ...theme.textStyles.title3,
       color: theme.colors.textMain,
       textAlign: 'center' as const,
     },
-    headerIconButton: { padding: 8 },
+    headerIconButton: { padding: Skin.space(8) },
     body: {
       flex: 1,
     },

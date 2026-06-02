@@ -7,6 +7,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useTheme, type AppTheme } from '@/theme';
+import * as Skin from '@/theme/skins/geometry';
 
 type LoadingSize = 'sm' | 'md' | 'lg';
 
@@ -67,7 +68,7 @@ const createStyles = (theme: AppTheme, size: LoadingSize) =>
       padding: size === 'sm' ? 16 : size === 'md' ? 24 : 48,
     },
     message: {
-      marginTop: 12,
+      marginTop: Skin.space(12),
       fontSize: size === 'sm' ? 12 : 14,
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,

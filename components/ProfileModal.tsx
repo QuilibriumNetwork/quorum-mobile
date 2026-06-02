@@ -6,6 +6,7 @@ import NameDetailModal from '@/components/qns/NameDetailModal';
 import RegisterPaymentModal from '@/components/qns/RegisterPaymentModal';
 import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { SkinsModal } from '@/components/skins/SkinsModal';
 import { useAuth, useWebSocket } from '@/context';
 import { compressAvatarImage } from '@/services/media/imageAttachment';
 import { truncateAddress } from '@/utils/formatAddress';
@@ -30,6 +31,19 @@ import {
   getGlobalNotificationsEnabled,
   setGlobalNotificationsEnabled,
 } from '@/services/notifications/notificationPrefs';
+import {
+  feedPrefsStore,
+  K_SHOW_REPLIES_IN_FEED,
+  K_SHOW_NON_FOLLOW_REPLIES,
+} from '@/services/farcaster/feedPrefs';
+import { useMMKVBoolean, useMMKVString } from 'react-native-mmkv';
+import {
+  translationPrefsStore,
+  K_TARGET_LANGUAGE,
+  resolveTarget,
+} from '@/services/translation/translationPrefs';
+import { languageName } from '@/components/translation/languages';
+import { TranslateLanguageModal } from '@/components/translation/TranslateLanguageModal';
 import { getAllSpaces } from '@/services/config/spaceStorage';
 import { encryptionStateStorage } from '@/services/crypto/encryption-state-storage';
 import {
@@ -66,21 +80,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logger } from '@quilibrium/quorum-shared';
+import * as Skin from '@/theme/skins/geometry';
 interface ProfileModalProps {
   visible: boolean;
   onClose: () => void;
@@ -108,15 +112,15 @@ function CallScreeningSection({ theme }: { theme: AppTheme }) {
   });
 
   return (
-    <View style={{ paddingHorizontal: 16, marginBottom: 24 }}>
-      <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+    <View style={{ paddingHorizontal: Skin.space(16), marginBottom: Skin.space(24) }}>
+      <Text style={{ fontSize: Skin.font(13), fontWeight: '600', color: theme.colors.textMuted, marginBottom: Skin.space(8), textTransform: 'uppercase', letterSpacing: 0.5 }}>
         Calls
       </Text>
-      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: 12, padding: 14 }}>
+      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(12), padding: Skin.space(14) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flex: 1, marginRight: 12 }}>
-            <Text style={{ fontSize: 15, color: theme.colors.textMain }}>Screen Unknown Callers</Text>
-            <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
+          <View style={{ flex: 1, marginRight: Skin.space(12) }}>
+            <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Screen Unknown Callers</Text>
+            <Text style={{ fontSize: Skin.font(12), color: theme.colors.textMuted, marginTop: Skin.space(2) }}>
               Only ring for people you have a conversation with
             </Text>
           </View>
@@ -140,15 +144,15 @@ function DevModeSection({ theme }: { theme: AppTheme }) {
   const config = getApiConfig();
 
   return (
-    <View style={{ paddingHorizontal: 16, marginBottom: 24 }}>
-      <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+    <View style={{ paddingHorizontal: Skin.space(16), marginBottom: Skin.space(24) }}>
+      <Text style={{ fontSize: Skin.font(13), fontWeight: '600', color: theme.colors.textMuted, marginBottom: Skin.space(8), textTransform: 'uppercase', letterSpacing: 0.5 }}>
         Developer
       </Text>
-      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: 12, padding: 14 }}>
+      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(12), padding: Skin.space(14) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flex: 1, marginRight: 12 }}>
-            <Text style={{ fontSize: 15, color: theme.colors.textMain }}>Use Local API</Text>
-            <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
+          <View style={{ flex: 1, marginRight: Skin.space(12) }}>
+            <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Use Local API</Text>
+            <Text style={{ fontSize: Skin.font(12), color: theme.colors.textMuted, marginTop: Skin.space(2) }}>
               {isLocal ? config.baseUrl : 'Connects to production'}
             </Text>
           </View>
@@ -205,21 +209,21 @@ function OtaUpdateSection({ theme }: { theme: AppTheme }) {
       : 'Update now';
 
   return (
-    <View style={{ paddingHorizontal: 16, marginBottom: 24 }}>
-      <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+    <View style={{ paddingHorizontal: Skin.space(16), marginBottom: Skin.space(24) }}>
+      <Text style={{ fontSize: Skin.font(13), fontWeight: '600', color: theme.colors.textMuted, marginBottom: Skin.space(8), textTransform: 'uppercase', letterSpacing: 0.5 }}>
         App Updates
       </Text>
-      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: 12, padding: 14, gap: 10 }}>
+      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(12), padding: Skin.space(14), gap: Skin.space(10) }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontSize: 13, color: theme.colors.textMuted }}>Current</Text>
-          <Text style={{ fontSize: 13, color: theme.colors.textMain, flex: 1, textAlign: 'right', marginLeft: 12 }} numberOfLines={1}>
+          <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMuted }}>Current</Text>
+          <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMain, flex: 1, textAlign: 'right', marginLeft: Skin.space(12) }} numberOfLines={1}>
             {fmt(currentlyRunning)}
           </Text>
         </View>
 
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontSize: 13, color: theme.colors.textMuted }}>Latest</Text>
-          <Text style={{ fontSize: 13, color: theme.colors.textMain, flex: 1, textAlign: 'right', marginLeft: 12 }} numberOfLines={1}>
+          <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMuted }}>Latest</Text>
+          <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMain, flex: 1, textAlign: 'right', marginLeft: Skin.space(12) }} numberOfLines={1}>
             {availableUpdate
               ? fmt(availableUpdate)
               : isChecking
@@ -229,25 +233,25 @@ function OtaUpdateSection({ theme }: { theme: AppTheme }) {
         </View>
 
         {checkError && (
-          <Text style={{ fontSize: 12, color: theme.colors.danger ?? '#ff3b30' }}>
+          <Text style={{ fontSize: Skin.font(12), color: theme.colors.danger ?? '#ff3b30' }}>
             {checkError.message}
           </Text>
         )}
 
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+        <View style={{ flexDirection: 'row', gap: Skin.space(8), marginTop: Skin.space(4) }}>
           <TouchableOpacity
             onPress={checkNow}
             disabled={isChecking}
             style={{
               flex: 1,
-              paddingVertical: 10,
-              borderRadius: 8,
+              paddingVertical: Skin.space(10),
+              borderRadius: Skin.radius(8),
               backgroundColor: theme.colors.surface3,
               alignItems: 'center',
               opacity: isChecking ? 0.5 : 1,
             }}
           >
-            <Text style={{ fontSize: 14, color: theme.colors.textMain }}>
+            <Text style={{ fontSize: Skin.font(14), color: theme.colors.textMain }}>
               {isChecking ? 'Checking…' : 'Check for updates'}
             </Text>
           </TouchableOpacity>
@@ -258,18 +262,18 @@ function OtaUpdateSection({ theme }: { theme: AppTheme }) {
               disabled={isDownloading}
               style={{
                 flex: 1,
-                paddingVertical: 10,
-                borderRadius: 8,
+                paddingVertical: Skin.space(10),
+                borderRadius: Skin.radius(8),
                 backgroundColor: '#0A84FF',
                 alignItems: 'center',
                 flexDirection: 'row',
                 justifyContent: 'center',
-                gap: 6,
+                gap: Skin.space(6),
                 opacity: isDownloading ? 0.6 : 1,
               }}
             >
               <IconSymbol name="bolt.fill" size={13} color="#fff" />
-              <Text style={{ fontSize: 14, color: '#fff', fontWeight: '600' }}>{buttonLabel}</Text>
+              <Text style={{ fontSize: Skin.font(14), color: '#fff', fontWeight: '600' }}>{buttonLabel}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -288,7 +292,7 @@ export default function ProfileModal({
   onOpenAuctions,
   onOpenOffers,
 }: ProfileModalProps) {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, activeSkin } = useTheme();
   const { user, signOut, updateProfile } = useAuth();
   const { enqueueOutbound } = useWebSocket();
   const { allowSync, setAllowSync, isLoading: isSyncLoading } = useSyncSettings();
@@ -308,11 +312,28 @@ export default function ProfileModal({
     setNotificationsState(next);
     setGlobalNotificationsEnabled(next);
   }, []);
+  // Feed reply toggles. Default: show replies (ON), hide non-follow replies
+  // (OFF). Backed by MMKV so the feed hook (subscribed to the same keys)
+  // re-filters live.
+  const [showRepliesInFeedRaw, setShowRepliesInFeed] = useMMKVBoolean(
+    K_SHOW_REPLIES_IN_FEED,
+    feedPrefsStore,
+  );
+  const showRepliesInFeed = showRepliesInFeedRaw ?? true;
+  const [showNonFollowRepliesRaw, setShowNonFollowReplies] = useMMKVBoolean(
+    K_SHOW_NON_FOLLOW_REPLIES,
+    feedPrefsStore,
+  );
+  const showNonFollowReplies = showNonFollowRepliesRaw ?? false;
   const [isSyncToggling, setIsSyncToggling] = React.useState(false);
 
   // Marketplace listing modal state
   const [listNameModalVisible, setListNameModalVisible] = React.useState(false);
   const [nameToList, setNameToList] = React.useState<string | null>(null);
+  const [skinsOpen, setSkinsOpen] = React.useState(false);
+  const [translateOpen, setTranslateOpen] = React.useState(false);
+  const [storedTarget] = useMMKVString(K_TARGET_LANGUAGE, translationPrefsStore);
+  const targetLanguageName = languageName(resolveTarget(storedTarget));
   const [showNamePickerModal, setShowNamePickerModal] = React.useState(false);
 
   // Registration payment modal state
@@ -1518,7 +1539,7 @@ export default function ProfileModal({
                 {isCheckingHealth ? (
                   <>
                     <ActivityIndicator size="large" color={theme.colors.primary} />
-                    <Text style={[styles.countdownSubtitle, { marginTop: 16 }]}>
+                    <Text style={[styles.countdownSubtitle, { marginTop: Skin.space(16) }]}>
                       Checking service availability...
                     </Text>
                   </>
@@ -1670,7 +1691,7 @@ export default function ProfileModal({
             {delegatedNames && delegatedNames.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Delegated to You</Text>
-                <Text style={[styles.settingDescription, { marginBottom: 12 }]}>
+                <Text style={[styles.settingDescription, { marginBottom: Skin.space(12) }]}>
                   These names resolve to your address but are owned by someone else.
                 </Text>
                 {delegatedNames.map((name) => {
@@ -1710,7 +1731,7 @@ export default function ProfileModal({
             {/* Invite Code Section */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Have an Invite Code?</Text>
-              <Text style={[styles.settingDescription, { marginBottom: 12 }]}>
+              <Text style={[styles.settingDescription, { marginBottom: Skin.space(12) }]}>
                 Enter your invite code to claim a reserved username for free.
               </Text>
               <View style={styles.searchContainer}>
@@ -1737,7 +1758,7 @@ export default function ProfileModal({
                 <View style={[
                   styles.usernameItem,
                   !inviteCodeValidation.valid && styles.usernameItemTaken,
-                  { marginTop: 16 }
+                  { marginTop: Skin.space(16) }
                 ]}>
                   <View style={styles.usernameLeft}>
                     {inviteCodeValidation.valid ? (
@@ -1821,7 +1842,7 @@ export default function ProfileModal({
                 <View style={[
                   styles.usernameItem,
                   !availability.available && !resolvedName?.resolveKey && styles.usernameItemTaken,
-                  { marginTop: 16 }
+                  { marginTop: Skin.space(16) }
                 ]}>
                   <View style={styles.usernameLeft}>
                     <Text style={[
@@ -2005,6 +2026,65 @@ export default function ProfileModal({
               </View>
             </View>
 
+            {/* Feed Settings */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Feed</Text>
+              <View style={styles.settingRow}>
+                <View style={styles.settingLeft}>
+                  <Text style={styles.settingLabel}>Show replies in main feed</Text>
+                  <Text style={styles.settingDescription}>
+                    Include reply casts in your main feed (thread views always show replies)
+                  </Text>
+                </View>
+                <Switch
+                  value={showRepliesInFeed}
+                  onValueChange={setShowRepliesInFeed}
+                  trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+                  thumbColor={showRepliesInFeed ? '#ffffff' : '#f4f3f4'}
+                />
+              </View>
+              <View style={styles.settingRow}>
+                <View style={styles.settingLeft}>
+                  <Text style={styles.settingLabel}>Show replies from non-followed in main feed</Text>
+                  <Text style={styles.settingDescription}>
+                    Include replies from people you don't follow in your main feed
+                  </Text>
+                </View>
+                <Switch
+                  value={showNonFollowReplies}
+                  onValueChange={setShowNonFollowReplies}
+                  disabled={!showRepliesInFeed}
+                  trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+                  thumbColor={showNonFollowReplies ? '#ffffff' : '#f4f3f4'}
+                />
+              </View>
+            </View>
+
+            {/* Appearance */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Appearance</Text>
+              <TouchableOpacity style={styles.settingRow} onPress={() => setSkinsOpen(true)}>
+                <View style={styles.settingLeft}>
+                  <Text style={styles.settingLabel}>Skins</Text>
+                  <Text style={styles.settingDescription}>
+                    {activeSkin
+                      ? `Active: ${activeSkin.meta.name}`
+                      : 'Customize colors, fonts, and background'}
+                  </Text>
+                </View>
+                <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.settingRow} onPress={() => setTranslateOpen(true)}>
+                <View style={styles.settingLeft}>
+                  <Text style={styles.settingLabel}>Translate to</Text>
+                  <Text style={styles.settingDescription}>
+                    {`On-device translation target: ${targetLanguageName}`}
+                  </Text>
+                </View>
+                <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
             {/* Farcaster */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Farcaster</Text>
@@ -2029,7 +2109,7 @@ export default function ProfileModal({
                   {/* Warpcast Wallet Import */}
                   {hasWarpcastWallet && !hasImportedWarpcastWallet && onOpenWarpcastImport && (
                     <TouchableOpacity
-                      style={[styles.actionButton, { marginTop: 12, alignItems: 'flex-start' }]}
+                      style={[styles.actionButton, { marginTop: Skin.space(12), alignItems: 'flex-start' }]}
                       onPress={() => {
                         if (isRouteMode) {
                           // In route mode, just open the import modal directly (no need to close ProfileModal)
@@ -2041,18 +2121,18 @@ export default function ProfileModal({
                         }
                       }}
                     >
-                      <IconSymbol name="wallet.pass.fill" size={20} color={theme.colors.primary} style={{ marginTop: 2 }} />
+                      <IconSymbol name="wallet.pass.fill" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.actionButtonText}>Import Warpcast Wallet</Text>
-                        <Text style={[styles.settingDescription, { marginTop: 4, marginLeft: 12 }]}>
+                        <Text style={[styles.settingDescription, { marginTop: Skin.space(4), marginLeft: Skin.space(12) }]}>
                           Import your Warpcast embedded wallet to use alongside your Quorum wallet
                         </Text>
                       </View>
-                      <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} style={{ marginTop: 2 }} />
+                      <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} style={{ marginTop: Skin.space(2) }} />
                     </TouchableOpacity>
                   )}
                   {hasImportedWarpcastWallet && importedWallet && (
-                    <View style={[styles.farcasterConnected, { marginTop: 12 }]}>
+                    <View style={[styles.farcasterConnected, { marginTop: Skin.space(12) }]}>
                       <View style={styles.farcasterInfo}>
                         <IconSymbol name="wallet.pass.fill" size={20} color={theme.colors.primary} />
                         <View style={styles.farcasterDetails}>
@@ -2249,7 +2329,7 @@ export default function ProfileModal({
 
               {/* Reset All Sessions */}
               <TouchableOpacity
-                style={[styles.actionButton, { marginTop: 16 }]}
+                style={[styles.actionButton, { marginTop: Skin.space(16) }]}
                 onPress={handleResetAllSessions}
               >
                 <IconSymbol name="arrow.triangle.2.circlepath" size={20} color={theme.colors.warning} />
@@ -2380,6 +2460,10 @@ export default function ProfileModal({
             }
           }}
         />
+
+        <SkinsModal visible={skinsOpen} onClose={() => setSkinsOpen(false)} />
+
+        <TranslateLanguageModal visible={translateOpen} onClose={() => setTranslateOpen(false)} />
 
         {/* Name Picker Modal for multiple names */}
         <BaseModal
@@ -2519,6 +2603,10 @@ export default function ProfileModal({
         }}
       />
 
+      <SkinsModal visible={skinsOpen} onClose={() => setSkinsOpen(false)} />
+
+      <TranslateLanguageModal visible={translateOpen} onClose={() => setTranslateOpen(false)} />
+
       {/* Name Picker Modal for multiple names */}
       <BaseModal
         visible={showNamePickerModal}
@@ -2558,17 +2646,17 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
   StyleSheet.create({
     routeContainer: {
       flex: 1,
-      paddingBottom: 90, // Clear the blur tab bar
+      paddingBottom: Skin.space(90), // Clear the blur tab bar
     },
     header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingBottom: 16,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(16),
     },
     title: {
-      fontSize: 24,
+      fontSize: Skin.font(24),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
@@ -2576,10 +2664,10 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     editButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Skin.space(6),
     },
     editButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -2587,50 +2675,50 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     editActions: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: Skin.space(12),
     },
     cancelButton: {
-      paddingVertical: 6,
-      paddingHorizontal: 12,
+      paddingVertical: Skin.space(6),
+      paddingHorizontal: Skin.space(12),
     },
     cancelButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     saveButton: {
       backgroundColor: theme.colors.primary,
-      paddingVertical: 6,
-      paddingHorizontal: 16,
-      borderRadius: 16,
+      paddingVertical: Skin.space(6),
+      paddingHorizontal: Skin.space(16),
+      borderRadius: Skin.radius(16),
       minWidth: 60,
       alignItems: 'center',
     },
     saveButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: '#fff',
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     tabs: {
       flexDirection: 'row',
-      marginHorizontal: 20,
-      borderBottomWidth: 1,
+      marginHorizontal: Skin.space(20),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.border,
     },
     tab: {
       flex: 1,
-      paddingVertical: 12,
+      paddingVertical: Skin.space(12),
       alignItems: 'center',
-      borderBottomWidth: 2,
+      borderBottomWidth: Skin.border(2),
       borderBottomColor: 'transparent',
     },
     tabActive: {
       borderBottomColor: theme.colors.primary,
     },
     tabText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -2639,21 +2727,21 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       color: theme.colors.primary,
     },
     scrollContent: {
-      paddingHorizontal: 20,
-      paddingTop: 20,
+      paddingHorizontal: Skin.space(20),
+      paddingTop: Skin.space(20),
     },
     profileHeader: {
       flexDirection: 'row',
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     avatarContainer: {
       position: 'relative',
-      marginRight: 16,
+      marginRight: Skin.space(16),
     },
     avatar: {
       width: 80,
       height: 80,
-      borderRadius: 40,
+      borderRadius: Skin.radius(40),
     },
     avatarPlaceholder: {
       backgroundColor: theme.colors.surface3,
@@ -2666,11 +2754,11 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       right: 0,
       width: 28,
       height: 28,
-      borderRadius: 14,
+      borderRadius: Skin.radius(14),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 2,
+      borderWidth: Skin.border(2),
       borderColor: theme.colors.background,
     },
     profileInfo: {
@@ -2678,81 +2766,81 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       justifyContent: 'center',
     },
     displayName: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
     },
     displayNameInput: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: 4,
-      borderBottomWidth: 1,
+      marginBottom: Skin.space(4),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.primary,
-      paddingVertical: 4,
+      paddingVertical: Skin.space(4),
     },
     username: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.primary,
-      marginRight: 6,
+      marginRight: Skin.space(6),
     },
     usernameRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 2,
+      marginBottom: Skin.space(2),
     },
     userId: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
     },
     section: {
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     sectionTitle: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
     },
     bioContainer: {
       backgroundColor: theme.colors.surface2,
-      padding: 12,
-      borderRadius: 8,
+      padding: Skin.space(12),
+      borderRadius: Skin.radius(8),
     },
     bioText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     bioInput: {
       backgroundColor: theme.colors.surface2,
-      padding: 12,
-      borderRadius: 8,
-      fontSize: 14,
+      padding: Skin.space(12),
+      borderRadius: Skin.radius(8),
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
       minHeight: 100,
-      borderWidth: 1,
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.primary,
     },
     infoRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 12,
-      borderBottomWidth: 1,
+      paddingVertical: Skin.space(12),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.border,
     },
     infoLabel: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
     },
     infoValue: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -2761,103 +2849,103 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     infoValueRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: Skin.space(6),
       flexShrink: 1,
     },
     premiumBanner: {
-      padding: 24,
-      borderRadius: 16,
+      padding: Skin.space(24),
+      borderRadius: Skin.radius(16),
       alignItems: 'center',
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     premiumTitle: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: isDark ? theme.colors.textMain : '#ffffff',
-      marginTop: 12,
-      marginBottom: 8,
+      marginTop: Skin.space(12),
+      marginBottom: Skin.space(8),
     },
     premiumSubtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: isDark ? theme.colors.textSubtle : '#ffffffcc',
       textAlign: 'center',
     },
     countdownContainer: {
       backgroundColor: theme.colors.surface2,
-      padding: 24,
-      borderRadius: 16,
+      padding: Skin.space(24),
+      borderRadius: Skin.radius(16),
       alignItems: 'center',
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     countdownTitle: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
     },
     countdownSubtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       textAlign: 'center',
-      marginBottom: 20,
+      marginBottom: Skin.space(20),
     },
     countdownTimer: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 16,
+      marginBottom: Skin.space(16),
     },
     countdownUnit: {
       alignItems: 'center',
       minWidth: 50,
     },
     countdownValue: {
-      fontSize: 32,
+      fontSize: Skin.font(32),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.primary,
     },
     countdownLabel: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.textMuted,
       textTransform: 'uppercase',
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
     countdownSeparator: {
-      fontSize: 28,
+      fontSize: Skin.font(28),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMuted,
-      marginHorizontal: 4,
-      marginBottom: 16,
+      marginHorizontal: Skin.space(4),
+      marginBottom: Skin.space(16),
     },
     countdownDate: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     searchSection: {
-      marginBottom: 24,
+      marginBottom: Skin.space(24),
     },
     searchContainer: {
       flexDirection: 'row',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
       overflow: 'hidden',
     },
     searchInput: {
       flex: 1,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      fontSize: 14,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(12),
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.regular.fontFamily,
     },
     searchButton: {
-      paddingHorizontal: 16,
+      paddingHorizontal: Skin.space(16),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface3,
@@ -2867,9 +2955,9 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       justifyContent: 'space-between',
       alignItems: 'center',
       backgroundColor: theme.colors.surface2,
-      padding: 16,
-      borderRadius: 8,
-      marginBottom: 8,
+      padding: Skin.space(16),
+      borderRadius: Skin.radius(8),
+      marginBottom: Skin.space(8),
     },
     usernameItemTaken: {
       opacity: 0.5,
@@ -2878,158 +2966,158 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flex: 1,
     },
     usernameText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
     },
     usernameTextTaken: {
       textDecorationLine: 'line-through',
     },
     availabilityText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
     },
     resolvedAddressText: {
-      fontSize: 11,
+      fontSize: Skin.font(11),
       color: theme.colors.primary,
       fontFamily: theme.fonts.regular.fontFamily,
     },
     resolveButton: {
       backgroundColor: theme.colors.primary,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 6,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(6),
     },
     resolveButtonText: {
-      color: theme.colors.textOnPrimary,
-      fontSize: 12,
+      color: '#fff',
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     resolvedBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
+      gap: Skin.space(4),
+      paddingHorizontal: Skin.space(8),
+      paddingVertical: Skin.space(4),
       backgroundColor: theme.colors.success + '20',
-      borderRadius: 6,
+      borderRadius: Skin.radius(6),
     },
     resolvedText: {
       color: theme.colors.success,
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     primaryBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
+      gap: Skin.space(4),
+      paddingHorizontal: Skin.space(8),
+      paddingVertical: Skin.space(4),
       backgroundColor: theme.colors.primary + '20',
-      borderRadius: 6,
+      borderRadius: Skin.radius(6),
     },
     primaryText: {
       color: theme.colors.primary,
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     setPrimaryButton: {
       backgroundColor: theme.colors.surface3,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 6,
-      borderWidth: 1,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(6),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.primary,
     },
     setPrimaryButtonText: {
       color: theme.colors.primary,
-      fontSize: 12,
+      fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     usernameRight: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: Skin.space(12),
     },
     priceText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     buyButton: {
       backgroundColor: theme.colors.primary,
-      paddingHorizontal: 16,
-      paddingVertical: 6,
-      borderRadius: 16,
+      paddingHorizontal: Skin.space(16),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(16),
     },
     buyButtonText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: '#ffffff',
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     benefitsSection: {
       backgroundColor: theme.colors.surface2,
-      padding: 16,
-      borderRadius: 12,
-      marginBottom: 24,
+      padding: Skin.space(16),
+      borderRadius: Skin.radius(12),
+      marginBottom: Skin.space(24),
     },
     benefitItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
     },
     benefitText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
-      marginLeft: 12,
+      marginLeft: Skin.space(12),
       flex: 1,
     },
     settingRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 12,
-      borderBottomWidth: 1,
+      paddingVertical: Skin.space(12),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.border,
     },
     settingLeft: {
       flex: 1,
-      marginRight: 16,
+      marginRight: Skin.space(16),
     },
     settingLabel: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      marginBottom: 4,
+      marginBottom: Skin.space(4),
     },
     settingDescription: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
     },
     actionButton: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface2,
-      padding: 16,
-      borderRadius: 8,
-      marginBottom: 8,
+      padding: Skin.space(16),
+      borderRadius: Skin.radius(8),
+      marginBottom: Skin.space(8),
     },
     actionButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       flex: 1,
-      marginLeft: 12,
+      marginLeft: Skin.space(12),
     },
     dangerButton: {
       backgroundColor: theme.colors.danger + '20',
@@ -3039,20 +3127,20 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     recoveryPhraseContainer: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
     },
     recoveryPhraseWarning: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.warning + '20',
-      padding: 12,
-      borderRadius: 8,
-      marginBottom: 16,
-      gap: 8,
+      padding: Skin.space(12),
+      borderRadius: Skin.radius(8),
+      marginBottom: Skin.space(16),
+      gap: Skin.space(8),
     },
     recoveryPhraseWarningText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.warning,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -3061,77 +3149,77 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     recoveryPhraseGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
+      gap: Skin.space(8),
     },
     recoveryPhraseWord: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface3,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderRadius: 8,
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(12),
+      borderRadius: Skin.radius(8),
       minWidth: '30%',
     },
     recoveryPhraseIndex: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginRight: 6,
+      marginRight: Skin.space(6),
       minWidth: 20,
     },
     recoveryPhraseText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     hexKeyContainer: {
       backgroundColor: theme.colors.surface3,
-      borderRadius: 8,
-      padding: 12,
+      borderRadius: Skin.radius(8),
+      padding: Skin.space(12),
     },
     hexKeyLabel: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginBottom: 8,
+      marginBottom: Skin.space(8),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     hexKeyText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMain,
       fontFamily: 'monospace',
-      lineHeight: 18,
+      lineHeight: Skin.font(18),
       wordBreak: 'break-all',
     },
     recoveryPhraseActions: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
-      marginTop: 16,
-      gap: 12,
+      marginTop: Skin.space(16),
+      gap: Skin.space(12),
     },
     copyButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 8,
-      paddingHorizontal: 16,
-      borderRadius: 8,
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(16),
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.primary + '20',
-      gap: 6,
+      gap: Skin.space(6),
     },
     copyButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     hideButton: {
-      paddingVertical: 8,
-      paddingHorizontal: 16,
-      borderRadius: 8,
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(16),
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.surface3,
     },
     hideButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -3142,92 +3230,92 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       backgroundColor: theme.colors.surface2,
-      padding: 16,
-      borderRadius: 8,
+      padding: Skin.space(16),
+      borderRadius: Skin.radius(8),
     },
     farcasterInfo: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: Skin.space(12),
     },
     farcasterDetails: {
-      gap: 2,
+      gap: Skin.space(2),
     },
     farcasterUsername: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
     },
     farcasterFid: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
     },
     farcasterDisconnectButton: {
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 6,
+      paddingVertical: Skin.space(6),
+      paddingHorizontal: Skin.space(12),
+      borderRadius: Skin.radius(6),
       backgroundColor: theme.colors.danger + '20',
     },
     farcasterDisconnectText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.danger,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     farcasterImportContainer: {
       backgroundColor: theme.colors.surface2,
-      padding: 16,
-      borderRadius: 8,
+      padding: Skin.space(16),
+      borderRadius: Skin.radius(8),
     },
     farcasterImportDescription: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
-      marginBottom: 12,
-      lineHeight: 18,
+      marginBottom: Skin.space(12),
+      lineHeight: Skin.font(18),
     },
     farcasterMnemonicInput: {
       backgroundColor: theme.colors.surface3,
-      padding: 12,
-      borderRadius: 8,
-      fontSize: 14,
+      padding: Skin.space(12),
+      borderRadius: Skin.radius(8),
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       minHeight: 80,
-      borderWidth: 1,
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.border,
     },
     farcasterErrorContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      marginTop: 8,
+      gap: Skin.space(6),
+      marginTop: Skin.space(8),
     },
     farcasterErrorText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.danger,
     },
     farcasterImportActions: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
-      gap: 12,
-      marginTop: 12,
+      gap: Skin.space(12),
+      marginTop: Skin.space(12),
     },
     farcasterCancelButton: {
-      paddingVertical: 8,
-      paddingHorizontal: 16,
-      borderRadius: 8,
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(16),
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.surface3,
     },
     farcasterCancelText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     farcasterImportButton: {
-      paddingVertical: 8,
-      paddingHorizontal: 20,
-      borderRadius: 8,
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(20),
+      borderRadius: Skin.radius(8),
       backgroundColor: theme.colors.primary,
       minWidth: 80,
       alignItems: 'center',
@@ -3236,7 +3324,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       opacity: 0.6,
     },
     farcasterImportButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: '#fff',
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -3246,40 +3334,40 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 20,
-      gap: 8,
+      paddingVertical: Skin.space(20),
+      gap: Skin.space(8),
     },
     deviceLoadingText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
     },
     deviceListContainer: {
-      marginTop: 12,
+      marginTop: Skin.space(12),
       backgroundColor: theme.colors.surface2,
-      borderRadius: 8,
+      borderRadius: Skin.radius(8),
       overflow: 'hidden',
     },
     deviceItem: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderBottomWidth: 1,
+      paddingVertical: Skin.space(12),
+      paddingHorizontal: Skin.space(16),
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.border,
     },
     deviceInfo: {
       flex: 1,
-      marginRight: 12,
+      marginRight: Skin.space(12),
     },
     deviceHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      marginBottom: 4,
+      gap: Skin.space(6),
+      marginBottom: Skin.space(4),
     },
     deviceLabel: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -3288,53 +3376,53 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       color: theme.colors.primary,
     },
     deviceAddress: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
       fontFamily: theme.fonts.regular.fontFamily,
     },
     deviceRemoveButton: {
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 6,
+      paddingVertical: Skin.space(6),
+      paddingHorizontal: Skin.space(12),
+      borderRadius: Skin.radius(6),
       backgroundColor: theme.colors.danger + '20',
       minWidth: 70,
       alignItems: 'center',
     },
     deviceRemoveText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.danger,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     deviceEmptyText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
       textAlign: 'center',
-      paddingVertical: 20,
+      paddingVertical: Skin.space(20),
     },
     actionButtonContent: {
       flex: 1,
-      marginLeft: 12,
+      marginLeft: Skin.space(12),
     },
     actionButtonSubtext: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.textMuted,
-      marginTop: 2,
+      marginTop: Skin.space(2),
     },
     marketplaceButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.primary + '15',
-      padding: 14,
-      borderRadius: 8,
-      marginTop: 8,
-      gap: 8,
-      borderWidth: 1,
+      padding: Skin.space(14),
+      borderRadius: Skin.radius(8),
+      marginTop: Skin.space(8),
+      gap: Skin.space(8),
+      borderWidth: Skin.border(1),
       borderColor: theme.colors.primary + '30',
     },
     marketplaceButtonText: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -3344,37 +3432,37 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingBottom: 8,
+      paddingHorizontal: Skin.space(20),
+      paddingBottom: Skin.space(8),
     },
     namePickerTitle: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     namePickerSubtitle: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
-      paddingHorizontal: 20,
-      marginBottom: 16,
+      paddingHorizontal: Skin.space(20),
+      marginBottom: Skin.space(16),
     },
     namePickerList: {
       flex: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
     },
     namePickerItem: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 10,
-      gap: 12,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      marginBottom: Skin.space(10),
+      gap: Skin.space(12),
     },
     namePickerItemText: {
       flex: 1,
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,

@@ -8,13 +8,10 @@ import { feedActiveTabBus } from '@/services/ui/feedActiveTab';
 import { useTheme } from '@/theme';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 export default function FeedScreen() {
   const { farcasterAuthToken, refreshFarcasterToken, user } = useAuth();
@@ -197,7 +194,7 @@ export default function FeedScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -205,40 +202,40 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
-    gap: 12,
+    paddingHorizontal: Skin.space(32),
+    gap: Skin.space(12),
   },
   title: {
-    fontSize: 18,
+    fontSize: Skin.font(18),
     fontWeight: '600',
     textAlign: 'center',
   },
   body: {
-    fontSize: 14,
+    fontSize: Skin.font(14),
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: Skin.font(20),
   },
   detail: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
     textAlign: 'center',
     fontStyle: 'italic',
     opacity: 0.7,
-    marginTop: 4,
+    marginTop: Skin.space(4),
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 16,
+    gap: Skin.space(8),
+    marginTop: Skin.space(16),
   },
   action: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    borderWidth: 1,
+    paddingVertical: Skin.space(10),
+    paddingHorizontal: Skin.space(20),
+    borderRadius: Skin.radius(10),
+    borderWidth: Skin.border(1),
     borderColor: 'transparent',
   },
   actionText: {
-    fontSize: 15,
+    fontSize: Skin.font(15),
     fontWeight: '600',
   },
-});
+}));

@@ -5,21 +5,9 @@ import type { ProcessedAttachment } from '@/services/media/imageAttachment';
 import type { Channel, Emoji, SpaceMember, Sticker } from '@quilibrium/quorum-shared';
 import { searchEmojis } from '@/data/emojiData';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  useWindowDimensions,
-  Keyboard,
-  NativeSyntheticEvent,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TextInputSubmitEditingEventData,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, useWindowDimensions, Keyboard, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputSubmitEditingEventData, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
 
 
 export interface ReplyToMessage {
@@ -505,9 +493,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 8,
-                paddingHorizontal: 12,
-                paddingVertical: 6,
+                gap: Skin.space(8),
+                paddingHorizontal: Skin.space(12),
+                paddingVertical: Skin.space(6),
               }}
               activeOpacity={0.7}
             >
@@ -515,8 +503,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
                 style={{
                   width: 18,
                   height: 18,
-                  borderRadius: 4,
-                  borderWidth: 2,
+                  borderRadius: Skin.radius(4),
+                  borderWidth: Skin.border(2),
                   borderColor: alsoReplyOnFarcaster ? theme.colors.accent : theme.colors.textMuted,
                   backgroundColor: alsoReplyOnFarcaster ? theme.colors.accent : 'transparent',
                   alignItems: 'center',
@@ -525,7 +513,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
               >
                 {alsoReplyOnFarcaster && <IconSymbol name="checkmark" size={11} color="#fff" />}
               </View>
-              <Text style={{ color: theme.colors.textMain, fontSize: 13 }}>
+              <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(13) }}>
                 Also reply on Farcaster
               </Text>
             </TouchableOpacity>
@@ -843,78 +831,78 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
 const createStyles = (theme: AppTheme, bottomInset: number, screenWidth?: number) => StyleSheet.create({
   container: {
     backgroundColor: theme.colors.surface3,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 8 + bottomInset,
+    paddingHorizontal: Skin.space(12),
+    paddingTop: Skin.space(8),
+    paddingBottom: Skin.space(8) + bottomInset,
     width: screenWidth ?? '100%',
   },
   replyContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: Skin.space(8),
     backgroundColor: theme.colors.surface5,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingRight: 8,
+    borderRadius: Skin.radius(8),
+    paddingVertical: Skin.space(8),
+    paddingRight: Skin.space(8),
   },
   replyBar: {
     width: 3,
     height: '100%',
     backgroundColor: theme.colors.primary,
-    borderRadius: 2,
-    marginRight: 8,
+    borderRadius: Skin.radius(2),
+    marginRight: Skin.space(8),
   },
   replyContent: {
     flex: 1,
   },
   replySender: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
     color: theme.colors.primary,
-    marginBottom: 2,
+    marginBottom: Skin.space(2),
   },
   replyText: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontFamily: theme.fonts.regular.fontFamily,
     color: theme.colors.textSubtle,
   },
   replyDismiss: {
-    padding: 4,
+    padding: Skin.space(4),
   },
   editContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: Skin.space(8),
     backgroundColor: theme.colors.surface5,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingRight: 8,
+    borderRadius: Skin.radius(8),
+    paddingVertical: Skin.space(8),
+    paddingRight: Skin.space(8),
   },
   editBar: {
     width: 3,
     height: '100%',
     backgroundColor: theme.colors.warning ?? '#f59e0b',
-    borderRadius: 2,
-    marginRight: 8,
+    borderRadius: Skin.radius(2),
+    marginRight: Skin.space(8),
   },
   editContent: {
     flex: 1,
   },
   editLabel: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
     color: theme.colors.warning ?? '#f59e0b',
-    marginBottom: 2,
+    marginBottom: Skin.space(2),
   },
   editOriginalText: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontFamily: theme.fonts.regular.fontFamily,
     color: theme.colors.textSubtle,
   },
   previewContainer: {
-    marginBottom: 8,
+    marginBottom: Skin.space(8),
   },
   previewWrapper: {
     position: 'relative',
@@ -923,7 +911,7 @@ const createStyles = (theme: AppTheme, bottomInset: number, screenWidth?: number
   previewImage: {
     width: 100,
     height: 100,
-    borderRadius: 8,
+    borderRadius: Skin.radius(8),
   },
   previewCloseButton: {
     position: 'absolute',
@@ -931,20 +919,20 @@ const createStyles = (theme: AppTheme, bottomInset: number, screenWidth?: number
     right: -8,
     zIndex: 1,
     backgroundColor: theme.colors.surface3,
-    borderRadius: 12,
+    borderRadius: Skin.radius(12),
   },
   gifBadge: {
     position: 'absolute',
     bottom: 4,
     left: 4,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingHorizontal: Skin.space(6),
+    paddingVertical: Skin.space(2),
+    borderRadius: Skin.radius(4),
   },
   gifBadgeText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: Skin.font(10),
     fontWeight: 'bold',
   },
   wrapper: {
@@ -954,13 +942,13 @@ const createStyles = (theme: AppTheme, bottomInset: number, screenWidth?: number
   input: {
     backgroundColor: theme.colors.surface5,
     color: theme.colors.textMain,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 10,
+    borderRadius: Skin.radius(20),
+    paddingHorizontal: Skin.space(16),
+    paddingTop: Skin.space(8),
+    paddingBottom: Skin.space(10),
     fontFamily: theme.fonts.regular.fontFamily,
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: Skin.font(16),
+    lineHeight: Skin.font(22),
     maxHeight: 100,
     minHeight: 40,
     textAlignVertical: 'top',
@@ -970,7 +958,7 @@ const createStyles = (theme: AppTheme, bottomInset: number, screenWidth?: number
     alignItems: 'center',
   },
   inputIconButton: {
-    padding: 4,
+    padding: Skin.space(4),
   },
   sendButton: {
     width: 36,
@@ -980,79 +968,79 @@ const createStyles = (theme: AppTheme, bottomInset: number, screenWidth?: number
   },
   emojiPickerContainer: {
     backgroundColor: theme.colors.surface5,
-    borderRadius: 12,
-    marginBottom: 8,
+    borderRadius: Skin.radius(12),
+    marginBottom: Skin.space(8),
     height: 280,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
+    paddingHorizontal: Skin.space(12),
+    paddingVertical: Skin.space(8),
+    borderBottomWidth: Skin.border(1),
     borderBottomColor: theme.colors.border ?? theme.colors.surface3,
-    gap: 8,
+    gap: Skin.space(8),
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: Skin.font(14),
+    lineHeight: Skin.font(18),
     color: theme.colors.textMain,
     fontFamily: theme.fonts.regular.fontFamily,
     padding: 0,
   },
   categoryTabs: {
     maxHeight: 40,
-    borderBottomWidth: 1,
+    borderBottomWidth: Skin.border(1),
     borderBottomColor: theme.colors.border ?? theme.colors.surface3,
   },
   categoryTabsContent: {
-    paddingHorizontal: 4,
+    paddingHorizontal: Skin.space(4),
     alignItems: 'center',
   },
   categoryTab: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginHorizontal: 2,
-    borderRadius: 8,
+    paddingHorizontal: Skin.space(10),
+    paddingVertical: Skin.space(6),
+    marginHorizontal: Skin.space(2),
+    borderRadius: Skin.radius(8),
   },
   categoryTabActive: {
     backgroundColor: theme.colors.surface3 ?? theme.colors.surface2,
   },
   categoryTabEmoji: {
-    fontSize: 20,
+    fontSize: Skin.font(20),
   },
   emojiGrid: {
     flex: 1,
   },
   emojiGridContent: {
-    padding: 8,
+    padding: Skin.space(8),
   },
   emojiSection: {
-    marginBottom: 12,
+    marginBottom: Skin.space(12),
   },
   emojiSectionTitle: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontFamily: theme.fonts.medium.fontFamily,
     color: theme.colors.textMuted,
-    marginBottom: 6,
+    marginBottom: Skin.space(6),
   },
   emojiRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
   emojiButton: {
-    padding: 8,
+    padding: Skin.space(8),
     justifyContent: 'center',
     alignItems: 'center',
   },
   emoji: {
-    fontSize: 24,
+    fontSize: Skin.font(24),
   },
   customEmojiImage: {
     width: 28,
     height: 28,
-    borderRadius: 4,
+    borderRadius: Skin.radius(4),
   },
   stickerRow: {
     flexDirection: 'row',
@@ -1063,24 +1051,24 @@ const createStyles = (theme: AppTheme, bottomInset: number, screenWidth?: number
     aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 4,
+    padding: Skin.space(4),
   },
   stickerImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
+    borderRadius: Skin.radius(8),
   },
   emptyText: {
     textAlign: 'center',
     color: theme.colors.textMuted,
-    marginTop: 16,
-    fontSize: 14,
+    marginTop: Skin.space(16),
+    fontSize: Skin.font(14),
   },
   inputWrapper: {
     flex: 1,
     flexShrink: 1,
     position: 'relative',
-    marginHorizontal: 8,
+    marginHorizontal: Skin.space(8),
   },
   autocompleteContainer: {
     position: 'absolute',
@@ -1088,8 +1076,8 @@ const createStyles = (theme: AppTheme, bottomInset: number, screenWidth?: number
     left: 0,
     right: 0,
     backgroundColor: theme.colors.surface5,
-    borderRadius: 12,
-    marginBottom: 4,
+    borderRadius: Skin.radius(12),
+    marginBottom: Skin.space(4),
     maxHeight: 200,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -1104,27 +1092,27 @@ const createStyles = (theme: AppTheme, bottomInset: number, screenWidth?: number
   autocompleteItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 10,
+    paddingHorizontal: Skin.space(12),
+    paddingVertical: Skin.space(10),
+    gap: Skin.space(10),
   },
   autocompleteAvatar: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: Skin.radius(14),
     backgroundColor: theme.colors.primary + '30',
     justifyContent: 'center',
     alignItems: 'center',
   },
   autocompleteAvatarText: {
     color: theme.colors.primary,
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
   },
   autocompleteText: {
     color: theme.colors.textMain,
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
     flex: 1,
   },

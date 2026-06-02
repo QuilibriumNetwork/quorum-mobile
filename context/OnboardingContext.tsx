@@ -676,6 +676,10 @@ export function OnboardingProvider({ children }: OnboardingProviderProps) {
               username: state.farcasterAccount.username,
               signerPublicKey: state.farcasterAccount.signerPublicKey,
               custodyAddress: state.farcasterAccount.custodyAddress,
+              // Carry the Farcaster pfp through to the persisted user so
+              // surfaces like space chat can render the user's own avatar
+              // (it was previously dropped here, leaving pfpUrl undefined).
+              pfpUrl: state.farcasterAccount.pfpUrl,
             }
           : undefined,
       };

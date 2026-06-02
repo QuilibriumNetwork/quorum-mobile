@@ -1,11 +1,14 @@
 import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Image } from 'expo-image';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SCREEN_WIDTH } from '../utils';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
-const staticStyles = StyleSheet.create({
+const staticStyles = createSkinnable(() => StyleSheet.create({
   container: {
     overflow: 'hidden',
   },
@@ -14,21 +17,21 @@ const staticStyles = StyleSheet.create({
     height: SCREEN_WIDTH * 0.525, // Standard frame aspect ratio
   },
   buttonRow: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: Skin.space(12),
+    paddingHorizontal: Skin.space(16),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderTopWidth: 1,
+    borderTopWidth: Skin.border(1),
   },
   buttonText: {
-    fontSize: 15,
+    fontSize: Skin.font(15),
     fontWeight: '600',
   },
   iconMargin: {
-    marginLeft: 6,
+    marginLeft: Skin.space(6),
   },
-});
+}));
 
 interface FrameEmbedProps {
   imageUrl: string;

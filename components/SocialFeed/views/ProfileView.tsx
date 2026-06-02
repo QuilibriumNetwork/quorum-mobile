@@ -1,13 +1,7 @@
 import type { AppTheme } from '@/theme';
 import React, { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Image } from 'expo-image';
 import { FlashList } from '@shopify/flash-list';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
@@ -17,7 +11,11 @@ import type { EmbeddedCast } from '@/hooks/useFarcasterFeed';
 import { ImageViewer, AutoHeightImage, ImageCarousel, VideoPlayer } from '../media';
 import { CastText, LinkPreview, QuoteCast, FrameEmbed, LikeIcon, getLikeIconType } from '../content';
 import { QuorumIdentityBadge } from '../content/QuorumIdentityBadge';
+import { ProfileOverflowButton } from '../ProfileOverflowButton';
+import { ProfileActionButtons } from '../ProfileActionButtons';
 import { SCREEN_WIDTH, SCREEN_HEIGHT, formatTimestamp, lookupUserByUsername } from '../utils';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface ProfileViewProps {
   fid: number;
@@ -102,6 +100,7 @@ export function ProfileView({
                 style={styles.avatar}
               />
             </TouchableOpacity>
+            <ProfileOverflowButton targetFid={fid} username={author.username} theme={theme} />
           </View>
 
           {/* Name and username */}
@@ -152,6 +151,15 @@ export function ProfileView({
               <Text style={styles.statLabel}>Followers</Text>
             </View>
           </View>
+
+          <ProfileActionButtons
+            fid={fid}
+            username={author.username}
+            displayName={author.displayName}
+            pfpUrl={author.pfp?.url}
+            isFollowing={author.viewerContext?.following}
+            theme={theme}
+          />
         </View>
 
         <View style={styles.headerDivider} />
@@ -231,6 +239,7 @@ export function ProfileView({
               text={cast.text}
               style={styles.castText}
               theme={theme}
+              enableTranslate
               onMentionPress={handleMentionPress}
               onChannelPress={onOpenChannel}
             />
@@ -382,7 +391,7 @@ export function ProfileView({
         ListHeaderComponent={renderProfileHeader}
         renderItem={({ item }) => renderCast(item)}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 32 + bottomInset }}
+        contentContainerStyle={{ paddingBottom: Skin.space(32) + bottomInset }}
         onEndReached={() => {
           if (hasNextPage && !isFetchingNextPage) {
             fetchNextPage();
@@ -416,14 +425,14 @@ export function ProfileView({
   );
 }
 
-const staticStyles = StyleSheet.create({
+const staticStyles = createSkinnable(() => StyleSheet.create({
   banner: {
     width: SCREEN_WIDTH,
     height: 120,
   },
   avatarSection: {
-    paddingHorizontal: 16,
-    marginTop: -40,
+    paddingHorizontal: Skin.space(16),
+    marginTop: Skin.space(-40),
   },
   avatarRow: {
     flexDirection: 'row',
@@ -431,28 +440,28 @@ const staticStyles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   nameSection: {
-    marginTop: 12,
+    marginTop: Skin.space(12),
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Skin.space(6),
   },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 8,
+    gap: Skin.space(4),
+    marginTop: Skin.space(8),
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 12,
+    gap: Skin.space(16),
+    marginTop: Skin.space(12),
   },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: Skin.space(4),
   },
   castHeaderRow: {
     flexDirection: 'row',
@@ -462,24 +471,24 @@ const staticStyles = StyleSheet.create({
     flex: 1,
   },
   mediaContainer: {
-    marginHorizontal: -12,
+    marginHorizontal: Skin.space(-12),
   },
   frameEmbedsContainer: {
-    marginHorizontal: -12,
-    gap: 8,
+    marginHorizontal: Skin.space(-12),
+    gap: Skin.space(8),
   },
   embedGap: {
-    gap: 8,
+    gap: Skin.space(8),
   },
   actionsRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 4,
+    gap: Skin.space(16),
+    marginTop: Skin.space(4),
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Skin.space(6),
   },
   centeredLoader: {
     flex: 1,
@@ -487,10 +496,10 @@ const staticStyles = StyleSheet.create({
     alignItems: 'center',
   },
   errorContainer: {
-    padding: 20,
+    padding: Skin.space(20),
   },
   footerLoader: {
-    paddingVertical: 20,
+    paddingVertical: Skin.space(20),
     alignItems: 'center',
   },
   backButton: {
@@ -498,11 +507,11 @@ const staticStyles = StyleSheet.create({
     top: 12,
     left: 12,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
-    padding: 8,
+    borderRadius: Skin.radius(20),
+    padding: Skin.space(8),
     zIndex: 10,
   },
-});
+}));
 
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
@@ -527,85 +536,85 @@ function createStyles(theme: AppTheme) {
     avatar: {
       width: 80,
       height: 80,
-      borderRadius: 40,
-      borderWidth: 4,
+      borderRadius: Skin.radius(40),
+      borderWidth: Skin.border(4),
       borderColor: theme.colors.background,
       backgroundColor: theme.colors.surface3,
     },
     displayName: {
       color: theme.colors.textStrong,
-      fontSize: 22,
+      fontSize: Skin.font(22),
       fontWeight: '700',
     },
     username: {
       color: theme.colors.textMuted,
-      fontSize: 15,
-      marginTop: 2,
+      fontSize: Skin.font(15),
+      marginTop: Skin.space(2),
     },
     bio: {
       color: theme.colors.textMain,
-      fontSize: 15,
-      lineHeight: 21,
-      marginTop: 12,
+      fontSize: Skin.font(15),
+      lineHeight: Skin.font(21),
+      marginTop: Skin.space(12),
     },
     locationText: {
       color: theme.colors.textMuted,
-      fontSize: 13,
+      fontSize: Skin.font(13),
     },
     statCount: {
       color: theme.colors.textStrong,
       fontWeight: '600',
-      fontSize: 15,
+      fontSize: Skin.font(15),
     },
     statLabel: {
       color: theme.colors.textMuted,
-      fontSize: 14,
+      fontSize: Skin.font(14),
     },
     headerDivider: {
       height: 1,
       backgroundColor: theme.colors.surface3,
-      marginTop: 16,
+      marginTop: Skin.space(16),
     },
     castContainer: {
-      borderBottomWidth: 1,
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface3,
-      paddingTop: 12,
-      paddingBottom: 14,
-      paddingHorizontal: 12,
-      gap: 10,
+      paddingTop: Skin.space(12),
+      paddingBottom: Skin.space(14),
+      paddingHorizontal: Skin.space(12),
+      gap: Skin.space(10),
     },
     castAvatar: {
       width: 44,
       height: 44,
-      borderRadius: 22,
-      marginRight: 12,
+      borderRadius: Skin.radius(22),
+      marginRight: Skin.space(12),
       backgroundColor: theme.colors.surface3,
     },
     castAuthorName: {
       color: theme.colors.textStrong,
       fontWeight: '600',
-      fontSize: 15,
+      fontSize: Skin.font(15),
     },
     channelLink: {
       color: theme.colors.accent,
-      fontSize: 13,
+      fontSize: Skin.font(13),
     },
     castMeta: {
       color: theme.colors.textMuted,
-      fontSize: 13,
-      marginTop: 2,
+      fontSize: Skin.font(13),
+      marginTop: Skin.space(2),
     },
     castText: {
       color: theme.colors.textMain,
-      fontSize: 15,
-      lineHeight: 20,
+      fontSize: Skin.font(15),
+      lineHeight: Skin.font(20),
     },
     imagePlaceholder: {
       backgroundColor: theme.colors.surface3,
     },
     actionCount: {
       color: theme.colors.textMuted,
-      fontSize: 13,
+      fontSize: Skin.font(13),
     },
     errorText: {
       color: theme.colors.danger,

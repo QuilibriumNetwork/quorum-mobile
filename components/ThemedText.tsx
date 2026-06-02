@@ -2,6 +2,8 @@ import { StyleSheet, Text, type TextProps } from 'react-native';
 
 import { useTheme } from '@/theme';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 export type ThemedTextProps = TextProps & {
   lightColor?: string;
@@ -35,27 +37,27 @@ export function ThemedText({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   default: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: Skin.font(16),
+    lineHeight: Skin.font(24),
   },
   defaultSemiBold: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: Skin.font(16),
+    lineHeight: Skin.font(24),
     fontWeight: '600',
   },
   title: {
-    fontSize: 32,
+    fontSize: Skin.font(32),
     fontWeight: 'bold',
-    lineHeight: 32,
+    lineHeight: Skin.font(32),
   },
   subtitle: {
-    fontSize: 20,
+    fontSize: Skin.font(20),
     fontWeight: 'bold',
   },
   link: {
-    lineHeight: 30,
-    fontSize: 16,
+    lineHeight: Skin.font(30),
+    fontSize: Skin.font(16),
   },
-});
+}));

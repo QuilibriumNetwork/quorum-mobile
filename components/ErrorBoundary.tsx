@@ -1,5 +1,8 @@
 import React from 'react';
-import { Animated, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -140,84 +143,84 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0b',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: Skin.space(20),
   },
   content: {
     maxWidth: 400,
     alignItems: 'center',
   },
   title: {
-    fontSize: 24,
+    fontSize: Skin.font(24),
     fontWeight: '600',
     color: '#ffffff',
-    marginBottom: 12,
+    marginBottom: Skin.space(12),
     textAlign: 'center',
   },
   message: {
-    fontSize: 16,
+    fontSize: Skin.font(16),
     color: '#888888',
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
+    marginBottom: Skin.space(24),
+    lineHeight: Skin.font(22),
   },
   detailsWrapper: {
     width: '100%',
-    marginBottom: 24,
+    marginBottom: Skin.space(24),
   },
   detailsToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: Skin.space(8),
     alignSelf: 'center',
   },
   chevron: {
     color: '#666666',
-    fontSize: 10,
-    marginRight: 6,
+    fontSize: Skin.font(10),
+    marginRight: Skin.space(6),
   },
   detailsToggleText: {
     color: '#666666',
-    fontSize: 14,
+    fontSize: Skin.font(14),
   },
   detailsContainer: {
     overflow: 'hidden',
   },
   errorScroll: {
     backgroundColor: '#1a1a1b',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: Skin.radius(8),
+    padding: Skin.space(12),
     maxHeight: 280,
   },
   errorTitle: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
     fontWeight: '600',
     color: '#ff6b6b',
-    marginBottom: 4,
-    marginTop: 8,
+    marginBottom: Skin.space(4),
+    marginTop: Skin.space(8),
   },
   errorText: {
-    fontSize: 11,
+    fontSize: Skin.font(11),
     color: '#cccccc',
     fontFamily: 'monospace',
   },
   button: {
     backgroundColor: '#3b82f6',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: Skin.space(24),
+    paddingVertical: Skin.space(12),
+    borderRadius: Skin.radius(8),
   },
   buttonText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: Skin.font(16),
     fontWeight: '600',
   },
-});
+}));
 
 /**
  * Hook-friendly wrapper for using error boundary with functional components.

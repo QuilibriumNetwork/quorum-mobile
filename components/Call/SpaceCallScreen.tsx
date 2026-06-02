@@ -9,7 +9,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Alert, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { RTCView } from 'react-native-webrtc';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +20,8 @@ import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import type { CallQuality } from '@/services/calling/webrtc-manager';
 import { logger } from '@quilibrium/quorum-shared';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface SpaceCallScreenProps {
@@ -226,7 +229,7 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.hangupButton, { backgroundColor: '#ff3b30' }]}
+            style={[styles.hangupButton, { backgroundColor: theme.colors.danger }]}
             onPress={handleLeave}
             onLongPress={handleLeaveLongPress}
             delayLongPress={1500}
@@ -366,7 +369,7 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.hangupButton, { backgroundColor: '#ff3b30' }]}
+          style={[styles.hangupButton, { backgroundColor: theme.colors.danger }]}
           onPress={handleLeave}
         >
           <IconSymbol name="phone.down" color="#fff" size={28} />
@@ -376,7 +379,7 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 9998,
@@ -390,16 +393,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: Skin.space(16),
+    paddingBottom: Skin.space(12),
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   audioTopBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: Skin.space(16),
+    paddingBottom: Skin.space(12),
   },
   topBarLeft: {
     flex: 1,
@@ -411,47 +414,47 @@ const styles = StyleSheet.create({
   },
   topBarTitle: {
     color: '#fff',
-    fontSize: 17,
+    fontSize: Skin.font(17),
     fontWeight: '600',
   },
   audioTopBarTitle: {
-    fontSize: 17,
+    fontSize: Skin.font(17),
     fontWeight: '600',
   },
   topBarMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
+    gap: Skin.space(6),
+    marginTop: Skin.space(2),
   },
   topBarTimer: {
     color: 'rgba(255,255,255,0.8)',
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontVariant: ['tabular-nums'],
   },
   audioTopBarTimer: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
     fontVariant: ['tabular-nums'],
   },
   topBarSeparator: {
     color: 'rgba(255,255,255,0.5)',
-    fontSize: 13,
+    fontSize: Skin.font(13),
   },
   topBarParticipants: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
+    fontSize: Skin.font(13),
   },
   audioTopBarParticipants: {
-    fontSize: 13,
+    fontSize: Skin.font(13),
   },
   minimizeButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: Skin.radius(18),
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
+    marginLeft: Skin.space(12),
   },
   // Video layout
   remoteVideo: {
@@ -462,20 +465,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#1a1a1a',
-    gap: 12,
+    gap: Skin.space(12),
   },
   placeholderText: {
     color: 'rgba(255,255,255,0.6)',
-    fontSize: 15,
+    fontSize: Skin.font(15),
   },
   localVideoContainer: {
     position: 'absolute',
     right: 12,
     width: 100,
     height: 140,
-    borderRadius: 12,
+    borderRadius: Skin.radius(12),
     overflow: 'hidden',
-    borderWidth: 2,
+    borderWidth: Skin.border(2),
     borderColor: 'rgba(255,255,255,0.3)',
   },
   localVideo: {
@@ -489,14 +492,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
-    paddingVertical: 20,
+    gap: Skin.space(16),
+    paddingVertical: Skin.space(20),
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   videoControlButton: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: Skin.radius(24),
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -515,18 +518,18 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 24,
+    gap: Skin.space(24),
     maxWidth: SCREEN_WIDTH - 64,
   },
   avatarItem: {
     alignItems: 'center',
-    gap: 6,
+    gap: Skin.space(6),
   },
   avatarRing: {
-    borderWidth: 3,
+    borderWidth: Skin.border(3),
     borderColor: 'transparent',
-    borderRadius: 999,
-    padding: 2,
+    borderRadius: Skin.radius(999),
+    padding: Skin.space(2),
   },
   avatarRingSpeaking: {
     // borderColor is set inline from theme.colors.primary so the ring
@@ -538,64 +541,64 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   avatarLabel: {
-    fontSize: 12,
+    fontSize: Skin.font(12),
   },
   moreParticipants: {
     width: 64,
     height: 64,
-    borderRadius: 32,
+    borderRadius: Skin.radius(32),
     alignItems: 'center',
     justifyContent: 'center',
   },
   moreParticipantsText: {
-    fontSize: 16,
+    fontSize: Skin.font(16),
     fontWeight: '600',
   },
   audioControls: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 24,
-    paddingVertical: 20,
+    gap: Skin.space(24),
+    paddingVertical: Skin.space(20),
   },
   controlButton: {
     width: 72,
     height: 72,
-    borderRadius: 20,
+    borderRadius: Skin.radius(20),
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: Skin.space(4),
   },
   controlLabel: {
-    fontSize: 11,
+    fontSize: Skin.font(11),
   },
   hangupButton: {
     width: 72,
     height: 72,
-    borderRadius: 36,
+    borderRadius: Skin.radius(36),
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));
 
-const qualityStyles = StyleSheet.create({
+const qualityStyles = createSkinnable(() => StyleSheet.create({
   container: {
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 2,
+    gap: Skin.space(2),
   },
   bars: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 2,
+    gap: Skin.space(2),
   },
   bar: {
     width: 4,
-    borderRadius: 1,
+    borderRadius: Skin.radius(1),
   },
   detailText: {
     color: 'rgba(255,255,255,0.8)',
-    fontSize: 10,
+    fontSize: Skin.font(10),
     fontVariant: ['tabular-nums'],
   },
-});
+}));

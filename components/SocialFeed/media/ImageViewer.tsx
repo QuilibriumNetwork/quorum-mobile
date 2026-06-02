@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Image } from 'expo-image';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { saveMediaToLibrary } from '@/services/media/saveToLibrary';
@@ -14,6 +15,8 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from '../utils';
+import * as Skin from '@/theme/skins/geometry';
+import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 const ReanimatedView = Reanimated.View;
 
@@ -363,7 +366,7 @@ export function ImageViewer({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createSkinnable(() => StyleSheet.create({
   gestureRoot: {
     flex: 1,
   },
@@ -380,32 +383,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: Skin.space(20),
   },
   closeButton: {
     backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 20,
-    padding: 10,
+    borderRadius: Skin.radius(20),
+    padding: Skin.space(10),
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Skin.space(8),
   },
   headerButton: {
     backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 20,
-    padding: 10,
+    borderRadius: Skin.radius(20),
+    padding: Skin.space(10),
   },
   pageIndicator: {
     backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderRadius: Skin.radius(12),
+    paddingHorizontal: Skin.space(12),
+    paddingVertical: Skin.space(6),
   },
   pageIndicatorText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: Skin.font(14),
     fontWeight: '600',
   },
   gallery: {
@@ -431,20 +434,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    gap: Skin.space(8),
   },
   dot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: Skin.radius(4),
     backgroundColor: 'rgba(255,255,255,0.4)',
   },
   dotActive: {
     backgroundColor: '#fff',
     width: 10,
     height: 10,
-    borderRadius: 5,
+    borderRadius: Skin.radius(5),
   },
-});
+}));
 
 export default ImageViewer;

@@ -13,14 +13,8 @@ import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import WalletSelector from '@/components/wallet/WalletSelector';
 import { useTheme, type AppTheme } from '@/theme';
 import React from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import {
   TransactionForApproval,
   MessageForApproval,
@@ -29,6 +23,7 @@ import {
   EthereumProviderService,
 } from '@/services/miniapp/ethereumProvider';
 import { formatEther } from 'viem';
+import * as Skin from '@/theme/skins/geometry';
 
 // Request types
 export type ApprovalRequestType = 'transaction' | 'message' | 'typedData';
@@ -296,58 +291,58 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: Skin.space(20),
     },
     header: {
       alignItems: 'center',
-      paddingVertical: 16,
+      paddingVertical: Skin.space(16),
     },
     iconContainer: {
       width: 64,
       height: 64,
-      borderRadius: 32,
+      borderRadius: Skin.radius(32),
       backgroundColor: theme.colors.surface2,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 12,
+      marginBottom: Skin.space(12),
     },
     title: {
-      fontSize: 20,
+      fontSize: Skin.font(20),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
     appName: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
-      marginTop: 4,
+      marginTop: Skin.space(4),
     },
     warningContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: '#F59E0B15',
-      borderRadius: 12,
-      padding: 12,
-      gap: 8,
-      marginBottom: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(12),
+      gap: Skin.space(8),
+      marginBottom: Skin.space(16),
     },
     warningText: {
       flex: 1,
-      fontSize: 13,
-      color: '#F59E0B',
-      lineHeight: 18,
+      fontSize: Skin.font(13),
+      color: theme.colors.warning,
+      lineHeight: Skin.font(18),
     },
     scrollContainer: {
       flex: 1,
     },
     scrollContent: {
-      paddingBottom: 16,
+      paddingBottom: Skin.space(16),
     },
     detailsContainer: {
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 16,
-      gap: 12,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
+      gap: Skin.space(12),
     },
     detailRow: {
       flexDirection: 'row',
@@ -355,11 +350,11 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       alignItems: 'center',
     },
     detailLabel: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMuted,
     },
     detailValue: {
-      fontSize: 14,
+      fontSize: Skin.font(14),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -367,52 +362,52 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       textAlign: 'right',
     },
     detailValueHighlight: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       color: theme.colors.textMain,
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
     },
     chainBadge: {
       backgroundColor: theme.colors.primary + '20',
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
+      paddingHorizontal: Skin.space(10),
+      paddingVertical: Skin.space(4),
+      borderRadius: Skin.radius(12),
     },
     chainBadgeText: {
-      fontSize: 12,
+      fontSize: Skin.font(12),
       color: theme.colors.primary,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
     messageContainer: {
-      gap: 8,
+      gap: Skin.space(8),
     },
     messageScroll: {
       maxHeight: 200,
       backgroundColor: theme.colors.background,
-      borderRadius: 8,
-      padding: 12,
+      borderRadius: Skin.radius(8),
+      padding: Skin.space(12),
     },
     messageText: {
-      fontSize: 13,
+      fontSize: Skin.font(13),
       color: theme.colors.textMain,
       fontFamily: 'monospace',
-      lineHeight: 20,
+      lineHeight: Skin.font(20),
     },
     actions: {
       flexDirection: 'row',
-      gap: 12,
-      paddingVertical: 16,
+      gap: Skin.space(12),
+      paddingVertical: Skin.space(16),
     },
     rejectButton: {
       flex: 1,
       backgroundColor: theme.colors.surface2,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
       alignItems: 'center',
     },
     rejectButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
@@ -420,12 +415,12 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     approveButton: {
       flex: 1,
       backgroundColor: theme.colors.primary,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(16),
       alignItems: 'center',
     },
     approveButtonText: {
-      fontSize: 16,
+      fontSize: Skin.font(16),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: '#fff',
