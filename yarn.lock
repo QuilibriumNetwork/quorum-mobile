@@ -1939,10 +1939,10 @@
     tslib "^2.8.0"
     ws "^8.18.0"
 
-"@quilibrium/quorum-shared@2.1.0-20":
-  version "2.1.0-20"
-  resolved "https://registry.yarnpkg.com/@quilibrium/quorum-shared/-/quorum-shared-2.1.0-20.tgz#8ae2722d1f942479b011a07bd971e6534ffc1690"
-  integrity sha512-WJoJJ5X9induVBItYBSqgM6RTQHVU2z09XHAKJiw52d50UKdpAvqudl1Ytn0aGwJykfyurXc9IB7TkV+q9cKFg==
+"@quilibrium/quorum-shared@2.1.0-24":
+  version "2.1.0-24"
+  resolved "https://registry.yarnpkg.com/@quilibrium/quorum-shared/-/quorum-shared-2.1.0-24.tgz#3c54d694a80007025f64390024c6455f8ac6746b"
+  integrity sha512-8kLGEoidIoM1Yb/MUESdnAxri7lCXTihtsEZYO7YxhiHcNLPGPCsEeBg1778lTrJkzI/zVhc1kB84AxEMqmQ1g==
   dependencies:
     "@noble/hashes" "1.8.0"
     dayjs "1.11.19"

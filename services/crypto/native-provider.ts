@@ -994,20 +994,54 @@ export class NativeCryptoProvider implements CryptoProvider {
   ): Promise<({ plaintext: string } | { error: string })[]> {
     if (messages.length === 0) return [];
 
-    const input = JSON.stringify({
-      hub_private_key: hubPrivateKey,
-      config_private_key: configPrivateKey ?? null,
-      messages: messages.map(m => ({
-        ephemeral_public_key: m.ephemeral_public_key,
-        envelope: m.envelope,
-      })),
-    });
+    type UnsealResult = { plaintext: string } | { error: string };
 
-    const result = await QuorumCrypto.batchUnsealEnvelopes(input);
-    const parsed = JSON.parse(result) as {
-      results: ({ plaintext: string } | { error: string })[];
+    // Chunk the batch so a large reconnect-catchup doesn't hand
+    // Android's org.json a multi-MB tree to tokenize on the input side
+    // (it eagerly boxes the whole tree into primitives and OOMs the JVM
+    // heap — the same reason batchProcessMessages chunks). The native
+    // side independently caps the *output* size. Results are
+    // concatenated in message order, so the caller's index→entry
+    // alignment is preserved across chunks.
+    const MAX_BATCH_JSON_BYTES = 1_500_000;
+
+    const callChunk = async (chunk: typeof messages): Promise<UnsealResult[]> => {
+      const input = JSON.stringify({
+        hub_private_key: hubPrivateKey,
+        config_private_key: configPrivateKey ?? null,
+        messages: chunk.map(m => ({
+          ephemeral_public_key: m.ephemeral_public_key,
+          envelope: m.envelope,
+        })),
+      });
+      const result = await QuorumCrypto.batchUnsealEnvelopes(input);
+      const parsed = JSON.parse(result) as { results?: UnsealResult[] };
+      return parsed.results ?? [];
     };
-    return parsed.results;
+
+    const out: UnsealResult[] = [];
+    let chunk: typeof messages = [];
+    let chunkBytes = 0;
+    const flush = async () => {
+      if (chunk.length === 0) return;
+      out.push(...(await callChunk(chunk)));
+      chunk = [];
+      chunkBytes = 0;
+    };
+    for (const m of messages) {
+      // Approximate this message's contribution to the input JSON.
+      const size = m.ephemeral_public_key.length + m.envelope.length + 64;
+      // Keep at least one message per chunk even if it alone exceeds the
+      // cap (a single oversized envelope still parses fine; only the
+      // accumulated tree is the risk).
+      if (chunk.length > 0 && chunkBytes + size > MAX_BATCH_JSON_BYTES) {
+        await flush();
+      }
+      chunk.push(m);
+      chunkBytes += size;
+    }
+    await flush();
+    return out;
   }
 
   // Batch Process Messages

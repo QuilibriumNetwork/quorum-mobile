@@ -123,6 +123,13 @@ interface UseFarcasterThreadOptions {
   castHashPrefix: string;
   token?: string;
   enabled?: boolean;
+  /** Optional source of optimistic pending replies for the resolved
+   *  thread. Called with the main cast's hash; the returned casts are
+   *  merged into the reply tree (positioned by parentHash + timestamp via
+   *  the same `organizeReplies` pass, so they land in the right place).
+   *  Kept as a callback so this hook stays decoupled from the optimistic
+   *  store. */
+  getPendingReplies?: (mainHash: string) => ThreadCast[];
 }
 
 // Parse farcaster.xyz URL to extract username and hash prefix
@@ -416,6 +423,7 @@ export function useFarcasterThread({
   castHashPrefix,
   token,
   enabled = true,
+  getPendingReplies,
 }: UseFarcasterThreadOptions) {
   const query = useQuery({
     queryKey: ['farcaster-thread', username, castHashPrefix],
@@ -473,8 +481,12 @@ export function useFarcasterThread({
   // The caller (ThreadDetailView) shifts these depths by
   // `parentCasts.length + 1` so the visual indent is continuous from
   // the root parent down through the replies.
+  // Merge any optimistic pending replies before organizing, so they're
+  // positioned by parentHash + timestamp like real replies (a just-posted
+  // reply lands at the bottom of its parent's sibling group).
+  const pendingReplies = mainCast && getPendingReplies ? getPendingReplies(mainCast.hash) : [];
   const flattenedReplies = mainCast
-    ? organizeReplies(replies, mainCast.hash)
+    ? organizeReplies(pendingReplies.length ? [...replies, ...pendingReplies] : replies, mainCast.hash)
     : [];
 
   // Extract channel info from root-embed if present

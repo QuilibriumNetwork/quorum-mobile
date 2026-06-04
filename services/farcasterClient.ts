@@ -302,6 +302,30 @@ export async function unlikeCast({ token, castHash }: LikeCastParams) {
   return result;
 }
 
+/** Legacy cast delete — `DELETE /v2/casts` with the cast hash. Used as the
+ *  fallback when no hypersnap signer is provisioned (see `removeFarcasterCast`).
+ *  Only the cast's author may delete it; the server enforces that. */
+export async function deleteFarcasterCast({ token, castHash }: { token: string; castHash: string }) {
+  const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const response = await fetch(`${FARCASTER_BASE_URL}/v2/casts`, {
+    method: 'DELETE',
+    headers: {
+      accept: '*/*',
+      'content-type': 'application/json; charset=utf-8',
+      authorization: `Bearer ${token}`,
+      'idempotency-key': idempotencyKey,
+      origin: 'https://farcaster.xyz',
+      referer: 'https://farcaster.xyz/',
+    },
+    body: JSON.stringify({ castHash }),
+  });
+  if (!response.ok) {
+    const errorBody = await response.text();
+    const message = await safeReadError({ json: async () => JSON.parse(errorBody) } as Response);
+    throw new Error(message || `Failed to delete cast (${response.status})`);
+  }
+}
+
 interface RecastParams {
   token: string;
   castHash: string;

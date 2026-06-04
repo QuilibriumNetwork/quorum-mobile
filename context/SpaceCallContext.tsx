@@ -13,6 +13,7 @@ import React, {
   useContext,
   useState,
   useCallback,
+  useMemo,
   useRef,
 } from 'react';
 import { Platform } from 'react-native';
@@ -1019,20 +1020,41 @@ export function SpaceCallProvider({ children }: { children: React.ReactNode }) {
     return text === 'call-diag: no buffer' ? null : text;
   }, []);
 
-  const contextValue: SpaceCallContextValue = {
-    state,
-    isOverlayMinimized,
-    setOverlayMinimized,
-    joinCall,
-    leaveCall,
-    toggleMute,
-    toggleVideo,
-    toggleSpeaker,
-    flipCamera,
-    getLocalStream,
-    getRemoteStream,
-    getDiagnosticsText,
-  };
+  // Memoized so a provider re-render that doesn't change the call state
+  // doesn't re-render every useSpaceCall() consumer. (During a call, the
+  // audio-level/quality polling intervals update `state` frequently — see
+  // the deeper note: that high-frequency state ideally lives outside the
+  // shared context value so only the overlay subscribes to it.)
+  const contextValue = useMemo<SpaceCallContextValue>(
+    () => ({
+      state,
+      isOverlayMinimized,
+      setOverlayMinimized,
+      joinCall,
+      leaveCall,
+      toggleMute,
+      toggleVideo,
+      toggleSpeaker,
+      flipCamera,
+      getLocalStream,
+      getRemoteStream,
+      getDiagnosticsText,
+    }),
+    [
+      state,
+      isOverlayMinimized,
+      setOverlayMinimized,
+      joinCall,
+      leaveCall,
+      toggleMute,
+      toggleVideo,
+      toggleSpeaker,
+      flipCamera,
+      getLocalStream,
+      getRemoteStream,
+      getDiagnosticsText,
+    ],
+  );
 
   return (
     <SpaceCallContext.Provider value={contextValue}>

@@ -50,6 +50,11 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        // NOTE: `freezeOnBlur` was tried here to stop off-screen tabs
+        // re-rendering during the WS catch-up, but it triggered a native
+        // crash (react-native-screens freezing a reanimated-heavy screen)
+        // when navigating into a Farcaster DM. Left off — the cache-first
+        // query changes already deliver the tab-switch speedup without it.
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.textMuted,
         tabBarButton: HapticTab,

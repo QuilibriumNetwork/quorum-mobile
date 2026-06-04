@@ -49,13 +49,22 @@ export default function FeedScreen() {
     | { kind: 'token-missing'; detail?: string; reason: 'no-credentials' | 'api-rejected' | 'unknown' }
     | { kind: 'no-account' };
 
+  // Render-then-validate: show the feed immediately if we have a token OR
+  // a Farcaster account is already known (fid on the user profile), and
+  // validate/refresh the token in the background. Only a genuine cold
+  // start with no account on file gets the blocking spinner — otherwise a
+  // tab re-focus on a slow connection blocked the whole feed for seconds.
+  const knownFarcasterAccount = (user?.farcaster?.fid ?? 0) > 0;
   const [fcState, setFcState] = useState<FcState>(
-    farcasterAuthToken ? { kind: 'connected' } : { kind: 'checking' },
+    farcasterAuthToken || knownFarcasterAccount ? { kind: 'connected' } : { kind: 'checking' },
   );
   const [reimportOpen, setReimportOpen] = useState(false);
 
-  const attempt = useCallback(async () => {
-    setFcState({ kind: 'checking' });
+  const attempt = useCallback(async (blocking: boolean = true) => {
+    // Background validations (blocking=false) never flip to the spinner;
+    // they only downgrade to an error state if there's definitively no
+    // usable token, so the feed stays on screen meanwhile.
+    if (blocking) setFcState({ kind: 'checking' });
     const result = await refreshFarcasterToken();
     if ('token' in result) {
       setFcState({ kind: 'connected' });
@@ -92,8 +101,10 @@ export default function FeedScreen() {
       setFcState({ kind: 'connected' });
       return;
     }
-    void attempt();
-  }, [farcasterAuthToken, attempt]);
+    // Known account → validate in the background without blocking the
+    // feed; no account on file → blocking check (first-run sign-in path).
+    void attempt(!knownFarcasterAccount);
+  }, [farcasterAuthToken, attempt, knownFarcasterAccount]);
 
   // `username` is optional now — miniapp `viewCast` and other surfaces
   // give us just the hash. The thread fetcher's hypersnap path doesn't

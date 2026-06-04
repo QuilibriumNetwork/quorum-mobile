@@ -241,6 +241,10 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   // On Android, blur first to ensure keyboard shows when re-focusing after modal dismiss
   useImperativeHandle(ref, () => ({
     focus: () => {
+      // Already focused (e.g. the refocus fired right after sending a
+      // message): the keyboard is up, so re-running the Android
+      // blur/refocus dance would visibly dismiss and re-show it. No-op.
+      if (inputRef.current?.isFocused()) return;
       if (Platform.OS === 'android') {
         inputRef.current?.blur();
         setTimeout(() => {

@@ -31,6 +31,8 @@ interface CastOverflowButtonProps {
   castText?: string;
   /** Opens the host's report flow for this cast. */
   onReport: (castHash: string, authorFid?: number) => void;
+  /** Deletes the cast — only wired/shown for the viewer's own casts. */
+  onDelete?: (castHash: string) => void;
   theme: AppTheme;
   /** Icon size — defaults to 16 to sit in a cast header/action row. */
   size?: number;
@@ -43,6 +45,7 @@ export function CastOverflowButton({
   authorUsername,
   castText,
   onReport,
+  onDelete,
   theme,
   size = 16,
   color,
@@ -78,7 +81,35 @@ export function CastOverflowButton({
   const isMuted = canModerateUser && mutedFids.has(authorFid!);
   const isBlocked = canModerateUser && blockedFids.has(authorFid!);
 
+  // Delete is offered only for the viewer's own casts, and only when the host
+  // wired an `onDelete` handler.
+  const isOwnCast =
+    typeof authorFid === 'number' && authorFid > 0 && authorFid === ownFid && !!onDelete;
+
   const actions: ActionSheetAction[] = [
+    ...(isOwnCast
+      ? [
+          {
+            label: 'Delete cast',
+            icon: 'trash',
+            destructive: true,
+            onPress: () => {
+              Alert.alert(
+                'Delete cast?',
+                'This permanently removes your cast for everyone.',
+                [
+                  { text: 'Cancel', style: 'cancel' as const },
+                  {
+                    text: 'Delete',
+                    style: 'destructive' as const,
+                    onPress: () => onDelete!(castHash),
+                  },
+                ],
+              );
+            },
+          },
+        ]
+      : []),
     ...(canTranslate
       ? [
           {

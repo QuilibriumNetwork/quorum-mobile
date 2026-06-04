@@ -712,6 +712,20 @@ class QuorumCryptoModule : Module() {
 
                     val x448PrivateKeyInts = x448PrivateKey.map { it.toInt() and 0xFF }
 
+                    // Output-size safety net — mirror batchProcessMessages.
+                    // Without it the final `output.toString()` materializes
+                    // the entire batch's plaintext as one giant String (plus
+                    // a copy during StringBuilder growth) and OOMs the JVM
+                    // heap on large catch-up batches — the crash stack showed
+                    // JSONStringer failing on a ~144MB allocation.
+                    // Oversized messages are dropped to {error:"too_large"};
+                    // JS leaves them out of the pre-unseal cache and the
+                    // per-message fallback unseals them individually (see the
+                    // `'plaintext' in result` gate in WebSocketContext).
+                    val batchTextCap = 12 * 1024 * 1024
+                    val perMessageCap = 2 * 1024 * 1024
+                    var batchTextBytes = 0
+
                     val results = JSONArray()
 
                     for (i in 0 until messagesArray.length()) {
@@ -741,7 +755,15 @@ class QuorumCryptoModule : Module() {
                             try {
                                 val bytes = decryptInboxBytes(decryptResult)
                                 val plaintext = String(bytes, Charsets.UTF_8)
-                                resultObj.put("plaintext", sanitizeForJSON(plaintext))
+                                if (plaintext.length > perMessageCap ||
+                                    batchTextBytes + plaintext.length > batchTextCap) {
+                                    // Too large to bundle — drop to an error so
+                                    // JS unseals this one individually.
+                                    resultObj.put("error", "too_large")
+                                } else {
+                                    batchTextBytes += plaintext.length
+                                    resultObj.put("plaintext", sanitizeForJSON(plaintext))
+                                }
                             } catch (e: Exception) {
                                 if (decryptResult.contains("error") || decryptResult.contains("invalid") || decryptResult.contains("failed")) {
                                     resultObj.put("error", decryptResult)

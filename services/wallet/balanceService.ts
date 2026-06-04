@@ -511,7 +511,7 @@ async function fetchTokenBalancesForChain(
     // Paginate through all token balances
     let allTokenBalances: any[] = [];
     let pageKey: string | undefined;
-    const maxPages = 10; // Safety limit
+    const maxPages = 25; // Safety limit (~2500 tokens) — spam-heavy wallets exceed 1000
     let pageCount = 0;
 
     do {
@@ -572,53 +572,73 @@ async function fetchTokenBalancesForChain(
       return tokens;
     }
 
-    // Batch fetch metadata for all tokens in a single request
-    const batchRequest = nonZeroTokens.map((token: any, index: number) => ({
-      jsonrpc: '2.0',
-      method: 'alchemy_getTokenMetadata',
-      params: [token.contractAddress],
-      id: index,
-    }));
-
-    const metadataResponse = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(batchRequest),
-    });
-
-    if (!metadataResponse.ok) {
-      return tokens;
+    // Fetch metadata in CHUNKS. A single giant batch (one request id per
+    // token) gets rejected or truncated by the RPC for large/spam-heavy
+    // wallets — the response comes back short, every token past the first
+    // chunk loses its metadata, and they were silently dropped below. That's
+    // the "wallet only shows the first page of coins" bug. Chunking keeps each
+    // batch small enough to always come back whole, and a failed chunk no
+    // longer wipes the entire list (it just falls back to best-effort below).
+    const META_CHUNK = 100;
+    const metadataById = new Map<number, any>();
+    for (let start = 0; start < nonZeroTokens.length; start += META_CHUNK) {
+      const chunk = nonZeroTokens.slice(start, start + META_CHUNK);
+      const batchRequest = chunk.map((token: any, j: number) => ({
+        jsonrpc: '2.0',
+        method: 'alchemy_getTokenMetadata',
+        params: [token.contractAddress],
+        id: start + j, // globally-unique id so results map back precisely
+      }));
+      try {
+        const metadataResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(batchRequest),
+        });
+        if (!metadataResponse.ok) {
+          if (metadataResponse.status === 429) throw new Error(`Rate limited on ${chain}`);
+          continue; // metadata missing for this chunk → fallback below
+        }
+        const metadataResults = await metadataResponse.json();
+        const arr = Array.isArray(metadataResults) ? metadataResults : [metadataResults];
+        for (const r of arr) {
+          if (r && typeof r.id === 'number' && r.result) metadataById.set(r.id, r.result);
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message.includes('Rate limited')) throw e;
+        // network error on this chunk — keep going; these tokens fall back.
+      }
     }
 
-    const metadataResults = await metadataResponse.json();
-
-    // Process each metadata result
+    // Assemble every held token. A token whose metadata couldn't be resolved
+    // is still included with a best-effort fallback (address-derived symbol,
+    // 18 decimals) rather than dropped — so spam / no-metadata tokens still
+    // appear when the user has filtering turned off.
     for (let i = 0; i < nonZeroTokens.length; i++) {
       const token = nonZeroTokens[i];
-      const metadataData = Array.isArray(metadataResults)
-        ? metadataResults.find((r: any) => r.id === i)
-        : metadataResults;
-      const metadata = metadataData?.result;
-
-      if (metadata) {
-        const balanceRaw = BigInt(token.tokenBalance);
-        const decimals = metadata.decimals || 18;
-        const balance = Number(balanceRaw) / Math.pow(10, decimals);
-
-        if (balance > 0) {
-          const symbol = metadata.symbol || 'UNKNOWN';
-          tokens.push({
-            symbol,
-            name: metadata.name || metadata.symbol || 'Unknown Token',
-            balance: balance.toString(),
-            balanceRaw: balanceRaw.toString(),
-            decimals,
-            chain,
-            contractAddress: token.contractAddress,
-            logoUrl: metadata.logo || KNOWN_TOKEN_ICONS[symbol.toUpperCase()],
-          });
-        }
+      const metadata = metadataById.get(i);
+      let balanceRaw: bigint;
+      try {
+        balanceRaw = BigInt(token.tokenBalance);
+      } catch {
+        continue; // unparseable balance — skip
       }
+      if (balanceRaw <= 0n) continue;
+      const decimals = metadata?.decimals ?? 18;
+      const balance = Number(balanceRaw) / Math.pow(10, decimals);
+      if (!(balance > 0)) continue;
+      const symbol =
+        metadata?.symbol || `${String(token.contractAddress).slice(0, 6)}…`;
+      tokens.push({
+        symbol,
+        name: metadata?.name || metadata?.symbol || 'Unknown Token',
+        balance: balance.toString(),
+        balanceRaw: balanceRaw.toString(),
+        decimals,
+        chain,
+        contractAddress: token.contractAddress,
+        logoUrl: metadata?.logo || KNOWN_TOKEN_ICONS[symbol.toUpperCase()],
+      });
     }
 
     return tokens;
@@ -857,15 +877,32 @@ export async function fetchSolanaBalance(address: string): Promise<ChainBalance>
     const tokens: TokenBalance[] = [];
 
     try {
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-        programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
-      });
-      for (const { account } of tokenAccounts.value) {
+      // Enumerate BOTH token programs: classic SPL Token and Token-2022 (a
+      // separate on-chain program). They parse identically via
+      // getParsedTokenAccountsByOwner; querying only the classic program
+      // leaves any Token-2022 holdings invisible. Each query is caught
+      // independently so one failing doesn't drop the other's results.
+      const SPL_TOKEN_PROGRAM = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+      const TOKEN_2022_PROGRAM = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
+      const emptyValue = { value: [] as Awaited<ReturnType<typeof connection.getParsedTokenAccountsByOwner>>['value'] };
+      const [splAccounts, token2022Accounts] = await Promise.all([
+        connection
+          .getParsedTokenAccountsByOwner(publicKey, { programId: SPL_TOKEN_PROGRAM })
+          .catch(() => emptyValue),
+        connection
+          .getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_2022_PROGRAM })
+          .catch(() => emptyValue),
+      ]);
+
+      const seenMints = new Set<string>();
+      for (const { account } of [...splAccounts.value, ...token2022Accounts.value]) {
         const parsed = account.data.parsed;
         const uiAmount = parsed?.info?.tokenAmount?.uiAmount;
 
         if (uiAmount > 0) {
           const mint = parsed.info.mint;
+          if (seenMints.has(mint)) continue; // de-dupe across programs
+          seenMints.add(mint);
           const jupiterToken = jupiterTokens.get(mint);
           tokens.push({
             symbol: jupiterToken?.symbol || mint.slice(0, 6) + '...',

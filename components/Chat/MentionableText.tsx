@@ -69,7 +69,7 @@ interface TextPart {
 // Excludes digits 0-9 and other text characters that are technically in \p{Emoji}
 const EMOJI_ONLY_REGEX = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\s]+$/u;
 
-export function MentionableText({
+function MentionableTextBase({
   text: rawText,
   customEmojis,
   members = [],
@@ -489,5 +489,11 @@ const localStyles = createSkinnable(() => StyleSheet.create({
   },
   emoji: {},
 }));
+
+// Memoized: this is rendered once per message row and re-parses text +
+// mentions on every render. The DM view polls every few seconds, so without
+// memoization every poll re-parsed every visible message's text — a big
+// chunk of the redraw churn that OOM'd low-RAM devices.
+export const MentionableText = React.memo(MentionableTextBase);
 
 export default MentionableText;

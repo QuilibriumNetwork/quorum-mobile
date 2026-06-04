@@ -384,6 +384,26 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const isProcessingQueueRef = useRef(false);
   const MESSAGE_PROCESS_DELAY_MS = 10; // 10ms delay between non-batch messages (brief yield to UI thread)
   const MAX_MESSAGE_QUEUE_SIZE = 2000;
+  // Gate for verbose per-message / per-batch diagnostics. These build
+  // JSON.stringify(batch.map(...)) payloads that are NEVER printed
+  // (logger.debug sits below the logger's "log" minLevel), yet the
+  // argument is always evaluated — so during a reconnect catch-up flood
+  // they churn Hermes (native-heap) allocations for nothing. Flip to
+  // true only when actively tracing the message pipeline.
+  const WS_TRACE = false;
+  // Max messages drained into a single batch per processMessageQueue
+  // iteration. The queue can hold up to MAX_MESSAGE_QUEUE_SIZE; draining
+  // it all at once builds the entire batchInput object + its
+  // JSON.stringify in JS memory simultaneously (on top of the native
+  // parse + results), which spikes peak RSS on a reconnect catch-up and
+  // gets the foreground app OOM-killed by the kernel on small (≤2GB)
+  // devices — a process SIGKILL, not a catchable java OOM. Draining in
+  // bounded slices (the while loop just iterates more times, yielding
+  // between drains so the prior slice's memory is reclaimed) keeps the
+  // working set flat. Ordering/DR-state correctness is preserved: slices
+  // stay FIFO and the native side re-reads ratchet state from MMKV
+  // between calls.
+  const MAX_BATCH_DRAIN_SIZE = 250;
 
   // Pre-unsealed payload cache - populated by batch native decryption in processMessageQueue
   // Key: `${inboxAddress}:${timestamp}`, Value: decrypted plaintext payload
@@ -416,6 +436,33 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     ratchetStateCacheRef.current.set(rawState, result as object);
     return result;
   }, []);
+
+  // Coalesce conversation-list refreshes. During a reconnect catch-up
+  // thousands of DM messages would otherwise EACH fire an *active*
+  // refetch of the conversation list (synchronous storage read + full
+  // FlashList re-render). That per-message refetch was the launch-time
+  // "redraw storm" — the bulk of the render-thread + ART churn that
+  // pinned the native heap and got the app OOM-killed, even with no view
+  // open (the initial route is the conversation list). Instead: collect
+  // the touched conversation ids and invalidate the list + those details
+  // at most once per debounce window, collapsing thousands of refetches
+  // into a handful.
+  const CONVERSATION_REFRESH_DEBOUNCE_MS = 400;
+  const convRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingConvDetailIdsRef = useRef<Set<string>>(new Set());
+  const scheduleConversationRefresh = useCallback((conversationId?: string) => {
+    if (conversationId) pendingConvDetailIdsRef.current.add(conversationId);
+    if (convRefreshTimerRef.current) return; // a flush is already scheduled
+    convRefreshTimerRef.current = setTimeout(() => {
+      convRefreshTimerRef.current = null;
+      const ids = pendingConvDetailIdsRef.current;
+      pendingConvDetailIdsRef.current = new Set();
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all('direct'), refetchType: 'active' });
+      ids.forEach((id) =>
+        queryClient.invalidateQueries({ queryKey: queryKeys.conversations.detail(id), refetchType: 'active' }),
+      );
+    }, CONVERSATION_REFRESH_DEBOUNCE_MS);
+  }, [queryClient]);
 
   /**
    * Initialize device keys and set them in the encryption service
@@ -2374,17 +2421,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           };
         });
 
-        // Update conversation list to show latest message
+        // Update conversation list to show latest message.
         // Skip invalidating messagesKey: setQueryData above is canonical
-        // and a refetch races with storage writes.
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.all('direct'),
-          refetchType: 'active',
-        });
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.detail(conversationId),
-          refetchType: 'active',
-        });
+        // and a refetch races with storage writes. Coalesced so a
+        // fallback-path catch-up doesn't refetch+re-render per message.
+        scheduleConversationRefresh(conversationId);
 
 
         // Delete the message from the server inbox after successful processing
@@ -3307,9 +3348,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           return { ...old, pages: old.pages.map((page, i) => i === 0 ? { ...page, messages: [...page.messages, decryptedMessage] } : page) };
         });
 
-        // Only refetch active conversation queries (data already saved to storage)
-        queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all('direct'), refetchType: 'active' });
-        queryClient.invalidateQueries({ queryKey: queryKeys.conversations.detail(conversationId), refetchType: 'active' });
+        // Refresh active conversation queries (data already saved to
+        // storage). Debounced/coalesced so a catch-up flood doesn't fire
+        // one refetch+re-render per message — see scheduleConversationRefresh.
+        scheduleConversationRefresh(conversationId);
 
         // Best-effort: delete processed message from inbox
         const originalMsg = batch.find(m => m.timestamp === msgResult.timestamp);
@@ -3362,8 +3404,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     isProcessingQueueRef.current = true;
 
     while (messageQueueRef.current.length > 0) {
-      // Drain current batch of messages
-      const batch = messageQueueRef.current.splice(0, messageQueueRef.current.length);
+      // Drain a bounded slice (not the whole queue) so the per-iteration
+      // working set — batchInput + its JSON.stringify + native parse +
+      // results — stays flat. The loop keeps going until the queue is
+      // empty; see MAX_BATCH_DRAIN_SIZE for why this matters on small
+      // devices.
+      const batch = messageQueueRef.current.splice(0, MAX_BATCH_DRAIN_SIZE);
 
       try {
         // Classify messages and gather crypto state
@@ -3373,7 +3419,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // whether DM messages are reaching the native fast path or the JS
         // slow path.
         const me = fullUserAddrRef.current?.slice(0, 8) ?? '???';
-        if (batch.length > 0) {
+        if (WS_TRACE && batch.length > 0) {
           logger.debug(
             `[DM-classify ${me}]`,
             JSON.stringify({
@@ -3400,7 +3446,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           const cryptoProvider = new NativeCryptoProvider();
           const batchOutput = await cryptoProvider.batchProcessMessages(batchInput);
 
-          if (batchOutput.dm_results.length > 0) {
+          if (WS_TRACE && batchOutput.dm_results.length > 0) {
             logger.debug(
               `[DM-batch-result ${me}]`,
               JSON.stringify(
@@ -3481,6 +3527,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
         if (advance > getHubLastSeq(hub)) setHubLastSeq(hub, advance);
       });
+
+      // Yield between drains so this slice's batchInput/stringify/result
+      // allocations are reclaimed before the next slice builds — keeps
+      // peak RSS flat across a large catch-up instead of stacking.
+      if (messageQueueRef.current.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
     }
 
     isProcessingQueueRef.current = false;

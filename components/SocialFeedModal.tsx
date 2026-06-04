@@ -52,6 +52,8 @@ import { parseFarcasterUrl, useFarcasterThread, type FlattenedCast } from '@/hoo
 import { useFarcasterCastLimits, isLongCast } from '@/hooks/useFarcasterPro';
 import { followUser, likeCast, recastCast, unlikeCast, unrecastCast, uploadImageForCast } from '@/services/farcasterClient';
 import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
+import { useFeedOptimistic } from '@/context/FeedOptimisticContext';
+import type { PendingCast } from '@/services/feed/optimisticFeedStore';
 import { uploadVideoForCast } from '@/services/farcaster/videoUpload';
 import { pickMedia, type ProcessedAttachment } from '@/services/media/imageAttachment';
 import { useTheme, type AppTheme } from '@/theme';
@@ -947,9 +949,14 @@ function VideoPlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  // Natural aspect ratio measured from the loaded video, used when the
+  // embed doesn't carry width/height (common for HLS) so the container
+  // matches the real video instead of a 9/16 guess.
+  const [measuredAspect, setMeasuredAspect] = useState<number | null>(null);
   const videoRef = useRef<VideoView>(null);
-  const aspectRatio = width && height ? height / width : 9 / 16;
-  const calculatedHeight = Math.min(SCREEN_WIDTH * aspectRatio, SCREEN_HEIGHT * 0.7);
+  const aspectRatio = measuredAspect ?? (width && height ? height / width : 9 / 16);
+  // Full-width, natural aspect ratio — no max-height cap.
+  const calculatedHeight = SCREEN_WIDTH * aspectRatio;
 
   // Configure audio mode on mount
   useEffect(() => {
@@ -973,11 +980,97 @@ function VideoPlayer({
       player.currentTime = 0;
     });
 
+    // Measure the real video dimensions once the source loads so the
+    // container sizes to the natural aspect ratio — the embed often omits
+    // width/height (especially for HLS), which otherwise leaves a short
+    // 9/16 box that doesn't fill the height of a portrait video.
+    const applySize = (size?: { width: number; height: number } | null) => {
+      if (size && size.width > 0 && size.height > 0) {
+        setMeasuredAspect(size.height / size.width);
+      }
+    };
+
+    const loadSubscription = player.addListener('sourceLoad', (payload) => {
+      const tracks = payload.availableVideoTracks ?? [];
+      const best = tracks.reduce<(typeof tracks)[number] | undefined>((acc, t) => {
+        const area = (t.size?.width ?? 0) * (t.size?.height ?? 0);
+        const accArea = (acc?.size?.width ?? 0) * (acc?.size?.height ?? 0);
+        return area > accArea ? t : acc;
+      }, undefined);
+      applySize(best?.size ?? player.videoTrack?.size);
+    });
+
+    // For HLS the track (and its size) often isn't known until it's
+    // selected — `videoTrackChange` fires then, with the real dimensions.
+    const trackSubscription = player.addListener('videoTrackChange', (payload) => {
+      applySize(payload.videoTrack?.size);
+    });
+
+    // Once the source is ready the track is usually resolved; read it
+    // directly (covers events that fired before this effect subscribed).
+    const statusSubscription = player.addListener('statusChange', (payload) => {
+      if (payload.status === 'readyToPlay') applySize(player.videoTrack?.size);
+    });
+
+    // Immediate read in case the track was already resolved before we
+    // attached any listeners (player is created during render).
+    applySize(player.videoTrack?.size);
+
     return () => {
       subscription.remove();
       endSubscription.remove();
+      loadSubscription.remove();
+      trackSubscription.remove();
+      statusSubscription.remove();
     };
   }, [player]);
+
+  // HLS posters: the feed API often omits video dimensions, and expo-video
+  // can't report an HLS track's size before playback — so without this the
+  // poster sits at the 9/16 fallback until the user presses play (the
+  // thread works only because its API *does* include dimensions). Parse
+  // `RESOLUTION=WxH` from the m3u8 master manifest (a tiny text fetch) to
+  // size the box correctly up front. Only runs when nothing else sized it.
+  useEffect(() => {
+    if (thumbnailUrl || (width && height)) return;
+    if (!/\.m3u8(\?|#|$)/i.test(url)) return;
+    let cancelled = false;
+    fetch(url)
+      .then((r) => r.text())
+      .then((text) => {
+        if (cancelled) return;
+        const m = text.match(/RESOLUTION=(\d+)x(\d+)/i);
+        if (m) {
+          const w = parseInt(m[1], 10);
+          const h = parseInt(m[2], 10);
+          if (w > 0 && h > 0) setMeasuredAspect(h / w);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [url, thumbnailUrl, width, height]);
+
+  // Also measure the poster thumbnail's aspect ratio when one is present.
+  // With a thumbnail poster the VideoView isn't mounted until playback, so
+  // the player may not load and `sourceLoad` may not fire — measuring the
+  // thumbnail (which matches the video's aspect) keeps the box at the right
+  // height in the feed too, not just the thread.
+  useEffect(() => {
+    if (!thumbnailUrl) return;
+    let cancelled = false;
+    Image.getSize(
+      thumbnailUrl,
+      (w, h) => {
+        if (!cancelled && w > 0 && h > 0) setMeasuredAspect(h / w);
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [thumbnailUrl]);
 
   // Tap on the play-button overlay → play/pause toggle (or start on
   // first tap). Kept narrow so it doesn't swallow the rest of the
@@ -1024,14 +1117,28 @@ function VideoPlayer({
               resizeMode="cover"
             />
           ) : (
-            // No poster image (typical for hypersnap-bare HLS streams).
-            // Render a flat surface tinted by the theme so the
-            // play-icon overlay still has a backdrop to sit against.
-            <View
+            // No poster URL from the API (typical for hypersnap-bare HLS
+            // streams). Show the video's own first frame as the preview via
+            // the already-created player — works for HLS too, costs no extra
+            // player, and beats a blank box. `pointerEvents="none"` so taps
+            // fall through to the play overlay / fullscreen handler.
+            <VideoView
+              player={player}
               style={{
                 width: SCREEN_WIDTH,
                 height: calculatedHeight,
                 backgroundColor: theme.colors.surface3,
+              }}
+              contentFit="contain"
+              nativeControls={false}
+              pointerEvents="none"
+              onFirstFrameRender={() => {
+                // The frame is now displayed, so the player knows the
+                // dimensions — size the box to the real aspect ratio.
+                const size = player.videoTrack?.size;
+                if (size && size.width > 0 && size.height > 0) {
+                  setMeasuredAspect(size.height / size.width);
+                }
               }}
             />
           )}
@@ -1393,7 +1500,7 @@ function ChannelBadge({
       : undefined;
   const { data: resolved } = useFarcasterChannelByParentUrl(
     resolveTarget,
-    { enabled: Boolean(resolveTarget), gcTime: Infinity },
+    { enabled: Boolean(resolveTarget), gcTime: 10 * 60 * 1000 },
   );
   const finalKey = (slugIsUsable ? channelSlug : null) ?? slugFromUrl ?? resolved?.key;
   const finalName = (slugIsUsable ? channelSlug : null) ?? slugFromUrl ?? resolved?.name;
@@ -1461,7 +1568,7 @@ function ParentContextLine({
   const { data: parentCast } = useFarcasterCast(
     canFetchMiniCast ? cast.parentHash : undefined,
     canFetchMiniCast ? parentFid : undefined,
-    { enabled: canFetchMiniCast, gcTime: Infinity },
+    { enabled: canFetchMiniCast, gcTime: 10 * 60 * 1000 },
   );
 
   if (!showUrlContext && !showUserContext && !canFetchMiniCast && !showGenericReply) return null;
@@ -1526,7 +1633,7 @@ function ParentContextLine({
           <Image
             source={{ uri: previewImage }}
             style={{ width: '100%', height: 120, backgroundColor: theme.colors.surface3 }}
-            resizeMode="cover"
+            resizeMode="contain"
           />
         )}
       </Wrapper>
@@ -1819,7 +1926,7 @@ function QuoteCast({
   const { data: resolvedCast } = useFarcasterCast(
     enableResolve ? cast.hash : undefined,
     enableResolve ? cast.author!.fid : undefined,
-    { enabled: enableResolve, gcTime: Infinity },
+    { enabled: enableResolve, gcTime: 10 * 60 * 1000 },
   );
 
   const displayName = cast.author?.displayName || resolvedCast?.author.displayName || '';
@@ -1916,7 +2023,7 @@ function QuoteCast({
             height: 150,
             backgroundColor: theme.colors.surface3,
           }}
-          resizeMode="cover"
+          resizeMode="contain"
         />
       )}
     </TouchableOpacity>
@@ -2145,17 +2252,47 @@ function ThreadDetailView({
   governanceByHash?: Map<string, GovernanceChannelCast>;
   onGovernanceVoted?: () => void;
 }) {
-  const { parentCasts, mainCast: fetchedMainCast, replies, isLoading, error, channelContext, refetch } = useFarcasterThread({
+  const optimistic = useFeedOptimistic();
+  const { parentCasts, mainCast: fetchedMainCast, replies, allCasts, isLoading, error, channelContext, refetch } = useFarcasterThread({
     username,
     castHashPrefix,
     token,
+    // Merge optimistic pending replies into the thread so a just-posted
+    // reply shows instantly in the right place.
+    getPendingReplies: optimistic.pendingRepliesAsThreadCasts,
   });
-  const { submitCast: submitReplyCast } = useFarcasterSubmitCast({ token });
   // Use the fetched cast once it arrives; fall back to the placeholder
   // for the loading window. Cast shapes from FeedPostCard / search /
   // channel are structurally compatible enough that the renderer below
   // tolerates either — it reads optional fields lazily.
   const mainCast = fetchedMainCast ?? (placeholderCast as typeof fetchedMainCast | undefined);
+
+  // When fresh server thread data arrives: drop optimistic pending replies
+  // it now echoes back (matched by author + text + timestamp), and drop
+  // reaction overrides the server now reflects (so the live count shows
+  // through again instead of the frozen click-time count).
+  useEffect(() => {
+    if (allCasts && allCasts.length) {
+      // Primary: drop a sent reply stub once its real server copy appears in
+      // the thread, matched by confirmed hash. Match against SERVER casts
+      // only — the merged pending stubs carry their own `realHash`, so
+      // including them would make a stub reconcile itself away before the
+      // real cast actually lands. (The text+timestamp `reconcilePending`
+      // can't match reply stubs anyway: optimistic timestamps are Date.now()
+      // ms while server cast timestamps are seconds.)
+      const serverHashes = allCasts
+        .filter((c) => !(c as { __pending?: unknown }).__pending)
+        .map((c) => (c as { hash?: string }).hash)
+        .filter((h): h is string => !!h);
+      optimistic.reconcilePendingByHash(serverHashes);
+      optimistic.reconcilePending(allCasts);
+      optimistic.reconcileReactions(allCasts);
+    }
+    // reconcile* are stable module refs; depend on them (not the whole
+    // `optimistic` object, which is a new identity each render) so this
+    // runs only when the server thread data actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allCasts, optimistic.reconcilePendingByHash, optimistic.reconcilePending, optimistic.reconcileReactions]);
 
   // /hegemony overlay: when the thread's root cast is a proposal, surface the
   // weighted tally + per-voter points (normal threads show none of this).
@@ -2296,13 +2433,14 @@ function ThreadDetailView({
 
   const handleSubmitReply = async () => {
     if (!canReply || !mainCast) return;
+    setReplyError(null);
+    const text = replyText.trim();
 
     try {
       setIsPosting(true);
-      setReplyError(null);
 
-      // Build embeds array as simple URL strings — videos go through TUS
-      // upload, images through the existing direct upload.
+      // Upload any attachments first — their URLs are needed for the cast.
+      // Videos go through TUS upload, images through the direct upload.
       const embeds: string[] = [];
       for (const a of replyImages) {
         try {
@@ -2314,21 +2452,26 @@ function ThreadDetailView({
             embeds.push(uploaded.url);
           }
         } catch (uploadErr: any) {
+          // Nothing was posted yet — keep the text so it isn't lost.
           setReplyError(`Failed to upload attachment: ${uploadErr?.message ?? 'Unknown error'}`);
           setIsPosting(false);
           return;
         }
       }
 
-      await submitReplyCast({
-        text: replyText.trim(),
+      // Optimistically insert the reply and submit it in the background
+      // (with auto-retry). The composer clears, but the text lives in the
+      // pending stub — a failed send is recoverable, never lost. The reply
+      // shows instantly in the thread via the merge above.
+      optimistic.postReply({
+        threadHash: mainCast.hash,
+        parentHash: mainCast.hash,
+        parentFid: mainCast.author.fid,
+        text,
         embedUrls: embeds,
-        parent: { castHashHex: mainCast.hash, fid: mainCast.author.fid },
       });
       setReplyText('');
-      setReplyImages([]); // Clear images after posting
-      // Refetch to show the new reply
-      await refetch();
+      setReplyImages([]);
     } catch (err: unknown) {
       logger.warn(
         '[SocialFeedModal] reply submit threw:',
@@ -2376,12 +2519,101 @@ function ThreadDetailView({
     !!mainParentHash &&
     parentCasts.some((p) => p.hash.toLowerCase() === mainParentHash);
 
+  // Compact renderer for an optimistic pending reply: shows the text
+  // immediately with a status line ("Sending…" or, after the background
+  // submit exhausts its retries, "Failed to send" with Retry / Discard so
+  // the user is reprompted — the text is never lost).
+  const renderPendingReply = (cast: FlattenedCast, pending: PendingCast) => {
+    const indent = Math.min(cast.depth * 12, 48);
+    const failed = pending.status === 'failed';
+    // 'sent' = the submit landed (realHash set); we're just waiting for the
+    // server to index it so the real cast replaces this stub. Show it as
+    // settled, not still "Sending…", so it never looks stuck.
+    const sent = pending.status === 'sent';
+    // Always the current user, so prefer the freshly-resolved Farcaster avatar
+    // over the (possibly stale/missing) cached pfp on the pending author.
+    const avatarUri = replyAvatarUri ?? pending.author.pfpUrl;
+    const handle = pending.author.username ? `@${pending.author.username}` : '';
+    const statusText = failed ? 'Failed to send' : sent ? 'Posted' : 'Sending…';
+    return (
+      <View
+        key={pending.localId}
+        style={{
+          paddingLeft: 16 + indent,
+          paddingRight: 16,
+          paddingVertical: 12,
+          flexDirection: 'row',
+          opacity: failed || sent ? 1 : 0.7,
+        }}
+      >
+        {/* Avatar — mirrors a real cast row */}
+        <CachedAvatar
+          source={avatarUri ? { uri: avatarUri } : null}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: Skin.radius(22),
+            backgroundColor: theme.colors.surface3,
+            marginRight: Skin.space(12),
+          }}
+        />
+        <View style={{ flex: 1 }}>
+          {/* Header: display name */}
+          <Text
+            style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}
+            numberOfLines={1}
+          >
+            {pending.author.displayName || pending.author.username || 'You'}
+          </Text>
+          {/* Handle • status (status sits where the timestamp would) */}
+          <Text style={{ fontSize: Skin.font(13), marginTop: Skin.space(2) }} numberOfLines={1}>
+            <Text style={{ color: theme.colors.textMuted }}>{handle ? `${handle} • ` : ''}</Text>
+            <Text style={{ color: failed ? theme.colors.danger : theme.colors.textMuted }}>
+              {statusText}
+            </Text>
+          </Text>
+          {/* Body */}
+          <Text
+            style={{
+              color: theme.colors.textMain,
+              fontSize: Skin.font(15),
+              lineHeight: Skin.font(21),
+              marginTop: Skin.space(6),
+            }}
+          >
+            {pending.text}
+          </Text>
+          {/* Failed-state actions */}
+          {failed && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Skin.space(8), gap: Skin.space(16) }}>
+              <TouchableOpacity onPress={() => optimistic.retryPending(pending.localId)} hitSlop={8}>
+                <Text style={{ color: theme.colors.primary, fontSize: Skin.font(13), fontWeight: '600' }}>
+                  Retry
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => optimistic.discardPending(pending.localId)} hitSlop={8}>
+                <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>Discard</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   const renderCast = (cast: FlattenedCast, isMain = false, showBackArrow = false) => {
     // Defensive: a malformed cast (typically a placeholder passed in
     // from a surface whose shape differs from the thread API) used to
     // crash here at `cast.author.fid`. Render nothing instead of
     // throwing — the real cast replaces this on fetch completion.
     if (!cast || !cast.author) return null;
+
+    // Optimistic pending reply (not yet confirmed by the server).
+    const pendingReply = (cast as { __pending?: PendingCast }).__pending;
+    if (pendingReply) return renderPendingReply(cast, pendingReply);
+
+    // Optimistically deleted (the user just removed it) — hide immediately.
+    if (cast.hash && optimistic.isDeleted(cast.hash)) return null;
 
     // Governance: annotate FOR/AGAINST vote replies with the voter's points,
     // but only inside a proposal thread (never in a normal thread).
@@ -2579,6 +2811,7 @@ function ThreadDetailView({
             authorUsername={cast.author.username}
             castText={cast.text}
             onReport={(hash, castAuthorFid) => setReportCastTarget({ castHash: hash, castAuthorFid })}
+            onDelete={(hash) => optimistic.deleteCast(hash)}
             theme={theme}
           />
         </View>
@@ -2641,14 +2874,14 @@ function ThreadDetailView({
             {imageUrls.length === 1 ? (
               <AutoHeightImage
                 uri={imageUrls[0]}
-                maxHeight={SCREEN_HEIGHT * 0.6}
+                maxHeight={Infinity}
                 style={{ backgroundColor: theme.colors.surface3 }}
                 onPress={() => setViewerState({ images: imageUrls, index: 0 })}
               />
             ) : (
               <ImageCarousel
                 urls={imageUrls}
-                maxHeight={SCREEN_HEIGHT * 0.6}
+                maxHeight={Infinity}
                 theme={theme}
                 onImagePress={(_, index) => setViewerState({ images: imageUrls, index })}
               />
@@ -3558,14 +3791,14 @@ export function ProfileView({
             {imageUrls.length === 1 ? (
               <AutoHeightImage
                 uri={imageUrls[0]}
-                maxHeight={SCREEN_HEIGHT * 0.6}
+                maxHeight={Infinity}
                 style={{ backgroundColor: theme.colors.surface3 }}
                 onPress={() => setViewerState({ images: imageUrls, index: 0 })}
               />
             ) : (
               <ImageCarousel
                 urls={imageUrls}
-                maxHeight={SCREEN_HEIGHT * 0.6}
+                maxHeight={Infinity}
                 theme={theme}
                 onImagePress={(_, index) => setViewerState({ images: imageUrls, index })}
               />
@@ -4127,14 +4360,14 @@ function ChannelView({
             {imageUrls.length === 1 ? (
               <AutoHeightImage
                 uri={imageUrls[0]}
-                maxHeight={SCREEN_HEIGHT * 0.6}
+                maxHeight={Infinity}
                 style={{ backgroundColor: theme.colors.surface3 }}
                 onPress={() => setViewerState({ images: imageUrls, index: 0 })}
               />
             ) : (
               <ImageCarousel
                 urls={imageUrls}
-                maxHeight={SCREEN_HEIGHT * 0.6}
+                maxHeight={Infinity}
                 theme={theme}
                 onImagePress={(_, index) => setViewerState({ images: imageUrls, index })}
               />
@@ -4442,6 +4675,7 @@ interface FeedPostCardProps {
   onOpenShareSheet: (hash: string, author: string, text: string, isRecasted: boolean, recastCount: number, authorFid?: number) => void;
   onFollow: (fid: number) => void;
   onReport: (castHash: string, authorFid?: number) => void;
+  onDelete: (castHash: string) => void;
 }
 
 // Square media-grid cell — used by the "Media" filter to render the
@@ -4635,6 +4869,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
   onOpenShareSheet,
   onFollow,
   onReport,
+  onDelete,
 }: FeedPostCardProps) {
   const queryClient = useQueryClient();
   const navigateToThread = useCallback(() => {
@@ -4748,6 +4983,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
           authorUsername={post.username}
           castText={post.content}
           onReport={onReport}
+          onDelete={onDelete}
           theme={theme}
         />
       </Pressable>
@@ -4786,14 +5022,14 @@ const FeedPostCard = React.memo(function FeedPostCard({
           {post.mediaUrls.length === 1 ? (
             <AutoHeightImage
               uri={post.mediaUrls[0]}
-              maxHeight={SCREEN_HEIGHT * 0.6}
+              maxHeight={Infinity}
               style={styles.postMedia}
               onPress={() => onImagePress(post.mediaUrls, 0)}
             />
           ) : (
             <ImageCarousel
               urls={post.mediaUrls}
-              maxHeight={SCREEN_HEIGHT * 0.6}
+              maxHeight={Infinity}
               theme={theme}
               onImagePress={(_, index) => onImagePress(post.mediaUrls, index)}
             />
@@ -5224,8 +5460,15 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     pushScreen({ type: 'channel', channelKey });
   }, [pushScreen]);
 
-  // Track optimistic like states: hash -> { liked: boolean, count: number }
-  const [likeStates, setLikeStates] = useState<Map<string, { liked: boolean; count: number }>>(new Map());
+  // Optimistic like/recast/follow now live in the persistent feed-optimistic
+  // store (survive remounts, shared across every view). Reading its live
+  // immutable maps preserves the existing `likeStates`/`recastStates`/
+  // `followStates` prop + FlashList `extraData` contract unchanged.
+  // Mounting the hook here also keeps the background pending-cast submit
+  // queue running feed-wide.
+  const optimistic = useFeedOptimistic();
+  const { toggleLike, toggleRecast, toggleFollow } = optimistic;
+  const likeStates = optimistic.getLikes();
 
   // Image viewer state for feed images
   const [feedViewerState, setFeedViewerState] = useState<{ images: string[]; index: number } | null>(null);
@@ -5245,91 +5488,33 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     castAuthorFid?: number;
   } | null>(null);
 
-  const handleLikeToggle = useCallback(async (castHash: string, currentlyLiked: boolean, currentCount: number) => {
-    if (!token) return;
+  const handleLikeToggle = useCallback(
+    (castHash: string, currentlyLiked: boolean, currentCount: number) => {
+      void toggleLike(castHash, currentlyLiked, currentCount);
+    },
+    [toggleLike],
+  );
 
-    const newLiked = !currentlyLiked;
-    const newCount = newLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
+  // Optimistic recast states now read from the store (see `optimistic` above).
+  const recastStates = optimistic.getRecasts();
 
-    // Optimistic update
-    setLikeStates((prev) => {
-      const next = new Map(prev);
-      next.set(castHash, { liked: newLiked, count: newCount });
-      return next;
-    });
+  const handleRecastToggle = useCallback(
+    (castHash: string, currentlyRecasted: boolean, currentCount: number) => {
+      void toggleRecast(castHash, currentlyRecasted, currentCount);
+    },
+    [toggleRecast],
+  );
 
-    try {
-      if (newLiked) {
-        await likeCast({ token, castHash });
-      } else {
-        await unlikeCast({ token, castHash });
-      }
-    } catch (e) {
-      // Revert on failure
-      setLikeStates((prev) => {
-        const next = new Map(prev);
-        next.set(castHash, { liked: currentlyLiked, count: currentCount });
-        return next;
-      });
-    }
-  }, [token]);
+  // Optimistic follow states now read from the store.
+  const followStates = optimistic.getFollows();
 
-  // Track optimistic recast states: hash -> { recasted: boolean, count: number }
-  const [recastStates, setRecastStates] = useState<Map<string, { recasted: boolean; count: number }>>(new Map());
-
-  const handleRecastToggle = useCallback(async (castHash: string, currentlyRecasted: boolean, currentCount: number) => {
-    if (!token) return;
-
-    const newRecasted = !currentlyRecasted;
-    const newCount = newRecasted ? currentCount + 1 : Math.max(0, currentCount - 1);
-
-    // Optimistic update
-    setRecastStates((prev) => {
-      const next = new Map(prev);
-      next.set(castHash, { recasted: newRecasted, count: newCount });
-      return next;
-    });
-
-    try {
-      if (newRecasted) {
-        await recastCast({ token, castHash });
-      } else {
-        await unrecastCast({ token, castHash });
-      }
-    } catch (e) {
-      // Revert on failure
-      setRecastStates((prev) => {
-        const next = new Map(prev);
-        next.set(castHash, { recasted: currentlyRecasted, count: currentCount });
-        return next;
-      });
-    }
-  }, [token]);
-
-  // Track optimistic follow states: fid -> following
-  const [followStates, setFollowStates] = useState<Map<number, boolean>>(new Map());
-
-  const handleFollow = useCallback(async (fid: number) => {
-    if (!token) return;
-
-    // Optimistic update - immediately show as following
-    setFollowStates((prev) => {
-      const next = new Map(prev);
-      next.set(fid, true);
-      return next;
-    });
-
-    try {
-      await followUser({ token, targetFid: fid });
-    } catch (e) {
-      // Revert on failure
-      setFollowStates((prev) => {
-        const next = new Map(prev);
-        next.delete(fid);
-        return next;
-      });
-    }
-  }, [token]);
+  const handleFollow = useCallback(
+    (fid: number) => {
+      // The follow button only renders when not already following.
+      void toggleFollow(fid, false);
+    },
+    [toggleFollow],
+  );
 
   // Quote cast handler - opens compose modal with quote embed
   const [quoteCastEmbed, setQuoteCastEmbed] = useState<{ hash: string; author: string; text: string } | null>(null);
@@ -5408,6 +5593,10 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   const handleReportCast = useCallback((castHash: string, castAuthorFid?: number) => {
     setFeedReportTarget({ castHash, castAuthorFid });
   }, []);
+
+  const handleDeleteCast = useCallback((castHash: string) => {
+    void optimistic.deleteCast(castHash);
+  }, [optimistic.deleteCast]);
 
   const {
     data: farcasterItems,
@@ -5937,6 +6126,13 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     setSelectedImages(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Drop optimistic pending top-level casts once the server feed includes
+  // them (matched by the confirmed hash set after the background submit).
+  useEffect(() => {
+    if (posts && posts.length) optimistic.reconcilePendingByHash(posts.map((p) => p.hash));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts, optimistic.reconcilePendingByHash]);
+
   const handleSubmitCast = async () => {
     if (!canPost) {
       if (!token) {
@@ -5985,6 +6181,34 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         composeProposalMode && !/^PROPOSAL:/i.test(trimmedText)
           ? `PROPOSAL: ${trimmedText}`
           : trimmedText;
+
+      // Optimistic path for plain casts / quotes — submit in the
+      // background (with retry) and show the cast instantly at the top of
+      // the feed. Mini-app compose needs the real hash synchronously, and
+      // proposals refetch governance, so those keep the awaited path.
+      const isMiniApp = !!miniAppComposeResolverRef.current;
+      if (!isMiniApp && !composeProposalMode) {
+        if (quoteCastEmbed) {
+          optimistic.postQuote({
+            quotedHash: quoteCastEmbed.hash,
+            embedUrls: embeds,
+            text: finalText,
+            channelKey: composeChannelKey,
+          });
+        } else {
+          optimistic.postTop({ text: finalText, embedUrls: embeds, channelKey: composeChannelKey });
+        }
+        setCastText('');
+        setSelectedImages([]);
+        setMiniAppEmbeds([]);
+        setQuoteCastEmbed(null);
+        setComposeChannelKey(undefined);
+        setComposeProposalMode(false);
+        setComposeVisible(false);
+        // Pull the real cast in (and reconcile the pending stub) shortly.
+        setTimeout(() => { void refetch(); }, 3000);
+        return;
+      }
 
       const result = await submitMainCast({
         text: finalText,
@@ -6411,6 +6635,81 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                       <Text style={styles.stateText}>No casts match this filter yet.</Text>
                     </View>
                   )}
+
+                  {/* Optimistic pending top-level casts / quotes — shown at
+                      the top of the feed while they submit in the
+                      background, with a Retry/Discard reprompt on failure. */}
+                  {activeFilter !== 'media' && activeFilter !== 'governance' &&
+                    optimistic.pendingTopLevel().map((p) => {
+                      const failed = p.status === 'failed';
+                      // 'sent' = landed; waiting for the server to index it so
+                      // the real cast replaces this stub (never a stuck "Sending…").
+                      const sent = p.status === 'sent';
+                      // Current user's own pfp captured at post time.
+                      const avatarUri = p.author.pfpUrl;
+                      const handle = p.author.username ? `@${p.author.username}` : '';
+                      const statusText = failed ? 'Failed to send' : sent ? 'Posted' : 'Sending…';
+                      return (
+                        <View
+                          key={p.localId}
+                          style={{
+                            flexDirection: 'row',
+                            paddingHorizontal: 16,
+                            paddingVertical: 12,
+                            borderBottomWidth: StyleSheet.hairlineWidth,
+                            borderBottomColor: theme.colors.border,
+                            opacity: failed || sent ? 1 : 0.7,
+                          }}
+                        >
+                          {/* Avatar — mirrors a real feed cast */}
+                          <CachedAvatar
+                            source={avatarUri ? { uri: avatarUri } : null}
+                            style={{
+                              width: 44,
+                              height: 44,
+                              borderRadius: Skin.radius(22),
+                              backgroundColor: theme.colors.surface3,
+                              marginRight: Skin.space(12),
+                            }}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}
+                              numberOfLines={1}
+                            >
+                              {p.author.displayName || p.author.username || 'You'}
+                            </Text>
+                            {/* Handle • status (status sits where the timestamp would) */}
+                            <Text style={{ fontSize: Skin.font(13), marginTop: Skin.space(2) }} numberOfLines={1}>
+                              <Text style={{ color: theme.colors.textMuted }}>{handle ? `${handle} • ` : ''}</Text>
+                              <Text style={{ color: failed ? theme.colors.danger : theme.colors.textMuted }}>
+                                {statusText}
+                              </Text>
+                            </Text>
+                            <Text
+                              style={{
+                                color: theme.colors.textMain,
+                                fontSize: Skin.font(15),
+                                lineHeight: Skin.font(21),
+                                marginTop: Skin.space(6),
+                              }}
+                            >
+                              {p.text}
+                            </Text>
+                            {failed && (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Skin.space(8), gap: Skin.space(16) }}>
+                                <TouchableOpacity onPress={() => optimistic.retryPending(p.localId)} hitSlop={8}>
+                                  <Text style={{ color: theme.colors.primary, fontSize: Skin.font(13), fontWeight: '600' }}>Retry</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => optimistic.discardPending(p.localId)} hitSlop={8}>
+                                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>Discard</Text>
+                                </TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })}
                 </>
               }
               ListFooterComponent={
@@ -6421,6 +6720,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                 ) : null
               }
               renderItem={({ item: post }) =>
+                optimistic.isDeleted(post.hash) ? null :
                 activeFilter === 'media' ? (
                   <MediaGridCell
                     post={post}
@@ -6455,6 +6755,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                       onOpenShareSheet={handleOpenShareSheet}
                       onFollow={handleFollow}
                       onReport={handleReportCast}
+                      onDelete={handleDeleteCast}
                     />
                     {post.isProposal && (
                       <ProposalVoteBlock

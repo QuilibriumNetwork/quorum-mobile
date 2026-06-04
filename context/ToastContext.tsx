@@ -3,7 +3,7 @@
  */
 
 import { Toast } from '@/components/ui/Toast';
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 interface ToastData {
@@ -37,8 +37,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToast(prev => ({ ...prev, visible: false }));
   }, []);
 
+  // Memoized (callbacks are stable) so showing/hiding a toast doesn't
+  // re-render every useToast() consumer across the app.
+  const value = useMemo(() => ({ showToast, hideToast }), [showToast, hideToast]);
+
   return (
-    <ToastContext.Provider value={{ showToast, hideToast }}>
+    <ToastContext.Provider value={value}>
       {children}
       {toast.visible && (
         <View style={styles.toastContainer} pointerEvents="box-none">

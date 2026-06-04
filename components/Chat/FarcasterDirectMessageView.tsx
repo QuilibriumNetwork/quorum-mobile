@@ -30,7 +30,7 @@ import {
 } from '@/hooks/chat';
 import { useAuth } from '@/context/AuthContext';
 import { pickImage, type ProcessedAttachment } from '@/services/media/imageAttachment';
-import { uploadFarcasterImage, type DirectCastMessageMetadata } from '@/services/farcasterClient';
+import { uploadFarcasterImage, type DirectCastMessageMetadata, type DirectCastMessage } from '@/services/farcasterClient';
 import * as Skin from '@/theme/skins/geometry';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -72,12 +72,38 @@ export function FarcasterDirectMessageView({
   const addReactionMutation = useAddFarcasterDirectCastReaction();
   const removeReactionMutation = useRemoveFarcasterDirectCastReaction();
 
-  // Convert DirectCastMessages to DisplayMessages
+  // Convert DirectCastMessages to DisplayMessages.
+  // The query polls every few seconds and React Query's structural sharing
+  // keeps *unchanged* message objects referentially stable. We exploit that:
+  //  - reuse the prior DisplayMessage for any source message whose ref is
+  //    unchanged (per-message cache), and
+  //  - if NONE changed, return the exact same array reference,
+  // so an idle poll produces no new objects and downstream memoized
+  // consumers (MessagesList) skip re-rendering — which is what was churning
+  // render memory every 3s on large/long conversations.
+  const dmCacheRef = useRef(new Map<DirectCastMessage, DisplayMessage>());
+  const prevResultRef = useRef<DisplayMessage[]>([]);
+  const prevSourceRef = useRef<DirectCastMessage[]>([]);
   const displayMessages = useMemo(() => {
     const allMessages = messagesQuery.data?.pages.flatMap((page) => page.messages) ?? [];
-    // Farcaster returns messages newest first, we need oldest first for chat display
+    const unchanged =
+      allMessages.length === prevSourceRef.current.length &&
+      allMessages.every((m, i) => m === prevSourceRef.current[i]);
+    if (unchanged && prevResultRef.current.length) return prevResultRef.current;
+
+    const nextCache = new Map<DirectCastMessage, DisplayMessage>();
+    // Farcaster returns messages newest first; we need oldest first for chat.
     const reversed = [...allMessages].reverse();
-    return reversed.map((msg) => directCastToDisplayMessage(msg, currentUserFid));
+    const result = reversed.map((msg) => {
+      const cached = dmCacheRef.current.get(msg);
+      const dm = cached ?? directCastToDisplayMessage(msg, currentUserFid);
+      nextCache.set(msg, dm);
+      return dm;
+    });
+    dmCacheRef.current = nextCache; // drop entries for messages no longer present
+    prevSourceRef.current = allMessages;
+    prevResultRef.current = result;
+    return result;
   }, [messagesQuery.data, currentUserFid]);
 
   // Mark as read when viewing

@@ -70,7 +70,37 @@ export function useFarcasterSubmitCast(options: UseFarcasterSubmitCastOptions = 
 
   const submitCast = useCallback(
     async (input: SubmitCastInput): Promise<SubmitCastResult> => {
-      const wantMentions = input.extractMentions ?? true;
+      // Decide the publish path up front, because the two paths want the
+      // text preprocessed in OPPOSITE ways:
+      //   - hypersnap (protocol) path: `@username` must be STRIPPED out of
+      //     the stored text and supplied as an aligned
+      //     (mentions, mentionsPositions) pair (byte offsets into the
+      //     stripped text).
+      //   - legacy `/v2/casts` path: `@username` must be left INLINE — the
+      //     server resolves handles itself and has no mentions-array field
+      //     (see `submitViaLegacy` in quorum-shared, which forwards neither
+      //     `mentions` nor `mentionsPositions`).
+      // Running extractMentions and *then* falling through to legacy strips
+      // the handle from the text AND sends no mentions array, so the mention
+      // vanishes entirely. So only extract when hypersnap will actually run;
+      // otherwise leave the handle inline for the server to resolve.
+      //
+      // Mirrors the path decision inside `useSubmitCast`: hypersnap is used
+      // only when a signer record exists for this fid and the parent (if a
+      // reply) carries a fid.
+      const parentMissingFid =
+        !!input.parent && 'castHashHex' in input.parent && input.parent.fid == null;
+      let willUseHypersnap = false;
+      if (!parentMissingFid && fid != null) {
+        try {
+          const record = await hypersnapSignerStore.get();
+          willUseHypersnap = !!record && record.fid === fid;
+        } catch {
+          willUseHypersnap = false;
+        }
+      }
+
+      const wantMentions = (input.extractMentions ?? true) && willUseHypersnap;
       const { text, mentions, mentionsPositions } = wantMentions
         ? await extractMentions(input.text, qc)
         : { text: input.text, mentions: [] as number[], mentionsPositions: [] as number[] };

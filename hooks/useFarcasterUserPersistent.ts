@@ -44,7 +44,13 @@ export function useFarcasterUserPersistent(
     enabled: options.enabled,
     token: options.token,
     staleTime: STALE_TIME_MS,
-    gcTime: Infinity,
+    // Bound RAM: evict the in-memory entry 5 min after the last observer
+    // unmounts (e.g. the user scrolls off-screen). The MMKV layer above
+    // (initialData) is the persistent source, so eviction just means a
+    // cheap disk re-read on next mount — not a network refetch. `Infinity`
+    // here meant every Farcaster user ever resolved stayed in the JS heap
+    // for the whole session, which grows unbounded on a long feed scroll.
+    gcTime: 5 * 60 * 1000,
     initialData,
   });
 

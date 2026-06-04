@@ -46,8 +46,10 @@ import {
 import {
   connectToSpace,
   fidFromIdentity,
+  requestMicrophonePermission,
   type ConnectedSpaceRoom,
   type ReactionPayload,
+  type SpaceRoomEvents,
 } from '@/services/spaces/livekitRoom';
 import {
   fetchSpaceChat,
@@ -402,6 +404,13 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
   // Previous role, so we can detect listener→speaker transitions to
   // auto-prompt mic enable after the host accepts a stage invite.
   const prevRoleRef = React.useRef<SpaceRole>('listener');
+  // Set by the connection effect. Re-establishes the LiveKit connection
+  // with a fresh, publish-capable token when we're promoted to a
+  // speaking role mid-session (the listener token has no publish grant,
+  // so the mic can't come up otherwise — the "restart the app to speak"
+  // bug). Lives in a ref so the accept-invite handler (component scope)
+  // can trigger it immediately instead of waiting for the next poll.
+  const reconnectForSpeakingRef = React.useRef<(() => void) | null>(null);
   // Effective cast anchor for chat. Seeded from `join({castHash})` and
   // promoted from `room.rootCastHash` after the first snapshot poll
   // when not provided at join time. Lives in a ref so callbacks
@@ -515,6 +524,111 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
     // transition. Declared up front to keep both branches symmetric.
     let livePollStarted = false;
 
+    // The role our current LiveKit token was minted for. A listener
+    // token carries no publish grant, so if we're later promoted we must
+    // reconnect with a fresh token before the mic can come up.
+    let connectionRole: SpaceRole = 'listener';
+    // Guards the reconnect so the poll and accept-invite paths can't both
+    // fire it, and so the deliberate disconnect inside it isn't mistaken
+    // for a server kick.
+    let reconnecting = false;
+
+    const isPublisherRole = (r: SpaceRole) =>
+      r === 'host' || r === 'cohost' || r === 'speaker';
+
+    // Callback set shared by the initial connect and any reconnect, so a
+    // reconnect re-wires the exact same handlers.
+    const callbacks: SpaceRoomEvents = {
+      onActiveSpeakersChange: setActiveSpeakerIdentities,
+      onReaction: (payload: ReactionPayload) => {
+        // Append + auto-purge so the overlay can animate them as a
+        // short-lived stream without growing an unbounded array.
+        const ev: ReactionEvent = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          emoji: payload.emoji,
+          fid: payload.fid,
+          receivedAt: Date.now(),
+        };
+        setReactions((prev) => [...prev, ev]);
+        setTimeout(() => {
+          setReactions((prev) => prev.filter((r) => r.id !== ev.id));
+        }, REACTION_TTL_MS);
+      },
+      onDisconnected: () => {
+        // A reconnect tears down the old room on purpose — don't treat
+        // that as the server kicking us out.
+        if (reconnecting) return;
+        // The server kicked us — clean up local state but leave the
+        // active entry so the overlay can show an "ended" message before
+        // the user dismisses.
+        setState('idle');
+      },
+      onLocalVideoChanged: (url) => {
+        setLocalCameraStreamURL(url);
+        setCameraEnabled(url != null);
+      },
+      onRemoteVideoAdded: (identity, url) => {
+        const fid = fidFromIdentity(identity);
+        if (fid == null) return;
+        setRemoteVideoStreams((prev) => ({ ...prev, [fid]: url }));
+      },
+      onRemoteVideoRemoved: (identity) => {
+        const fid = fidFromIdentity(identity);
+        if (fid == null) return;
+        setRemoteVideoStreams((prev) => {
+          if (!(fid in prev)) return prev;
+          const next = { ...prev };
+          delete next[fid];
+          return next;
+        });
+      },
+    };
+
+    // Re-establish the connection with a publish-capable token after a
+    // promotion to host/cohost/speaker. The listener token we joined with
+    // has no publish grant, so LiveKit silently refuses the mic track (and
+    // on Android the native capture path never initializes) — which is why
+    // speaking only worked after a full app restart. This does what the
+    // restart did, scoped to the room: fetch a fresh token (now minted for
+    // our speaker role), grant the mic, swap the connection, enable mic.
+    const reconnectForSpeaking = async () => {
+      if (reconnecting || cancelled || activeIdRef.current !== active.id) return;
+      reconnecting = true;
+      try {
+        const fresh = await joinAudioRoom(active.id, farcasterAuthToken);
+        if (cancelled || activeIdRef.current !== active.id) return;
+        // Grant the mic BEFORE building the new PeerConnection so the
+        // native audio device module comes up able to capture.
+        await requestMicrophonePermission();
+        const old = connectedRef.current;
+        connectedRef.current = null;
+        if (old) {
+          try { await old.disconnect(); } catch { /* ignore */ }
+        }
+        const connected = await connectToSpace(fresh.wsUrl, fresh.token, callbacks);
+        if (cancelled || activeIdRef.current !== active.id) {
+          await connected.disconnect();
+          return;
+        }
+        connectedRef.current = connected;
+        connectionRole = fresh.role;
+        // Restore the loudspeaker/earpiece route the user had picked.
+        QuorumCrypto.setSpeakerphoneEnabled(isSpeakerOnRef.current).catch(() => { /* ignore */ });
+        // Auto-enable the mic so the freshly-promoted speaker isn't left
+        // silent; they can mute afterward from the control bar.
+        const on = await connected.setMicEnabled(true);
+        setMicEnabled(on);
+      } catch (e) {
+        logger.warn(
+          '[AudioSpace] reconnect-as-speaker failed:',
+          e instanceof Error ? e.message : e,
+        );
+      } finally {
+        reconnecting = false;
+      }
+    };
+    reconnectForSpeakingRef.current = () => { void reconnectForSpeaking(); };
+
     const startLivePoll = (roomId: string, initialCastHash: string | undefined) => {
       if (livePollStarted) return;
       livePollStarted = true;
@@ -587,6 +701,13 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
             if (self && self.role !== prevRoleRef.current) {
               prevRoleRef.current = self.role;
               setRole(self.role);
+              // Promoted into a speaking role while connected as a
+              // listener? Reconnect with a publish-capable token so the
+              // mic works without an app restart. (No-op if the
+              // accept-invite path already kicked this off.)
+              if (isPublisherRole(self.role) && !isPublisherRole(connectionRole)) {
+                void reconnectForSpeaking();
+              }
             }
             if (self && typeof self.handRaised === 'boolean') {
               setHandRaised(self.handRaised);
@@ -662,53 +783,13 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
         setRole(join.role);
         setState('connecting');
 
-        const connected = await connectToSpace(join.wsUrl, join.token, {
-          onActiveSpeakersChange: setActiveSpeakerIdentities,
-          onReaction: (payload: ReactionPayload) => {
-            // Append + auto-purge so the overlay can animate them as a
-            // short-lived stream without growing an unbounded array.
-            const ev: ReactionEvent = {
-              id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              emoji: payload.emoji,
-              fid: payload.fid,
-              receivedAt: Date.now(),
-            };
-            setReactions((prev) => [...prev, ev]);
-            setTimeout(() => {
-              setReactions((prev) => prev.filter((r) => r.id !== ev.id));
-            }, REACTION_TTL_MS);
-          },
-          onDisconnected: () => {
-            // The server kicked us — clean up local state but leave the
-            // active entry so the overlay can show an "ended" message
-            // before the user dismisses.
-            setState('idle');
-          },
-          onLocalVideoChanged: (url) => {
-            setLocalCameraStreamURL(url);
-            setCameraEnabled(url != null);
-          },
-          onRemoteVideoAdded: (identity, url) => {
-            const fid = fidFromIdentity(identity);
-            if (fid == null) return;
-            setRemoteVideoStreams((prev) => ({ ...prev, [fid]: url }));
-          },
-          onRemoteVideoRemoved: (identity) => {
-            const fid = fidFromIdentity(identity);
-            if (fid == null) return;
-            setRemoteVideoStreams((prev) => {
-              if (!(fid in prev)) return prev;
-              const next = { ...prev };
-              delete next[fid];
-              return next;
-            });
-          },
-        });
+        const connected = await connectToSpace(join.wsUrl, join.token, callbacks);
         if (cancelled || activeIdRef.current !== active.id) {
           await connected.disconnect();
           return;
         }
         connectedRef.current = connected;
+        connectionRole = join.role;
         setState('connected');
 
         // Apply the audio-output preference now that WebRTC owns the
@@ -831,13 +912,13 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
     if (!active || !farcasterAuthToken) return;
     try {
       await acceptStageInviteApi(active.id, farcasterAuthToken);
-      // Server flips our role to 'speaker' on the next snapshot, which
-      // the poll picks up. We also auto-enable the mic so the user
-      // doesn't land on a "speaker but silent" state — they can mute
-      // afterward via the control bar.
-      setTimeout(() => {
-        connectedRef.current?.setMicEnabled(true).then((on) => setMicEnabled(on));
-      }, 500);
+      // The server has now flipped us to 'speaker'. Our LiveKit
+      // connection was opened as a listener (no publish grant), so we
+      // can't just enable the mic on it — we reconnect with a fresh,
+      // publish-capable token and auto-enable the mic. Fired immediately
+      // here for responsiveness; the role-change poll is the fallback if
+      // this provider somehow has no live connection yet.
+      reconnectForSpeakingRef.current?.();
     } catch {
       // No state mutation on failure — keeps the modal visible so the
       // user can retry.

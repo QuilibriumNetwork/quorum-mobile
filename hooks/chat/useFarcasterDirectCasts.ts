@@ -3,7 +3,16 @@
  */
 
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import {
+  getCachedDMConversations,
+  setCachedDMConversations,
+  getCachedDMMessages,
+  setCachedDMMessages,
+  type CachedConversations,
+  type CachedMessages,
+} from '@/services/farcaster/farcasterDMCache';
 import {
   getDirectCastConversations,
   getDirectCastMessages,
@@ -81,7 +90,10 @@ export function useFarcasterConversations(options?: { enabled?: boolean }) {
   const hasFarcaster = !!user?.farcaster?.fid;
   const currentUserFid = user?.farcaster?.fid;
 
-  return useInfiniteQuery({
+  // Paint the inbox instantly from MMKV, then refresh in the background.
+  const initialData = useMemo(() => getCachedDMConversations(), []);
+
+  const query = useInfiniteQuery({
     queryKey: farcasterDCQueryKeys.conversations,
     queryFn: async ({ pageParam }) => {
       if (!farcasterAuthToken) {
@@ -100,18 +112,32 @@ export function useFarcasterConversations(options?: { enabled?: boolean }) {
         requestsCount: result.requestsCount,
       };
     },
+    initialData,
+    // Treat the cached data as stale so the background refresh still runs.
+    initialDataUpdatedAt: 0,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: (options?.enabled ?? true) && hasFarcaster && !!farcasterAuthToken,
-    staleTime: 15000, // 15 seconds — short enough that the inbox stays
-    // fresh, long enough not to spam the Farcaster API.
+    // Cache-first: the Messages tab must paint instantly on focus, not
+    // block on a network round-trip (the old `refetchOnMount:'always'`
+    // gated first paint for up to ~5s on slow connections). Cached
+    // conversations show immediately; the `refetchInterval` below keeps
+    // them fresh in the background so they're never more than ~15s stale.
+    staleTime: 60000,
     refetchInterval: 15000,
     refetchIntervalInBackground: true,
-    // Always refetch when the Messages tab re-mounts so the user sees a
-    // fresh inbox even when the previous mount was minutes ago.
-    refetchOnMount: 'always',
+    refetchOnMount: false,
     refetchOnWindowFocus: true,
   });
+
+  // Persist the freshest page so the next launch/open paints instantly.
+  useEffect(() => {
+    if (query.isFetched && query.data && query.data.pages.length > 0) {
+      setCachedDMConversations(query.data as CachedConversations);
+    }
+  }, [query.data, query.isFetched]);
+
+  return query;
 }
 
 /**
@@ -128,7 +154,10 @@ export function useFarcasterDirectCastMessages(
     ? conversationId.slice(10)
     : conversationId;
 
-  return useInfiniteQuery({
+  // Paint the open DM instantly from MMKV, then refresh in the background.
+  const initialData = useMemo(() => getCachedDMMessages(fcConversationId), [fcConversationId]);
+
+  const query = useInfiniteQuery({
     queryKey: farcasterDCQueryKeys.messages(fcConversationId ?? ''),
     queryFn: async ({ pageParam }) => {
       if (!farcasterAuthToken || !fcConversationId) {
@@ -147,16 +176,22 @@ export function useFarcasterDirectCastMessages(
         nextCursor: result.nextCursor,
       };
     },
+    initialData,
+    // Treat the cached page as stale so the background refresh still runs.
+    initialDataUpdatedAt: 0,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: (options?.enabled ?? true) && !!farcasterAuthToken && !!fcConversationId,
-    // Aggressive polling while the chat is actually open — the user
-    // is expecting near-real-time message delivery. The infinite-query
-    // refetchInterval only re-runs page 0, which is exactly what we
-    // want for "newest first" message arrays.
+    // Poll while the chat is open for near-real-time delivery, but NOT in
+    // the background: `refetchIntervalInBackground` kept re-fetching +
+    // re-rendering the entire (large) message view every 3s even when the
+    // app/DM wasn't on screen, churning render memory until low-RAM (2GB)
+    // devices OOM. Foreground-only polling + the referentially-stable
+    // `displayMessages` mapping in FarcasterDirectMessageView stop the
+    // unnecessary re-renders.
     staleTime: 3000,
-    refetchInterval: 3000,
-    refetchIntervalInBackground: true,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
     // Forces an immediate refresh when navigating into a chat —
     // otherwise the user lands on a screen with potentially-minutes-old
     // state, waits ~3s for the first poll, and only then sees fresh
@@ -164,6 +199,15 @@ export function useFarcasterDirectCastMessages(
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
   });
+
+  // Persist the freshest page so re-opening this DM paints instantly.
+  useEffect(() => {
+    if (query.isFetched && query.data && (query.data.pages[0]?.messages.length ?? 0) > 0) {
+      setCachedDMMessages(fcConversationId, query.data as CachedMessages);
+    }
+  }, [query.data, query.isFetched, fcConversationId]);
+
+  return query;
 }
 
 // Type for infinite query data structure

@@ -97,6 +97,12 @@ export function useMessages({
     enabled: enabled && !!spaceId && !!channelId,
     staleTime: MESSAGES_STALE_TIME_MS,
     gcTime: MESSAGES_GC_TIME_MS,
+    // Cap retained pages so a long session / large scrollback doesn't
+    // pin every page in the (Hermes-native) heap for the full 30-min
+    // gcTime. Older pages drop from memory and refetch from SQLite on
+    // scroll-up. Bidirectional query, so scrolling one way trims the
+    // other end.
+    maxPages: 6,
     initialData,
     initialDataUpdatedAt: 0,
   });

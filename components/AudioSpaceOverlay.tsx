@@ -262,7 +262,10 @@ export function AudioSpaceOverlay() {
       visible
       transparent
       animationType="slide"
-      onRequestClose={minimize}
+      // A scheduled space isn't an active call, so there's nothing to keep
+      // alive in the background — dismissing should fully close it, not leave
+      // a draggable pill behind. Live/connecting spaces still minimize.
+      onRequestClose={state === 'scheduled' ? leave : minimize}
       statusBarTranslucent
     >
       <View style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
@@ -324,8 +327,16 @@ export function AudioSpaceOverlay() {
                 <Text style={{ color: theme.colors.danger, fontWeight: '600' }}>End</Text>
               </Pressable>
             )}
-            <Pressable onPress={minimize} hitSlop={12} style={styles.closeButton}>
-              <IconSymbol name="chevron.down" size={22} color={theme.colors.textMuted} />
+            <Pressable
+              onPress={state === 'scheduled' ? leave : minimize}
+              hitSlop={12}
+              style={styles.closeButton}
+            >
+              <IconSymbol
+                name={state === 'scheduled' ? 'xmark' : 'chevron.down'}
+                size={22}
+                color={theme.colors.textMuted}
+              />
             </Pressable>
           </View>
 
