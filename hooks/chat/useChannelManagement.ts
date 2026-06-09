@@ -5,7 +5,6 @@
  * - useAddChannel: Create a new channel
  * - useUpdateChannel: Update channel properties
  * - useDeleteChannel: Delete a channel
- * - usePinChannel: Pin/unpin a channel
  * - useAddGroup: Create a new channel group
  * - useUpdateGroup: Update group properties
  * - useDeleteGroup: Delete a channel group
@@ -224,59 +223,6 @@ export function useDeleteChannel() {
         ...space,
         groups: updatedGroups,
         modifiedDate: Date.now(),
-      };
-
-      saveSpace(updatedSpace);
-      const adapter = getMMKVAdapter();
-      await adapter.saveSpace(updatedSpace);
-    },
-    onSuccess: (_, params) => {
-      queryClient.invalidateQueries({ queryKey: ['channels', params.spaceId] });
-      queryClient.invalidateQueries({ queryKey: ['spaces', params.spaceId] });
-      queryClient.invalidateQueries({ queryKey: ['spaces'] });
-    },
-  });
-}
-
-interface PinChannelParams {
-  spaceId: string;
-  channelId: string;
-  isPinned: boolean;
-}
-
-/**
- * Pin or unpin a channel
- */
-export function usePinChannel() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (params: PinChannelParams): Promise<void> => {
-      const space = getSpace(params.spaceId);
-      if (!space) {
-        throw new Error('Space not found');
-      }
-
-      const timestamp = Date.now();
-      const updatedGroups = space.groups.map(group => ({
-        ...group,
-        channels: group.channels.map(channel => {
-          if (channel.channelId === params.channelId) {
-            return {
-              ...channel,
-              isPinned: params.isPinned,
-              pinnedAt: params.isPinned ? timestamp : undefined,
-              modifiedDate: timestamp,
-            };
-          }
-          return channel;
-        }),
-      }));
-
-      const updatedSpace: Space = {
-        ...space,
-        groups: updatedGroups,
-        modifiedDate: timestamp,
       };
 
       saveSpace(updatedSpace);

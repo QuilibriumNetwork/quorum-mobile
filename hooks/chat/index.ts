@@ -68,7 +68,6 @@ export {
   useAddChannel,
   useUpdateChannel,
   useDeleteChannel,
-  usePinChannel,
   useAddGroup,
   useUpdateGroup,
   useDeleteGroup,
