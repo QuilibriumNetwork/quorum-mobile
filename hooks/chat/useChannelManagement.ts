@@ -10,6 +10,11 @@
  * - useDeleteGroup: Delete a channel group
  * - useMoveChannel: Move a channel between groups or reorder within a group
  * - useReorderGroups: Reorder channel groups
+ * - useReorderChannels: Reorder channels within a group
+ *
+ * All mutations that modify the space manifest also broadcast the updated
+ * manifest to all members via the API and hub WebSocket, matching the
+ * pattern used by useRoleManagement and useSpaceSettings.
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +26,8 @@ import type { Space, Channel, Group } from '@quilibrium/quorum-shared';
 import { sha256 } from '@noble/hashes/sha2.js';
 import bs58 from 'bs58';
 import * as multihashes from 'multihashes';
+import { useWebSocket } from '@/context/WebSocketContext';
+import { broadcastSpaceUpdate } from '@/services/space/broadcastSpaceUpdate';
 
 /**
  * Derive address from public key using multihash
@@ -47,6 +54,7 @@ interface AddChannelParams {
  */
 export function useAddChannel() {
   const queryClient = useQueryClient();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: AddChannelParams): Promise<Channel> => {
@@ -112,6 +120,12 @@ export function useAddChannel() {
       const adapter = getMMKVAdapter();
       await adapter.saveSpace(updatedSpace);
 
+      // Broadcast to all members
+      enqueueOutbound(async () => {
+        const result = await broadcastSpaceUpdate(updatedSpace);
+        return result ? [result.wsEnvelope] : [];
+      });
+
       return newChannel;
     },
     onSuccess: (_, params) => {
@@ -138,6 +152,7 @@ interface UpdateChannelParams {
  */
 export function useUpdateChannel() {
   const queryClient = useQueryClient();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: UpdateChannelParams): Promise<Channel> => {
@@ -181,6 +196,12 @@ export function useUpdateChannel() {
       const adapter = getMMKVAdapter();
       await adapter.saveSpace(updatedSpace);
 
+      // Broadcast to all members
+      enqueueOutbound(async () => {
+        const result = await broadcastSpaceUpdate(updatedSpace);
+        return result ? [result.wsEnvelope] : [];
+      });
+
       return foundChannel;
     },
     onSuccess: (_, params) => {
@@ -201,6 +222,7 @@ interface DeleteChannelParams {
  */
 export function useDeleteChannel() {
   const queryClient = useQueryClient();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: DeleteChannelParams): Promise<void> => {
@@ -228,6 +250,12 @@ export function useDeleteChannel() {
       saveSpace(updatedSpace);
       const adapter = getMMKVAdapter();
       await adapter.saveSpace(updatedSpace);
+
+      // Broadcast to all members
+      enqueueOutbound(async () => {
+        const result = await broadcastSpaceUpdate(updatedSpace);
+        return result ? [result.wsEnvelope] : [];
+      });
     },
     onSuccess: (_, params) => {
       queryClient.invalidateQueries({ queryKey: ['channels', params.spaceId] });
@@ -249,6 +277,7 @@ interface AddGroupParams {
  */
 export function useAddGroup() {
   const queryClient = useQueryClient();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: AddGroupParams): Promise<Group> => {
@@ -274,6 +303,12 @@ export function useAddGroup() {
       const adapter = getMMKVAdapter();
       await adapter.saveSpace(updatedSpace);
 
+      // Broadcast to all members
+      enqueueOutbound(async () => {
+        const result = await broadcastSpaceUpdate(updatedSpace);
+        return result ? [result.wsEnvelope] : [];
+      });
+
       return newGroup;
     },
     onSuccess: (_, params) => {
@@ -294,6 +329,7 @@ interface DeleteGroupParams {
  */
 export function useDeleteGroup() {
   const queryClient = useQueryClient();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: DeleteGroupParams): Promise<void> => {
@@ -323,6 +359,12 @@ export function useDeleteGroup() {
       saveSpace(updatedSpace);
       const adapter = getMMKVAdapter();
       await adapter.saveSpace(updatedSpace);
+
+      // Broadcast to all members
+      enqueueOutbound(async () => {
+        const result = await broadcastSpaceUpdate(updatedSpace);
+        return result ? [result.wsEnvelope] : [];
+      });
     },
     onSuccess: (_, params) => {
       queryClient.invalidateQueries({ queryKey: ['channels', params.spaceId] });
@@ -345,6 +387,7 @@ interface UpdateGroupParams {
  */
 export function useUpdateGroup() {
   const queryClient = useQueryClient();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: UpdateGroupParams): Promise<Group> => {
@@ -379,6 +422,12 @@ export function useUpdateGroup() {
       const adapter = getMMKVAdapter();
       await adapter.saveSpace(updatedSpace);
 
+      // Broadcast to all members
+      enqueueOutbound(async () => {
+        const result = await broadcastSpaceUpdate(updatedSpace);
+        return result ? [result.wsEnvelope] : [];
+      });
+
       return updatedGroup;
     },
     onSuccess: (_, params) => {
@@ -402,6 +451,7 @@ interface MoveChannelParams {
  */
 export function useMoveChannel() {
   const queryClient = useQueryClient();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: MoveChannelParams): Promise<void> => {
@@ -459,6 +509,12 @@ export function useMoveChannel() {
       saveSpace(updatedSpace);
       const adapter = getMMKVAdapter();
       await adapter.saveSpace(updatedSpace);
+
+      // Broadcast to all members
+      enqueueOutbound(async () => {
+        const result = await broadcastSpaceUpdate(updatedSpace);
+        return result ? [result.wsEnvelope] : [];
+      });
     },
     onSuccess: (_, params) => {
       queryClient.invalidateQueries({ queryKey: ['channels', params.spaceId] });
@@ -478,6 +534,7 @@ interface ReorderGroupsParams {
  */
 export function useReorderGroups() {
   const queryClient = useQueryClient();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: ReorderGroupsParams): Promise<void> => {
@@ -512,6 +569,12 @@ export function useReorderGroups() {
       saveSpace(updatedSpace);
       const adapter = getMMKVAdapter();
       await adapter.saveSpace(updatedSpace);
+
+      // Broadcast to all members
+      enqueueOutbound(async () => {
+        const result = await broadcastSpaceUpdate(updatedSpace);
+        return result ? [result.wsEnvelope] : [];
+      });
     },
     onSuccess: (_, params) => {
       queryClient.invalidateQueries({ queryKey: ['channels', params.spaceId] });
@@ -532,6 +595,7 @@ interface ReorderChannelsParams {
  */
 export function useReorderChannels() {
   const queryClient = useQueryClient();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: ReorderChannelsParams): Promise<void> => {
@@ -572,6 +636,12 @@ export function useReorderChannels() {
       saveSpace(updatedSpace);
       const adapter = getMMKVAdapter();
       await adapter.saveSpace(updatedSpace);
+
+      // Broadcast to all members
+      enqueueOutbound(async () => {
+        const result = await broadcastSpaceUpdate(updatedSpace);
+        return result ? [result.wsEnvelope] : [];
+      });
     },
     onSuccess: (_, params) => {
       queryClient.invalidateQueries({ queryKey: ['channels', params.spaceId] });
