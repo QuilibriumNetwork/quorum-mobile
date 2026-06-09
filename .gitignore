@@ -9,6 +9,7 @@ node_modules/
 
 # build
 modules/quorum-crypto/android/build/
+modules/quorum-translation/android/build/
 
 # Expo
 .expo/
