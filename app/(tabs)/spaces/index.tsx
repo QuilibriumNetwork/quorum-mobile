@@ -174,7 +174,7 @@ export default function SpacesIndex() {
         </View>
         <View style={styles.headerSlotRight}>
           <TouchableOpacity onPress={() => router.push('/spaces/discover')} style={styles.headerIconButton} hitSlop={8}>
-            <IconSymbol name="safari.fill" size={22} color={theme.colors.textMain} />
+            <IconSymbol name="safari" size={22} color={theme.colors.textMain} />
           </TouchableOpacity>
           <TouchableOpacity onPress={handleOpenAddSpace} style={styles.headerIconButton} hitSlop={8}>
             <IconSymbol name="plus" size={22} color={theme.colors.textMain} />

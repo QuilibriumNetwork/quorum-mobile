@@ -45,10 +45,10 @@ export default function WalletTab() {
 
   const headingLabel = section === 'wallet' ? 'Wallet' : 'Mini Apps';
   // Wallet view → four-square (apps) icon. Mini-apps view → the same
-  // creditcard.fill glyph the tab bar uses for the Wallet tab itself,
-  // so users see "this is the wallet" affordance in the spot they
-  // already learned to associate with the wallet.
-  const toggleIcon = section === 'wallet' ? 'square.grid.2x2' : 'creditcard.fill';
+  // wallet glyph the tab bar uses for the Wallet tab itself, so users
+  // see "this is the wallet" affordance in the spot they already
+  // learned to associate with the wallet.
+  const toggleIcon = section === 'wallet' ? 'square.grid.2x2' : 'wallet.pass';
   const toggleLabel = section === 'wallet' ? 'Open mini apps' : 'Back to wallet';
 
   return (
