@@ -230,7 +230,7 @@ export default function MessagesInbox() {
             style={styles.headerIconButton}
             hitSlop={8}
           >
-            <IconSymbol name="square.and.pencil" size={22} color={theme.colors.textMain} />
+            <IconSymbol name="person.badge.plus" size={22} color={theme.colors.textMain} />
           </TouchableOpacity>
         </View>
       </View>
