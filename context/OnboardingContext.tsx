@@ -417,6 +417,9 @@ export function OnboardingProvider({ children }: OnboardingProviderProps) {
               account.authToken
                 ? secureStorage.storeFarcasterAuthToken(account.authToken)
                 : Promise.resolve(),
+              account.authToken && account.authTokenExpiresAt != null
+                ? secureStorage.storeFarcasterAuthTokenExpiresAt(account.authTokenExpiresAt)
+                : Promise.resolve(),
             ]);
             const pfpDataUri = account.pfpUrl
               ? (await fetchImageAsDataUri(account.pfpUrl)) ?? undefined

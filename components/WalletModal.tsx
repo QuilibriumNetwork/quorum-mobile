@@ -114,7 +114,7 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
   const styles = createStyles(theme, isDark, insets);
 
   const { user } = useAuth();
-  const { addresses, balances, isLoading, isError, refetch } = useWallet();
+  const { addresses, balances, isLoading, addressesPending, isError, refetch, refetchAddresses } = useWallet();
   const {
     activeWallet,
     activeType,
@@ -123,6 +123,13 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
     hasWarpcastWallet,
     switchWallet,
   } = useWalletSelection();
+
+  // The Quilibrium / Ethereum / Warpcast cards don't depend on multi-chain
+  // derivation — never show the "No wallet found" empty state while any of
+  // them is renderable (derivation being slow, disabled, or failed must
+  // not hide wallets that plainly exist).
+  const hasLocalWalletCards =
+    !!user?.quilibriumAddress || !!builtinWallet || !!warpcastWallet;
 
   // Fetch balances for Warpcast wallet (EVM only)
   const {
@@ -260,9 +267,17 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
 
   const handleRefresh = React.useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([refetch(), refetchNFTs(), refetchWarpcastBalances()]);
+    await Promise.all([
+      refetch(),
+      refetchNFTs(),
+      refetchWarpcastBalances(),
+      // Re-attempt address derivation too — without this, the retry
+      // affordances on the addresses tab only refreshed balances and a
+      // failed/null derivation could never recover.
+      ...(addresses ? [] : [Promise.resolve(refetchAddresses())]),
+    ]);
     setRefreshing(false);
-  }, [refetch, refetchNFTs, refetchWarpcastBalances]);
+  }, [refetch, refetchNFTs, refetchWarpcastBalances, refetchAddresses, addresses]);
 
   const copyAddress = React.useCallback(async (address: string, chain: string) => {
     const doCopy = async () => {
@@ -595,6 +610,19 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
               </View>
             )}
 
+            {/* Timed-out State - spinner auto-hid after 5s but balances never arrived */}
+            {!showLoadingSpinner && !isError &&
+              ((activeType === 'builtin' && isLoading && !balances) ||
+                (activeType === 'warpcast' && warpcastBalancesLoading && !warpcastBalances)) && (
+              <View style={styles.errorContainer}>
+                <IconSymbol name="exclamationmark.triangle.fill" size={32} color={theme.colors.warning} />
+                <Text style={styles.errorText}>Wallet is taking longer than expected to load</Text>
+                <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Error State */}
             {isError && (
               <View style={styles.errorContainer}>
@@ -769,12 +797,12 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
         ) : activeTab === 'addresses' ? (
           /* Addresses Tab */
           <View style={styles.addressesSection}>
-            {!addresses && isLoading ? (
+            {!addresses && !hasLocalWalletCards && (isLoading || addressesPending) ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
                 <Text style={styles.loadingText}>Deriving addresses...</Text>
               </View>
-            ) : !addresses && isError ? (
+            ) : !addresses && !hasLocalWalletCards && isError ? (
               <View style={styles.errorContainer}>
                 <IconSymbol name="exclamationmark.triangle.fill" size={32} color={theme.colors.warning} />
                 <Text style={styles.errorText}>Failed to derive addresses</Text>
@@ -782,7 +810,7 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
                   <Text style={styles.retryButtonText}>Retry</Text>
                 </TouchableOpacity>
               </View>
-            ) : !addresses ? (
+            ) : !addresses && !hasLocalWalletCards ? (
               <View style={styles.errorContainer}>
                 <IconSymbol name="key.fill" size={32} color={theme.colors.textMuted} />
                 <Text style={styles.errorText}>No wallet found</Text>
@@ -902,6 +930,47 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
                   </LinearGradient>
                 </View>
 
+                {/* Multi-chain cards need the derived addresses; while they
+                    are pending/unavailable, show an inline status card
+                    instead of hiding the wallets above. */}
+                {!addresses && (
+                  <View style={styles.addressCard}>
+                    <LinearGradient
+                      colors={['#88888820', '#88888810']}
+                      style={styles.addressCardGradient}
+                    >
+                      <View style={styles.addressCardHeader}>
+                        <View style={[styles.chainIconContainer, { backgroundColor: theme.colors.textMuted }]}>
+                          <IconSymbol name="key.fill" size={14} color="#fff" />
+                        </View>
+                        <View>
+                          <Text style={styles.addressCardTitle}>Other Chains</Text>
+                          <Text style={styles.addressCardSubtitle}>Bitcoin, Solana, Kaspa, Bittensor, Tezos</Text>
+                        </View>
+                      </View>
+                      {isLoading || addressesPending ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 }}>
+                          <ActivityIndicator size="small" color={theme.colors.primary} />
+                          <Text style={styles.emptySubtext}>Deriving addresses…</Text>
+                        </View>
+                      ) : (
+                        <View style={{ paddingVertical: 12 }}>
+                          <Text style={styles.emptySubtext}>
+                            {isError
+                              ? 'Failed to derive multi-chain addresses.'
+                              : 'Multi-chain addresses unavailable.'}
+                          </Text>
+                          <TouchableOpacity style={[styles.retryButton, { marginTop: 8 }]} onPress={handleRefresh}>
+                            <Text style={styles.retryButtonText}>Retry</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </LinearGradient>
+                  </View>
+                )}
+
+                {addresses && (
+                <>
                 {/* Bitcoin Address Card */}
                 <View style={styles.addressCard}>
                   <LinearGradient
@@ -1108,6 +1177,8 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
                       </TouchableOpacity>
                     </LinearGradient>
                   </View>
+                )}
+                </>
                 )}
 
                 {/* Info Note */}

@@ -6,7 +6,8 @@
 import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context';
-import { useCreateResaleListing, useGetNameRecord } from '@/hooks/useQNS';
+import { useCreateResaleListing } from '@/hooks/useQNS';
+import type { NameRecord } from '@/services/api/qnsClient';
 import {
   generateNonce,
   getFullStealthKeyMaterial,
@@ -26,6 +27,11 @@ interface ListNameModalProps {
   onClose: () => void;
   name: string;
   nameType: 'username' | 'domain';
+  /**
+   * The stealth ownership record for this name from the owner's bucket
+   * (GET /bucket/{tag}) - the only route that exposes ownership markers.
+   */
+  nameRecord?: NameRecord | null;
   onSuccess?: () => void;
 }
 
@@ -34,6 +40,7 @@ export default function ListNameModal({
   onClose,
   name,
   nameType,
+  nameRecord,
   onSuccess,
 }: ListNameModalProps) {
   const { theme } = useTheme();
@@ -46,11 +53,6 @@ export default function ListNameModal({
   const [priceToken, setPriceToken] = React.useState<'wQUIL' | 'USDC'>('wQUIL');
   const [sellerAddress, setSellerAddress] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-
-  // Fetch name record to get ownership keys
-  const { data: nameRecord, isLoading: isLoadingRecord } = useGetNameRecord(name, {
-    enabled: visible && !!name,
-  });
 
   const { mutate: createListing, isPending: isCreatingListing } = useCreateResaleListing();
 
@@ -179,7 +181,7 @@ export default function ListNameModal({
     }
   };
 
-  const isLoading = isLoadingRecord || isSubmitting || isCreatingListing;
+  const isLoading = isSubmitting || isCreatingListing;
 
   // Calculate 99% seller amount for preview
   const sellerAmount = priceAmount ? (parseFloat(priceAmount) * 0.99).toFixed(2) : '0.00';

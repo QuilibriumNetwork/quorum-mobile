@@ -17,6 +17,7 @@
  */
 
 import React from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import { AudioSpaceOverlay } from '@/components/AudioSpaceOverlay';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -426,6 +427,18 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
   // interval on every change.
   const activeSpeakerIdsRef = React.useRef<string[]>([]);
   React.useEffect(() => { activeSpeakerIdsRef.current = activeSpeakerIdentities; }, [activeSpeakerIdentities]);
+  // Live mirrors of minimized + app state, read inside the poll/heartbeat
+  // interval callbacks so they see the current values without re-binding
+  // the intervals (and without stale closures).
+  const minimizedRef = React.useRef(false);
+  React.useEffect(() => { minimizedRef.current = minimized; }, [minimized]);
+  const appStateRef = React.useRef<AppStateStatus>(AppState.currentState);
+  React.useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      appStateRef.current = next;
+    });
+    return () => sub.remove();
+  }, []);
 
   const teardown = React.useCallback(async () => {
     if (heartbeatRef.current) {
@@ -720,7 +733,17 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
         }
       };
       void pull();
-      roomPollRef.current = setInterval(() => { void pull(); }, ROOM_POLL_INTERVAL_MS);
+      let pollTick = 0;
+      roomPollRef.current = setInterval(() => {
+        pollTick++;
+        // Backgrounded: skip snapshot polling entirely — nothing is
+        // rendered, and the audio stream + heartbeat don't depend on it.
+        if (appStateRef.current !== 'active') return;
+        // Minimized: the mini-pill still shows live state, so keep
+        // polling but at 1/3 rate (~15s instead of 5s).
+        if (minimizedRef.current && pollTick % 3 !== 0) return;
+        void pull();
+      }, ROOM_POLL_INTERVAL_MS);
     };
 
     const run = async () => {
@@ -765,7 +788,15 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
               setState('idle');
             }
           };
-          roomPollRef.current = setInterval(() => { void schedPull(); }, ROOM_POLL_INTERVAL_MS);
+          let schedTick = 0;
+          roomPollRef.current = setInterval(() => {
+            schedTick++;
+            // Same poll gating as the live poll: skip when backgrounded,
+            // poll at 1/3 rate while minimized.
+            if (appStateRef.current !== 'active') return;
+            if (minimizedRef.current && schedTick % 3 !== 0) return;
+            void schedPull();
+          }, ROOM_POLL_INTERVAL_MS);
           return;
         }
 
@@ -815,6 +846,10 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
         // burn requests without changing server-side state.
         const tickHeartbeat = () => {
           if (activeIdRef.current !== active.id) return;
+          // Backgrounded: skip — keep heartbeating while the app is
+          // active (it keeps presence alive), but don't burn requests
+          // when nothing is in the foreground.
+          if (appStateRef.current !== 'active') return;
           const currentRole = prevRoleRef.current;
           if (currentRole !== 'host' && currentRole !== 'cohost') return;
           const fids = activeSpeakerIdsRef.current

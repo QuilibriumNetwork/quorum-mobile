@@ -17,10 +17,11 @@ import { useWalletSelection } from '@/hooks/useWalletSelection';
 import {
   generateNonce,
   getFullStealthKeyMaterial,
-  signResaleListing,
+  getStealthKeyMaterial,
+  signStealthOwnership,
 } from '@/services/onboarding/keyService';
 import { getMnemonic, getPrivateKey } from '@/services/onboarding/secureStorage';
-import type { Offer } from '@/services/api/qnsClient';
+import { getQNSClient, type Offer } from '@/services/api/qnsClient';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
@@ -82,7 +83,8 @@ export default function OffersModal({
   }, [visible]);
 
   const handleAcceptOffer = async (offer: Offer) => {
-    if (!user?.quilibriumAddress || !activeWallet) return;
+    if (!user?.quilibriumAddress || !activeWallet || !offer.name) return;
+    const offerName = offer.name;
 
     Alert.alert(
       'Accept Offer',
@@ -102,19 +104,39 @@ export default function OffersModal({
                 privateKey ?? undefined
               );
 
+              // Look up the stealth ownership markers via the owner's bucket -
+              // the only route that exposes them (GET /bucket/{tag})
+              const { bucketTag } = getStealthKeyMaterial(
+                user.quilibriumAddress,
+                mnemonic ?? undefined,
+                privateKey ?? undefined
+              );
+              const nameRecord = await getQNSClient().getNameRecordFromBucket(bucketTag, offerName);
+              if (!nameRecord?.ownership?.one_time_key || !nameRecord?.ownership?.verification_key) {
+                throw new Error('Could not retrieve ownership information');
+              }
+
+              const oneTimeKey = Uint8Array.from(atob(nameRecord.ownership.one_time_key), c => c.charCodeAt(0));
+              const verificationKey = Uint8Array.from(atob(nameRecord.ownership.verification_key), c => c.charCodeAt(0));
               const timestamp = Math.floor(Date.now() / 1000);
               const nonce = generateNonce();
 
-              // Use a simplified signature for offer acceptance
-              const msgBytes = new TextEncoder().encode(
-                `accept:${offer.id}:${timestamp}:${nonce}`
+              // The server verifies offer acceptance against the offer ID with
+              // the "offer" message type - see qns-api offer.go
+              const signature = signStealthOwnership(
+                viewKeyMaterial,
+                spendKeyMaterial,
+                oneTimeKey,
+                verificationKey,
+                offer.id,
+                'offer',
+                timestamp,
+                nonce
               );
-              const signature = btoa(String.fromCharCode(...msgBytes));
 
               acceptOffer({
                 offerId: offer.id,
-                sellerAddress: activeWallet.address,
-                chain: 'base',
+                ownerAddress: activeWallet.address,
                 signature,
                 timestamp,
                 nonce,
@@ -141,6 +163,9 @@ export default function OffersModal({
   };
 
   const handleRejectOffer = (offer: Offer) => {
+    if (!user?.quilibriumAddress || !offer.name) return;
+    const offerName = offer.name;
+
     Alert.alert(
       'Reject Offer',
       `Reject the offer of ${offer.amount} ${offer.token} for @${offer.name}?`,
@@ -151,25 +176,64 @@ export default function OffersModal({
           style: 'destructive',
           onPress: async () => {
             setProcessingOfferId(offer.id);
-            const timestamp = Math.floor(Date.now() / 1000);
-            const nonce = generateNonce();
-            const signature = btoa(`reject:${offer.id}:${timestamp}:${nonce}`);
+            try {
+              const mnemonic = await getMnemonic();
+              const privateKey = await getPrivateKey();
+              const { viewKeyMaterial, spendKeyMaterial } = getFullStealthKeyMaterial(
+                user.quilibriumAddress,
+                mnemonic ?? undefined,
+                privateKey ?? undefined
+              );
 
-            rejectOffer({
-              offerId: offer.id,
-              signature,
-              timestamp,
-              nonce,
-            }, {
-              onSuccess: () => {
-                refetchReceived();
-                setProcessingOfferId(null);
-              },
-              onError: (err) => {
-                Alert.alert('Error', err instanceof Error ? err.message : 'Failed to reject offer');
-                setProcessingOfferId(null);
-              },
-            });
+              // Look up the stealth ownership markers via the owner's bucket -
+              // the only route that exposes them (GET /bucket/{tag})
+              const { bucketTag } = getStealthKeyMaterial(
+                user.quilibriumAddress,
+                mnemonic ?? undefined,
+                privateKey ?? undefined
+              );
+              const nameRecord = await getQNSClient().getNameRecordFromBucket(bucketTag, offerName);
+              if (!nameRecord?.ownership?.one_time_key || !nameRecord?.ownership?.verification_key) {
+                throw new Error('Could not retrieve ownership information');
+              }
+
+              const oneTimeKey = Uint8Array.from(atob(nameRecord.ownership.one_time_key), c => c.charCodeAt(0));
+              const verificationKey = Uint8Array.from(atob(nameRecord.ownership.verification_key), c => c.charCodeAt(0));
+              const timestamp = Math.floor(Date.now() / 1000);
+              const nonce = generateNonce();
+
+              // The server verifies offer rejection against the offer ID with
+              // the "reject" message type - see qns-api offer.go
+              const signature = signStealthOwnership(
+                viewKeyMaterial,
+                spendKeyMaterial,
+                oneTimeKey,
+                verificationKey,
+                offer.id,
+                'reject',
+                timestamp,
+                nonce
+              );
+
+              rejectOffer({
+                offerId: offer.id,
+                signature,
+                timestamp,
+                nonce,
+              }, {
+                onSuccess: () => {
+                  refetchReceived();
+                  setProcessingOfferId(null);
+                },
+                onError: (err) => {
+                  Alert.alert('Error', err instanceof Error ? err.message : 'Failed to reject offer');
+                  setProcessingOfferId(null);
+                },
+              });
+            } catch (err) {
+              Alert.alert('Error', 'Failed to reject offer');
+              setProcessingOfferId(null);
+            }
           },
         },
       ]
@@ -177,6 +241,9 @@ export default function OffersModal({
   };
 
   const handleCancelOffer = (offer: Offer) => {
+    if (!activeWallet) return;
+    const cancelBuyerAddress = activeWallet.address;
+
     Alert.alert(
       'Cancel Offer',
       `Cancel your offer of ${offer.amount} ${offer.token} for @${offer.name}?`,
@@ -189,10 +256,12 @@ export default function OffersModal({
             setProcessingOfferId(offer.id);
             const timestamp = Math.floor(Date.now() / 1000);
             const nonce = generateNonce();
+            // The server authenticates cancellation by matching buyer_address
             const signature = btoa(`cancel:${offer.id}:${timestamp}:${nonce}`);
 
             cancelOffer({
               offerId: offer.id,
+              buyerAddress: cancelBuyerAddress,
               signature,
               timestamp,
               nonce,
@@ -223,8 +292,9 @@ export default function OffersModal({
     }
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
+  const formatDate = (date: string | number) => {
+    // Numeric dates from the API are unix seconds
+    return new Date(typeof date === 'number' ? date * 1000 : date).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',

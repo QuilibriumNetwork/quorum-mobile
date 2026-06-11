@@ -2,6 +2,7 @@ import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
+import { useToast } from '@/context/ToastContext';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
 import { useAssignRole, useRemoveFromRole, useSpaces } from '@/hooks/chat';
@@ -55,6 +56,7 @@ export default function UserProfileModal({
   onOpenFarcasterProfile,
 }: UserProfileModalProps) {
   const { theme, isDark } = useTheme();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [loadingRoles, setLoadingRoles] = useState<Set<string>>(new Set());
 
@@ -87,8 +89,12 @@ export default function UserProfileModal({
         roleId,
         userAddress: user.userId,
       });
-    } catch {
-      Alert.alert('Error', 'Failed to assign role');
+    } catch (e) {
+      showToast({
+        type: 'error',
+        title: 'Failed to assign role',
+        message: e instanceof Error ? e.message : undefined,
+      });
     } finally {
       setLoadingRoles(prev => {
         const next = new Set(prev);
@@ -107,8 +113,12 @@ export default function UserProfileModal({
         roleId,
         userAddress: user.userId,
       });
-    } catch {
-      Alert.alert('Error', 'Failed to remove role');
+    } catch (e) {
+      showToast({
+        type: 'error',
+        title: 'Failed to remove role',
+        message: e instanceof Error ? e.message : undefined,
+      });
     } finally {
       setLoadingRoles(prev => {
         const next = new Set(prev);

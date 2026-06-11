@@ -14,10 +14,12 @@
  * encryption store. Keys are namespaced so future per-DM opt-outs can
  * live here too without collision.
  *
- * No App Group mirror needed — the iOS NSE doesn't read these; it
- * gates on its own content-type suppression rules. Local notification
- * presentation (the surface that this gates) all happens in the JS
- * runtime where this module is reachable.
+ * The store is mirrored to the iOS App Group so the NSE can apply the
+ * same global/space/channel gates to OS-rendered pushes (see the store
+ * comment below). The global + per-space toggles are ALSO synced to
+ * quorum-api (pushPrefsSync) so the server filters ALERT pushes before
+ * they ever reach the device; per-channel stays device-side because
+ * the server can't see channel ids inside encrypted envelopes.
  */
 
 import { type MMKV } from 'react-native-mmkv';
@@ -38,6 +40,16 @@ function getStore(): MMKV {
   return store;
 }
 
+// Server sync — fire-and-forget after every server-relevant pref
+// write. Dynamic import breaks the cycle (pushPrefsSync reads prefs
+// from this module). The sync itself debounces and persists a retry
+// flag, so dropping the promise here is safe.
+function scheduleServerPrefsSync(): void {
+  import('./pushPrefsSync')
+    .then(({ syncPushPrefsWithQuorum }) => syncPushPrefsWithQuorum())
+    .catch(() => {});
+}
+
 function spaceKey(spaceId: string): string {
   return `${K_SPACE_PREFIX}${spaceId}`;
 }
@@ -56,6 +68,7 @@ export function getGlobalNotificationsEnabled(): boolean {
 
 export function setGlobalNotificationsEnabled(enabled: boolean): void {
   getStore().set(K_GLOBAL, enabled);
+  scheduleServerPrefsSync();
 }
 
 // Per-space
@@ -68,6 +81,24 @@ export function getSpaceNotificationsEnabled(spaceId: string): boolean {
 
 export function setSpaceNotificationsEnabled(spaceId: string, enabled: boolean): void {
   getStore().set(spaceKey(spaceId), enabled);
+  scheduleServerPrefsSync();
+}
+
+/**
+ * SpaceIds the user has explicitly muted (per-space toggle off).
+ * Spaces default to enabled, so only explicit `false` entries count.
+ * Used by pushPrefsSync to build the server-side muted_hubs list.
+ */
+export function getMutedSpaceIds(): string[] {
+  const store = getStore();
+  const out: string[] = [];
+  for (const key of store.getAllKeys()) {
+    if (!key.startsWith(K_SPACE_PREFIX)) continue;
+    if (store.getBoolean(key) === false) {
+      out.push(key.slice(K_SPACE_PREFIX.length));
+    }
+  }
+  return out;
 }
 
 // Per-channel

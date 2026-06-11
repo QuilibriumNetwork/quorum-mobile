@@ -35,6 +35,12 @@ export function useFarcasterUsersPrefetch(fids: (number | undefined)[]): void {
   const stableKey = useFidsSignature(fids);
 
   useEffect(() => {
+    // Bound the session-lifetime dedupe set — a very long browsing
+    // session would otherwise grow it indefinitely. Clearing just means
+    // already-cached FIDs get re-confirmed against the caches below.
+    if (fetchedRef.current.size > 20000) {
+      fetchedRef.current.clear();
+    }
     const unique = uniquePositiveFids(fids);
     const missing = unique.filter((fid) => {
       if (fetchedRef.current.has(fid)) return false;

@@ -28,7 +28,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import React from 'react';
-import { ActivityIndicator, Platform, View } from 'react-native';
+import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
@@ -62,6 +62,7 @@ import {
   registerPushTokenWithQuorum,
   startPushTokenRotationListener,
 } from '@/services/notifications/pushRegistration';
+import { retryPushPrefsSyncIfDirty } from '@/services/notifications/pushPrefsSync';
 import { registerBackgroundNotificationTask } from '@/services/notifications/pushReceivedTask';
 import { CustomThemeProvider, useTheme } from '@/theme';
 import { AppBackground } from '@/components/ui/AppBackground';
@@ -130,9 +131,16 @@ function AuthRouter() {
     // Set up notification tap handler + Expo token rotation listener.
     const subscription = setupNotificationResponseListener();
     const stopRotation = startPushTokenRotationListener();
+    // Retry a failed server-side notification-prefs sync whenever the
+    // app comes back to the foreground (no-op when the last sync
+    // succeeded — it just checks an MMKV dirty flag).
+    const appStateSub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') retryPushPrefsSyncIfDirty();
+    });
     return () => {
       subscription.remove();
       stopRotation();
+      appStateSub.remove();
     };
   }, [authState]);
 

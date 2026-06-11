@@ -12,6 +12,7 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { InteractionManager } from 'react-native';
+import { getLocalTokenIconUri } from './tokenIcons';
 
 // In-flight request deduplication to prevent duplicate API calls
 const inFlightRequests = new Map<string, Promise<any>>();
@@ -160,6 +161,14 @@ function getAlchemyNftEndpoint(chain: string): string | null {
 const SOLANA_RPC = `${RPC_PROXY_BASE}/api/solana/rpc`;
 const BITCOIN_API = `${RPC_PROXY_BASE}/api/bitcoin`;
 
+// Fallback decimals for well-known tokens, keyed by lowercase contract
+// address (when Alchemy metadata is unavailable). Without this, a failed
+// metadata fetch falls back to 18 and misformats non-18-decimal balances.
+const KNOWN_TOKEN_DECIMALS: Record<string, number> = {
+  '0x8143182a775c54578c8b7b3ef77982498866945d': 8, // wQUIL on Ethereum
+  '0x49b5a631f54927c0007232844f06fe18cbf69786': 6, // SNAP on Ethereum
+};
+
 // Fallback icons for well-known tokens (when Alchemy doesn't provide one)
 const KNOWN_TOKEN_ICONS: Record<string, string> = {
   // Stablecoins
@@ -190,6 +199,10 @@ const KNOWN_TOKEN_ICONS: Record<string, string> = {
   PEPE: 'https://assets.coingecko.com/coins/images/29850/small/pepe-token.jpeg',
   SHIB: 'https://assets.coingecko.com/coins/images/11939/small/shiba.png',
 };
+
+/** USDC icon for surfaces that render it outside a balance row (e.g. the
+ *  Apex token picker — wQUIL/SNAP ship bundled icons, USDC does not). */
+export const USDC_ICON_URL = KNOWN_TOKEN_ICONS.USDC;
 
 export interface TokenBalance {
   symbol: string;
@@ -624,7 +637,10 @@ async function fetchTokenBalancesForChain(
         continue; // unparseable balance — skip
       }
       if (balanceRaw <= 0n) continue;
-      const decimals = metadata?.decimals ?? 18;
+      const decimals =
+        metadata?.decimals ??
+        KNOWN_TOKEN_DECIMALS[String(token.contractAddress).toLowerCase()] ??
+        18;
       const balance = Number(balanceRaw) / Math.pow(10, decimals);
       if (!(balance > 0)) continue;
       const symbol =
@@ -637,7 +653,10 @@ async function fetchTokenBalancesForChain(
         decimals,
         chain,
         contractAddress: token.contractAddress,
-        logoUrl: metadata?.logo || KNOWN_TOKEN_ICONS[symbol.toUpperCase()],
+        logoUrl:
+          getLocalTokenIconUri(token.contractAddress) ||
+          metadata?.logo ||
+          KNOWN_TOKEN_ICONS[symbol.toUpperCase()],
       });
     }
 

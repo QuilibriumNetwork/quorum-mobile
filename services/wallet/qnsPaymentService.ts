@@ -21,9 +21,12 @@ import { mainnet, base, optimism, arbitrum, polygon } from 'viem/chains';
 // RPC Proxy base URL (same as transactionService.ts)
 const RPC_PROXY_BASE = 'https://rpc-proxy.quorummessenger.com';
 
-function getRpcUrl(chainId: number): string {
+export function getRpcUrl(chainId: number): string {
   return `${RPC_PROXY_BASE}/api/alchemy/${chainId}/rpc`;
 }
+
+// The rpc proxy is intermittently slower than viem's 10s default timeout.
+export const RPC_TIMEOUT_MS = 30_000;
 
 const CHAIN_MAP: Record<number, Chain> = {
   1: mainnet,
@@ -156,7 +159,7 @@ export async function getTokenNonce(
   const chain = CHAIN_MAP[chainId];
   if (!chain) throw new Error(`Unsupported chain ID: ${chainId}`);
 
-  const transport = http(getRpcUrl(chainId));
+  const transport = http(getRpcUrl(chainId), { timeout: RPC_TIMEOUT_MS });
   const publicClient = createPublicClient({ chain, transport });
 
   const nonce = await publicClient.readContract({
@@ -186,7 +189,7 @@ export async function signERC20Permit(
   if (!chain) throw new Error(`Unsupported chain ID: ${chainId}`);
 
   const account = privateKeyToAccount(formatKey(privateKey));
-  const transport = http(getRpcUrl(chainId));
+  const transport = http(getRpcUrl(chainId), { timeout: RPC_TIMEOUT_MS });
   const walletClient = createWalletClient({ account, chain, transport });
 
   const signature = await walletClient.signTypedData({
@@ -243,7 +246,7 @@ export async function sendSplitterPayment(
   if (!splitterAddress) throw new Error(`Splitter not deployed on chain ${chainId}`);
 
   const account = privateKeyToAccount(formatKey(privateKey));
-  const transport = http(getRpcUrl(chainId));
+  const transport = http(getRpcUrl(chainId), { timeout: RPC_TIMEOUT_MS });
 
   const publicClient = createPublicClient({ chain, transport });
   const walletClient = createWalletClient({ account, chain, transport });
@@ -303,7 +306,7 @@ export async function sendERC20Transfer(
   if (!chain) throw new Error(`Unsupported chain ID: ${chainId}`);
 
   const account = privateKeyToAccount(formatKey(privateKey));
-  const transport = http(getRpcUrl(chainId));
+  const transport = http(getRpcUrl(chainId), { timeout: RPC_TIMEOUT_MS });
 
   const publicClient = createPublicClient({ chain, transport });
   const walletClient = createWalletClient({ account, chain, transport });

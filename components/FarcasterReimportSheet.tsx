@@ -22,6 +22,7 @@ import {
 } from '@/services/onboarding/farcasterService';
 import {
   storeFarcasterAuthToken,
+  storeFarcasterAuthTokenExpiresAt,
   storeFarcasterCustodyKey,
   storeFarcasterFid,
   storeFarcasterSignerKey,
@@ -73,7 +74,12 @@ export default function FarcasterReimportSheet({ visible, onClose, onImported }:
         storeFarcasterSignerKey(keys.signerPrivateKey),
         storeFarcasterFid(account.fid),
       ];
-      if (account.authToken) writes.push(storeFarcasterAuthToken(account.authToken));
+      if (account.authToken) {
+        writes.push(storeFarcasterAuthToken(account.authToken));
+        if (account.authTokenExpiresAt != null) {
+          writes.push(storeFarcasterAuthTokenExpiresAt(account.authTokenExpiresAt));
+        }
+      }
       await Promise.all(writes);
       setMnemonic('');
       onImported();

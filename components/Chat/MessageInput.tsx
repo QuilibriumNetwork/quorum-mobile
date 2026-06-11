@@ -1,6 +1,7 @@
 import type { AppTheme } from '@/theme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useEmojiFrecency } from '@/hooks/useEmojiFrecency';
+import { useDebouncedValue } from '@/hooks/useFarcasterSearch';
 import type { ProcessedAttachment } from '@/services/media/imageAttachment';
 import type { Channel, Emoji, SpaceMember, Sticker } from '@quilibrium/quorum-shared';
 import { searchEmojis } from '@/data/emojiData';
@@ -210,7 +211,13 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   onToggleAlsoReplyOnFarcaster,
 }, ref) {
   const { width: screenWidth } = useWindowDimensions();
-  const styles = useMemo(() => createStyles(theme, bottomInset, screenWidth), [theme, bottomInset, screenWidth]);
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  // Keyboard/inset/rotation-driven values applied inline so the whole
+  // stylesheet isn't rebuilt every time the insets or screen width change.
+  const containerDynamicStyle = useMemo(() => ({
+    paddingBottom: Skin.space(8) + bottomInset,
+    width: screenWidth,
+  }), [bottomInset, screenWidth]);
   const availableWidth = screenWidth - 180;
   const maxPlaceholderNameLength = Math.max(8, Math.min(Math.floor(availableWidth / 8.5), 24));
   const inputRef = useRef<TextInput>(null);
@@ -236,6 +243,10 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   const [autocompleteType, setAutocompleteType] = useState<'mention' | 'channel' | null>(null);
   const [autocompleteQuery, setAutocompleteQuery] = useState('');
   const [cursorPosition, setCursorPosition] = useState(0);
+  // Debounce the query that feeds the filter memos so fast typing doesn't
+  // re-filter the full member/channel lists on every keystroke. Trigger
+  // detection ('@'/'#' showing or hiding the popup) stays immediate.
+  const debouncedAutocompleteQuery = useDebouncedValue(autocompleteQuery, 150);
 
   // Expose focus method to parent
   // On Android, blur first to ensure keyboard shows when re-focusing after modal dismiss
@@ -348,19 +359,19 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
       const displayName = (m.display_name || '').toLowerCase();
       const name = (m.name || '').toLowerCase();
       const address = (m.address || '').toLowerCase();
-      return displayName.includes(autocompleteQuery) ||
-             name.includes(autocompleteQuery) ||
-             address.includes(autocompleteQuery);
+      return displayName.includes(debouncedAutocompleteQuery) ||
+             name.includes(debouncedAutocompleteQuery) ||
+             address.includes(debouncedAutocompleteQuery);
     }).slice(0, 6);
-  }, [autocompleteType, autocompleteQuery, members]);
+  }, [autocompleteType, debouncedAutocompleteQuery, members]);
 
   // Filter channels for channel autocomplete - match from start of name
   const filteredChannels = useMemo(() => {
     if (autocompleteType !== 'channel') return [];
     return channels.filter((c) => {
-      return c.channelName.toLowerCase().startsWith(autocompleteQuery);
+      return c.channelName.toLowerCase().startsWith(debouncedAutocompleteQuery);
     }).slice(0, 6);
-  }, [autocompleteType, autocompleteQuery, channels]);
+  }, [autocompleteType, debouncedAutocompleteQuery, channels]);
 
   // Insert selected mention - uses address for reliable matching, renders as display name
   const handleSelectMention = useCallback((member: SpaceMember) => {
@@ -457,7 +468,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   }, [searchQuery, stickers]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerDynamicStyle]}>
       {/* Edit mode preview */}
       {editingMessage && (
         <View style={styles.editContainer}>
@@ -832,13 +843,13 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   );
 });
 
-const createStyles = (theme: AppTheme, bottomInset: number, screenWidth?: number) => StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     backgroundColor: theme.colors.surface3,
     paddingHorizontal: Skin.space(12),
     paddingTop: Skin.space(8),
-    paddingBottom: Skin.space(8) + bottomInset,
-    width: screenWidth ?? '100%',
+    // paddingBottom and width depend on insets/screen width and are
+    // applied inline via containerDynamicStyle in the component.
   },
   replyContainer: {
     flexDirection: 'row',

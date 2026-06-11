@@ -30,6 +30,7 @@ export interface FarcasterAccount {
   custodyAddress: string;
   signerPublicKey: string;
   authToken?: string;  // Auth token for Farcaster API calls
+  authTokenExpiresAt?: number | null;  // Unix ms expiry of authToken (null when API omits it)
 }
 
 // BIP32 derivation for secp256k1 (Ethereum)
@@ -284,9 +285,12 @@ export async function lookupFarcasterAccount(
     }
 
     const user = data.result.state.user;
-    // Token is an object with { secret, expiresAt }
+    // Token is an object with { secret, expiresAt } — expiresAt is unix ms
+    // (mirrors the request's own params.expiresAt in buildCustodyBearerPayload).
     const tokenObj = data.result?.token;
     const authToken = tokenObj?.secret;
+    const authTokenExpiresAt =
+      typeof tokenObj?.expiresAt === 'number' ? tokenObj.expiresAt : null;
 
     return {
       fid: user.fid,
@@ -296,6 +300,7 @@ export async function lookupFarcasterAccount(
       custodyAddress: custodyAddress,
       signerPublicKey: '', // Will be set by caller
       authToken,
+      authTokenExpiresAt,
     };
   } catch (error) {
     throw error;
@@ -308,7 +313,7 @@ export async function lookupFarcasterAccount(
  */
 export async function refreshFarcasterAuthToken(
   custodyPrivateKey: string
-): Promise<string | null> {
+): Promise<{ secret: string; expiresAt: number | null } | null> {
   try {
     // Build the auth request payload
     const authRequest = buildCustodyBearerPayload();
@@ -336,11 +341,16 @@ export async function refreshFarcasterAuthToken(
 
     const data = await response.json();
 
-    // Token is an object with { secret, expiresAt }
+    // Token is an object with { secret, expiresAt } — expiresAt is unix ms
+    // (mirrors the request's own params.expiresAt in buildCustodyBearerPayload).
     const tokenObj = data.result?.token;
     const authToken = tokenObj?.secret;
+    if (typeof authToken !== 'string') return null;
 
-    return typeof authToken === 'string' ? authToken : null;
+    return {
+      secret: authToken,
+      expiresAt: typeof tokenObj?.expiresAt === 'number' ? tokenObj.expiresAt : null,
+    };
   } catch (error) {
     return null;
   }

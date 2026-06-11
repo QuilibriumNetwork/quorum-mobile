@@ -6,6 +6,9 @@ import {
   createPublicClient,
   createWalletClient,
   http,
+  keccak256,
+  TimeoutError,
+  HttpRequestError,
   type Hash,
   type Hex,
   type Address,
@@ -68,6 +71,12 @@ function getRpcUrl(chainId: number): string {
   throw new Error(`Unsupported chain: ${chainId}`);
 }
 
+// Viem's default HTTP transport timeout is 10s — the rpc proxy is
+// intermittently slower than that, which made user-facing sends "fail"
+// (with viem's TimeoutError) for transactions that actually broadcast
+// fine. Give every RPC call generous headroom.
+const RPC_TIMEOUT_MS = 30_000;
+
 export interface SwapTransaction {
   to: string;
   data: string;
@@ -80,6 +89,13 @@ export interface SwapTransaction {
 export interface TransactionResult {
   hash: Hash;
   chainId: number;
+  /** True when the signed transaction was handed to the RPC but the HTTP
+   *  call timed out / dropped before a response — the tx may well have
+   *  reached the network anyway (the hash is computed locally from the
+   *  signed payload, so it's valid either way). Callers should record it
+   *  as pending and let the confirmation watcher decide, NOT treat it as
+   *  a failure. */
+  broadcastUncertain?: boolean;
 }
 
 /**
@@ -102,7 +118,7 @@ export async function sendSwapTransaction(
     : `0x${privateKey}`) as Hex;
 
   const account = privateKeyToAccount(formattedKey);
-  const transport = http(getRpcUrl(chainId));
+  const transport = http(getRpcUrl(chainId), { timeout: RPC_TIMEOUT_MS });
 
   const publicClient = createPublicClient({
     chain,
@@ -132,8 +148,14 @@ export async function sendSwapTransaction(
       gasLimit = 300000n;
     }
   }
-  // Send the transaction
-  const hash = await walletClient.sendTransaction({
+  // Prepare and sign locally FIRST: the tx hash is keccak256 of the signed
+  // payload, so we know it before broadcasting. If the broadcast HTTP call
+  // then times out (slow rpc proxy), the transaction may still have reached
+  // the network — return the hash flagged `broadcastUncertain` instead of
+  // throwing, so callers record it as pending and the confirmation watcher
+  // settles the outcome. Previously this path threw, the caller treated a
+  // possibly-successful send as failed, and the tx never entered history.
+  const request = await walletClient.prepareTransactionRequest({
     to: to as Address,
     data: data as Hex,
     value: value ? BigInt(value) : undefined,
@@ -142,6 +164,21 @@ export async function sendSwapTransaction(
     chain,
     account,
   });
+  const serialized = await walletClient.signTransaction(request);
+  const hash = keccak256(serialized);
+
+  try {
+    await publicClient.sendRawTransaction({ serializedTransaction: serialized });
+  } catch (err) {
+    // Transport-level failures (timeout, dropped connection) leave the
+    // broadcast outcome unknown. JSON-RPC rejections (nonce too low,
+    // insufficient funds, …) are definitive — rethrow those.
+    if (err instanceof TimeoutError || err instanceof HttpRequestError) {
+      return { hash, chainId, broadcastUncertain: true };
+    }
+    throw err;
+  }
+
   return {
     hash,
     chainId,
@@ -161,7 +198,7 @@ export async function waitForTransaction(
     throw new Error(`Unsupported chain ID: ${chainId}`);
   }
 
-  const transport = http(getRpcUrl(chainId));
+  const transport = http(getRpcUrl(chainId), { timeout: RPC_TIMEOUT_MS });
   const publicClient = createPublicClient({
     chain,
     transport,
@@ -195,7 +232,7 @@ export async function getTransactionStatus(
     throw new Error(`Unsupported chain ID: ${chainId}`);
   }
 
-  const transport = http(getRpcUrl(chainId));
+  const transport = http(getRpcUrl(chainId), { timeout: RPC_TIMEOUT_MS });
   const publicClient = createPublicClient({
     chain,
     transport,
@@ -233,7 +270,7 @@ export async function checkAllowance(
     throw new Error(`Unsupported chain ID: ${chainId}`);
   }
 
-  const transport = http(getRpcUrl(chainId));
+  const transport = http(getRpcUrl(chainId), { timeout: RPC_TIMEOUT_MS });
   const publicClient = createPublicClient({
     chain,
     transport,
@@ -271,7 +308,7 @@ export async function approveToken(
     : `0x${privateKey}`) as Hex;
 
   const account = privateKeyToAccount(formattedKey);
-  const transport = http(getRpcUrl(chainId));
+  const transport = http(getRpcUrl(chainId), { timeout: RPC_TIMEOUT_MS });
 
   const walletClient = createWalletClient({
     account,
@@ -328,7 +365,7 @@ export async function estimateTransferGasCost(chainId: number): Promise<bigint> 
     throw new Error(`Unsupported chain ID: ${chainId}`);
   }
 
-  const transport = http(getRpcUrl(chainId));
+  const transport = http(getRpcUrl(chainId), { timeout: RPC_TIMEOUT_MS });
   const publicClient = createPublicClient({
     chain,
     transport,

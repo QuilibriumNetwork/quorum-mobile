@@ -424,6 +424,35 @@ export class QuorumMobileClient implements QuorumApiClient {
     await this.fetch<void>('/push/unregister', { method: 'POST', body: params });
   }
 
+  /**
+   * Sync notification preferences for a push token so the server can
+   * filter ALERT pushes before they reach the device (device-local
+   * checks can't suppress OS-rendered lock-screen notifications).
+   *
+   * Server contract (POST /push/prefs):
+   *   { expo_token, inbox_address, inbox_public_key,
+   *     inbox_signature: <hex ed448>, timestamp: <unix ms>,
+   *     enabled, muted_hubs: [<hub_address>, ...] }
+   *
+   * Signature is Ed448 over:
+   *   "push-prefs" || expo_token || (0x01 if enabled else 0x00)
+   *     || mutedHubsSorted.join(',') || be64(timestamp)
+   * with muted_hubs sorted ascending (plain string sort) before joining.
+   * The signing key is a registered inbox's Ed448 key, same as
+   * registerPushToken.
+   */
+  async postPushPrefs(params: {
+    expo_token: string;
+    inbox_address: string;
+    inbox_public_key: string;
+    inbox_signature: string;
+    timestamp: number;
+    enabled: boolean;
+    muted_hubs: string[];
+  }): Promise<void> {
+    await this.fetch<void>('/push/prefs', { method: 'POST', body: params });
+  }
+
   // Pinning
 
   async pinMessage(params: {
@@ -888,6 +917,181 @@ export class QuorumMobileClient implements QuorumApiClient {
       method: 'POST',
       body: { reason },
     });
+  }
+
+  // Quorum Apex (subscriptions)
+  //
+  // NOTE: every endpoint in this section is NEW server work — the
+  // quorum-api routes don't exist yet. The doc comment on each method is
+  // the server contract the backend needs to implement. Client-side
+  // callers (hooks/useApex.ts) degrade gracefully on 404 so the app keeps
+  // working before the server ships.
+
+  /**
+   * Publish a space's Apex config — the token the owner accepts for Apex
+   * subscriptions and the Ethereum address subscription payouts go to.
+   *
+   * Server contract: POST /spaces/{spaceAddress}/apex-config
+   * Body: { token: 'wQUIL'|'SNAP'|'USDC', payout_address: '0x…' (20-byte
+   * hex), timestamp: number (unix ms), owner_public_key: hex,
+   * owner_signature: hex Ed448 }. The signature covers the UTF-8 bytes of
+   * `apex-config:{spaceAddress}:{token}:{lowercase payout_address}:{timestamp}`
+   * (built by services/apex/apexSpaceConfig.ts). The server MUST verify:
+   * (1) owner_public_key matches the space registration's owner key,
+   * (2) the Ed448 signature is valid over the rebuilt canonical message,
+   * (3) timestamp is recent (e.g. within 10 minutes) to prevent replaying
+   * an old config. Upsert on success. Returns { status: 'ok' }.
+   */
+  async setSpaceApexConfig(
+    spaceAddress: string,
+    config: {
+      token: 'wQUIL' | 'SNAP' | 'USDC';
+      payout_address: string;
+      timestamp: number;
+      owner_public_key: string;
+      owner_signature: string;
+    }
+  ): Promise<{ status: string }> {
+    return this.fetch<{ status: string }>(`/spaces/${spaceAddress}/apex-config`, {
+      method: 'POST',
+      body: config,
+    });
+  }
+
+  /**
+   * Fetch a space's Apex config, or null if the owner hasn't published
+   * one (404).
+   *
+   * Server contract: GET /spaces/{spaceAddress}/apex-config →
+   * { token: 'wQUIL'|'SNAP'|'USDC', payout_address: '0x…',
+   *   subscriber_count?: number } | 404.
+   * subscriber_count = number of DISTINCT subscribers with an active
+   * (period_end in the future) subscription that includes this space in
+   * at least one slot. Optional so older servers stay compatible.
+   */
+  async getSpaceApexConfig(spaceAddress: string): Promise<{
+    token: 'wQUIL' | 'SNAP' | 'USDC';
+    payout_address: string;
+    subscriber_count?: number;
+  } | null> {
+    try {
+      return await this.fetch<{
+        token: 'wQUIL' | 'SNAP' | 'USDC';
+        payout_address: string;
+        subscriber_count?: number;
+      }>(`/spaces/${spaceAddress}/apex-config`);
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Register a paid Apex subscription after the splitter transaction is
+   * sent. The server should verify the tx on-chain (ApexPayment event
+   * from the splitter: payer, token, amountEach, 5 recipients with
+   * recipients[0] = the Q Inc registry address) before marking the
+   * subscriber active for the period.
+   *
+   * Server contract: POST /apex/subscriptions
+   * Body: { address (Quorum address), tx_hash, chain_id, token,
+   * amount_each (decimal string of token base units), space_addresses
+   * (the 4 chosen slots — REPEATS ARE ALLOWED: a subscriber may assign
+   * multiple or all four slots to one space; the server must NOT enforce
+   * distinctness, only that each slot's space has a matching apex-config
+   * payout in the verified event's recipients), period_start, period_end
+   * (unix ms) }. Returns { status: 'ok' }. The chosen space_addresses are
+   * locked for the period; a renewal payment (new POST) may change them.
+   *
+   * Amount verification: the server must check the event's amountEach
+   * against the CURRENT MARKET exchange rate — USDC pegged at $1, wQUIL
+   * and SNAP from DexScreener's Ethereum pair priceUsd (the same source
+   * the client quotes from: GET api.dexscreener.com/latest/dex/tokens/
+   * {tokenAddress}), NOT the QNS pricing API's internal rate. Require
+   * amountEach >= ($25/5)-equivalent at verification time with a tolerance
+   * band (e.g. accept >= 90%) to absorb price drift between the client's
+   * quote and on-chain confirmation.
+   */
+  async registerApexSubscription(params: {
+    address: string;
+    tx_hash: string;
+    chain_id: number;
+    token: 'wQUIL' | 'SNAP' | 'USDC';
+    amount_each: string;
+    space_addresses: string[];
+    period_start: number;
+    period_end: number;
+  }): Promise<{ status: string }> {
+    return this.fetch<{ status: string }>('/apex/subscriptions', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Fetch a user's current Apex subscription, or null if they've never
+   * subscribed / the record expired out (404).
+   *
+   * Server contract: GET /apex/subscriptions/{address} →
+   * { address, token, tx_hash, space_addresses: string[], period_start,
+   * period_end, subscribed_since } | 404. Timestamps are unix ms;
+   * subscribed_since is the period_start of the user's first-ever
+   * subscription (for "member since" display).
+   */
+  async getApexSubscription(address: string): Promise<{
+    address: string;
+    token: 'wQUIL' | 'SNAP' | 'USDC';
+    tx_hash: string;
+    space_addresses: string[];
+    period_start: number;
+    period_end: number;
+    subscribed_since: number;
+  } | null> {
+    try {
+      return await this.fetch<{
+        address: string;
+        token: 'wQUIL' | 'SNAP' | 'USDC';
+        tx_hash: string;
+        space_addresses: string[];
+        period_start: number;
+        period_end: number;
+        subscribed_since: number;
+      }>(`/apex/subscriptions/${address}`);
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk Apex-active lookup for rendering the gold subscriber ring.
+   * Either or both of addresses (Quorum addresses, for chat) and fids
+   * (Farcaster fids, for the feed — resolved server-side via the
+   * farcaster-fid index) may be provided.
+   *
+   * Server contract: GET /apex/status?addresses=a,b&fids=1,2 →
+   * { active_addresses: string[], active_fids: number[] } — the subsets
+   * of the queried ids whose subscription period_end is in the future.
+   */
+  async getApexStatuses(params: {
+    addresses?: string[];
+    fids?: number[];
+  }): Promise<{ active_addresses: string[]; active_fids: number[] }> {
+    const queryParts: string[] = [];
+    if (params.addresses?.length) {
+      queryParts.push(`addresses=${params.addresses.map(encodeURIComponent).join(',')}`);
+    }
+    if (params.fids?.length) {
+      queryParts.push(`fids=${params.fids.join(',')}`);
+    }
+    const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+    return this.fetch<{ active_addresses: string[]; active_fids: number[] }>(
+      `/apex/status${query}`
+    );
   }
 }
 

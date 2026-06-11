@@ -226,22 +226,30 @@ public func isGloballyMuted() -> Bool {
 }
 
 /// True iff this push corresponds to a content type we should hide,
-/// OR the user has muted this space/channel in prefs. Single decrypt
-/// drives all three decisions to keep the NSE fast.
+/// OR the user has muted this space/channel in prefs.
+///
+/// The space-level mute is checked FIRST and from the hub address
+/// alone — it needs only the local hub→space lookup, no decryption —
+/// so a muted space suppresses even when classification (REST fetch +
+/// decrypt) fails. Channel-level mute and content-type suppression
+/// need the decrypted entry and share a single classify pass.
 public func shouldSuppressHubLogPush(apiBase: URL, hubAddress: String, seq: UInt64) -> Bool {
+    let prefs = openAppGroupMMKV(prefsMMKVId)
+
+    if let prefs = prefs, let spaceId = lookupSpaceIdForHub(hubAddress: hubAddress) {
+        let k = prefsSpacePrefix + spaceId
+        if prefs.contains(key: k) && !prefs.bool(forKey: k) { return true }
+    }
+
     guard let cls = classifyHubLogEntryFull(apiBase: apiBase, hubAddress: hubAddress, seq: seq) else {
         return false
     }
     if let t = cls.contentType, SuppressedContentTypes.contains(t) {
         return true
     }
-    guard let mmkv = openAppGroupMMKV(prefsMMKVId) else { return false }
-    if let s = cls.spaceId, mmkv.contains(key: prefsSpacePrefix + s) {
-        if !mmkv.bool(forKey: prefsSpacePrefix + s) { return true }
-    }
-    if let s = cls.spaceId, let c = cls.channelId {
+    if let prefs = prefs, let s = cls.spaceId, let c = cls.channelId {
         let k = prefsChannelPrefix + s + ":" + c
-        if mmkv.contains(key: k) && !mmkv.bool(forKey: k) {
+        if prefs.contains(key: k) && !prefs.bool(forKey: k) {
             return true
         }
     }
@@ -251,39 +259,39 @@ public func shouldSuppressHubLogPush(apiBase: URL, hubAddress: String, seq: UInt
 // MARK: - MMKV lookups
 
 /// Iterate the spaces MMKV to find which space has a hub matching
-/// the given address. The main app's spaceStorage.ts stores per-space
-/// records under "spaces:<spaceId>" keys with nested key objects.
+/// the given address. The main app's spaceStorage.ts stores each
+/// SpaceKey as a flat JSON record under "space_key:<spaceId>:<keyId>"
+/// (the Space record itself, under "space:<spaceId>", carries no
+/// keys), so we scan the hub-key records and compare their `address`.
 private func lookupSpaceIdForHub(hubAddress: String) -> String? {
     guard let mmkv = openAppGroupMMKV(spacesMMKVId) else { return nil }
     let keys = (mmkv.allKeys() as? [String]) ?? []
-    let prefix = "spaces:"
+    let prefix = "space_key:"
+    let suffix = ":hub"
     for k in keys {
-        guard k.hasPrefix(prefix) else { continue }
-        let spaceId = String(k.dropFirst(prefix.count))
+        guard k.hasPrefix(prefix), k.hasSuffix(suffix) else { continue }
         guard let recordStr = mmkv.string(forKey: k),
               let data = recordStr.data(using: .utf8),
               let record = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let keys = record["keys"] as? [String: Any],
-              let hub = keys["hub"] as? [String: Any],
-              let addr = hub["address"] as? String
+              let addr = record["address"] as? String
         else { continue }
         if addr == hubAddress {
-            return spaceId
+            return String(k.dropFirst(prefix.count).dropLast(suffix.count))
         }
     }
     return nil
 }
 
-/// Read a SpaceKey (hub / config / inbox) for the given space.
-/// Returns the private key bytes, or nil if missing.
+/// Read a SpaceKey (hub / config / inbox) for the given space from
+/// its "space_key:<spaceId>:<keyId>" record. Returns the private key
+/// bytes, or nil if missing.
 private func lookupSpaceKey(spaceId: String, kind: String) -> [UInt8]? {
     guard let mmkv = openAppGroupMMKV(spacesMMKVId) else { return nil }
-    guard let recordStr = mmkv.string(forKey: "spaces:\(spaceId)"),
+    guard let recordStr = mmkv.string(forKey: "space_key:\(spaceId):\(kind)"),
           let data = recordStr.data(using: .utf8),
           let record = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-          let keys = record["keys"] as? [String: Any],
-          let k = keys[kind] as? [String: Any],
-          let privHex = k["privateKey"] as? String
+          let privHex = record["privateKey"] as? String,
+          !privHex.isEmpty
     else { return nil }
     return hexToBytes(privHex)
 }

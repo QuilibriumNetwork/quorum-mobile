@@ -122,9 +122,7 @@ export function useRegistrationPayment() {
       setStep('getting_payment_address');
       const paymentInfo = await getQNSClient().getPaymentAddress(
         account.address,
-        signature,
-        tokenSymbol,
-        chainName
+        signature
       );
 
       // Step 3: Send ERC20 transfer
@@ -228,10 +226,10 @@ export type MarketplaceBuyStep =
 /**
  * Helper to get wallet private key based on active wallet type
  */
-async function getWalletPrivateKey(
+export async function getWalletPrivateKey(
   activeType: string,
   importedWallet: { privateKey?: string } | null,
-  fetchKeys: () => Promise<{ data: { ethereum?: { privateKey: string } } | null }>
+  fetchKeys: () => Promise<{ data?: { ethereum?: { privateKey: string } } | null }>
 ): Promise<string> {
   let privateKey: string | null = null;
   if (activeType === 'warpcast') {
@@ -242,6 +240,21 @@ async function getWalletPrivateKey(
   }
   if (!privateKey) throw new Error('Could not access wallet keys');
   return privateKey;
+}
+
+/**
+ * Sign the QNS payment-address signature message with the wallet's private key
+ * (EIP-191 personal_sign). The server derives a deterministic payment address
+ * from this signature and uses it to verify the caller owns the wallet address.
+ */
+export async function signQNSSignatureMessage(
+  privateKey: string
+): Promise<{ address: string; signature: string }> {
+  const formattedKey = (privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`) as Hex;
+  const account = privateKeyToAccount(formattedKey);
+  const { message } = await getQNSClient().getSignatureMessage();
+  const signature = await account.signMessage({ message });
+  return { address: account.address, signature };
 }
 
 /**
@@ -416,6 +429,8 @@ export function useAuctionPayment() {
       if (!chainId) throw new Error(`Unsupported chain: ${params.chainName}`);
 
       const privateKey = await getWalletPrivateKey(activeType, importedWallet, fetchKeys);
+      const formattedKey = (privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`) as Hex;
+      const account = privateKeyToAccount(formattedKey);
 
       // Sign permit and send splitter payment
       setStep('signing_permit');
@@ -439,9 +454,10 @@ export function useAuctionPayment() {
       const buyerOwnership: Ownership = stealthOwnershipToApi(stealth);
 
       await getQNSClient().submitAuctionPayment(params.auctionId, {
+        buyer_address: account.address,
         tx_hash: hash,
         chain: params.chainName,
-        buyer_ownership: buyerOwnership,
+        ownership: buyerOwnership,
       });
 
       // Poll for confirmation
@@ -517,6 +533,8 @@ export function useOfferPayment() {
       if (!chainId) throw new Error(`Unsupported chain: ${params.chainName}`);
 
       const privateKey = await getWalletPrivateKey(activeType, importedWallet, fetchKeys);
+      const formattedKey = (privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`) as Hex;
+      const account = privateKeyToAccount(formattedKey);
 
       setStep('signing_permit');
 
@@ -539,9 +557,10 @@ export function useOfferPayment() {
       const buyerOwnership: Ownership = stealthOwnershipToApi(stealth);
 
       await getQNSClient().submitOfferPayment(params.offerId, {
+        buyer_address: account.address,
         tx_hash: hash,
         chain: params.chainName,
-        buyer_ownership: buyerOwnership,
+        ownership: buyerOwnership,
       });
 
       // Poll for confirmation
@@ -554,7 +573,7 @@ export function useOfferPayment() {
         attempts++;
         try {
           const status = await getQNSClient().getOfferPurchaseStatus(params.offerId);
-          if (status.state === 'sold') {
+          if (status.state === 'completed') {
             confirmed = true;
           } else if (status.state === 'failed') {
             throw new Error(status.message || 'Offer payment confirmation failed');

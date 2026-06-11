@@ -1,4 +1,5 @@
 import { logger } from '@quilibrium/quorum-shared';
+import { reportFarcasterAuthFailure } from './farcaster/authTokenEvents';
 
 const FARCASTER_BASE_URL = 'https://client.farcaster.xyz';
 
@@ -156,6 +157,76 @@ export async function checkWarpcastWallet(token: string, fid: number): Promise<{
   } catch (error: unknown) {
     // AbortError or network failure — return no wallet
     return { hasWallet: false };
+  }
+}
+
+/**
+ * Resolve a user's primary registered (Farcaster-verified) ETH address.
+ *
+ * Selection order among verifications carrying a valid ETH address:
+ *   1. a verification explicitly flagged `primary` (when the API returns one)
+ *   2. the first ETH verification WITHOUT the 'warpcastWallet' label
+ *      (a deliberately connected wallet, not the Privy embedded one)
+ *   3. a 'warpcastWallet'-labeled ETH verification as last resort
+ *
+ * Returns null when the user has no usable ETH verification.
+ */
+export async function fetchPrimaryEthAddress(token: string, fid: number): Promise<string | null> {
+  try {
+    const fidInt = Math.floor(Number(fid));
+    if (!fidInt || isNaN(fidInt)) {
+      return null;
+    }
+
+    // Add timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 10000);
+
+    const response = await fetch(
+      `${FARCASTER_BASE_URL}/v2/verifications?fid=${fidInt}&limit=100`,
+      {
+        method: 'GET',
+        headers: {
+          'accept': 'application/json',
+          'authorization': `Bearer ${token}`,
+        },
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeoutId);
+    if (!response.ok) {
+      return null;
+    }
+
+    const json = await response.json();
+    const verifications: { labels?: string[]; address?: string; primary?: boolean }[] =
+      json.result?.verifications ?? [];
+
+    // Ethereum addresses start with 0x and are 42 chars (0x + 40 hex)
+    const ethVerifications = verifications.filter(
+      (v) => typeof v.address === 'string' && /^0x[a-fA-F0-9]{40}$/.test(v.address)
+    );
+    if (ethVerifications.length === 0) {
+      return null;
+    }
+
+    const primary = ethVerifications.find((v) => v.primary);
+    if (primary?.address) {
+      return primary.address;
+    }
+
+    const nonWarpcast = ethVerifications.find((v) => !v.labels?.includes('warpcastWallet'));
+    if (nonWarpcast?.address) {
+      return nonWarpcast.address;
+    }
+
+    return ethVerifications[0].address ?? null;
+  } catch (error: unknown) {
+    // AbortError or network failure — treat as unresolvable
+    return null;
   }
 }
 
@@ -1092,6 +1163,12 @@ export async function fetchFarcasterNotifications({
   );
 
   if (!response.ok) {
+    // Expired/revoked token → kick off the background re-auth (it
+    // invalidates the notifications query on success so the refetch
+    // carries the new token). Still throw so this call fails normally.
+    if (response.status === 401 || response.status === 403) {
+      reportFarcasterAuthFailure();
+    }
     let detail = `HTTP ${response.status}`;
     try {
       const body = await response.text();

@@ -18,6 +18,7 @@ import { useTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
 import { validateSkin } from '@/theme/skins/validate';
 import { publishSkin } from '@/services/skins/skinsClient';
+import { logger } from '@quilibrium/quorum-shared';
 import type { FrameCorner, SkinColorTokens, SkinOverride } from '@/theme/skins/types';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -171,7 +172,8 @@ export function SkinEditor({ onClose }: { onClose: () => void }) {
       });
       if (!out.base64) return null;
       return `data:image/jpeg;base64,${out.base64}`;
-    } catch {
+    } catch (e) {
+      logger.warn('[skins] image processing failed:', e instanceof Error ? e.message : e);
       Alert.alert('Couldn’t process image', 'Please try another image.');
       return null;
     }

@@ -1,10 +1,13 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useMMKVBoolean } from 'react-native-mmkv';
+import { reportFarcasterAuthFailure } from '@/services/farcaster/authTokenEvents';
 import { isScamCast } from '@/services/farcaster/scamFilter';
 import { normalizedCastToLegacy } from '@/services/farcaster/hypersnapToLegacyShape';
 import { useAuth } from '@/context/AuthContext';
 import { useFollowingFids } from '@/hooks/useFollowingFids';
+import { useFarcasterUsersPrefetch } from '@/hooks/useFarcasterUsersPrefetch';
+import { getCachedFeed, setCachedFeed } from '@/services/offline/farcasterFeedCache';
 import {
   feedPrefsStore,
   K_SHOW_REPLIES_IN_FEED,
@@ -165,7 +168,7 @@ export interface EmbeddedCast {
   };
 }
 
-interface FeedPage {
+export interface FeedPage {
   items: FarcasterFeedItem[];
   /** Cursor for the next page. `number` = legacy `olderThan` timestamp;
    *  PageContext-shaped object = either continuation. `null` = end. */
@@ -179,7 +182,7 @@ interface UseFarcasterFeedOptions {
   enabled?: boolean;
 }
 
-interface PageContext {
+export interface PageContext {
   /** Legacy /v2/feed-items cursor. */
   olderThan?: number;
   latestMainCastTimestamp?: number;
@@ -287,6 +290,13 @@ async function fetchFeedPage(
   });
 
   if (!response.ok) {
+    // Expired/revoked token → kick off the background re-auth (it
+    // invalidates this query on success, so the retry fetch picks up
+    // the new token via the hook's `token` param). Still throw so this
+    // fetch surfaces its error normally.
+    if (response.status === 401 || response.status === 403) {
+      reportFarcasterAuthFailure();
+    }
     const errorData = await response.json().catch(() => null);
     throw new Error(
       errorData?.message || `Farcaster request failed (${response.status})`
@@ -320,8 +330,16 @@ export function useFarcasterFeed({ token, enabled = true }: UseFarcasterFeedOpti
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const fid = user?.farcaster?.fid;
-  const queryKey = ['farcaster-feed', token, fid];
+  // The auth token is deliberately NOT in the key — it changes on
+  // re-auth and would orphan the cached pages. fid is the data identity;
+  // the token is gated via `enabled` and used inside queryFn only.
+  const queryKey = ['farcaster-feed', fid];
   const topItemHashRef = useRef<string | undefined>(undefined);
+
+  // Paint the last-known feed instantly from MMKV on cold start, then
+  // refresh in the background. `initialDataUpdatedAt` carries the persist
+  // time so React Query's staleness logic still applies to restored data.
+  const cached = useMemo(() => getCachedFeed(fid), [fid]);
 
   const query = useInfiniteQuery({
     queryKey,
@@ -345,12 +363,42 @@ export function useFarcasterFeed({ token, enabled = true }: UseFarcasterFeedOpti
         excludeItemIdPrefixes: allExcludePrefixes,
       } as PageContext;
     },
-    enabled: enabled && Boolean(token),
+    enabled: Boolean(token) && enabled,
     staleTime: 1000 * 60 * 2, // 2 minutes
+    // Cap retained pages so a long scroll session doesn't pin every page
+    // in the JS heap; dropped pages refetch from the network on demand.
+    maxPages: 6,
+    initialData: cached?.data,
+    initialDataUpdatedAt: cached?.updatedAt,
   });
 
+  // Persist the freshest first page so the next cold start paints instantly.
+  useEffect(() => {
+    if (query.isFetched && query.data && query.data.pages.length > 0) {
+      setCachedFeed(fid, query.data);
+    }
+  }, [query.data, query.isFetched, fid]);
+
   // Flatten all pages into a single array
-  const allItems = query.data?.pages.flatMap((page) => page.items) ?? [];
+  const allItems = useMemo(
+    () => query.data?.pages.flatMap((page) => page.items) ?? [],
+    [query.data],
+  );
+
+  // Bulk-resolve parent authors for replies whose parent username is
+  // missing (hypersnap only returns the parent FID) — one bulk lookup per
+  // page instead of N per-cast fetches when ParentContextLine renders.
+  const parentAuthorFids = useMemo(() => {
+    const fids: number[] = [];
+    for (const item of allItems) {
+      const parent = item.cast?.parentAuthor;
+      if (item.cast?.parentHash && parent?.fid && !parent.username) {
+        fids.push(parent.fid);
+      }
+    }
+    return fids;
+  }, [allItems]);
+  useFarcasterUsersPrefetch(parentAuthorFids);
 
   // Main-feed reply filtering, in two layers (a reply is any cast with a
   // parentHash):

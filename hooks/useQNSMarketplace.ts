@@ -307,10 +307,14 @@ export function usePlaceBid() {
       amount: string;
       bidderAddress: string;
       bidderOwnership: Ownership;
+      signature: string;
+      chain?: string;
     }) => getQNSClient().placeBid(params.auctionId, {
       amount: params.amount,
       bidder_address: params.bidderAddress,
-      bidder_ownership: params.bidderOwnership,
+      ownership: params.bidderOwnership,
+      signature: params.signature,
+      chain: params.chain,
     }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
@@ -334,10 +338,12 @@ export function useInstantBuy() {
       auctionId: string;
       buyerAddress: string;
       buyerOwnership: Ownership;
-      chain: string;
+      signature: string;
+      chain?: string;
     }) => getQNSClient().instantBuy(params.auctionId, {
       buyer_address: params.buyerAddress,
-      buyer_ownership: params.buyerOwnership,
+      ownership: params.buyerOwnership,
+      signature: params.signature,
       chain: params.chain,
     }),
     onSuccess: (_, variables) => {
@@ -357,13 +363,15 @@ export function useSubmitAuctionPayment() {
   return useMutation({
     mutationFn: (params: {
       auctionId: string;
+      buyerAddress: string;
       txHash: string;
       chain: string;
       buyerOwnership: Ownership;
     }) => getQNSClient().submitAuctionPayment(params.auctionId, {
+      buyer_address: params.buyerAddress,
       tx_hash: params.txHash,
       chain: params.chain,
-      buyer_ownership: params.buyerOwnership,
+      ownership: params.buyerOwnership,
     }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
@@ -400,7 +408,7 @@ export function useCreateAuction() {
       token: params.token,
       starting_price: params.startingPrice,
       instant_buy_price: params.instantBuyPrice,
-      duration_hours: params.durationHours,
+      duration_seconds: Math.round(params.durationHours * 3600),
       seller_address: params.sellerAddress,
       signature: params.signature,
       timestamp: params.timestamp,
@@ -541,18 +549,20 @@ export function useCreateOfferOnListing() {
   return useMutation({
     mutationFn: (params: {
       listingId: string;
-      token: 'wQUIL' | 'USDC';
       amount: string;
       buyerAddress: string;
       buyerOwnership: Ownership;
       expiresInHours: number;
+      signature: string;
+      chain?: string;
     }) => getQNSClient().createOfferOnListing({
       listing_id: params.listingId,
-      token: params.token,
       amount: params.amount,
       buyer_address: params.buyerAddress,
-      buyer_ownership: params.buyerOwnership,
-      expires_in_hours: params.expiresInHours,
+      ownership: params.buyerOwnership,
+      expiration_seconds: Math.round(params.expiresInHours * 3600),
+      signature: params.signature,
+      chain: params.chain,
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -577,14 +587,18 @@ export function useCreateOfferOnName() {
       buyerAddress: string;
       buyerOwnership: Ownership;
       expiresInHours: number;
+      signature: string;
+      chain?: string;
     }) => getQNSClient().createOfferOnName({
       name: params.name,
       name_type: params.nameType,
       token: params.token,
       amount: params.amount,
       buyer_address: params.buyerAddress,
-      buyer_ownership: params.buyerOwnership,
-      expires_in_hours: params.expiresInHours,
+      ownership: params.buyerOwnership,
+      expiration_seconds: Math.round(params.expiresInHours * 3600),
+      signature: params.signature,
+      chain: params.chain,
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -603,14 +617,12 @@ export function useAcceptOffer() {
   return useMutation({
     mutationFn: (params: {
       offerId: string;
-      sellerAddress: string;
-      chain: string;
+      ownerAddress: string;
       signature: string;
       timestamp: number;
       nonce: string;
     }) => getQNSClient().acceptOffer(params.offerId, {
-      seller_address: params.sellerAddress,
-      chain: params.chain,
+      owner_address: params.ownerAddress,
       signature: params.signature,
       timestamp: params.timestamp,
       nonce: params.nonce,
@@ -663,10 +675,12 @@ export function useCancelOffer() {
   return useMutation({
     mutationFn: (params: {
       offerId: string;
+      buyerAddress: string;
       signature: string;
       timestamp: number;
       nonce: string;
     }) => getQNSClient().cancelOffer(params.offerId, {
+      buyer_address: params.buyerAddress,
       signature: params.signature,
       timestamp: params.timestamp,
       nonce: params.nonce,
@@ -691,13 +705,15 @@ export function useSubmitOfferPayment() {
   return useMutation({
     mutationFn: (params: {
       offerId: string;
+      buyerAddress: string;
       txHash: string;
       chain: string;
       buyerOwnership: Ownership;
     }) => getQNSClient().submitOfferPayment(params.offerId, {
+      buyer_address: params.buyerAddress,
       tx_hash: params.txHash,
       chain: params.chain,
-      buyer_ownership: params.buyerOwnership,
+      ownership: params.buyerOwnership,
     }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({

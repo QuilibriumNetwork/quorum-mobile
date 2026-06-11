@@ -595,6 +595,16 @@ export default function SendModal({ visible, onClose, preselectedAsset, initialR
           } else {
             refetchBalances();
           }
+          // Confirmation polling failed — the tx may still succeed on
+          // chain, so surface a status-unknown toast with the explorer link.
+          showToast({
+            type: 'error',
+            title: 'Confirmation Unknown',
+            message: `Couldn't confirm the ${txSymbol} send. Check the explorer for its status.`,
+            txHash: txHashCaptured,
+            explorerUrl,
+            duration: 8000,
+          });
         }
       })();
     } catch (error: unknown) {

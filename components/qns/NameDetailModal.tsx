@@ -7,10 +7,10 @@ import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context';
 import {
-  useGetNameRecord,
   useGetResaleListingByName,
   useUpdateResolveKey,
 } from '@/hooks/useQNS';
+import type { NameRecord } from '@/services/api/qnsClient';
 import {
   useCancelResaleListing,
   useTransferOwnership,
@@ -20,8 +20,7 @@ import {
   generateNonce,
   getFullStealthKeyMaterial,
   signResaleListing,
-  generateStealthOwnership,
-  stealthOwnershipToApi,
+  signStealthOwnership,
 } from '@/services/onboarding/keyService';
 import { getMnemonic, getPrivateKey } from '@/services/onboarding/secureStorage';
 import { useTheme, type AppTheme } from '@/theme';
@@ -39,6 +38,13 @@ interface NameDetailModalProps {
   nameType: 'username' | 'domain';
   isResolvable: boolean;
   isPrimary: boolean;
+  /**
+   * The stealth ownership record for this name, found in the owner's bucket
+   * (GET /bucket/{tag}). The server only exposes ownership markers via the
+   * bucket route, so the parent (which already holds the bucket records)
+   * passes the matched record down.
+   */
+  nameRecord?: NameRecord | null;
   onListName?: (name: string) => void;
   onRefresh?: () => void;
 }
@@ -50,6 +56,7 @@ export default function NameDetailModal({
   nameType,
   isResolvable,
   isPrimary,
+  nameRecord,
   onListName,
   onRefresh,
 }: NameDetailModalProps) {
@@ -62,10 +69,6 @@ export default function NameDetailModal({
   const [transferAddress, setTransferAddress] = React.useState('');
   const [isTransferring, setIsTransferring] = React.useState(false);
   const [isCancelling, setIsCancelling] = React.useState(false);
-
-  const { data: nameRecord, isLoading: isLoadingRecord } = useGetNameRecord(name, {
-    enabled: visible && !!name,
-  });
 
   const { data: listing, isLoading: isLoadingListing } = useGetResaleListingByName(name, {
     enabled: visible && !!name,
@@ -96,7 +99,7 @@ export default function NameDetailModal({
   };
 
   const handleMakeResolvable = async () => {
-    if (!user?.quilibriumAddress || !nameRecord?.ownership?.one_time_key || !nameRecord?.ownership?.verification_key) {
+    if (!user?.quilibriumAddress || !user?.publicKey || !nameRecord?.ownership?.one_time_key || !nameRecord?.ownership?.verification_key) {
       Alert.alert('Error', 'Could not retrieve ownership information.');
       return;
     }
@@ -126,14 +129,10 @@ export default function NameDetailModal({
         nonce
       );
 
-      // Derive the ed448 resolve key from the stealth key material
-      const { ed448PublicKey } = await import('@/services/onboarding/keyService')
-        .then(m => ({ ed448PublicKey: null })); // Simplified - use existing pattern
-
       updateResolveKey({
         name,
         nameType,
-        resolveKey: user.quilibriumAddress, // resolve key derived from address
+        resolveKey: user.publicKey, // ed448 public key as hex (57 bytes / 114 hex chars)
         signature,
         timestamp,
         nonce,
@@ -157,6 +156,8 @@ export default function NameDetailModal({
       return;
     }
 
+    const { one_time_key: oneTimeKeyB64, verification_key: verificationKeyB64 } = nameRecord.ownership;
+
     Alert.alert(
       'Cancel Listing',
       `Are you sure you want to remove @${name} from the marketplace?`,
@@ -178,8 +179,8 @@ export default function NameDetailModal({
                 privateKey ?? undefined
               );
 
-              const oneTimeKey = Uint8Array.from(atob(nameRecord.ownership.one_time_key), c => c.charCodeAt(0));
-              const verificationKey = Uint8Array.from(atob(nameRecord.ownership.verification_key), c => c.charCodeAt(0));
+              const oneTimeKey = Uint8Array.from(atob(oneTimeKeyB64), c => c.charCodeAt(0));
+              const verificationKey = Uint8Array.from(atob(verificationKeyB64), c => c.charCodeAt(0));
               const timestamp = Math.floor(Date.now() / 1000);
               const nonce = generateNonce();
 
@@ -234,6 +235,8 @@ export default function NameDetailModal({
       return;
     }
 
+    const { one_time_key: oneTimeKeyB64, verification_key: verificationKeyB64 } = nameRecord.ownership;
+
     Alert.alert(
       'Transfer Name',
       `Transfer @${name} to ${transferAddress.slice(0, 6)}...${transferAddress.slice(-4)}? This cannot be undone.`,
@@ -253,18 +256,20 @@ export default function NameDetailModal({
                 privateKey ?? undefined
               );
 
-              const oneTimeKey = Uint8Array.from(atob(nameRecord.ownership.one_time_key), c => c.charCodeAt(0));
-              const verificationKey = Uint8Array.from(atob(nameRecord.ownership.verification_key), c => c.charCodeAt(0));
+              const oneTimeKey = Uint8Array.from(atob(oneTimeKeyB64), c => c.charCodeAt(0));
+              const verificationKey = Uint8Array.from(atob(verificationKeyB64), c => c.charCodeAt(0));
               const timestamp = Math.floor(Date.now() / 1000);
               const nonce = generateNonce();
 
-              const signature = signResaleListing(
+              // The server verifies transfers against the "transfer" message type
+              // (not the name type) - see qns-api resolution.go
+              const signature = signStealthOwnership(
                 viewKeyMaterial,
                 spendKeyMaterial,
                 oneTimeKey,
                 verificationKey,
                 name,
-                nameType,
+                'transfer',
                 timestamp,
                 nonce
               );

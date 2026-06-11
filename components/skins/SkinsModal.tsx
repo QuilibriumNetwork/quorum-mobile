@@ -30,6 +30,7 @@ import {
   type SkinSummary,
 } from '@/services/skins/skinsClient';
 import { SkinEditor } from '@/components/skins/SkinEditor';
+import { logger } from '@quilibrium/quorum-shared';
 import * as Skin from '@/theme/skins/geometry';
 
 export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -59,7 +60,8 @@ export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: ()
     try {
       await setActiveSkin(skin);
       setRefresh((n) => n + 1);
-    } catch {
+    } catch (e) {
+      logger.warn('[skins] apply failed:', e instanceof Error ? e.message : e);
       Alert.alert('Couldn’t apply skin', 'Something went wrong applying that skin.');
     } finally {
       setBusy(false);
@@ -72,7 +74,8 @@ export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: ()
     try {
       const page = await fetchSkinGallery({ sort: 'popular', limit: 50 });
       setGallery(page.entries);
-    } catch {
+    } catch (e) {
+      logger.warn('[skins] gallery load failed:', e instanceof Error ? e.message : e);
       setGalleryError('Couldn’t load the gallery.');
     } finally {
       setGalleryLoading(false);
@@ -166,7 +169,8 @@ export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: ()
       if (res.canceled || !res.assets?.[0]) return;
       const text = await readAsStringAsync(res.assets[0].uri);
       handleImportText(text);
-    } catch {
+    } catch (e) {
+      logger.warn('[skins] file import failed:', e instanceof Error ? e.message : e);
       Alert.alert('Import failed', 'Couldn’t read that file.');
     }
   };

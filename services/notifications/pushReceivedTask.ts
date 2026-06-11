@@ -85,6 +85,12 @@ if (!taskDefined) {
     // Hub-log pushes carry hub_address; resolve to spaceId locally to
     // check the prefs. Skip when we can't resolve (the push will
     // still surface via the global flow).
+    //
+    // 'farcaster' and 'inbox' pushes intentionally stay under the
+    // global toggle above ONLY: neither carries a space context
+    // (farcaster routes by fid, inbox by per-DM inbox address), so
+    // there is no spaceId to check a per-space pref against. Per-space
+    // mutes simply don't apply to them.
     if (inferred.type === 'hub-log' && hubAddress) {
       const space = getSpaceByHubAddress(hubAddress);
       if (space && !getSpaceNotificationsEnabled(space.spaceId)) {

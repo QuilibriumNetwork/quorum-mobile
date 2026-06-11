@@ -167,7 +167,12 @@ export function useWalletAddresses() {
   // If we have cache, no need to derive
   const hasCache = !!cachedAddresses;
 
-  // Delay derivation until after interactions (only if no cache)
+  // Delay derivation until after interactions (only if no cache). A hard
+  // fallback timer guarantees derivation still happens even when
+  // InteractionManager never settles (continuous JS-driven animations —
+  // common on the simulator — starve runAfterInteractions indefinitely,
+  // which left the query disabled forever and the addresses tab showing
+  // "No wallet found" for a perfectly healthy wallet).
   const [canDerive, setCanDerive] = React.useState(false);
   React.useEffect(() => {
     if (!hasCache && !canDerive) {
@@ -176,29 +181,55 @@ export function useWalletAddresses() {
           setCanDerive(true);
         }, 200);
       });
-      return () => task.cancel();
+      const hardFallback = setTimeout(() => setCanDerive(true), 1500);
+      return () => {
+        task.cancel();
+        clearTimeout(hardFallback);
+      };
     }
   }, [hasCache, canDerive]);
 
   return useQuery({
     queryKey: walletKeys.addresses(),
     queryFn: async (): Promise<ChainAddresses | null> => {
-      // First try mnemonic (preferred)
-      const mnemonic = await getMnemonic();
-      if (mnemonic && mnemonic.length >= 12) {
-        const addresses = await deriveMultiChainAddressesAsync(mnemonic);
-        setCachedAddresses(DERIVATION_VERSION, addresses);
-        return addresses;
+      // First try mnemonic (preferred). Errors here must NOT abort the
+      // whole query — fall through to the private-key path (previously a
+      // mnemonic-derivation throw escaped the queryFn and the private-key
+      // fallback never ran).
+      try {
+        const stored = await getMnemonic();
+        // Older builds persisted the raw phrase string rather than a
+        // word array — normalize so `.map()` in the deriver doesn't
+        // throw on a string.
+        const mnemonic = typeof stored === 'string'
+          ? (stored as string).trim().split(/\s+/)
+          : stored;
+        if (mnemonic && mnemonic.length >= 12) {
+          const addresses = await deriveMultiChainAddressesAsync(mnemonic);
+          setCachedAddresses(DERIVATION_VERSION, addresses);
+          return addresses;
+        }
+        if (stored) {
+          console.warn('[useWalletAddresses] mnemonic present but malformed (length', mnemonic?.length, ') — trying private key');
+        }
+      } catch (e) {
+        console.warn('[useWalletAddresses] mnemonic derivation failed — trying private key:', e instanceof Error ? e.message : e);
       }
 
       // Fall back to hex private key derivation
-      const privateKey = await getPrivateKey();
-      if (privateKey && privateKey.length > 0) {
-        const addresses = await deriveMultiChainAddressesFromPrivateKeyAsync(privateKey);
-        setCachedAddresses(DERIVATION_VERSION, addresses);
-        return addresses;
+      try {
+        const privateKey = await getPrivateKey();
+        if (privateKey && privateKey.length > 0) {
+          const addresses = await deriveMultiChainAddressesFromPrivateKeyAsync(privateKey);
+          setCachedAddresses(DERIVATION_VERSION, addresses);
+          return addresses;
+        }
+      } catch (e) {
+        console.warn('[useWalletAddresses] private-key derivation failed:', e instanceof Error ? e.message : e);
+        throw e; // surface as query error — both sources failed
       }
 
+      console.warn('[useWalletAddresses] no mnemonic and no private key in secure storage — no addresses to derive');
       return null;
     },
     staleTime: Infinity,
@@ -385,9 +416,17 @@ export interface WalletData {
   addresses: ChainAddresses | null;
   balances: WalletBalances | null;
   isLoading: boolean;
+  /** True until the address-derivation query has actually completed.
+   *  Distinct from isLoading: a disabled/not-yet-started query is pending
+   *  but NOT loading — consumers must not render "no wallet" empty states
+   *  while this is true. */
+  addressesPending: boolean;
   isError: boolean;
   error: Error | null;
   refetch: () => void;
+  /** Re-run address derivation. The plain `refetch` only refreshes
+   *  balances — retry buttons for missing addresses must call this. */
+  refetchAddresses: () => void;
 }
 
 /**
@@ -397,7 +436,9 @@ export function useWallet(): WalletData {
   const {
     data: addresses,
     isLoading: addressesLoading,
+    isPending: addressesPending,
     error: addressesError,
+    refetch: refetchAddresses,
   } = useWalletAddresses();
 
   const {
@@ -422,9 +463,11 @@ export function useWallet(): WalletData {
     addresses: addresses ?? null,
     balances: balances ?? null,
     isLoading,
+    addressesPending: addressesPending && !addresses,
     isError: !!error,
     error: error as Error | null,
     refetch,
+    refetchAddresses,
   };
 }
 

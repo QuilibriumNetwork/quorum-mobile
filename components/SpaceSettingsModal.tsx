@@ -43,6 +43,10 @@ import {
 } from '@/hooks/chat';
 import { useSpaceMembers } from '@/hooks/chat/useSpaces';
 import { useDeleteSpace, useLeaveSpace, useUpdateSpace } from '@/hooks/chat/useSpaceSettings';
+import { useSpaceApexConfig, useSetSpaceApexConfig } from '@/hooks/useApex';
+import { useWalletSelection } from '@/hooks/useWalletSelection';
+import type { ApexToken } from '@/services/apex/config';
+import { getErrorMessage } from '@/utils/error';
 import { getSpace, getSpaceKey } from '@/services/config/spaceStorage';
 import {
   getChannelNotificationsEnabled,
@@ -261,6 +265,193 @@ function RoleEditor({ role, spaceId, theme, styles, onDelete }: RoleEditorProps)
         </View>
       )}
     </View>
+  );
+}
+
+const APEX_TOKEN_CHOICES: ApexToken[] = ['wQUIL', 'SNAP', 'USDC'];
+const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+/**
+ * Apex section (General tab, owner-only) — publish which token this space
+ * accepts for Quorum Apex subscriptions and the ETH address payouts go to.
+ * Inline success/error feedback only: this sits inside a native modal, so
+ * root toasts would render underneath it.
+ */
+function ApexConfigSection({
+  spaceAddress,
+  theme,
+  styles,
+}: {
+  spaceAddress: string;
+  theme: AppTheme;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const { data: existingConfig, isLoading: isConfigLoading } = useSpaceApexConfig(spaceAddress);
+  const setApexConfig = useSetSpaceApexConfig();
+  const { builtinWallet } = useWalletSelection();
+
+  const [token, setToken] = useState<ApexToken>('wQUIL');
+  const [payoutAddress, setPayoutAddress] = useState('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(
+    null
+  );
+
+  // Populate from the published config once it loads; otherwise prefill
+  // the payout with the owner's built-in ETH wallet address.
+  const initializedRef = React.useRef(false);
+  useEffect(() => {
+    if (initializedRef.current) return;
+    if (existingConfig) {
+      initializedRef.current = true;
+      setToken(existingConfig.token);
+      setPayoutAddress(existingConfig.payout_address);
+    } else if (existingConfig === null && builtinWallet?.address) {
+      initializedRef.current = true;
+      setPayoutAddress(builtinWallet.address);
+    }
+  }, [existingConfig, builtinWallet?.address]);
+
+  const trimmedAddress = payoutAddress.trim();
+  // The zero address is rejected everywhere downstream (payment service,
+  // contract, server) because ERC20 transfers to it revert or burn — fail
+  // it here so the owner finds out before saving.
+  const isZeroAddress =
+    trimmedAddress.toLowerCase() === '0x0000000000000000000000000000000000000000';
+  const isValidAddress = ETH_ADDRESS_RE.test(trimmedAddress) && !isZeroAddress;
+  const addressError =
+    trimmedAddress.length > 0 && !isValidAddress
+      ? isZeroAddress
+        ? 'The zero address would burn payments — use a real wallet address'
+        : 'Enter a valid Ethereum address (0x + 40 hex characters)'
+      : null;
+
+  const handleSave = () => {
+    if (!isValidAddress || setApexConfig.isPending) return;
+    setFeedback(null);
+    setApexConfig.mutate(
+      {
+        spaceAddress,
+        token,
+        payoutAddress: trimmedAddress,
+      },
+      {
+        onSuccess: () => setFeedback({ type: 'success', text: 'Apex settings saved.' }),
+        onError: (error) =>
+          setFeedback({
+            type: 'error',
+            text: getErrorMessage(error) || 'Failed to save Apex settings.',
+          }),
+      }
+    );
+  };
+
+  return (
+    <>
+      <View style={styles.divider} />
+      <Text style={styles.sectionTitle}>Apex</Text>
+      <Text style={styles.sectionDescription}>
+        Let Apex subscribers support this space. Choose the token you accept and where payouts go.
+      </Text>
+      {existingConfig?.subscriber_count != null && (
+        <Text style={[styles.sectionDescription, { marginTop: Skin.space(8) }]}>
+          {existingConfig.subscriber_count} active subscriber
+          {existingConfig.subscriber_count === 1 ? '' : 's'} currently support
+          {existingConfig.subscriber_count === 1 ? 's' : ''} this space.
+        </Text>
+      )}
+
+      {/* Token chips */}
+      <View style={{ flexDirection: 'row', gap: Skin.space(8), marginTop: Skin.space(12) }}>
+        {APEX_TOKEN_CHOICES.map((choice) => {
+          const isSelected = token === choice;
+          return (
+            <TouchableOpacity
+              key={choice}
+              onPress={() => {
+                setToken(choice);
+                setFeedback(null);
+              }}
+              style={{
+                paddingVertical: Skin.space(8),
+                paddingHorizontal: Skin.space(16),
+                borderRadius: Skin.radius(16),
+                backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface2,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: Skin.font(13),
+                  fontWeight: '600',
+                  color: isSelected ? '#fff' : theme.colors.textMain,
+                }}
+              >
+                {choice}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Payout address */}
+      <Text style={[styles.sectionDescription, { marginTop: Skin.space(16), marginBottom: Skin.space(4) }]}>
+        Payout address (Ethereum)
+      </Text>
+      <TextInput
+        value={payoutAddress}
+        onChangeText={(text) => {
+          setPayoutAddress(text);
+          setFeedback(null);
+        }}
+        placeholder="0x…"
+        placeholderTextColor={theme.colors.textMuted}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={{
+          backgroundColor: theme.colors.surface2,
+          color: theme.colors.textMain,
+          borderRadius: Skin.radius(10),
+          padding: Skin.space(12),
+          fontSize: Skin.font(14),
+        }}
+      />
+      {addressError && <Text style={styles.errorText}>{addressError}</Text>}
+      {feedback && (
+        <Text
+          style={{
+            fontSize: Skin.font(13),
+            marginTop: Skin.space(6),
+            color: feedback.type === 'success' ? (theme.colors.success ?? '#22c55e') : theme.colors.danger,
+          }}
+        >
+          {feedback.text}
+        </Text>
+      )}
+
+      <TouchableOpacity
+        onPress={handleSave}
+        disabled={!isValidAddress || setApexConfig.isPending || isConfigLoading}
+        style={{
+          marginTop: Skin.space(12),
+          alignSelf: 'flex-start',
+          paddingVertical: Skin.space(10),
+          paddingHorizontal: Skin.space(20),
+          borderRadius: Skin.radius(10),
+          backgroundColor:
+            isValidAddress && !setApexConfig.isPending && !isConfigLoading
+              ? theme.colors.primary
+              : theme.colors.surface3,
+          opacity: isValidAddress && !setApexConfig.isPending && !isConfigLoading ? 1 : 0.6,
+        }}
+      >
+        {setApexConfig.isPending ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={{ color: '#fff', fontWeight: '600', fontSize: Skin.font(14) }}>
+            Save Apex settings
+          </Text>
+        )}
+      </TouchableOpacity>
+    </>
   );
 }
 
@@ -1311,6 +1502,9 @@ export default function SpaceSettingsModal({
           <Text style={styles.saveButtonText}>Save Changes</Text>
         )}
       </TouchableOpacity>
+
+      {/* Quorum Apex — owner-only (the General tab is owner-gated) */}
+      <ApexConfigSection spaceAddress={spaceId} theme={theme} styles={styles} />
       </ScrollView>
     </View>
   );

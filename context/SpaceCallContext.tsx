@@ -160,7 +160,7 @@ const initialState: SpaceCallState = {
 // doesn't strobe between syllables.
 const SPEAKING_THRESHOLD = 0.05;
 const SPEAKING_HOLD_MS = 600;
-const SPEAKING_POLL_MS = 250;
+const SPEAKING_POLL_MS = 500;
 
 export function SpaceCallProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -275,6 +275,9 @@ export function SpaceCallProvider({ children }: { children: React.ReactNode }) {
     let prevTimestamp = 0;
 
     qualityIntervalRef.current = setInterval(async () => {
+      // Stats are only meaningful (and worth the bridge cost) while the
+      // call is actually connected — skip during recovery/teardown ticks.
+      if (phaseRef.current !== 'connected') return;
       const pc = pcRef.current;
       if (!pc) return;
 
@@ -344,6 +347,9 @@ export function SpaceCallProvider({ children }: { children: React.ReactNode }) {
   const startSpeakingMonitor = useCallback(() => {
     if (speakingIntervalRef.current) clearInterval(speakingIntervalRef.current);
     speakingIntervalRef.current = setInterval(async () => {
+      // Speaking indicators only matter (and audioLevel only flows) while
+      // connected — skip the getStats bridge call otherwise.
+      if (phaseRef.current !== 'connected') return;
       const pc = pcRef.current;
       if (!pc) return;
       try {

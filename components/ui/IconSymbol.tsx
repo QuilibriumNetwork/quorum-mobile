@@ -167,6 +167,7 @@ const MAPPING = {
   'clock.arrow.circlepath': 'history',
   'arrow.up.arrow.down': 'swap-vert',
   'plus.circle': 'add-circle-outline',
+  'minus.circle': 'remove-circle-outline',
   // Marketplace icons
   'tag.fill': 'sell',
   'rectangle.stack.fill': 'layers',

@@ -23,16 +23,19 @@ import {
   type SubmitCastResult,
 } from '@quilibrium/quorum-shared';
 import { useAuth } from '@/context/AuthContext';
+import { reportFarcasterAuthFailure } from '@/services/farcaster/authTokenEvents';
 import { hypersnapSignerStore } from '@/services/farcaster/hypersnapAdapters';
 import { extractMentions } from '@/services/farcaster/mentionExtraction';
 import { translateEmbedUrls } from '@/services/farcaster/embedTranslation';
+import { resolveChannelParentUrl } from '@/services/farcaster/channelUrlResolver';
 
-/** Hypersnap accepts a channel as its parent URL — the standard form
- *  used by farcaster.xyz / warpcast is `…/~/channel/<slug>`. We mirror
- *  that here so a known slug always lands in the same canonical bucket. */
-function channelKeyToParentUrl(key: string): string {
-  return `https://farcaster.xyz/~/channel/${key}`;
-}
+// Channel key → parent_url: a cast joins a channel ONLY when parent_url
+// exactly equals the channel's canonical FIP-2 `url` (warpcast.com/~/channel
+// form for most, chain:// URIs for original channels). Constructing the URL
+// from the key — the old behavior here — produced identifiers Farcaster's
+// backend doesn't recognize, so hypersnap-submitted casts fell out of their
+// channels. resolveChannelParentUrl fetches (and caches) the canonical URL
+// from the Farcaster API instead.
 
 export interface SubmitCastInput {
   text: string;
@@ -108,6 +111,13 @@ export function useFarcasterSubmitCast(options: UseFarcasterSubmitCastOptions = 
       const inputUrls = input.embedUrls ?? [];
       const embeds = await translateEmbedUrls(inputUrls, qc);
 
+      // Resolve the channel's canonical parent URL up front (the
+      // channelKeyToUrl callback below is synchronous). Cached after the
+      // first lookup per channel; falls back to the warpcast.com form.
+      const channelParentUrl = input.channelKey
+        ? await resolveChannelParentUrl(input.channelKey)
+        : undefined;
+
       // Map from a CastId's hash (hex) → original sharable URL. The
       // legacy `/v2/casts` endpoint only accepts plain URL strings,
       // so when the protocol-shape produced by `translateEmbedUrls`
@@ -124,21 +134,35 @@ export function useFarcasterSubmitCast(options: UseFarcasterSubmitCastOptions = 
         }
       });
 
-      return mutation.mutateAsync({
-        text,
-        embeds: embeds.length > 0 ? embeds : undefined,
-        mentions: mentions.length > 0 ? mentions : undefined,
-        mentionsPositions: mentionsPositions.length > 0 ? mentionsPositions : undefined,
-        parent: input.parent,
-        channelKey: input.channelKey,
-        channelKeyToUrl: input.channelKey ? channelKeyToParentUrl : undefined,
-        castIdToUrl: ({ hash }) => {
-          const hex = Array.from(hash)
-            .map((b) => b.toString(16).padStart(2, '0'))
-            .join('');
-          return castIdHashHexToUrl.get(hex);
-        },
-      });
+      try {
+        return await mutation.mutateAsync({
+          text,
+          embeds: embeds.length > 0 ? embeds : undefined,
+          mentions: mentions.length > 0 ? mentions : undefined,
+          mentionsPositions: mentionsPositions.length > 0 ? mentionsPositions : undefined,
+          parent: input.parent,
+          channelKey: input.channelKey,
+          channelKeyToUrl: channelParentUrl ? () => channelParentUrl : undefined,
+          castIdToUrl: ({ hash }) => {
+            const hex = Array.from(hash)
+              .map((b) => b.toString(16).padStart(2, '0'))
+              .join('');
+            return castIdHashHexToUrl.get(hex);
+          },
+        });
+      } catch (e) {
+        // The legacy `/v2/casts` fallback throws quorum-shared's
+        // LegacyFarcasterError, which carries the HTTP status (the
+        // class isn't exported, so duck-type it). An expired token
+        // surfaces here as 401/403 — kick off the background re-auth
+        // so the user's retry succeeds; still rethrow so the composer
+        // shows the failure.
+        const status = (e as { status?: unknown })?.status;
+        if (status === 401 || status === 403) {
+          reportFarcasterAuthFailure();
+        }
+        throw e;
+      }
     },
     [mutation, qc],
   );

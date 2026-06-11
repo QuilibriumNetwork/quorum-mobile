@@ -16,6 +16,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { getLocalTokenIconUri } from '@/services/wallet/tokenIcons';
 
 const DEXSCREENER_BASE = 'https://api.dexscreener.com/latest/dex/tokens';
 const PRICE_CHART_BASE = 'https://rpc-proxy.quorummessenger.com/api/price/chart';
@@ -113,7 +114,7 @@ export async function fetchTokenInfo(
     symbol: dex.symbol,
     priceUsd: dex.priceUsd,
     change24hPct: dex.change24hPct,
-    iconUrl: dex.iconUrl,
+    iconUrl: getLocalTokenIconUri(contractAddress) || dex.iconUrl,
     liquidityUsd: dex.liquidityUsd,
     sparkline: chart,
   };

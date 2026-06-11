@@ -119,7 +119,8 @@ export function useSearchSummary({
       };
     },
     enabled: enabled && q.trim().length > 0,
-    staleTime: 60 * 1000,
+    staleTime: 5 * 60 * 1000, // 5 minutes - re-running the same search rarely changes
+    gcTime: 30 * 60 * 1000, // 30 minutes
   });
 }
 
@@ -169,9 +170,13 @@ export function useSearchUsers({
       };
     },
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.next,
+    getNextPageParam: (lastPage) => {
+      if (!lastPage.next) return undefined;
+      return lastPage.next;
+    },
     enabled: enabled && q.trim().length > 0,
     staleTime: 60 * 1000,
+    maxPages: 6,
   });
 
   const users = useMemo(() => {
@@ -237,9 +242,13 @@ export function useSearchChannels({
       };
     },
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.next,
+    getNextPageParam: (lastPage) => {
+      if (!lastPage.next) return undefined;
+      return lastPage.next;
+    },
     enabled: enabled && q.trim().length > 0,
     staleTime: 60 * 1000,
+    maxPages: 6,
   });
 
   const channels = useMemo(() => {
@@ -305,9 +314,13 @@ export function useSearchCasts({
       };
     },
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.next,
+    getNextPageParam: (lastPage) => {
+      if (!lastPage.next) return undefined;
+      return lastPage.next;
+    },
     enabled: enabled && q.trim().length > 0,
     staleTime: 60 * 1000,
+    maxPages: 6,
   });
 
   const casts = useMemo(() => {

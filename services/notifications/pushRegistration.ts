@@ -64,7 +64,8 @@ function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-function be64(n: bigint | number): Uint8Array {
+// Exported for pushPrefsSync, which signs over the same byte layout.
+export function be64(n: bigint | number): Uint8Array {
   const out = new Uint8Array(8);
   let v = typeof n === 'bigint' ? n : BigInt(n);
   for (let i = 7; i >= 0; i--) {
@@ -74,7 +75,7 @@ function be64(n: bigint | number): Uint8Array {
   return out;
 }
 
-function concatBytes(...parts: Uint8Array[]): Uint8Array {
+export function concatBytes(...parts: Uint8Array[]): Uint8Array {
   let total = 0;
   for (const p of parts) total += p.length;
   const out = new Uint8Array(total);
@@ -86,13 +87,19 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-interface InboxKeyMaterial {
+export interface InboxKeyMaterial {
   inboxAddress: string;
   publicKeyHex: string;
   privateKeyBytes: Uint8Array;
 }
 
-async function gatherInboxKeys(): Promise<InboxKeyMaterial[]> {
+/**
+ * Enumerate every inbox keyset the user holds: device inbox first
+ * (the "primary" inbox), then space inboxes, then per-conversation
+ * inboxes. Exported so pushPrefsSync can pick the same primary inbox
+ * registration uses to sign its requests.
+ */
+export async function gatherInboxKeys(): Promise<InboxKeyMaterial[]> {
   const out: InboxKeyMaterial[] = [];
 
   const device = await getDeviceKeyset();
@@ -131,7 +138,7 @@ async function gatherInboxKeys(): Promise<InboxKeyMaterial[]> {
   return out;
 }
 
-async function getExpoPushToken(): Promise<string | null> {
+export async function getExpoPushToken(): Promise<string | null> {
   try {
     const projectId =
       (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas
@@ -143,6 +150,17 @@ async function getExpoPushToken(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Ed448-sign an already-assembled message with an inbox private key,
+ * returning the signature hex the server expects. Shared by the
+ * register/unregister paths here and by pushPrefsSync.
+ */
+export async function signEd448Hex(priv: Uint8Array, msg: Uint8Array): Promise<string> {
+  const provider = new NativeCryptoProvider();
+  const sigB64 = await provider.signEd448(bytesToBase64(priv), bytesToBase64(msg));
+  return bytesToHex(base64ToBytes(sigB64));
 }
 
 async function signRegister(
@@ -158,10 +176,7 @@ async function signRegister(
   const tsBytes = be64(BigInt(timestampMs));
   const domain = new TextEncoder().encode('push-register');
   const msg = concatBytes(domain, tokenBytes, platformBytes, fidBytes, tsBytes);
-
-  const provider = new NativeCryptoProvider();
-  const sigB64 = await provider.signEd448(bytesToBase64(priv), bytesToBase64(msg));
-  return bytesToHex(base64ToBytes(sigB64));
+  return signEd448Hex(priv, msg);
 }
 
 async function signUnregister(
@@ -173,9 +188,7 @@ async function signUnregister(
   const tsBytes = be64(BigInt(timestampMs));
   const domain = new TextEncoder().encode('push-unregister');
   const msg = concatBytes(domain, tokenBytes, tsBytes);
-  const provider = new NativeCryptoProvider();
-  const sigB64 = await provider.signEd448(bytesToBase64(priv), bytesToBase64(msg));
-  return bytesToHex(base64ToBytes(sigB64));
+  return signEd448Hex(priv, msg);
 }
 
 // Single-flight guard. Concurrent callers (auth effect, rotation
@@ -264,6 +277,11 @@ async function registerPushTokenInternal(opts?: {
     pushRegStorage.set(LAST_TOKEN_KEY, expoToken);
     pushRegStorage.set(LAST_FID_KEY, fid);
     pushRegStorage.set(LAST_REGISTERED_AT_KEY, now);
+    // A previous prefs sync may have failed (network); registration is
+    // invoked on every startup, so this is the retry surface. Dynamic
+    // import avoids the pushPrefsSync → pushRegistration cycle.
+    const { retryPushPrefsSyncIfDirty } = await import('./pushPrefsSync');
+    retryPushPrefsSyncIfDirty();
     return;
   }
 
@@ -313,6 +331,14 @@ async function registerPushTokenInternal(opts?: {
   // hasn't changed). Awaited so any async errors surface in the same
   // logging surface as registration errors.
   await writeNotificationCatalog();
+
+  // A fresh token binding must immediately carry the user's notification
+  // prefs, otherwise the server pushes unfiltered until the next pref
+  // toggle. Dynamic import avoids the pushPrefsSync → pushRegistration
+  // cycle; errors are swallowed inside the sync (it marks itself dirty
+  // and retries on the next registration / foreground).
+  const { syncPushPrefsWithQuorum } = await import('./pushPrefsSync');
+  await syncPushPrefsWithQuorum();
 }
 
 /**

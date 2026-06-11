@@ -1,5 +1,6 @@
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useToast } from '@/context/ToastContext';
 import { useWebSocket } from '@/context/WebSocketContext';
 import { isValidAvatarUri } from '@/utils/validation';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
@@ -11,7 +12,7 @@ import type { DirectoryEntry } from '@/services/api/quorumClient';
 import { haptics } from '@/utils/haptics';
 import { router, Stack } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useHeaderHeight } from '@react-navigation/elements';
 import * as Skin from '@/theme/skins/geometry';
@@ -27,6 +28,7 @@ export default function DiscoverSpacesScreen() {
   const { theme, isDark } = useTheme();
   const headerHeight = useHeaderHeight();
   const { isConnected } = useWebSocket();
+  const { showToast } = useToast();
   const { data: joinedSpaces } = useSpaces();
   const joinSpaceMutation = useJoinSpace();
 
@@ -44,7 +46,7 @@ export default function DiscoverSpacesScreen() {
 
   const handleJoin = useCallback(async (entry: DirectoryEntry) => {
     if (!isConnected) {
-      Alert.alert('Not Connected', 'Please check your connection.');
+      showToast({ type: 'error', title: 'Not Connected', message: 'Please check your connection.' });
       return;
     }
 
@@ -55,7 +57,7 @@ export default function DiscoverSpacesScreen() {
       const client = getQuorumClient();
       const spaceData = await client.fetchSpace(entry.space_address);
       if (!spaceData?.inviteUrl) {
-        Alert.alert('Unable to Join', 'This space has no public invite link.');
+        showToast({ type: 'error', title: 'Unable to Join', message: 'This space has no public invite link.' });
         return;
       }
 
@@ -65,11 +67,15 @@ export default function DiscoverSpacesScreen() {
 
       router.push(`/spaces/${entry.space_address}`);
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to join');
+      showToast({
+        type: 'error',
+        title: 'Failed to Join',
+        message: error instanceof Error ? error.message : 'Failed to join',
+      });
     } finally {
       setJoiningId(null);
     }
-  }, [isConnected, joinSpaceMutation]);
+  }, [isConnected, joinSpaceMutation, showToast]);
 
   const renderEntry = useCallback(({ item }: { item: DirectoryEntry }) => {
     const isJoined = joinedIds.has(item.space_address);

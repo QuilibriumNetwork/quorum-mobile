@@ -295,14 +295,10 @@ export function useGetPaymentAddress() {
     mutationFn: ({
       walletAddress,
       signature,
-      token,
-      chain,
     }: {
       walletAddress: string;
       signature: string;
-      token: 'wQUIL' | 'USDC';
-      chain: string;
-    }) => getQNSClient().getPaymentAddress(walletAddress, signature, token, chain),
+    }) => getQNSClient().getPaymentAddress(walletAddress, signature),
   });
 }
 
@@ -421,19 +417,6 @@ export function useCreateResaleListing() {
         queryKey: ['qns', 'bucket'],
       });
     },
-  });
-}
-
-/**
- * Get a name record with ownership keys
- */
-export function useGetNameRecord(name: string | undefined, options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: ['qns', 'nameRecord', name ?? ''],
-    queryFn: () => getQNSClient().getNameRecord(name!),
-    enabled: !!name && options?.enabled !== false,
-    staleTime: queryConfig.staleTime.profile,
-    gcTime: queryConfig.gcTime,
   });
 }
 

@@ -5,8 +5,8 @@
 import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context';
-import { useGetNameRecord } from '@/hooks/useQNS';
 import { useCreateAuction, useAuctionInfo } from '@/hooks/useQNSMarketplace';
+import type { NameRecord } from '@/services/api/qnsClient';
 import {
   generateNonce,
   getFullStealthKeyMaterial,
@@ -27,6 +27,11 @@ interface CreateAuctionModalProps {
   onClose: () => void;
   name: string;
   nameType: 'username' | 'domain';
+  /**
+   * The stealth ownership record for this name from the owner's bucket
+   * (GET /bucket/{tag}) - the only route that exposes ownership markers.
+   */
+  nameRecord?: NameRecord | null;
   onSuccess?: () => void;
 }
 
@@ -37,6 +42,7 @@ export default function CreateAuctionModal({
   onClose,
   name,
   nameType,
+  nameRecord,
   onSuccess,
 }: CreateAuctionModalProps) {
   const { theme, isDark } = useTheme();
@@ -50,10 +56,6 @@ export default function CreateAuctionModal({
   const [instantBuyPrice, setInstantBuyPrice] = React.useState('');
   const [durationHours, setDurationHours] = React.useState(48);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-
-  const { data: nameRecord, isLoading: isLoadingRecord } = useGetNameRecord(name, {
-    enabled: visible && !!name,
-  });
 
   const { data: auctionInfo } = useAuctionInfo({ enabled: visible });
   const { mutate: createAuction, isPending: isCreating } = useCreateAuction();

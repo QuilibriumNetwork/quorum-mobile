@@ -1,6 +1,6 @@
 import type { AppTheme } from '@/theme';
 import React, { useCallback, useState, useRef, useMemo, forwardRef, useImperativeHandle, useEffect } from 'react';
-import { Image, Text, View, StyleSheet, ImageSourcePropType, ActivityIndicator, Pressable, useWindowDimensions } from 'react-native';
+import { Image, Text, View, StyleSheet, ImageSourcePropType, ActivityIndicator, Pressable, useWindowDimensions, type ImageStyle, type StyleProp } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, withSequence } from 'react-native-reanimated';
@@ -9,6 +9,8 @@ import { haptics } from '@/utils/haptics';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
+import { ApexAvatarRing } from '@/components/ui/ApexAvatarRing';
+import { useApexStatusForAddresses } from '@/hooks/useApex';
 import { AutoHeightImage } from '@/components/SocialFeed/media/AutoHeightImage';
 import { ImageViewer } from '@/components/SocialFeed/media/ImageViewer';
 import { InviteLinkCard, containsInviteLink, extractInviteLink, stripInviteLink } from './InviteLinkCard';
@@ -122,6 +124,154 @@ function getAvatarSource(msg: DisplayMessage): ImageSourcePropType | undefined {
   }
   return msg.userAvatar;
 }
+
+type MessageStyles = ReturnType<typeof createStyles>;
+
+// Memoized reaction badge — gives each badge stable press handlers so the
+// reactions row doesn't recreate closures for every badge on each cell render.
+const ReactionBadge = React.memo(function ReactionBadge({
+  reaction,
+  messageId,
+  customEmoji,
+  styles,
+  onToggle,
+  onShowDetails,
+}: {
+  reaction: DisplayReaction;
+  messageId: string;
+  customEmoji?: Emoji;
+  styles: MessageStyles;
+  onToggle: (messageId: string, emoji: string, hasReacted: boolean) => void;
+  onShowDetails: (messageId: string) => void;
+}) {
+  const handlePress = useCallback(() => {
+    onToggle(messageId, reaction.emoji, reaction.hasReacted);
+  }, [onToggle, messageId, reaction.emoji, reaction.hasReacted]);
+
+  // Long-press any badge opens the reactor-detail modal.
+  // We don't preselect the touched emoji per the spec — the
+  // modal opens with no pill selected so the user sees the
+  // full reactor list, then can drill down via the pills.
+  const handleLongPress = useCallback(() => {
+    onShowDetails(messageId);
+  }, [onShowDetails, messageId]);
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.reactionBadge,
+        reaction.hasReacted && styles.reactionBadgeActive,
+      ]}
+      onPress={handlePress}
+      onLongPress={handleLongPress}
+      delayLongPress={300}
+    >
+      {customEmoji ? (
+        <Image
+          source={{ uri: customEmoji.imgUrl }}
+          style={styles.reactionCustomEmoji}
+          resizeMode="contain"
+        />
+      ) : (
+        <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
+      )}
+      <Text
+        style={[
+          styles.reactionCount,
+          reaction.hasReacted && styles.reactionCountActive,
+        ]}
+      >
+        {reaction.count}
+      </Text>
+    </TouchableOpacity>
+  );
+});
+
+// Memoized embed image — gives AutoHeightImage stable press handlers so the
+// embed row doesn't mint a new closure per cell render.
+const EmbedMessageImage = React.memo(function EmbedMessageImage({
+  uri,
+  maxWidth,
+  style,
+  messageId,
+  onImagePress,
+  onMessageLongPress,
+}: {
+  uri: string;
+  maxWidth: number;
+  style: StyleProp<ImageStyle>;
+  messageId: string;
+  onImagePress: (url: string) => void;
+  onMessageLongPress: (messageId: string) => void;
+}) {
+  const handlePress = useCallback(() => onImagePress(uri), [onImagePress, uri]);
+  const handleLongPress = useCallback(() => onMessageLongPress(messageId), [onMessageLongPress, messageId]);
+  return (
+    <AutoHeightImage
+      uri={uri}
+      maxHeight={400}
+      maxWidth={maxWidth}
+      style={style}
+      onPress={handlePress}
+      onLongPress={handleLongPress}
+    />
+  );
+});
+
+// Memoized reply indicator — tap scrolls to the original message.
+const ReplyIndicator = React.memo(function ReplyIndicator({
+  replyToMessageId,
+  replyToAuthor,
+  replyPreview,
+  styles,
+  mutedColor,
+  onPress,
+}: {
+  replyToMessageId: string;
+  replyToAuthor: string;
+  replyPreview?: string;
+  styles: MessageStyles;
+  mutedColor: string;
+  onPress: (messageId: string) => void;
+}) {
+  const handlePress = useCallback(() => {
+    onPress(replyToMessageId);
+  }, [onPress, replyToMessageId]);
+  return (
+    <TouchableOpacity
+      style={styles.replyIndicator}
+      onPress={handlePress}
+      activeOpacity={0.7}
+    >
+      <IconSymbol
+        name="arrowshape.turn.up.left.fill"
+        size={12}
+        color={mutedColor}
+      />
+      <Text style={styles.replyIndicatorText} numberOfLines={1}>
+        {replyToAuthor}: {replyPreview || '...'}
+      </Text>
+    </TouchableOpacity>
+  );
+});
+
+// Memoized retry button for failed sends.
+const RetryButton = React.memo(function RetryButton({
+  messageId,
+  styles,
+  onRetry,
+}: {
+  messageId: string;
+  styles: MessageStyles;
+  onRetry: (messageId: string) => void;
+}) {
+  const handlePress = useCallback(() => onRetry(messageId), [onRetry, messageId]);
+  return (
+    <TouchableOpacity onPress={handlePress} style={styles.retryButton}>
+      <Text style={styles.retryText}>Retry</Text>
+    </TouchableOpacity>
+  );
+});
 
 export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(function MessagesList({
   messages,
@@ -289,6 +439,15 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     }
   }, [memberMap, onUserPress]);
 
+  // Apex gold ring — batched "is this sender Apex-active?" lookup over the
+  // distinct sender addresses of the loaded messages. Degrades silently to
+  // an empty set when the server endpoint isn't live.
+  const senderAddresses = useMemo(
+    () => Array.from(new Set(messages.map((m) => m.userId))),
+    [messages]
+  );
+  const apexAddresses = useApexStatusForAddresses(senderAddresses);
+
   // Helper to render tappable avatar
   const renderAvatar = useCallback(
     (item: DisplayMessage) => {
@@ -314,10 +473,18 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
           }
         : undefined;
 
-      const avatarContent = avatarSource ? (
-        <CachedAvatar source={avatarSource} style={styles.messageAvatar} />
-      ) : (
-        <DefaultAvatar address={item.userId} size={40} style={styles.messageAvatar} />
+      const avatarContent = (
+        <ApexAvatarRing
+          active={apexAddresses.has(item.userId)}
+          size={40}
+          style={styles.messageAvatarRing}
+        >
+          {avatarSource ? (
+            <CachedAvatar source={avatarSource} style={styles.messageAvatar} />
+          ) : (
+            <DefaultAvatar address={item.userId} size={40} style={styles.messageAvatar} />
+          )}
+        </ApexAvatarRing>
       );
 
       if (handlePress) {
@@ -330,7 +497,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
 
       return avatarContent;
     },
-    [styles.messageAvatar, onUserPress, memberMap]
+    [styles.messageAvatar, styles.messageAvatarRing, onUserPress, memberMap, apexAddresses]
   );
 
   // onStartReached fires when scrolling toward the top (older messages)
@@ -349,6 +516,35 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     },
     [reactionPickerMessageId, onReaction]
   );
+
+  // Stable handlers passed to memoized row sub-components (ReactionBadge,
+  // EmbedMessageImage, ReplyIndicator, RetryButton) — the children call
+  // these with their own data so no per-row closures are needed.
+  const handleImagePress = useCallback((url: string) => {
+    setViewerImage(url);
+  }, []);
+
+  const handleMessageLongPress = useCallback((messageId: string) => {
+    haptics.medium();
+    if (onReply || onDelete) {
+      setActionSheetMessageId(messageId);
+    } else {
+      setReactionPickerMessageId(messageId);
+    }
+  }, [onReply, onDelete]);
+
+  const handleToggleReaction = useCallback((messageId: string, emoji: string, hasReacted: boolean) => {
+    if (hasReacted) {
+      onRemoveReaction?.(messageId, emoji);
+    } else {
+      onReaction?.(messageId, emoji);
+    }
+  }, [onReaction, onRemoveReaction]);
+
+  const handleShowReactionDetails = useCallback((messageId: string) => {
+    haptics.selection();
+    setReactionDetailsMessageId(messageId);
+  }, []);
 
   // Get the message being acted on for reply
   const actionSheetMessage = useMemo(() => {
@@ -424,58 +620,22 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       if (!reactions || reactions.length === 0) return null;
       return (
         <View style={styles.reactionsRow}>
-          {reactions.map((reaction) => {
-            // Check if this is a custom emoji (ID matches a custom emoji)
-            const customEmoji = customEmojiMap[reaction.emoji];
-
-            return (
-              <TouchableOpacity
-                key={reaction.emoji}
-                style={[
-                  styles.reactionBadge,
-                  reaction.hasReacted && styles.reactionBadgeActive,
-                ]}
-                onPress={() => {
-                  if (reaction.hasReacted) {
-                    onRemoveReaction?.(messageId, reaction.emoji);
-                  } else {
-                    onReaction?.(messageId, reaction.emoji);
-                  }
-                }}
-                // Long-press any badge opens the reactor-detail modal.
-                // We don't preselect the touched emoji per the spec — the
-                // modal opens with no pill selected so the user sees the
-                // full reactor list, then can drill down via the pills.
-                onLongPress={() => {
-                  haptics.selection();
-                  setReactionDetailsMessageId(messageId);
-                }}
-                delayLongPress={300}
-              >
-                {customEmoji ? (
-                  <Image
-                    source={{ uri: customEmoji.imgUrl }}
-                    style={styles.reactionCustomEmoji}
-                    resizeMode="contain"
-                  />
-                ) : (
-                  <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
-                )}
-                <Text
-                  style={[
-                    styles.reactionCount,
-                    reaction.hasReacted && styles.reactionCountActive,
-                  ]}
-                >
-                  {reaction.count}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          {reactions.map((reaction) => (
+            <ReactionBadge
+              key={reaction.emoji}
+              reaction={reaction}
+              messageId={messageId}
+              // Check if this is a custom emoji (ID matches a custom emoji)
+              customEmoji={customEmojiMap[reaction.emoji]}
+              styles={styles}
+              onToggle={handleToggleReaction}
+              onShowDetails={handleShowReactionDetails}
+            />
+          ))}
         </View>
       );
     },
-    [styles, onReaction, onRemoveReaction, customEmojiMap]
+    [styles, handleToggleReaction, handleShowReactionDetails, customEmojiMap]
   );
 
   // Render system message (join/leave/kick)
@@ -610,14 +770,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     (item: DisplayMessage) => {
       const imageUrl = item.imageUrl || item.thumbnailUrl;
 
-      const handleLongPress = () => {
-        haptics.medium();
-        if (onReply || onDelete) {
-          setActionSheetMessageId(item.id);
-        } else {
-          setReactionPickerMessageId(item.id);
-        }
-      };
+      const handleLongPress = () => handleMessageLongPress(item.id);
 
       const isHighlighted = highlightedMessageId === item.id;
 
@@ -632,13 +785,13 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               </View>
               {imageUrl && (
                 <View style={styles.embedImageContainer}>
-                  <AutoHeightImage
+                  <EmbedMessageImage
                     uri={imageUrl}
-                    maxHeight={400}
                     maxWidth={MESSAGE_IMAGE_MAX_WIDTH}
                     style={styles.embedImage}
-                    onPress={() => setViewerImage(imageUrl)}
-                    onLongPress={handleLongPress}
+                    messageId={item.id}
+                    onImagePress={handleImagePress}
+                    onMessageLongPress={handleMessageLongPress}
                   />
                 </View>
               )}
@@ -672,7 +825,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, renderAvatar, onReply, onDelete, highlightedMessageId, highlightAnimStyle]
+    [styles, renderReactions, renderAvatar, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle]
   );
 
   // Render sticker message
@@ -680,14 +833,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     (item: DisplayMessage) => {
       const sticker = item.stickerId ? stickerMap[item.stickerId] : null;
 
-      const handleLongPress = () => {
-        haptics.medium();
-        if (onReply || onDelete) {
-          setActionSheetMessageId(item.id);
-        } else {
-          setReactionPickerMessageId(item.id);
-        }
-      };
+      const handleLongPress = () => handleMessageLongPress(item.id);
 
       const isHighlighted = highlightedMessageId === item.id;
 
@@ -719,7 +865,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, stickerMap, renderAvatar, onReply, onDelete, highlightedMessageId, highlightAnimStyle]
+    [styles, renderReactions, stickerMap, renderAvatar, handleMessageLongPress, highlightedMessageId, highlightAnimStyle]
   );
 
   // Helper to get reply preview from parent message
@@ -760,14 +906,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       }
 
       // Show action sheet if reply is available, otherwise go straight to emoji picker
-      const handleLongPress = () => {
-        haptics.medium();
-        if (onReply || onDelete) {
-          setActionSheetMessageId(item.id);
-        } else {
-          setReactionPickerMessageId(item.id);
-        }
-      };
+      const handleLongPress = () => handleMessageLongPress(item.id);
 
       const isHighlighted = highlightedMessageId === item.id;
 
@@ -801,22 +940,14 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               </View>
               {/* Reply indicator - tap to scroll to original message */}
               {item.isReply && item.replyToAuthor && item.replyToMessageId && (
-                <TouchableOpacity
-                  style={styles.replyIndicator}
-                  onPress={() => {
-                    scrollToMessageWithHighlight(item.replyToMessageId!);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <IconSymbol
-                    name="arrowshape.turn.up.left.fill"
-                    size={12}
-                    color={theme.colors.textMuted}
-                  />
-                  <Text style={styles.replyIndicatorText} numberOfLines={1}>
-                    {item.replyToAuthor}: {replyPreview || '...'}
-                  </Text>
-                </TouchableOpacity>
+                <ReplyIndicator
+                  replyToMessageId={item.replyToMessageId}
+                  replyToAuthor={item.replyToAuthor}
+                  replyPreview={replyPreview}
+                  styles={styles}
+                  mutedColor={theme.colors.textMuted}
+                  onPress={scrollToMessageWithHighlight}
+                />
               )}
               {item.hasLink && item.link ? (
                 <View style={styles.messageWithLink}>
@@ -877,12 +1008,11 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                     {item.sendError || 'Failed to send'}
                   </Text>
                   {onRetryMessage && (
-                    <TouchableOpacity
-                      onPress={() => onRetryMessage(item.id)}
-                      style={styles.retryButton}
-                    >
-                      <Text style={styles.retryText}>Retry</Text>
-                    </TouchableOpacity>
+                    <RetryButton
+                      messageId={item.id}
+                      styles={styles}
+                      onRetry={onRetryMessage}
+                    />
                   )}
                 </View>
               )}
@@ -891,7 +1021,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, scrollToMessageWithHighlight, customEmojis, members, channels, currentUserId, onUserPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, onReply, onDelete]
+    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, scrollToMessageWithHighlight, customEmojis, members, channels, currentUserId, onUserPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress]
   );
 
   const renderCast = useCallback(
@@ -1124,6 +1254,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: Skin.radius(20),
+  },
+  // The avatar's right margin lives on the ApexAvatarRing wrapper so the
+  // gold ring hugs the image instead of enclosing the margin.
+  messageAvatarRing: {
     marginRight: Skin.space(12),
   },
   messageContent: {

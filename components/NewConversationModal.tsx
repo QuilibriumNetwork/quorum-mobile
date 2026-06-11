@@ -73,6 +73,7 @@ export default function NewConversationModal({
     data: resolvedName,
     isLoading: isResolvingName,
     error: resolveError,
+    refetch: retryResolveName,
   } = useResolveName(usernameToResolve, {
     enabled: usernameToResolve.length >= 1,
   });
@@ -235,9 +236,18 @@ export default function NewConversationModal({
                 @{usernameToResolve} is registered but not publicly resolvable
               </Text>
             ) : resolveError ? (
-              <Text style={styles.errorText}>
-                @{usernameToResolve} not found
-              </Text>
+              <View style={styles.resolveErrorRow}>
+                <Text style={styles.errorText}>
+                  @{usernameToResolve} not found
+                </Text>
+                <TouchableOpacity
+                  onPress={() => retryResolveName()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry lookup"
+                >
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
             ) : null
           )}
           {existingConversation && (
@@ -329,6 +339,18 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.danger ?? '#ef4444',
+    },
+    resolveErrorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(12),
+    },
+    retryText: {
+      marginTop: Skin.space(8),
+      fontSize: Skin.font(13),
+      fontFamily: theme.fonts.medium.fontFamily,
+      fontWeight: theme.fonts.medium.fontWeight,
+      color: theme.colors.primary,
     },
     existingBanner: {
       flexDirection: 'row',

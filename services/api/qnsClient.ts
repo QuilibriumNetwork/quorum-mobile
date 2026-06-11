@@ -124,9 +124,11 @@ export interface ChainInfo {
 
 export interface PricingInfo {
   prices: {
-    quil_price_usd: number;
-    wquil_price_usd: number;
-    usdc_price_usd: number;
+    // Decimal strings, NOT numbers — the Go server's TokenPrices struct
+    // (qns-api internal/services/pricing.go) serializes these as strings.
+    quil_price_usd: string;
+    wquil_price_usd: string;
+    usdc_price_usd: string;
     last_update: string;
   };
   tiers: PricingTier[];
@@ -263,11 +265,11 @@ export interface AuctionInfo {
   enabled: boolean;
   platform_fee_percent: number;
   seller_percent: number;
-  min_duration_hours: number;
-  max_duration_hours: number;
+  min_duration_seconds: number;
+  max_duration_seconds: number;
   min_bid_increment_bps: number;
   anti_snipe_seconds: number;
-  cascade_windows: number[];
+  cascade_windows_seconds: number[];
   signature_message: string;
 }
 
@@ -340,9 +342,10 @@ export interface OfferInfo {
   enabled: boolean;
   platform_fee_percent: number;
   seller_percent: number;
-  min_expiration_hours: number;
-  max_expiration_hours: number;
-  accepted_lock_hours: number;
+  min_expiration_seconds: number;
+  max_expiration_seconds: number;
+  default_expiration_seconds: number;
+  accept_lock_window_seconds: number;
   signature_message: string;
 }
 
@@ -510,12 +513,64 @@ export class QNSClient {
   }
 
   /**
+   * Fetch a single page of stealth ownership records from a bucket
+   */
+  private async fetchBucketPage(
+    bucketTag: number,
+    limit: number,
+    offset: number
+  ): Promise<{ records: NameRecord[]; total_count: number; limit: number; offset: number }> {
+    return this.fetch<{ records: NameRecord[]; total_count: number; limit: number; offset: number }>(
+      `/bucket/${bucketTag}?limit=${limit}&offset=${offset}`
+    );
+  }
+
+  /**
    * Bucket lookup - get all stealth ownership records in a bucket (quilibrium privacy lookup)
+   * Pages through GET /bucket/{tag} until all records are fetched.
    * Client should decrypt locally to find owned names
    */
   async bucketLookup(bucketTag: number): Promise<NameRecord[]> {
-    const response = await this.fetch<{ records: NameRecord[]; total_count: number; limit: number; offset: number }>(`/bucket/${bucketTag}`);
-    return response.records;
+    const limit = 100;
+    let offset = 0;
+    const all: NameRecord[] = [];
+    // Page until a short page is returned
+    for (;;) {
+      const response = await this.fetchBucketPage(bucketTag, limit, offset);
+      const records = response.records ?? [];
+      all.push(...records);
+      if (records.length < limit || all.length >= response.total_count) {
+        break;
+      }
+      offset += records.length;
+    }
+    return all;
+  }
+
+  /**
+   * Find a single stealth ownership record by name within a bucket.
+   * The server only exposes ownership markers (one_time_key / verification_key)
+   * via GET /bucket/{tag} - there is no GET /names/{name} route - so we page
+   * through the bucket until the record for this name is found.
+   * Returns null if the name is not present in the bucket.
+   */
+  async getNameRecordFromBucket(bucketTag: number, name: string): Promise<NameRecord | null> {
+    const limit = 100;
+    let offset = 0;
+    for (;;) {
+      const response = await this.fetchBucketPage(bucketTag, limit, offset);
+      const records = response.records ?? [];
+      const match = records.find(
+        r => ((r as { name?: string }).name || r.header?.name) === name
+      );
+      if (match) {
+        return match;
+      }
+      if (records.length < limit || offset + records.length >= response.total_count) {
+        return null;
+      }
+      offset += records.length;
+    }
   }
 
   /**
@@ -596,35 +651,25 @@ export class QNSClient {
    * The payment address is deterministic based on the wallet's signature
    * @param walletAddress The wallet address that signed the message
    * @param signature The EIP-191 personal_sign signature of the signature message
-   * @param token The payment token (wQUIL or USDC)
-   * @param chain The payment chain (e.g., 'base')
    */
   async getPaymentAddress(
     walletAddress: string,
-    signature: string,
-    token: 'wQUIL' | 'USDC',
-    chain: string
+    signature: string
   ): Promise<{
     payment_address: string;
-    token: string;
-    chain: string;
-    chain_id: number;
+    signature_message: string;
   }> {
     const response = await this.fetch<{
       success: true;
       data: {
         payment_address: string;
-        token: string;
-        chain: string;
-        chain_id: number;
+        signature_message: string;
       };
     }>('/pricing/payment-address', {
       method: 'POST',
       body: {
         wallet_address: walletAddress,
         signature,
-        token,
-        chain,
       },
     });
     return response.data;
@@ -850,15 +895,6 @@ export class QNSClient {
         nonce,
       },
     });
-    return response.data;
-  }
-
-  /**
-   * Get a name record by name (for retrieving ownership keys)
-   * @param name The name to look up
-   */
-  async getNameRecord(name: string): Promise<NameRecord & { ownership?: Ownership }> {
-    const response = await this.fetch<{ success: true; data: NameRecord & { ownership?: Ownership } }>(`/names/${encodeURIComponent(name)}`);
     return response.data;
   }
 
@@ -1222,14 +1258,10 @@ export async function getSignatureMessage(): Promise<{ message: string }> {
 
 export async function getPaymentAddress(
   walletAddress: string,
-  signature: string,
-  token: 'wQUIL' | 'USDC',
-  chain: string
+  signature: string
 ): Promise<{
   payment_address: string;
-  token: string;
-  chain: string;
-  chain_id: number;
+  signature_message: string;
 }> {
-  return getQNSClient().getPaymentAddress(walletAddress, signature, token, chain);
+  return getQNSClient().getPaymentAddress(walletAddress, signature);
 }

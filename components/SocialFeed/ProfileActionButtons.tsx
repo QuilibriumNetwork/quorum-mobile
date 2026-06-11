@@ -12,6 +12,7 @@ import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { followUser, unfollowUser } from '@/services/farcasterClient';
 import type { AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
@@ -44,6 +45,7 @@ export function ProfileActionButtons({
   theme,
 }: ProfileActionButtonsProps) {
   const { user, farcasterAuthToken } = useAuth();
+  const { showToast } = useToast();
   const ownFid = user?.farcaster?.fid;
 
   // Local optimistic follow state, seeded from the profile's viewerContext.
@@ -65,7 +67,11 @@ export function ProfileActionButtons({
       else await unfollowUser({ token: farcasterAuthToken, targetFid: fid });
     } catch {
       setFollowing(!next); // rollback
-      Alert.alert('Something went wrong', `Couldn't ${next ? 'follow' : 'unfollow'} @${username ?? fid}.`);
+      showToast({
+        type: 'error',
+        title: 'Something went wrong',
+        message: `Couldn't ${next ? 'follow' : 'unfollow'} @${username ?? fid}. Check your connection and try again.`,
+      });
     } finally {
       setBusy(false);
     }

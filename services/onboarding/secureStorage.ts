@@ -30,6 +30,7 @@ const STORAGE_KEYS = {
   FARCASTER_CUSTODY_KEY: 'farcaster.custodyKey',  // secp256k1 private key for SIWE signing
   FARCASTER_FID: 'farcaster.fid',
   FARCASTER_AUTH_TOKEN: 'farcaster.authToken',  // API auth token for Farcaster API calls
+  FARCASTER_AUTH_TOKEN_EXPIRES_AT: 'farcaster.authTokenExpiresAt',  // Unix ms expiry of the auth token
 
   // Warpcast embedded wallet (imported from Warpcast/Privy)
   WARPCAST_WALLET_ADDRESS: 'warpcast.walletAddress',
@@ -350,6 +351,25 @@ export async function deleteFarcasterAuthToken(): Promise<void> {
   await SecureStore.deleteItemAsync(STORAGE_KEYS.FARCASTER_AUTH_TOKEN);
 }
 
+export async function storeFarcasterAuthTokenExpiresAt(ts: number): Promise<void> {
+  await SecureStore.setItemAsync(
+    STORAGE_KEYS.FARCASTER_AUTH_TOKEN_EXPIRES_AT,
+    ts.toString(),
+    SECURE_OPTIONS
+  );
+}
+
+export async function getFarcasterAuthTokenExpiresAt(): Promise<number | null> {
+  const stored = await SecureStore.getItemAsync(STORAGE_KEYS.FARCASTER_AUTH_TOKEN_EXPIRES_AT);
+  if (!stored) return null;
+  const parsed = parseInt(stored, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export async function deleteFarcasterAuthTokenExpiresAt(): Promise<void> {
+  await SecureStore.deleteItemAsync(STORAGE_KEYS.FARCASTER_AUTH_TOKEN_EXPIRES_AT);
+}
+
 // Onboarding State
 
 export interface OnboardingStateData {
@@ -474,6 +494,7 @@ export async function clearAllSecureStorage(): Promise<void> {
     deleteFarcasterCustodyKey(),
     SecureStore.deleteItemAsync(STORAGE_KEYS.FARCASTER_FID),
     deleteFarcasterAuthToken(),
+    deleteFarcasterAuthTokenExpiresAt(),
     clearOnboardingState(),
     deleteWarpcastWallet(),
   ]);

@@ -20,13 +20,11 @@ export const queryConfig = {
 export const queryKeys = {
   farcaster: {
     all: ['farcaster'] as const,
-    feed: (token?: string) => ['farcaster-feed', token] as const,
-    thread: (username: string, hashPrefix: string, token?: string) =>
-      ['farcaster-thread', username, hashPrefix, token] as const,
-    profile: (fid: number, token?: string) =>
-      ['farcaster-profile', fid, token] as const,
-    channel: (channelKey: string, token?: string) =>
-      ['farcaster-channel', channelKey, token] as const,
+    feed: (fid?: number) => ['farcaster-feed', fid] as const,
+    thread: (username: string, hashPrefix: string) =>
+      ['farcaster-thread', username, hashPrefix] as const,
+    profile: (fid: number) => ['farcaster-profile', fid] as const,
+    channel: (channelKey: string) => ['farcaster-channel', channelKey] as const,
   },
   qns: {
     all: ['qns'] as const,

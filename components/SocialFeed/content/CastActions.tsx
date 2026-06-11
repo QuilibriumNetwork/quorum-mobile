@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LikeIcon, getLikeIconType } from './LikeIcon';
+import { SnapIcon } from './SnapIcon';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
@@ -19,6 +20,9 @@ interface CastActionsProps {
   likeStates: Map<string, { liked: boolean; count: number }>;
   onLikeToggle: (castHash: string, currentlyLiked: boolean, currentCount: number) => void;
   onReplyPress?: () => void;
+  /** Opens the tip flow for this cast. Button is hidden when omitted
+   *  (e.g. viewing your own cast, or no tipping surface available). */
+  onTipPress?: () => void;
 }
 
 /**
@@ -36,6 +40,7 @@ export const CastActions = React.memo(function CastActions({
   likeStates,
   onLikeToggle,
   onReplyPress,
+  onTipPress,
 }: CastActionsProps) {
   const optimistic = likeStates.get(castHash);
   const liked = optimistic?.liked ?? isLiked;
@@ -88,6 +93,12 @@ export const CastActions = React.memo(function CastActions({
           </Text>
         )}
       </View>
+
+      {onTipPress && (
+        <TouchableOpacity style={styles.actionButton} onPress={onTipPress}>
+          <SnapIcon color={theme.colors.textMuted} size={16} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 });

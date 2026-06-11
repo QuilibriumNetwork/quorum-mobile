@@ -2819,6 +2819,33 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // Process each message result
       const deleteTimestamps: number[] = [];
 
+      // Coalesced reaction/edit updates. During the loop, reaction-add,
+      // reaction-remove, and edit handlers queue their changes here instead
+      // of writing storage + cache once per item. After the loop we flush:
+      // one saveMessage per distinct message (cumulative state, latest wins)
+      // and one setQueryData per affected query key (all transforms applied
+      // in a single immutable pass).
+      const pendingStorageUpdates = new Map<string, Message>();
+      const pendingCacheTransforms = new Map<string, {
+        queryKey: ReturnType<typeof queryKeys.messages.infinite>;
+        transforms: Map<string, ((msg: Message) => Message)[]>;
+      }>();
+      const queueCacheTransform = (
+        queryKey: ReturnType<typeof queryKeys.messages.infinite>,
+        messageId: string,
+        transform: (msg: Message) => Message,
+      ) => {
+        const keyHash = JSON.stringify(queryKey);
+        let entry = pendingCacheTransforms.get(keyHash);
+        if (!entry) {
+          entry = { queryKey, transforms: new Map() };
+          pendingCacheTransforms.set(keyHash, entry);
+        }
+        const fns = entry.transforms.get(messageId);
+        if (fns) fns.push(transform);
+        else entry.transforms.set(messageId, [transform]);
+      };
+
       for (const msgResult of groupResult.messages) {
         deleteTimestamps.push(msgResult.timestamp);
 
@@ -2910,21 +2937,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               }];
             };
 
-            queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
-              if (!old) return old;
-              return { ...old, pages: old.pages.map(page => ({
-                ...page,
-                messages: page.messages.map(msg =>
-                  msg.messageId === reactionContent.messageId
-                    ? { ...msg, reactions: computeNewReactions(msg.reactions) }
-                    : msg
-                ),
-              })) };
-            });
+            queueCacheTransform(messagesKey, reactionContent.messageId, (msg) => (
+              { ...msg, reactions: computeNewReactions(msg.reactions) }
+            ));
 
-            const existingMsg = await storage.getMessage({ spaceId, channelId, messageId: reactionContent.messageId });
-            if (existingMsg) {
-              await storage.saveMessage({ ...existingMsg, reactions: computeNewReactions(existingMsg.reactions) }, existingMsg.createdDate, '', '', '', '');
+            const baseMsg = pendingStorageUpdates.get(reactionContent.messageId)
+              ?? await storage.getMessage({ spaceId, channelId, messageId: reactionContent.messageId });
+            if (baseMsg) {
+              pendingStorageUpdates.set(reactionContent.messageId, { ...baseMsg, reactions: computeNewReactions(baseMsg.reactions) });
             }
             continue;
           }
@@ -2936,57 +2956,38 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 ? { ...r, count: r.count - 1, memberIds: r.memberIds.filter(id => id !== reactionContent.senderId) }
                 : r).filter(r => r.count > 0);
 
-            queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
-              if (!old) return old;
-              return { ...old, pages: old.pages.map(page => ({
-                ...page,
-                messages: page.messages.map(msg =>
-                  msg.messageId === reactionContent.messageId
-                    ? { ...msg, reactions: computeRemoved(msg.reactions) }
-                    : msg
-                ),
-              })) };
-            });
+            queueCacheTransform(messagesKey, reactionContent.messageId, (msg) => (
+              { ...msg, reactions: computeRemoved(msg.reactions) }
+            ));
 
-            const existingMsg = await storage.getMessage({ spaceId, channelId, messageId: reactionContent.messageId });
-            if (existingMsg) {
-              await storage.saveMessage({ ...existingMsg, reactions: computeRemoved(existingMsg.reactions) }, existingMsg.createdDate, '', '', '', '');
+            const baseMsg = pendingStorageUpdates.get(reactionContent.messageId)
+              ?? await storage.getMessage({ spaceId, channelId, messageId: reactionContent.messageId });
+            if (baseMsg) {
+              pendingStorageUpdates.set(reactionContent.messageId, { ...baseMsg, reactions: computeRemoved(baseMsg.reactions) });
             }
             continue;
           }
 
           if (contentType === 'edit-message') {
             const editContent = spaceMessage.content as { originalMessageId: string; editedText: string | string[]; editedAt: number };
-            queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
-              if (!old) return old;
-              return { ...old, pages: old.pages.map(page => ({
-                ...page,
-                messages: page.messages.map(msg => {
-                  if (msg.messageId === editContent.originalMessageId && msg.content.type === 'post') {
-                    return {
-                      ...msg,
-                      modifiedDate: editContent.editedAt,
-                      content: { ...msg.content, text: editContent.editedText },
-                      edits: [...(msg.edits || []), { text: editContent.editedText, modifiedDate: editContent.editedAt, lastModifiedHash: '' }],
-                    };
-                  }
-                  return msg;
-                }),
-              })) };
-            });
+            const applyEdit = (msg: Message): Message => {
+              if (msg.content.type !== 'post') return msg;
+              return {
+                ...msg,
+                modifiedDate: editContent.editedAt,
+                content: { ...msg.content, text: editContent.editedText },
+                edits: [...(msg.edits || []), { text: editContent.editedText, modifiedDate: editContent.editedAt, lastModifiedHash: '' }],
+              };
+            };
+            queueCacheTransform(messagesKey, editContent.originalMessageId, applyEdit);
             // Persist to storage too. Cache-only updates revert as soon as the
             // query refetches from disk (e.g. on remount, invalidate, or when
             // the user navigates away and back), so the edit appears to "snap
             // back" to the original. Match what the cache update did above.
-            const existingMsg = await storage.getMessage({ spaceId, channelId, messageId: editContent.originalMessageId });
-            if (existingMsg && existingMsg.content.type === 'post') {
-              const updated: Message = {
-                ...existingMsg,
-                modifiedDate: editContent.editedAt,
-                content: { ...existingMsg.content, text: editContent.editedText },
-                edits: [...(existingMsg.edits || []), { text: editContent.editedText, modifiedDate: editContent.editedAt, lastModifiedHash: '' }],
-              };
-              await storage.saveMessage(updated, updated.createdDate, '', '', '', '');
+            const baseMsg = pendingStorageUpdates.get(editContent.originalMessageId)
+              ?? await storage.getMessage({ spaceId, channelId, messageId: editContent.originalMessageId });
+            if (baseMsg && baseMsg.content.type === 'post') {
+              pendingStorageUpdates.set(editContent.originalMessageId, applyEdit(baseMsg));
             }
             continue;
           }
@@ -3001,6 +3002,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               })) };
             });
             await storage.deleteMessage(removeContent.removeMessageId);
+            // Drop any queued reaction/edit update for this message so the
+            // deferred flush below doesn't resurrect it after deletion.
+            pendingStorageUpdates.delete(removeContent.removeMessageId);
+            for (const entry of pendingCacheTransforms.values()) {
+              entry.transforms.delete(removeContent.removeMessageId);
+            }
             continue;
           }
 
@@ -3107,6 +3114,29 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             return { ...old, pages: old.pages.map((page, i) => i === 0 ? { ...page, messages: [...page.messages, spaceMessage] } : page) };
           });
         }
+      }
+
+      // Flush coalesced reaction/edit cache updates: one setQueryData per
+      // affected query key, applying every queued transform in a single
+      // immutable pass. No existing cache — leave it alone (same as before).
+      for (const { queryKey: messagesKey, transforms } of pendingCacheTransforms.values()) {
+        if (transforms.size === 0) continue;
+        queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
+          if (!old) return old;
+          return { ...old, pages: old.pages.map(page => ({
+            ...page,
+            messages: page.messages.map(msg => {
+              const fns = transforms.get(msg.messageId);
+              if (!fns) return msg;
+              return fns.reduce((m, fn) => fn(m), msg);
+            }),
+          })) };
+        });
+      }
+
+      // Flush coalesced storage updates: one saveMessage per distinct message.
+      for (const updated of pendingStorageUpdates.values()) {
+        await storage.saveMessage(updated, updated.createdDate, '', '', '', '');
       }
 
       // Best-effort: batch delete processed messages from inbox

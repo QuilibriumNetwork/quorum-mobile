@@ -1,4 +1,5 @@
 import ListNameModal from '@/components/ListNameModal';
+import ApexSubscribeModal from '@/components/apex/ApexSubscribeModal';
 import AuctionsModal from '@/components/qns/AuctionsModal';
 import MarketplaceModal from '@/components/qns/MarketplaceModal';
 import OffersModal from '@/components/qns/OffersModal';
@@ -6,9 +7,14 @@ import NameDetailModal from '@/components/qns/NameDetailModal';
 import RegisterPaymentModal from '@/components/qns/RegisterPaymentModal';
 import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { ApexAvatarRing, APEX_GOLD } from '@/components/ui/ApexAvatarRing';
+import { useApexSubscription, type ApexSubscriptionState } from '@/hooks/useApex';
 import { SkinsModal } from '@/components/skins/SkinsModal';
 import { useAuth, useWebSocket } from '@/context';
+import { useToast } from '@/context/ToastContext';
 import { compressAvatarImage } from '@/services/media/imageAttachment';
+import { getHypersnapOptInChoice, setHypersnapOptInChoice } from '@/services/farcaster/hypersnapOptIn';
+import { provisionHypersnapSigner, forgetHypersnapSigner } from '@/services/farcaster/hypersnapProvision';
 import { truncateAddress } from '@/utils/formatAddress';
 import {
   useBucketLookup,
@@ -68,6 +74,7 @@ import {
   getPrivateKey,
   getPublicKey,
   storeFarcasterAuthToken,
+  storeFarcasterAuthTokenExpiresAt,
   storeFarcasterCustodyKey,
   storeFarcasterFid,
   storeFarcasterSignerKey,
@@ -295,12 +302,20 @@ export default function ProfileModal({
   const { theme, isDark, activeSkin } = useTheme();
   const { user, signOut, updateProfile } = useAuth();
   const { enqueueOutbound } = useWebSocket();
+  const { showToast } = useToast();
   const { allowSync, setAllowSync, isLoading: isSyncLoading } = useSyncSettings();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = React.useState<'profile' | 'premium' | 'settings'>('profile');
   const [usernameSearch, setUsernameSearch] = React.useState('');
   const [inviteCode, setInviteCode] = React.useState('');
+  // Hypersnap signer opt-in. Mirrors the MMKV-persisted choice that the
+  // first-run prompt writes; this switch is the only way to change the
+  // choice after that prompt has been answered.
+  const [hypersnapEnabled, setHypersnapEnabled] = React.useState<boolean>(
+    () => getHypersnapOptInChoice() === 'opted-in'
+  );
+  const [hypersnapBusy, setHypersnapBusy] = React.useState(false);
   // Notifications toggle. Backed by MMKV via notificationPrefs so the
   // setting persists across launches AND is read by showMessageNotification
   // at presentation time. Previously this was plain React state with no
@@ -326,6 +341,10 @@ export default function ProfileModal({
   );
   const showNonFollowReplies = showNonFollowRepliesRaw ?? false;
   const [isSyncToggling, setIsSyncToggling] = React.useState(false);
+
+  // Quorum Apex subscription — card in the premium tab + gold avatar ring
+  const apexState = useApexSubscription();
+  const [apexModalMode, setApexModalMode] = React.useState<'subscribe' | 'renew' | null>(null);
 
   // Marketplace listing modal state
   const [listNameModalVisible, setListNameModalVisible] = React.useState(false);
@@ -406,10 +425,52 @@ export default function ProfileModal({
       setFarcasterMnemonic('');
       setFarcasterError(null);
       setPendingRemovals([]);
+      // Re-read the persisted Hypersnap choice — the first-run prompt (or
+      // another surface) may have changed it since this modal last opened.
+      setHypersnapEnabled(getHypersnapOptInChoice() === 'opted-in');
       // Load device registrations
       loadDeviceRegistrations();
     }
   }, [visible, user]);
+
+  // Toggle the Hypersnap signer opt-in. Enabling provisions immediately so
+  // the user gets feedback here rather than waiting for the feed-mounted
+  // lifecycle hook; disabling clears the local signer record (the on-chain
+  // KEY_REMOVE is intentionally not issued — the key simply stops being used).
+  const handleToggleHypersnap = React.useCallback(async (value: boolean) => {
+    const fid = user?.farcaster?.fid;
+    if (!fid) return;
+    setHypersnapEnabled(value);
+    if (!value) {
+      setHypersnapOptInChoice('opted-out');
+      try {
+        await forgetHypersnapSigner();
+      } catch {
+        // Local cleanup only — nothing user-actionable if it fails.
+      }
+      showToast({ type: 'success', title: 'Hypersnap signer disabled' });
+      return;
+    }
+    setHypersnapOptInChoice('opted-in');
+    setHypersnapBusy(true);
+    try {
+      await provisionHypersnapSigner(fid);
+      showToast({
+        type: 'success',
+        title: 'Hypersnap signer enabled',
+        message: 'Eligible Farcaster activity now earns $SNAP.',
+      });
+    } catch (e) {
+      // Stay opted-in: the feed lifecycle hook retries automatically.
+      showToast({
+        type: 'error',
+        title: "Couldn't create signer",
+        message: e instanceof Error ? e.message : 'It will retry automatically.',
+      });
+    } finally {
+      setHypersnapBusy(false);
+    }
+  }, [user?.farcaster?.fid, showToast]);
 
   // Load device registrations from server
   const loadDeviceRegistrations = React.useCallback(async () => {
@@ -437,17 +498,20 @@ export default function ProfileModal({
         });
         setDeviceRegistrations(sorted);
       }
-    } catch {
+    } catch (e) {
       // Device registration fetch failed — show empty device list
+      logger.warn('[devices] failed to load device registrations', e);
     } finally {
       setIsLoadingDevices(false);
     }
   }, [user?.address]);
 
-  const styles = createStyles(theme, isDark, insets);
+  // Memoized so the extracted React.memo sections below (which receive
+  // `styles` as a prop) aren't invalidated on every render.
+  const styles = React.useMemo(() => createStyles(theme, isDark, insets), [theme, isDark, insets]);
 
   // Handle device removal
-  const handleRemoveDevice = (identityPublicKey: string) => {
+  const handleRemoveDevice = React.useCallback((identityPublicKey: string) => {
     Alert.alert(
       'Remove Device',
       'Are you sure you want to remove this device? It will no longer be able to receive encrypted messages for your account.',
@@ -497,10 +561,10 @@ export default function ProfileModal({
         },
       ]
     );
-  };
+  }, [user?.address, deviceRegistrations]);
 
   // Handle reset all DM sessions
-  const handleResetAllSessions = () => {
+  const handleResetAllSessions = React.useCallback(() => {
     Alert.alert(
       'Reset All DM Sessions',
       'This will reset all your encrypted DM sessions. Your next message to each contact will establish a fresh secure connection.\n\nUse this if you are experiencing persistent decryption errors.',
@@ -516,7 +580,7 @@ export default function ProfileModal({
         },
       ]
     );
-  };
+  }, []);
 
   // Public profile opt-in — requires explicit consent via a confirmation
   // dialog the FIRST time the user enables it, since flipping this means
@@ -560,10 +624,11 @@ export default function ProfileModal({
                       const config = await getConfig(user.address);
                       await saveConfig({ ...config, farcasterLink });
                     }
-                  } catch {
+                  } catch (e) {
                     // Link generation failed — fall through and publish
                     // without it. Profile is still public, just without
                     // the cross-identity badge.
+                    logger.warn('[publicProfile] farcaster link generation failed', e);
                   }
                 }
 
@@ -585,6 +650,11 @@ export default function ProfileModal({
                   // Non-fatal — toggle is still on locally; next save
                   // attempt will retry the publish.
                   logger.warn('[publicProfile] publish failed', e);
+                  showToast({
+                    type: 'error',
+                    title: "Couldn't publish profile",
+                    message: 'Your profile is public locally; publishing will be retried on your next profile save.',
+                  });
                 }
               },
             },
@@ -603,15 +673,20 @@ export default function ProfileModal({
               await unpublishPublicProfile(user.address);
             } catch (e) {
               logger.warn('[publicProfile] unpublish failed', e);
+              showToast({
+                type: 'error',
+                title: "Couldn't remove public profile",
+                message: 'Your profile may still be publicly visible. Try toggling again.',
+              });
             }
           })();
         }
       }
     },
-    [updateProfile, user],
+    [updateProfile, user, showToast],
   );
 
-  const handleToggleSync = async (enabled: boolean) => {
+  const handleToggleSync = React.useCallback(async (enabled: boolean) => {
     setIsSyncToggling(true);
     try {
       await setAllowSync(enabled);
@@ -626,7 +701,7 @@ export default function ProfileModal({
     } finally {
       setIsSyncToggling(false);
     }
-  };
+  }, [setAllowSync]);
 
   const handleResetAppData = () => {
     Alert.alert(
@@ -649,7 +724,7 @@ export default function ProfileModal({
     );
   };
 
-  const handleExportRecoveryPhrase = () => {
+  const handleExportRecoveryPhrase = React.useCallback(() => {
     Alert.alert(
       'Export Recovery Key',
       'Your recovery key is the only way to restore your account. Never share it with anyone. Make sure no one is looking at your screen.',
@@ -682,9 +757,9 @@ export default function ProfileModal({
         },
       ]
     );
-  };
+  }, []);
 
-  const handleCopyRecoveryPhrase = async () => {
+  const handleCopyRecoveryPhrase = React.useCallback(async () => {
     if (recoveryPhrase) {
       await Clipboard.setStringAsync(recoveryPhrase.join(' '));
       Alert.alert('Copied', 'Recovery phrase copied to clipboard. Make sure to store it securely and clear your clipboard.');
@@ -692,7 +767,13 @@ export default function ProfileModal({
       await Clipboard.setStringAsync(hexPrivateKey);
       Alert.alert('Copied', 'Private key copied to clipboard. Make sure to store it securely and clear your clipboard.');
     }
-  };
+  }, [recoveryPhrase, hexPrivateKey]);
+
+  const handleHideRecoveryPhrase = React.useCallback(() => {
+    setShowRecoveryPhrase(false);
+    setRecoveryPhrase(null);
+    setHexPrivateKey(null);
+  }, []);
 
   const handleImportFarcaster = async () => {
     if (!farcasterMnemonic.trim()) {
@@ -735,6 +816,9 @@ export default function ProfileModal({
       ];
       if (account.authToken) {
         storePromises.push(storeFarcasterAuthToken(account.authToken));
+        if (account.authTokenExpiresAt != null) {
+          storePromises.push(storeFarcasterAuthTokenExpiresAt(account.authTokenExpiresAt));
+        }
       }
       await Promise.all(storePromises);
 
@@ -776,7 +860,7 @@ export default function ProfileModal({
     );
   };
 
-  const handlePickImage = async () => {
+  const handlePickImage = React.useCallback(async () => {
     if (!user?.address) return;
 
     // Request permission
@@ -837,8 +921,9 @@ export default function ProfileModal({
               if (updateResult) {
                 envelopes.push(updateResult.wsEnvelope);
               }
-            } catch {
+            } catch (e) {
               // Profile broadcast to this space failed — skip and continue with others
+              logger.warn('[profile] avatar broadcast to space failed', space.spaceId, e);
             }
           }
 
@@ -860,8 +945,9 @@ export default function ProfileModal({
               user.farcaster.custodyAddress,
               user.address,
             );
-          } catch {
+          } catch (e) {
             // Link generation failed — publish without it.
+            logger.warn('[publicProfile] farcaster link generation failed', e);
           }
         }
         try {
@@ -876,10 +962,15 @@ export default function ProfileModal({
           });
         } catch (e) {
           logger.warn('[publicProfile] publish on avatar change failed', e);
+          showToast({
+            type: 'error',
+            title: "Couldn't publish new avatar",
+            message: 'Your avatar was updated locally but failed to publish publicly.',
+          });
         }
       }
     }
-  };
+  }, [user, enqueueOutbound, updateProfile, showToast]);
 
   const handleSaveProfile = async () => {
     if (!user?.address) return;
@@ -919,8 +1010,9 @@ export default function ProfileModal({
               if (result) {
                 envelopes.push(result.wsEnvelope);
               }
-            } catch {
+            } catch (e) {
               // Profile broadcast to this space failed — skip and continue with others
+              logger.warn('[profile] profile broadcast to space failed', space.spaceId, e);
             }
           }
 
@@ -942,8 +1034,9 @@ export default function ProfileModal({
               user.farcaster.custodyAddress,
               user.address,
             );
-          } catch {
+          } catch (e) {
             // Non-fatal — publish without it.
+            logger.warn('[publicProfile] farcaster link generation failed', e);
           }
         }
         try {
@@ -958,10 +1051,22 @@ export default function ProfileModal({
           });
         } catch (e) {
           logger.warn('[publicProfile] publish on save failed', e);
+          showToast({
+            type: 'error',
+            title: "Couldn't publish profile update",
+            message: 'Your profile was saved locally but failed to publish publicly.',
+          });
         }
       }
 
       setIsEditing(false);
+    } catch (e) {
+      logger.warn('[profile] save failed', e);
+      showToast({
+        type: 'error',
+        title: "Couldn't save profile",
+        message: e instanceof Error ? e.message : 'Please try again.',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -988,11 +1093,11 @@ export default function ProfileModal({
   };
 
   // Copy user address to clipboard
-  const handleCopyAddress = async () => {
+  const handleCopyAddress = React.useCallback(async () => {
     if (!user?.address) return;
     await Clipboard.setStringAsync(user.address);
     Alert.alert('Copied', 'Address copied to clipboard');
-  };
+  }, [user?.address]);
 
   // QNS health check - determine if service is available
   const { isServiceDown, isLoading: isCheckingHealth } = useQNSHealth();
@@ -1079,8 +1184,9 @@ export default function ProfileModal({
         const viewPubKeyFromAddr = cleanAddr.slice(0, 112); // First 56 bytes as hex
 
         setStealthKeyMaterial(keyMaterial);
-      } catch {
+      } catch (e) {
         // Stealth key derivation failed — non-critical, leave material as null
+        logger.warn('[qns] stealth key derivation failed', e);
       }
     };
     if (visible && user?.quilibriumAddress) {
@@ -1149,8 +1255,9 @@ export default function ProfileModal({
               resolvableNames.push(recordName);
             }
           }
-        } catch {
+        } catch (e) {
           // Stealth ownership verification failed for this record — skip
+          logger.warn('[qns] stealth ownership verification failed for record', recordName, e);
         }
       }
     }
@@ -1180,6 +1287,31 @@ export default function ProfileModal({
   }, [reverseResolvedNames, existingNames]);
 
   const isLoadingExistingNames = isLoadingBucketRecords || isLoadingReverseNames;
+
+  // Find a name's stealth ownership record among the bucket records.
+  // The server only exposes ownership markers via GET /bucket/{tag}, so child
+  // modals (NameDetailModal, ListNameModal) receive the matched record as a prop.
+  const findBucketRecord = React.useCallback(
+    (name: string) => {
+      if (!bucketRecords || !name) return null;
+      const records = Array.isArray(bucketRecords)
+        ? bucketRecords
+        : (bucketRecords as any)?.records;
+      if (!Array.isArray(records)) return null;
+      return records.find(r => ((r as any).name || r.header?.name) === name) ?? null;
+    },
+    [bucketRecords]
+  );
+
+  const selectedNameDetailRecord = React.useMemo(
+    () => findBucketRecord(selectedNameForDetail),
+    [findBucketRecord, selectedNameForDetail]
+  );
+
+  const nameToListRecord = React.useMemo(
+    () => findBucketRecord(nameToList ?? ''),
+    [findBucketRecord, nameToList]
+  );
 
   const { mutate: registerWithPayment, isPending: isRegistering } = useRegisterWithPayment();
 
@@ -1428,102 +1560,31 @@ export default function ProfileModal({
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
         {activeTab === 'profile' && (
-          <>
-            {/* Profile Header — hidden when parent supplies its own */}
-            {!hideHeader && (
-              <View style={styles.profileHeader}>
-                <TouchableOpacity style={styles.avatarContainer} onPress={handlePickImage}>
-                  {user?.profileImage ? (
-                    <Image source={{ uri: user.profileImage }} style={styles.avatar} />
-                  ) : (
-                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                      <IconSymbol name="person.fill" size={40} color={theme.colors.textMuted} />
-                    </View>
-                  )}
-                  <View style={styles.editAvatarButton}>
-                    <IconSymbol name="camera.fill" size={16} color={theme.colors.textMain} />
-                  </View>
-                </TouchableOpacity>
-                <View style={styles.profileInfo}>
-                  {isEditing ? (
-                    <TextInput
-                      style={styles.displayNameInput}
-                      value={editDisplayName}
-                      onChangeText={setEditDisplayName}
-                      placeholder="Display Name"
-                      placeholderTextColor={theme.colors.textMuted}
-                      autoCapitalize="words"
-                    />
-                  ) : (
-                    <Text style={styles.displayName}>
-                      {user?.displayName || 'Anonymous'}
-                    </Text>
-                  )}
-                  {user?.username && (
-                    <View style={styles.usernameRow}>
-                      <Text style={styles.username}>@{user.username}</Text>
-                    </View>
-                  )}
-                  <Text style={styles.userId}>
-                    {user?.address ? truncateAddress(user.address) : ''}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {/* Bio Section */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Bio</Text>
-              {isEditing ? (
-                <TextInput
-                  style={styles.bioInput}
-                  value={editBio}
-                  onChangeText={setEditBio}
-                  placeholder="Tell us about yourself..."
-                  placeholderTextColor={theme.colors.textMuted}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-              ) : (
-                <View style={styles.bioContainer}>
-                  <Text style={styles.bioText}>
-                    {user?.bio || 'No bio yet. Tap Edit to add one.'}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Account Info */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Account Info</Text>
-              <TouchableOpacity style={styles.infoRow} onPress={handleCopyAddress}>
-                <Text style={styles.infoLabel}>Address</Text>
-                <View style={styles.infoValueRow}>
-                  <Text style={[styles.infoValue, { maxWidth: undefined }]} numberOfLines={1}>
-                    {user?.address ? truncateAddress(user.address) : 'N/A'}
-                  </Text>
-                  <IconSymbol name="doc.on.doc" size={14} color={theme.colors.textMuted} />
-                </View>
-              </TouchableOpacity>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Privacy Level</Text>
-                <Text style={styles.infoValue}>
-                  {user?.privacyLevel ? user.privacyLevel.charAt(0).toUpperCase() + user.privacyLevel.slice(1) : 'Standard'}
-                </Text>
-              </View>
-              {user?.farcaster && (
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Farcaster</Text>
-                  <Text style={styles.infoValue}>@{user.farcaster.username}</Text>
-                </View>
-              )}
-            </View>
-          </>
+          <ProfileTabSection
+            styles={styles}
+            theme={theme}
+            hideHeader={hideHeader}
+            user={user}
+            isEditing={isEditing}
+            editDisplayName={editDisplayName}
+            editBio={editBio}
+            onChangeDisplayName={setEditDisplayName}
+            onChangeBio={setEditBio}
+            onPickImage={handlePickImage}
+            onCopyAddress={handleCopyAddress}
+            isApexActive={apexState.isActive}
+          />
         )}
 
         {activeTab === 'premium' && (
           <>
+            {/* Quorum Apex */}
+            <ApexSectionCard
+              styles={styles}
+              apexState={apexState}
+              onOpenApexModal={setApexModalMode}
+            />
+
             {/* Premium Banner */}
             <View style={[styles.premiumBanner, { backgroundColor: theme.colors.primary }]}>
               <IconSymbol name="star.fill" size={32} color="#fff" />
@@ -1964,101 +2025,22 @@ export default function ProfileModal({
 
         {activeTab === 'settings' && (
           <>
-            {/* Privacy & Sync Settings */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Privacy & Sync</Text>
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <Text style={styles.settingLabel}>Public Profile</Text>
-                  <Text style={styles.settingDescription}>
-                    Let anyone see your display name, picture, bio, and QNS username — even outside shared spaces. Off by default.
-                  </Text>
-                </View>
-                <Switch
-                  value={!!user?.isProfilePublic}
-                  onValueChange={handleTogglePublicProfile}
-                  trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-                  thumbColor={user?.isProfilePublic ? '#ffffff' : '#f4f3f4'}
-                />
-              </View>
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <Text style={styles.settingLabel}>Enable Sync</Text>
-                  <Text style={styles.settingDescription}>
-                    Sync your profile, spaces, and keys between devices. Increases metadata visibility.
-                  </Text>
-                </View>
-                <Switch
-                  value={allowSync}
-                  onValueChange={handleToggleSync}
-                  disabled={isSyncLoading || isSyncToggling}
-                  trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-                  thumbColor={allowSync ? '#ffffff' : '#f4f3f4'}
-                />
-              </View>
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <Text style={styles.settingLabel}>Show Online Status</Text>
-                  <Text style={styles.settingDescription}>Let others see when you're active</Text>
-                </View>
-                <Switch
-                  value={true}
-                  trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-                  thumbColor={'#ffffff'}
-                />
-              </View>
-            </View>
-
-            {/* Notification Settings */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Notifications</Text>
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <Text style={styles.settingLabel}>Push Notifications</Text>
-                  <Text style={styles.settingDescription}>Receive notifications on your device</Text>
-                </View>
-                <Switch
-                  value={notifications}
-                  onValueChange={setNotifications}
-                  trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-                  thumbColor={notifications ? '#ffffff' : '#f4f3f4'}
-                />
-              </View>
-            </View>
-
-            {/* Feed Settings */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Feed</Text>
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <Text style={styles.settingLabel}>Show replies in main feed</Text>
-                  <Text style={styles.settingDescription}>
-                    Include reply casts in your main feed (thread views always show replies)
-                  </Text>
-                </View>
-                <Switch
-                  value={showRepliesInFeed}
-                  onValueChange={setShowRepliesInFeed}
-                  trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-                  thumbColor={showRepliesInFeed ? '#ffffff' : '#f4f3f4'}
-                />
-              </View>
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <Text style={styles.settingLabel}>Show replies from non-followed in main feed</Text>
-                  <Text style={styles.settingDescription}>
-                    Include replies from people you don't follow in your main feed
-                  </Text>
-                </View>
-                <Switch
-                  value={showNonFollowReplies}
-                  onValueChange={setShowNonFollowReplies}
-                  disabled={!showRepliesInFeed}
-                  trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-                  thumbColor={showNonFollowReplies ? '#ffffff' : '#f4f3f4'}
-                />
-              </View>
-            </View>
+            {/* Privacy & Sync, Notifications, Feed Settings */}
+            <PrivacyFeedSettingsSection
+              styles={styles}
+              theme={theme}
+              isProfilePublic={!!user?.isProfilePublic}
+              onTogglePublicProfile={handleTogglePublicProfile}
+              allowSync={allowSync}
+              onToggleSync={handleToggleSync}
+              syncDisabled={isSyncLoading || isSyncToggling}
+              notifications={notifications}
+              onToggleNotifications={setNotifications}
+              showRepliesInFeed={showRepliesInFeed}
+              onToggleShowReplies={setShowRepliesInFeed}
+              showNonFollowReplies={showNonFollowReplies}
+              onToggleShowNonFollowReplies={setShowNonFollowReplies}
+            />
 
             {/* Appearance */}
             <View style={styles.section}>
@@ -2105,6 +2087,24 @@ export default function ProfileModal({
                     >
                       <Text style={styles.farcasterDisconnectText}>Disconnect</Text>
                     </TouchableOpacity>
+                  </View>
+                  {/* Hypersnap signer opt-in */}
+                  <View style={[styles.farcasterConnected, { marginTop: Skin.space(12) }]}>
+                    <View style={{ flex: 1, marginRight: Skin.space(12) }}>
+                      <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Hypersnap Signer</Text>
+                      <Text style={{ fontSize: Skin.font(12), color: theme.colors.textMuted, marginTop: Skin.space(2) }}>
+                        Post and react through Quilibrium's hub to earn $SNAP
+                      </Text>
+                    </View>
+                    {hypersnapBusy ? (
+                      <ActivityIndicator size="small" color={theme.colors.primary} />
+                    ) : (
+                      <Switch
+                        value={hypersnapEnabled}
+                        onValueChange={handleToggleHypersnap}
+                        trackColor={{ true: theme.colors.primary }}
+                      />
+                    )}
                   </View>
                   {/* Warpcast Wallet Import */}
                   {hasWarpcastWallet && !hasImportedWarpcastWallet && onOpenWarpcastImport && (
@@ -2213,132 +2213,28 @@ export default function ProfileModal({
             </View>
 
             {/* Account Actions */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Account</Text>
-              {!showRecoveryPhrase ? (
-                <TouchableOpacity style={styles.actionButton} onPress={handleExportRecoveryPhrase}>
-                  <IconSymbol name="key.fill" size={20} color={theme.colors.textMain} />
-                  <Text style={styles.actionButtonText}>Export Recovery Key</Text>
-                  <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.recoveryPhraseContainer}>
-                  <View style={styles.recoveryPhraseWarning}>
-                    <IconSymbol name="exclamationmark.triangle.fill" size={20} color={theme.colors.warning} />
-                    <Text style={styles.recoveryPhraseWarningText}>
-                      Never share this {recoveryPhrase ? 'phrase' : 'key'} with anyone!
-                    </Text>
-                  </View>
-                  {recoveryPhrase ? (
-                    // Display mnemonic as word grid
-                    <View style={styles.recoveryPhraseGrid}>
-                      {recoveryPhrase.map((word, index) => (
-                        <View key={index} style={styles.recoveryPhraseWord}>
-                          <Text style={styles.recoveryPhraseIndex}>{index + 1}.</Text>
-                          <Text style={styles.recoveryPhraseText}>{word}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : hexPrivateKey ? (
-                    // Display hex private key
-                    <View style={styles.hexKeyContainer}>
-                      <Text style={styles.hexKeyLabel}>Private Key (Hex)</Text>
-                      <Text style={styles.hexKeyText} selectable>
-                        {hexPrivateKey}
-                      </Text>
-                    </View>
-                  ) : null}
-                  <View style={styles.recoveryPhraseActions}>
-                    <TouchableOpacity style={styles.copyButton} onPress={handleCopyRecoveryPhrase}>
-                      <IconSymbol name="doc.on.doc" size={16} color={theme.colors.primary} />
-                      <Text style={styles.copyButtonText}>Copy</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.hideButton}
-                      onPress={() => {
-                        setShowRecoveryPhrase(false);
-                        setRecoveryPhrase(null);
-                        setHexPrivateKey(null);
-                      }}
-                    >
-                      <Text style={styles.hideButtonText}>Hide</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            </View>
+            <AccountRecoverySection
+              styles={styles}
+              theme={theme}
+              showRecoveryPhrase={showRecoveryPhrase}
+              recoveryPhrase={recoveryPhrase}
+              hexPrivateKey={hexPrivateKey}
+              onExport={handleExportRecoveryPhrase}
+              onCopy={handleCopyRecoveryPhrase}
+              onHide={handleHideRecoveryPhrase}
+            />
 
             {/* Device Keys */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Device Keys</Text>
-              <Text style={styles.settingDescription}>
-                Manage devices registered to your account for encrypted messaging.
-              </Text>
-
-              {isLoadingDevices ? (
-                <View style={styles.deviceLoadingContainer}>
-                  <ActivityIndicator size="small" color={theme.colors.primary} />
-                  <Text style={styles.deviceLoadingText}>Loading devices...</Text>
-                </View>
-              ) : deviceRegistrations.length > 0 ? (
-                <View style={styles.deviceListContainer}>
-                  {deviceRegistrations.map((device) => {
-                    const isCurrentDevice = device.inbox_registration.inbox_address === currentDeviceInboxAddress;
-                    const inboxAddr = device.inbox_registration.inbox_address;
-                    const displayAddr = inboxAddr.length > 16
-                      ? `${inboxAddr.slice(0, 8)}...${inboxAddr.slice(-6)}`
-                      : inboxAddr;
-
-                    return (
-                      <View key={device.identity_public_key} style={styles.deviceItem}>
-                        <View style={styles.deviceInfo}>
-                          <View style={styles.deviceHeader}>
-                            <IconSymbol
-                              name={isCurrentDevice ? 'iphone' : 'desktopcomputer'}
-                              size={16}
-                              color={isCurrentDevice ? theme.colors.primary : theme.colors.textMuted}
-                            />
-                            <Text style={[styles.deviceLabel, isCurrentDevice && styles.deviceLabelCurrent]}>
-                              {isCurrentDevice ? 'This device' : 'Other device'}
-                            </Text>
-                          </View>
-                          <Text style={styles.deviceAddress} numberOfLines={1}>
-                            {displayAddr}
-                          </Text>
-                        </View>
-                        {!isCurrentDevice && (
-                          <TouchableOpacity
-                            style={styles.deviceRemoveButton}
-                            onPress={() => handleRemoveDevice(device.identity_public_key)}
-                            disabled={isRemovingDevice}
-                          >
-                            {isRemovingDevice ? (
-                              <ActivityIndicator size="small" color={theme.colors.danger} />
-                            ) : (
-                              <Text style={styles.deviceRemoveText}>Remove</Text>
-                            )}
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : (
-                <Text style={styles.deviceEmptyText}>No devices registered</Text>
-              )}
-
-              {/* Reset All Sessions */}
-              <TouchableOpacity
-                style={[styles.actionButton, { marginTop: Skin.space(16) }]}
-                onPress={handleResetAllSessions}
-              >
-                <IconSymbol name="arrow.triangle.2.circlepath" size={20} color={theme.colors.warning} />
-                <View style={styles.actionButtonContent}>
-                  <Text style={styles.actionButtonText}>Reset All DM Sessions</Text>
-                  <Text style={styles.actionButtonSubtext}>Fix persistent encryption errors</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
+            <DeviceKeysSection
+              styles={styles}
+              theme={theme}
+              isLoadingDevices={isLoadingDevices}
+              deviceRegistrations={deviceRegistrations}
+              currentDeviceInboxAddress={currentDeviceInboxAddress}
+              isRemovingDevice={isRemovingDevice}
+              onRemoveDevice={handleRemoveDevice}
+              onResetAllSessions={handleResetAllSessions}
+            />
 
             {/* Calls */}
             <CallScreeningSection theme={theme} />
@@ -2409,6 +2305,7 @@ export default function ProfileModal({
           }}
           name={selectedNameForDetail}
           nameType="username"
+          nameRecord={selectedNameDetailRecord}
           isResolvable={resolvableNames.has(selectedNameForDetail)}
           isPrimary={user?.primaryUsername === selectedNameForDetail}
           onListName={(n) => {
@@ -2453,6 +2350,7 @@ export default function ProfileModal({
           }}
           name={nameToList ?? ''}
           nameType="username"
+          nameRecord={nameToListRecord}
           onSuccess={() => {
             // Refresh bucket records to update listing status
             if (stealthKeyMaterial) {
@@ -2464,6 +2362,13 @@ export default function ProfileModal({
         <SkinsModal visible={skinsOpen} onClose={() => setSkinsOpen(false)} />
 
         <TranslateLanguageModal visible={translateOpen} onClose={() => setTranslateOpen(false)} />
+
+        {/* Quorum Apex subscribe / renew */}
+        <ApexSubscribeModal
+          visible={apexModalMode !== null}
+          onClose={() => setApexModalMode(null)}
+          mode={apexModalMode ?? 'subscribe'}
+        />
 
         {/* Name Picker Modal for multiple names */}
         <BaseModal
@@ -2551,6 +2456,7 @@ export default function ProfileModal({
         }}
         name={selectedNameForDetail}
         nameType="username"
+        nameRecord={selectedNameDetailRecord}
         isResolvable={resolvableNames.has(selectedNameForDetail)}
         isPrimary={user?.primaryUsername === selectedNameForDetail}
         onListName={(n) => {
@@ -2595,6 +2501,7 @@ export default function ProfileModal({
         }}
         name={nameToList ?? ''}
         nameType="username"
+        nameRecord={nameToListRecord}
         onSuccess={() => {
           // Refresh bucket records to update listing status
           if (stealthKeyMaterial) {
@@ -2606,6 +2513,13 @@ export default function ProfileModal({
       <SkinsModal visible={skinsOpen} onClose={() => setSkinsOpen(false)} />
 
       <TranslateLanguageModal visible={translateOpen} onClose={() => setTranslateOpen(false)} />
+
+      {/* Quorum Apex subscribe / renew */}
+      <ApexSubscribeModal
+        visible={apexModalMode !== null}
+        onClose={() => setApexModalMode(null)}
+        mode={apexModalMode ?? 'subscribe'}
+      />
 
       {/* Name Picker Modal for multiple names */}
       <BaseModal
@@ -2870,6 +2784,86 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       fontSize: Skin.font(14),
       color: isDark ? theme.colors.textSubtle : '#ffffffcc',
       textAlign: 'center',
+    },
+    // Quorum Apex card (premium tab)
+    apexCard: {
+      backgroundColor: theme.colors.surface2,
+      borderRadius: Skin.radius(16),
+      borderWidth: Skin.border(1),
+      borderColor: APEX_GOLD + '66',
+      padding: Skin.space(16),
+      marginBottom: Skin.space(24),
+    },
+    apexHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(8),
+    },
+    apexTitle: {
+      flex: 1,
+      fontSize: Skin.font(17),
+      fontFamily: theme.fonts.bold.fontFamily,
+      fontWeight: theme.fonts.bold.fontWeight,
+      color: theme.colors.textMain,
+    },
+    apexDaysLeft: {
+      fontSize: Skin.font(13),
+      fontFamily: theme.fonts.medium.fontFamily,
+      fontWeight: theme.fonts.medium.fontWeight,
+      color: APEX_GOLD,
+    },
+    apexExpired: {
+      fontSize: Skin.font(13),
+      color: theme.colors.danger,
+    },
+    apexPitch: {
+      fontSize: Skin.font(14),
+      lineHeight: Skin.font(20),
+      color: theme.colors.textMuted,
+      marginTop: Skin.space(8),
+    },
+    apexMetaText: {
+      fontSize: Skin.font(13),
+      color: theme.colors.textMuted,
+      marginTop: Skin.space(6),
+    },
+    apexSpacesLabel: {
+      fontSize: Skin.font(12),
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginTop: Skin.space(14),
+      marginBottom: Skin.space(6),
+    },
+    apexSpaceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(8),
+      paddingVertical: Skin.space(3),
+    },
+    apexSpaceName: {
+      flex: 1,
+      fontSize: Skin.font(14),
+      color: theme.colors.textMain,
+    },
+    apexLockNote: {
+      fontSize: Skin.font(12),
+      color: theme.colors.textMuted,
+      fontStyle: 'italic',
+      marginTop: Skin.space(8),
+    },
+    apexButton: {
+      backgroundColor: APEX_GOLD,
+      borderRadius: Skin.radius(12),
+      paddingVertical: Skin.space(12),
+      alignItems: 'center',
+      marginTop: Skin.space(14),
+    },
+    apexButtonText: {
+      fontSize: Skin.font(15),
+      fontFamily: theme.fonts.bold.fontFamily,
+      fontWeight: theme.fonts.bold.fontWeight,
+      color: '#1A1505',
     },
     countdownContainer: {
       backgroundColor: theme.colors.surface2,
@@ -3468,3 +3462,530 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       color: theme.colors.textMain,
     },
   });
+
+// ---------------------------------------------------------------------------
+// Memoized sections
+//
+// ProfileModal carries a lot of state (~60 hooks); any state change re-renders
+// the entire tree. The self-contained sections below are extracted into
+// React.memo components so they only re-render when the props they actually
+// read change. `styles` is memoized above, and all callbacks passed in are
+// stable (useCallback), so memo bail-outs actually take effect.
+// ---------------------------------------------------------------------------
+
+type ProfileStyles = ReturnType<typeof createStyles>;
+type ProfileUser = ReturnType<typeof useAuth>['user'];
+
+/**
+ * Quorum Apex card — sits at the top of the premium tab. Three states:
+ * never subscribed (pitch + Subscribe), active (membership details +
+ * locked spaces + Renew), expired (expiry date + Renew).
+ */
+const ApexSectionCard = React.memo(function ApexSectionCard({
+  styles,
+  apexState,
+  onOpenApexModal,
+}: {
+  styles: ProfileStyles;
+  apexState: ApexSubscriptionState;
+  onOpenApexModal: (mode: 'subscribe' | 'renew') => void;
+}) {
+  const { subscription, isActive, daysLeft } = apexState;
+
+  // Resolve the chosen spaces' names from locally-joined spaces; spaces
+  // the user hasn't joined fall back to a truncated address. Slots are
+  // aggregated per space — a subscriber may assign multiple slots (even
+  // all four) to one space, so render "Name ×N" instead of repeated rows.
+  const spaceEntries = React.useMemo(() => {
+    if (!subscription) return [];
+    const local = new Map(getAllSpaces().map((s) => [s.spaceId, s.spaceName]));
+    const counts = new Map<string, number>();
+    for (const address of subscription.space_addresses) {
+      counts.set(address, (counts.get(address) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).map(([address, count]) => ({
+      address,
+      count,
+      name: local.get(address) || truncateAddress(address),
+    }));
+  }, [subscription]);
+
+  // Never subscribed — gold pitch card
+  if (!subscription) {
+    return (
+      <View style={styles.apexCard}>
+        <View style={styles.apexHeaderRow}>
+          <IconSymbol name="crown.fill" size={20} color={APEX_GOLD} />
+          <Text style={styles.apexTitle}>Quorum Apex</Text>
+        </View>
+        <Text style={styles.apexPitch}>
+          Support 4 communities of your choice and get a gold ring on your profile — $25/month
+        </Text>
+        <TouchableOpacity style={styles.apexButton} onPress={() => onOpenApexModal('subscribe')}>
+          <Text style={styles.apexButtonText}>Subscribe</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Subscribed (active) or expired
+  return (
+    <View style={styles.apexCard}>
+      <View style={styles.apexHeaderRow}>
+        <IconSymbol name="crown.fill" size={20} color={APEX_GOLD} />
+        <Text style={styles.apexTitle}>Quorum Apex</Text>
+        {isActive ? (
+          <Text style={styles.apexDaysLeft}>{daysLeft} days left</Text>
+        ) : (
+          <Text style={styles.apexExpired}>
+            Expired {new Date(subscription.period_end).toLocaleDateString()}
+          </Text>
+        )}
+      </View>
+
+      <Text style={styles.apexMetaText}>
+        Member since {new Date(subscription.subscribed_since).toLocaleDateString()} • paying in{' '}
+        {subscription.token}
+      </Text>
+
+      <Text style={styles.apexSpacesLabel}>Supported spaces</Text>
+      {spaceEntries.map((entry) => (
+        <View key={entry.address} style={styles.apexSpaceRow}>
+          <IconSymbol name="checkmark.circle.fill" size={14} color={APEX_GOLD} />
+          <Text style={styles.apexSpaceName} numberOfLines={1}>
+            {entry.name}
+            {entry.count > 1 ? ` ×${entry.count}` : ''}
+          </Text>
+        </View>
+      ))}
+      {isActive && (
+        <Text style={styles.apexLockNote}>
+          Supported spaces are locked until your next renewal.
+        </Text>
+      )}
+
+      <TouchableOpacity style={styles.apexButton} onPress={() => onOpenApexModal('renew')}>
+        <Text style={styles.apexButtonText}>Renew</Text>
+      </TouchableOpacity>
+    </View>
+  );
+});
+
+const ProfileTabSection = React.memo(function ProfileTabSection({
+  styles,
+  theme,
+  hideHeader,
+  user,
+  isEditing,
+  editDisplayName,
+  editBio,
+  onChangeDisplayName,
+  onChangeBio,
+  onPickImage,
+  onCopyAddress,
+  isApexActive,
+}: {
+  styles: ProfileStyles;
+  theme: AppTheme;
+  hideHeader: boolean;
+  user: ProfileUser;
+  isEditing: boolean;
+  editDisplayName: string;
+  editBio: string;
+  onChangeDisplayName: (text: string) => void;
+  onChangeBio: (text: string) => void;
+  onPickImage: () => void;
+  onCopyAddress: () => void;
+  /** Gold Apex ring around the user's own avatar. */
+  isApexActive: boolean;
+}) {
+  return (
+    <>
+      {/* Profile Header — hidden when parent supplies its own */}
+      {!hideHeader && (
+        <View style={styles.profileHeader}>
+          <TouchableOpacity style={styles.avatarContainer} onPress={onPickImage}>
+            <ApexAvatarRing active={isApexActive} size={80}>
+              {user?.profileImage ? (
+                <Image source={{ uri: user.profileImage }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                  <IconSymbol name="person.fill" size={40} color={theme.colors.textMuted} />
+                </View>
+              )}
+            </ApexAvatarRing>
+            <View style={styles.editAvatarButton}>
+              <IconSymbol name="camera.fill" size={16} color={theme.colors.textMain} />
+            </View>
+          </TouchableOpacity>
+          <View style={styles.profileInfo}>
+            {isEditing ? (
+              <TextInput
+                style={styles.displayNameInput}
+                value={editDisplayName}
+                onChangeText={onChangeDisplayName}
+                placeholder="Display Name"
+                placeholderTextColor={theme.colors.textMuted}
+                autoCapitalize="words"
+              />
+            ) : (
+              <Text style={styles.displayName}>
+                {user?.displayName || 'Anonymous'}
+              </Text>
+            )}
+            {user?.username && (
+              <View style={styles.usernameRow}>
+                <Text style={styles.username}>@{user.username}</Text>
+              </View>
+            )}
+            <Text style={styles.userId}>
+              {user?.address ? truncateAddress(user.address) : ''}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Bio Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Bio</Text>
+        {isEditing ? (
+          <TextInput
+            style={styles.bioInput}
+            value={editBio}
+            onChangeText={onChangeBio}
+            placeholder="Tell us about yourself..."
+            placeholderTextColor={theme.colors.textMuted}
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+          />
+        ) : (
+          <View style={styles.bioContainer}>
+            <Text style={styles.bioText}>
+              {user?.bio || 'No bio yet. Tap Edit to add one.'}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Account Info */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Account Info</Text>
+        <TouchableOpacity style={styles.infoRow} onPress={onCopyAddress}>
+          <Text style={styles.infoLabel}>Address</Text>
+          <View style={styles.infoValueRow}>
+            <Text style={[styles.infoValue, { maxWidth: undefined }]} numberOfLines={1}>
+              {user?.address ? truncateAddress(user.address) : 'N/A'}
+            </Text>
+            <IconSymbol name="doc.on.doc" size={14} color={theme.colors.textMuted} />
+          </View>
+        </TouchableOpacity>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Privacy Level</Text>
+          <Text style={styles.infoValue}>
+            {user?.privacyLevel ? user.privacyLevel.charAt(0).toUpperCase() + user.privacyLevel.slice(1) : 'Standard'}
+          </Text>
+        </View>
+        {user?.farcaster && (
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Farcaster</Text>
+            <Text style={styles.infoValue}>@{user.farcaster.username}</Text>
+          </View>
+        )}
+      </View>
+    </>
+  );
+});
+
+const PrivacyFeedSettingsSection = React.memo(function PrivacyFeedSettingsSection({
+  styles,
+  theme,
+  isProfilePublic,
+  onTogglePublicProfile,
+  allowSync,
+  onToggleSync,
+  syncDisabled,
+  notifications,
+  onToggleNotifications,
+  showRepliesInFeed,
+  onToggleShowReplies,
+  showNonFollowReplies,
+  onToggleShowNonFollowReplies,
+}: {
+  styles: ProfileStyles;
+  theme: AppTheme;
+  isProfilePublic: boolean;
+  onTogglePublicProfile: (enabled: boolean) => void;
+  allowSync: boolean;
+  onToggleSync: (enabled: boolean) => void;
+  syncDisabled: boolean;
+  notifications: boolean;
+  onToggleNotifications: (enabled: boolean) => void;
+  showRepliesInFeed: boolean;
+  onToggleShowReplies: (enabled: boolean) => void;
+  showNonFollowReplies: boolean;
+  onToggleShowNonFollowReplies: (enabled: boolean) => void;
+}) {
+  return (
+    <>
+      {/* Privacy & Sync Settings */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Privacy & Sync</Text>
+        <View style={styles.settingRow}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingLabel}>Public Profile</Text>
+            <Text style={styles.settingDescription}>
+              Let anyone see your display name, picture, bio, and QNS username — even outside shared spaces. Off by default.
+            </Text>
+          </View>
+          <Switch
+            value={isProfilePublic}
+            onValueChange={onTogglePublicProfile}
+            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+            thumbColor={isProfilePublic ? '#ffffff' : '#f4f3f4'}
+          />
+        </View>
+        <View style={styles.settingRow}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingLabel}>Enable Sync</Text>
+            <Text style={styles.settingDescription}>
+              Sync your profile, spaces, and keys between devices. Increases metadata visibility.
+            </Text>
+          </View>
+          <Switch
+            value={allowSync}
+            onValueChange={onToggleSync}
+            disabled={syncDisabled}
+            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+            thumbColor={allowSync ? '#ffffff' : '#f4f3f4'}
+          />
+        </View>
+        <View style={styles.settingRow}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingLabel}>Show Online Status</Text>
+            <Text style={styles.settingDescription}>Let others see when you're active</Text>
+          </View>
+          <Switch
+            value={true}
+            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+            thumbColor={'#ffffff'}
+          />
+        </View>
+      </View>
+
+      {/* Notification Settings */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Notifications</Text>
+        <View style={styles.settingRow}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingLabel}>Push Notifications</Text>
+            <Text style={styles.settingDescription}>Receive notifications on your device</Text>
+          </View>
+          <Switch
+            value={notifications}
+            onValueChange={onToggleNotifications}
+            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+            thumbColor={notifications ? '#ffffff' : '#f4f3f4'}
+          />
+        </View>
+      </View>
+
+      {/* Feed Settings */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Feed</Text>
+        <View style={styles.settingRow}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingLabel}>Show replies in main feed</Text>
+            <Text style={styles.settingDescription}>
+              Include reply casts in your main feed (thread views always show replies)
+            </Text>
+          </View>
+          <Switch
+            value={showRepliesInFeed}
+            onValueChange={onToggleShowReplies}
+            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+            thumbColor={showRepliesInFeed ? '#ffffff' : '#f4f3f4'}
+          />
+        </View>
+        <View style={styles.settingRow}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingLabel}>Show replies from non-followed in main feed</Text>
+            <Text style={styles.settingDescription}>
+              Include replies from people you don't follow in your main feed
+            </Text>
+          </View>
+          <Switch
+            value={showNonFollowReplies}
+            onValueChange={onToggleShowNonFollowReplies}
+            disabled={!showRepliesInFeed}
+            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+            thumbColor={showNonFollowReplies ? '#ffffff' : '#f4f3f4'}
+          />
+        </View>
+      </View>
+    </>
+  );
+});
+
+const AccountRecoverySection = React.memo(function AccountRecoverySection({
+  styles,
+  theme,
+  showRecoveryPhrase,
+  recoveryPhrase,
+  hexPrivateKey,
+  onExport,
+  onCopy,
+  onHide,
+}: {
+  styles: ProfileStyles;
+  theme: AppTheme;
+  showRecoveryPhrase: boolean;
+  recoveryPhrase: string[] | null;
+  hexPrivateKey: string | null;
+  onExport: () => void;
+  onCopy: () => void;
+  onHide: () => void;
+}) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Account</Text>
+      {!showRecoveryPhrase ? (
+        <TouchableOpacity style={styles.actionButton} onPress={onExport}>
+          <IconSymbol name="key.fill" size={20} color={theme.colors.textMain} />
+          <Text style={styles.actionButtonText}>Export Recovery Key</Text>
+          <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.recoveryPhraseContainer}>
+          <View style={styles.recoveryPhraseWarning}>
+            <IconSymbol name="exclamationmark.triangle.fill" size={20} color={theme.colors.warning} />
+            <Text style={styles.recoveryPhraseWarningText}>
+              Never share this {recoveryPhrase ? 'phrase' : 'key'} with anyone!
+            </Text>
+          </View>
+          {recoveryPhrase ? (
+            // Display mnemonic as word grid
+            <View style={styles.recoveryPhraseGrid}>
+              {recoveryPhrase.map((word, index) => (
+                <View key={index} style={styles.recoveryPhraseWord}>
+                  <Text style={styles.recoveryPhraseIndex}>{index + 1}.</Text>
+                  <Text style={styles.recoveryPhraseText}>{word}</Text>
+                </View>
+              ))}
+            </View>
+          ) : hexPrivateKey ? (
+            // Display hex private key
+            <View style={styles.hexKeyContainer}>
+              <Text style={styles.hexKeyLabel}>Private Key (Hex)</Text>
+              <Text style={styles.hexKeyText} selectable>
+                {hexPrivateKey}
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.recoveryPhraseActions}>
+            <TouchableOpacity style={styles.copyButton} onPress={onCopy}>
+              <IconSymbol name="doc.on.doc" size={16} color={theme.colors.primary} />
+              <Text style={styles.copyButtonText}>Copy</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.hideButton} onPress={onHide}>
+              <Text style={styles.hideButtonText}>Hide</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+});
+
+const DeviceKeysSection = React.memo(function DeviceKeysSection({
+  styles,
+  theme,
+  isLoadingDevices,
+  deviceRegistrations,
+  currentDeviceInboxAddress,
+  isRemovingDevice,
+  onRemoveDevice,
+  onResetAllSessions,
+}: {
+  styles: ProfileStyles;
+  theme: AppTheme;
+  isLoadingDevices: boolean;
+  deviceRegistrations: DeviceRegistration[];
+  currentDeviceInboxAddress: string | null;
+  isRemovingDevice: boolean;
+  onRemoveDevice: (identityPublicKey: string) => void;
+  onResetAllSessions: () => void;
+}) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Device Keys</Text>
+      <Text style={styles.settingDescription}>
+        Manage devices registered to your account for encrypted messaging.
+      </Text>
+
+      {isLoadingDevices ? (
+        <View style={styles.deviceLoadingContainer}>
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+          <Text style={styles.deviceLoadingText}>Loading devices...</Text>
+        </View>
+      ) : deviceRegistrations.length > 0 ? (
+        <View style={styles.deviceListContainer}>
+          {deviceRegistrations.map((device) => {
+            const isCurrentDevice = device.inbox_registration.inbox_address === currentDeviceInboxAddress;
+            const inboxAddr = device.inbox_registration.inbox_address;
+            const displayAddr = inboxAddr.length > 16
+              ? `${inboxAddr.slice(0, 8)}...${inboxAddr.slice(-6)}`
+              : inboxAddr;
+
+            return (
+              <View key={device.identity_public_key} style={styles.deviceItem}>
+                <View style={styles.deviceInfo}>
+                  <View style={styles.deviceHeader}>
+                    <IconSymbol
+                      name={isCurrentDevice ? 'iphone' : 'desktopcomputer'}
+                      size={16}
+                      color={isCurrentDevice ? theme.colors.primary : theme.colors.textMuted}
+                    />
+                    <Text style={[styles.deviceLabel, isCurrentDevice && styles.deviceLabelCurrent]}>
+                      {isCurrentDevice ? 'This device' : 'Other device'}
+                    </Text>
+                  </View>
+                  <Text style={styles.deviceAddress} numberOfLines={1}>
+                    {displayAddr}
+                  </Text>
+                </View>
+                {!isCurrentDevice && (
+                  <TouchableOpacity
+                    style={styles.deviceRemoveButton}
+                    onPress={() => onRemoveDevice(device.identity_public_key)}
+                    disabled={isRemovingDevice}
+                  >
+                    {isRemovingDevice ? (
+                      <ActivityIndicator size="small" color={theme.colors.danger} />
+                    ) : (
+                      <Text style={styles.deviceRemoveText}>Remove</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      ) : (
+        <Text style={styles.deviceEmptyText}>No devices registered</Text>
+      )}
+
+      {/* Reset All Sessions */}
+      <TouchableOpacity
+        style={[styles.actionButton, { marginTop: Skin.space(16) }]}
+        onPress={onResetAllSessions}
+      >
+        <IconSymbol name="arrow.triangle.2.circlepath" size={20} color={theme.colors.warning} />
+        <View style={styles.actionButtonContent}>
+          <Text style={styles.actionButtonText}>Reset All DM Sessions</Text>
+          <Text style={styles.actionButtonSubtext}>Fix persistent encryption errors</Text>
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
+});

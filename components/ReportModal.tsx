@@ -10,6 +10,7 @@ import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import type { AppTheme } from '@/theme';
 import { useTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { submitReport, type ReportReason } from '@/services/reporting/reportService';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -46,6 +47,7 @@ interface ReportModalProps {
 export function ReportModal({ visible, onClose, target, onSubmitted }: ReportModalProps) {
   const { theme } = useTheme();
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [reason, setReason] = useState<ReportReason | null>(null);
   const [freeText, setFreeText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -86,12 +88,21 @@ export function ReportModal({ visible, onClose, target, onSubmitted }: ReportMod
           reporterAddress: user.address,
         });
       }
-      Alert.alert('Report submitted', 'Thanks — our team will review it.');
       setReason(null);
       setFreeText('');
       onSubmitted?.();
       onClose();
+      // Toast (not Alert): the sheet is closing, so the root-level toast
+      // is visible as confirmation.
+      showToast({
+        type: 'success',
+        title: 'Report submitted',
+        message: 'Thanks — our team will review it.',
+      });
     } catch (e) {
+      // Keep Alert here: the sheet stays open on failure, and this
+      // component is a native RN Modal — the app's root-level toast
+      // would render behind it and never be seen.
       Alert.alert(
         'Could not submit report',
         e instanceof Error ? e.message : 'Unknown error',

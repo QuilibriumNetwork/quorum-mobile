@@ -15,11 +15,13 @@ import React, {
   useMemo,
   useEffect,
 } from 'react';
-import { InteractionManager } from 'react-native';
+import { AppState, InteractionManager } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { mmkvStorage, clearAllMMKVStorage } from '../services/offline/storage';
-import { getPrivateKey, getDeviceKeyset, clearAllSecureStorage, getFarcasterAuthToken, getFarcasterCustodyKey, storeFarcasterAuthToken, storeFarcasterCustodyKey, storeFarcasterSignerKey, storeFarcasterFid, getMnemonic } from '../services/onboarding/secureStorage';
+import { getPrivateKey, getDeviceKeyset, clearAllSecureStorage, getFarcasterAuthToken, getFarcasterAuthTokenExpiresAt, getFarcasterCustodyKey, storeFarcasterAuthToken, storeFarcasterAuthTokenExpiresAt, storeFarcasterCustodyKey, storeFarcasterSignerKey, storeFarcasterFid, getMnemonic } from '../services/onboarding/secureStorage';
 import { deriveFarcasterKeys, lookupFarcasterAccount, validateFarcasterMnemonic } from '../services/onboarding/farcasterService';
 import { refreshFarcasterAuthToken, fetchFarcasterProfileByFid } from '../services/onboarding/farcasterService';
+import { registerFarcasterAuthFailureHandler } from '../services/farcaster/authTokenEvents';
 import { initializeEncryptionKeys, uploadUserRegistration, deriveQuilibriumAddressWithMnemonic, ensurePrivateKey } from '../services/onboarding/keyService';
 import { NativeSigningProvider } from '../services/crypto';
 import { getConfig, saveConfig } from '../services/config';
@@ -70,8 +72,12 @@ interface AuthContextValue {
    * "got a token" from the various ways it can fail (no credentials,
    * mnemonic recovery failed, API rejected, network error). Each
    * branch maps to a different UI affordance — see feed/index.tsx.
+   *
+   * `force` skips the stored-token early return and mints a fresh
+   * token from the custody key — used by the 401/403 backstop where
+   * the stored token is exactly what just got rejected.
    */
-  refreshFarcasterToken: () => Promise<
+  refreshFarcasterToken: (opts?: { force?: boolean }) => Promise<
     | { token: string }
     | { error: 'no-credentials' | 'derivation-failed' | 'api-rejected' | 'unknown'; detail?: string }
   >;
@@ -84,6 +90,97 @@ const STORAGE_KEYS = {
   AUTH_STATE: 'auth:state',
 } as const;
 
+// Farcaster auth-token refresh policy. Tokens are minted with a ~1000
+// day lifetime, but accounts imported long ago do expire — and before
+// this change an expired-but-present token was never refreshed, forcing
+// users to disconnect/reconnect. We renew proactively well before
+// expiry, and bootstrap tokens stored before expiry tracking existed
+// via an MMKV "last refresh attempt" mark.
+const FARCASTER_REFRESH_MARK_KEY = 'farcaster.lastTokenRefresh';
+const FARCASTER_REFRESH_OK_KEY = 'farcaster.lastTokenRefreshOk';
+const TOKEN_REFRESH_LEAD_MS = 7 * 24 * 60 * 60 * 1000;       // renew within 7 days of expiry
+const UNKNOWN_EXPIRY_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;  // unknown expiry: renew if no attempt in 30 days
+const REFRESH_THROTTLE_MS = 6 * 60 * 60 * 1000;              // foreground checks: one attempt per 6h
+const REFRESH_FAILURE_RETRY_MS = 60 * 60 * 1000;             // ...but retry a failed attempt after 1h
+
+function getRefreshMark(): number | null {
+  const raw = mmkvStorage.getItem(FARCASTER_REFRESH_MARK_KEY);
+  if (!raw) return null;
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+// Mark is recorded on ATTEMPT (not just success) so an offline device
+// doesn't hammer the API on every foreground; the OK flag lets the
+// throttle distinguish "renewed fine, leave it alone for 6h" from
+// "failed, worth retrying in 1h".
+function recordRefreshAttempt(): void {
+  mmkvStorage.setItem(FARCASTER_REFRESH_MARK_KEY, String(Date.now()));
+  mmkvStorage.setItem(FARCASTER_REFRESH_OK_KEY, '0');
+}
+
+function recordRefreshSuccess(): void {
+  mmkvStorage.setItem(FARCASTER_REFRESH_OK_KEY, '1');
+}
+
+/**
+ * Proactive Farcaster token renewal. Refreshes when the token is
+ * missing, within TOKEN_REFRESH_LEAD_MS of its stored expiry, or — for
+ * tokens stored before expiry tracking existed — when the last refresh
+ * attempt is older than UNKNOWN_EXPIRY_MAX_AGE_MS. `throttle` is set by
+ * the AppState listener so repeated foregrounds don't re-attempt more
+ * than once per REFRESH_THROTTLE_MS (REFRESH_FAILURE_RETRY_MS after a
+ * failure). Never clears an existing token on failure — a stale token
+ * beats no token, and the 401 backstop handles outright rejection.
+ */
+async function maybeRefreshFarcasterAuthToken(
+  onToken: (token: string) => void,
+  opts?: { throttle?: boolean },
+): Promise<void> {
+  try {
+    const [token, expiresAt] = await Promise.all([
+      getFarcasterAuthToken(),
+      getFarcasterAuthTokenExpiresAt(),
+    ]);
+    const now = Date.now();
+
+    let needsRefresh: boolean;
+    if (!token) {
+      needsRefresh = true;
+    } else if (expiresAt != null) {
+      needsRefresh = expiresAt - now < TOKEN_REFRESH_LEAD_MS;
+    } else {
+      const mark = getRefreshMark();
+      needsRefresh = mark == null || now - mark > UNKNOWN_EXPIRY_MAX_AGE_MS;
+    }
+    if (!needsRefresh) return;
+
+    if (opts?.throttle) {
+      const mark = getRefreshMark();
+      const lastOk = mmkvStorage.getItem(FARCASTER_REFRESH_OK_KEY) === '1';
+      const wait = lastOk ? REFRESH_THROTTLE_MS : REFRESH_FAILURE_RETRY_MS;
+      if (mark != null && now - mark < wait) return;
+    }
+
+    const custodyKey = await getFarcasterCustodyKey();
+    if (!custodyKey) return;
+
+    recordRefreshAttempt();
+    const fresh = await refreshFarcasterAuthToken(custodyKey);
+    logger.debug('[AuthContext] Proactive token refresh:', fresh ? 'success' : 'failed');
+    if (!fresh) return;
+
+    recordRefreshSuccess();
+    await storeFarcasterAuthToken(fresh.secret);
+    if (fresh.expiresAt != null) {
+      await storeFarcasterAuthTokenExpiresAt(fresh.expiresAt);
+    }
+    onToken(fresh.secret);
+  } catch (e) {
+    logger.debug('[AuthContext] Proactive token refresh error:', e);
+  }
+}
+
 interface AuthProviderProps {
   children: React.ReactNode;
 }
@@ -92,6 +189,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [authState, setAuthState] = useState<AuthState>('loading');
   const [user, setUser] = useState<UserInfo | null>(null);
   const [farcasterAuthToken, setFarcasterAuthToken] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   // Load persisted auth state on mount
   useEffect(() => {
@@ -226,27 +324,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
               }
             })();
 
-            // Farcaster token refresh runs in parallel with encryption setup
-            const tokenTask = (async () => {
-              try {
-                let farcasterToken = await getFarcasterAuthToken();
-                logger.debug('[AuthContext] Deferred token check:', farcasterToken ? 'found' : 'not found');
-                if (!farcasterToken) {
-                  const custodyKey = await getFarcasterCustodyKey();
-                  logger.debug('[AuthContext] Custody key for refresh:', custodyKey ? 'found' : 'not found');
-                  if (custodyKey) {
-                    farcasterToken = await refreshFarcasterAuthToken(custodyKey);
-                    logger.debug('[AuthContext] Refreshed token:', farcasterToken ? 'success' : 'failed');
-                    if (farcasterToken) {
-                      await storeFarcasterAuthToken(farcasterToken);
-                      setFarcasterAuthToken(farcasterToken);
-                    }
-                  }
-                }
-              } catch (tokenError) {
-                logger.debug('[AuthContext] Token refresh error:', tokenError);
-              }
-            })();
+            // Farcaster token refresh runs in parallel with encryption
+            // setup. Renews when the token is missing OR nearing expiry
+            // (the old `!token` check let an expired-but-present token
+            // sit forever — see maybeRefreshFarcasterAuthToken).
+            const tokenTask = maybeRefreshFarcasterAuthToken((token) => {
+              setFarcasterAuthToken(token);
+            });
 
             // Backfill the Farcaster pfp for accounts onboarded before it was
             // persisted (older builds dropped it). Without this, the user's
@@ -289,6 +373,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     loadAuthState();
   }, []);
+
+  // Proactive renewal on foreground: tokens outlive typical sessions,
+  // so expiry usually approaches while the app is backgrounded. The
+  // helper throttles attempts via the lastTokenRefresh mark (6h after
+  // a success, 1h after a failure so transient network errors retry
+  // sooner).
+  useEffect(() => {
+    if (authState !== 'authenticated') return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      void maybeRefreshFarcasterAuthToken(
+        (token) => setFarcasterAuthToken(token),
+        { throttle: true },
+      );
+    });
+    return () => subscription.remove();
+  }, [authState]);
 
   const signIn = useCallback(async (userInfo: UserInfo) => {
     try {
@@ -385,15 +486,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return signingProvider.signEd448(privateKey, message);
   }, [signingProvider]);
 
-  const refreshFarcasterToken = useCallback(async (): Promise<
+  const refreshFarcasterToken = useCallback(async (opts?: { force?: boolean }): Promise<
     | { token: string }
     | { error: 'no-credentials' | 'derivation-failed' | 'api-rejected' | 'unknown'; detail?: string }
   > => {
     try {
-      const stored = await getFarcasterAuthToken();
-      if (stored) {
-        if (stored !== farcasterAuthToken) setFarcasterAuthToken(stored);
-        return { token: stored };
+      // `force` skips this early return — the 401 backstop calls with
+      // force because the stored token is what just got rejected.
+      if (!opts?.force) {
+        const stored = await getFarcasterAuthToken();
+        if (stored) {
+          if (stored !== farcasterAuthToken) setFarcasterAuthToken(stored);
+          return { token: stored };
+        }
       }
       let custodyKey = await getFarcasterCustodyKey();
 
@@ -423,6 +528,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
               custodyKey = keys.custodyPrivateKey;
               if (account.authToken) {
                 await storeFarcasterAuthToken(account.authToken);
+                if (account.authTokenExpiresAt != null) {
+                  await storeFarcasterAuthTokenExpiresAt(account.authTokenExpiresAt);
+                }
                 setFarcasterAuthToken(account.authToken);
                 return { token: account.authToken };
               }
@@ -439,17 +547,39 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (!custodyKey) {
         return { error: 'no-credentials', detail: recoveryDetail };
       }
+      recordRefreshAttempt();
       const fresh = await refreshFarcasterAuthToken(custodyKey);
       if (fresh) {
-        await storeFarcasterAuthToken(fresh);
-        setFarcasterAuthToken(fresh);
-        return { token: fresh };
+        recordRefreshSuccess();
+        await storeFarcasterAuthToken(fresh.secret);
+        if (fresh.expiresAt != null) {
+          await storeFarcasterAuthTokenExpiresAt(fresh.expiresAt);
+        }
+        setFarcasterAuthToken(fresh.secret);
+        return { token: fresh.secret };
       }
       return { error: 'api-rejected', detail: 'farcaster.xyz returned no token (auth rejected or rate-limited)' };
     } catch (e) {
       return { error: 'unknown', detail: (e as Error)?.message };
     }
   }, [farcasterAuthToken]);
+
+  // Reactive 401/403 backstop: high-traffic Farcaster call sites (feed,
+  // notifications, legacy cast submit) report rejections through
+  // authTokenEvents; we force-refresh from the custody key and then
+  // invalidate the Farcaster query caches. The token is deliberately
+  // NOT in those queryKeys — queryFns read it per-render from
+  // context-fed props, so the refetch triggered by invalidation is what
+  // carries the new token to the API.
+  useEffect(() => {
+    return registerFarcasterAuthFailureHandler(async () => {
+      const result = await refreshFarcasterToken({ force: true });
+      if ('token' in result) {
+        void queryClient.invalidateQueries({ queryKey: ['farcaster-feed'] });
+        void queryClient.invalidateQueries({ queryKey: ['farcaster-notifications'] });
+      }
+    });
+  }, [refreshFarcasterToken, queryClient]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

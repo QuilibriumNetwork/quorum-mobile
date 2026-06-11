@@ -229,6 +229,8 @@ export default function MessagesInbox() {
             onPress={handleOpenNewConversation}
             style={styles.headerIconButton}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="New conversation"
           >
             <IconSymbol name="square.and.pencil" size={22} color={theme.colors.textMain} />
           </TouchableOpacity>
@@ -248,7 +250,11 @@ export default function MessagesInbox() {
           autoCorrect={false}
         />
         {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
+          <TouchableOpacity
+            onPress={() => setSearch('')}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+          >
             <IconSymbol name="xmark.circle.fill" size={18} color={theme.colors.textMuted} />
           </TouchableOpacity>
         )}

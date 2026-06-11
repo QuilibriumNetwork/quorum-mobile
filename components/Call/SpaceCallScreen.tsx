@@ -16,6 +16,7 @@ import { RTCView } from 'react-native-webrtc';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 import { useSpaceCall } from '@/context/SpaceCallContext';
+import { useToast } from '@/context/ToastContext';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import type { CallQuality } from '@/services/calling/webrtc-manager';
@@ -84,6 +85,7 @@ function QualityIndicator({ quality }: { quality: CallQuality | null }) {
 export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
   const { state, leaveCall, toggleMute, toggleVideo, toggleSpeaker, flipCamera, getLocalStream, getRemoteStream, getDiagnosticsText } = useSpaceCall();
   const { theme } = useTheme();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(0);
   const [callStartTime] = useState(() => Date.now());
@@ -132,7 +134,12 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
         {
           text: 'Copy',
           onPress: async () => {
-            try { await Clipboard.setStringAsync(text); } catch { /* noop */ }
+            try {
+              await Clipboard.setStringAsync(text);
+              showToast({ type: 'success', title: 'Copied', message: 'Call diagnostics copied to clipboard.' });
+            } catch {
+              showToast({ type: 'error', title: 'Copy Failed', message: 'Could not copy diagnostics to clipboard.' });
+            }
           },
         },
       ],

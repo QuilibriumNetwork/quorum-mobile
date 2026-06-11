@@ -24,6 +24,7 @@ import {
   storeFarcasterSignerKey,
   storeFarcasterFid,
   storeFarcasterAuthToken,
+  storeFarcasterAuthTokenExpiresAt,
 } from '@/services/onboarding/secureStorage';
 import { fetchImageAsDataUri } from '@/utils/image';
 import * as Skin from '@/theme/skins/geometry';
@@ -137,6 +138,9 @@ export default function FarcasterSetupScreen() {
       ];
       if (account.authToken) {
         storePromises.push(storeFarcasterAuthToken(account.authToken));
+        if (account.authTokenExpiresAt != null) {
+          storePromises.push(storeFarcasterAuthTokenExpiresAt(account.authTokenExpiresAt));
+        }
       }
       await Promise.all(storePromises);
 

@@ -39,7 +39,6 @@ export function useMutedFids(): MutedFids {
     initialData: cached,
     staleTime: 1000 * 60 * 10, // 10 minutes
     refetchInterval: 1000 * 60 * 15, // background refresh every 15 minutes
-    refetchOnWindowFocus: true,
   });
 
   const fids = useMemo(() => new Set(query.data ?? []), [query.data]);

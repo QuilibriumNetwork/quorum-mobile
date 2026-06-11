@@ -7,9 +7,12 @@ import { AudioSpaceEmbed } from '@/components/SocialFeed/content/AudioSpaceEmbed
 import { LiveSpacesStrip } from '@/components/SocialFeed/content/LiveSpacesStrip';
 import { FarcasterTokenEmbed } from '@/components/SocialFeed/content/FarcasterTokenEmbed';
 import { LikeIcon, getLikeIconType } from '@/components/SocialFeed/content/LikeIcon';
+import { SnapIcon } from '@/components/SocialFeed/content/SnapIcon';
+import TipModal, { type TipTarget } from '@/components/wallet/TipModal';
 import { useMiniappManifest } from '@/hooks/useMiniappManifest';
 import { useOgMetadata } from '@/hooks/useOgMetadata';
 import { SnapEmbed, useSnapDetection } from '@/components/SocialFeed/content/SnapEmbed';
+import { AutoHeightImage } from '@/components/SocialFeed/media/AutoHeightImage';
 import { ImageViewer } from '@/components/SocialFeed/media/ImageViewer';
 import { VideoViewer } from '@/components/SocialFeed/media/VideoViewer';
 import { extractYouTubeMatchesFromText, YouTubeEmbed, parseYouTubeUrl } from '@/components/SocialFeed/media/YouTubeEmbed';
@@ -20,6 +23,8 @@ import { useHegemonyGovernance } from '@/hooks/useHegemonyGovernance';
 import type { ChannelCast as GovernanceChannelCast, CastReply as GovernanceCastReply } from '@/services/governance/governanceClient';
 import { parseVote as parseGovernanceVote } from '@/services/governance/governanceClient';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
+import { ApexAvatarRing } from '@/components/ui/ApexAvatarRing';
+import { useApexStatusForFids } from '@/hooks/useApex';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context/AuthContext';
 import { useConversations, type ConversationWithPreview } from '@/hooks/chat/useConversations';
@@ -74,7 +79,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { setAudioModeAsync } from 'expo-audio';
 import { Image as ExpoImage } from 'expo-image';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, BackHandler, Dimensions, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View, type ImageStyle, type KeyboardEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Alert, Animated, BackHandler, Dimensions, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View, type KeyboardEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReanimatedModule, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -104,54 +109,41 @@ async function ensureAudioMode() {
   }
 }
 
-// Cache for image dimensions to prevent recalculation during scroll
-const imageDimensionCache = new Map<string, number>();
-
-function AutoHeightImage({ uri, maxHeight, maxWidth = SCREEN_WIDTH, style, onPress }: { uri: string; maxHeight: number; maxWidth?: number; style?: StyleProp<ImageStyle>; onPress?: () => void }) {
-  const cacheKey = `${uri}:${maxWidth}`;
-  const cachedHeight = imageDimensionCache.get(cacheKey);
-  const [height, setHeight] = useState<number>(cachedHeight ?? 250);
-
-  useEffect(() => {
-    // Skip if already cached
-    if (imageDimensionCache.has(cacheKey)) {
-      setHeight(imageDimensionCache.get(cacheKey)!);
-      return;
-    }
-
-    Image.getSize(
-      uri,
-      (width, imgHeight) => {
-        const aspectRatio = imgHeight / width;
-        const calculatedHeight = Math.min(maxWidth * aspectRatio, maxHeight);
-        imageDimensionCache.set(cacheKey, calculatedHeight);
-        setHeight(calculatedHeight);
-      },
-      () => {
-        imageDimensionCache.set(cacheKey, 250);
-        setHeight(250); // fallback
-      }
-    );
-  }, [uri, maxHeight, maxWidth, cacheKey]);
-
-  const imageElement = (
-    <Image
-      source={{ uri }}
-      style={[style, { width: maxWidth, height }]}
-      resizeMode="cover"
-    />
+// Memoized carousel tile — keeps the per-image onPress closure inside a
+// memoized component so paging (activeIndex updates) doesn't re-render
+// every image in the carousel.
+const CarouselImageTile = React.memo(function CarouselImageTile({
+  url,
+  index,
+  maxHeight,
+  theme,
+  onImagePress,
+}: {
+  url: string;
+  index: number;
+  maxHeight: number;
+  theme: AppTheme;
+  onImagePress?: (url: string, index: number) => void;
+}) {
+  const handlePress = useCallback(() => onImagePress?.(url, index), [onImagePress, url, index]);
+  return (
+    <View
+      style={{
+        width: SCREEN_WIDTH,
+        justifyContent: 'center',
+        alignItems: 'center',
+      }}
+    >
+      <AutoHeightImage
+        uri={url}
+        maxHeight={maxHeight}
+        maxWidth={SCREEN_WIDTH}
+        style={{ backgroundColor: theme.colors.surface3 }}
+        onPress={onImagePress ? handlePress : undefined}
+      />
+    </View>
   );
-
-  if (onPress) {
-    return (
-      <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
-        {imageElement}
-      </TouchableOpacity>
-    );
-  }
-
-  return imageElement;
-}
+});
 
 function ImageCarousel({ urls, maxHeight, theme, onImagePress }: { urls: string[]; maxHeight: number; theme: AppTheme; onImagePress?: (url: string, index: number) => void }) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -176,22 +168,14 @@ function ImageCarousel({ urls, maxHeight, theme, onImagePress }: { urls: string[
         contentContainerStyle={{ width: SCREEN_WIDTH * urls.length }}
       >
         {urls.map((url, index) => (
-          <View
+          <CarouselImageTile
             key={index}
-            style={{
-              width: SCREEN_WIDTH,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
-            <AutoHeightImage
-              uri={url}
-              maxHeight={maxHeight}
-              maxWidth={SCREEN_WIDTH}
-              style={{ backgroundColor: theme.colors.surface3 }}
-              onPress={onImagePress ? () => onImagePress(url, index) : undefined}
-            />
-          </View>
+            url={url}
+            index={index}
+            maxHeight={maxHeight}
+            theme={theme}
+            onImagePress={onImagePress}
+          />
         ))}
       </ScrollView>
       <View style={{
@@ -2216,6 +2200,7 @@ function ThreadDetailView({
   placeholderCast,
   bottomInset = 0,
   currentUserFid,
+  onTipPress,
   maxCastLength = DEFAULT_CAST_LENGTH,
   regularCastByteLimit = DEFAULT_CAST_LENGTH,
   governanceByHash,
@@ -2245,6 +2230,8 @@ function ThreadDetailView({
   placeholderCast?: unknown;
   bottomInset?: number;
   currentUserFid?: number;
+  /** Opens the tip flow for a cast. Tip button hidden when omitted. */
+  onTipPress?: (target: TipTarget) => void;
   maxCastLength?: number;
   regularCastByteLimit?: number;
   /** /hegemony proposals keyed by 0x hash — overlays vote tallies + voter
@@ -2293,6 +2280,19 @@ function ThreadDetailView({
     // runs only when the server thread data actually changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allCasts, optimistic.reconcilePendingByHash, optimistic.reconcilePending, optimistic.reconcileReactions]);
+
+  // Apex gold ring — batched status lookup over every author visible in
+  // the thread (parents + main + replies). Degrades silently to no rings.
+  const threadAuthorFids = React.useMemo(() => {
+    const fids = new Set<number>();
+    const mainFid = (mainCast as { author?: { fid?: number } } | undefined)?.author?.fid;
+    if (mainFid) fids.add(mainFid);
+    for (const c of allCasts ?? []) {
+      if (c.author?.fid) fids.add(c.author.fid);
+    }
+    return Array.from(fids);
+  }, [mainCast, allCasts]);
+  const apexFids = useApexStatusForFids(threadAuthorFids);
 
   // /hegemony overlay: when the thread's root cast is a proposal, surface the
   // weighted tally + per-voter points (normal threads show none of this).
@@ -2724,15 +2724,17 @@ function ThreadDetailView({
           )}
           <View style={{ position: 'relative', marginRight: Skin.space(12) }}>
             <TouchableOpacity onPress={() => onOpenProfile(cast.author.fid, cast.author.username)}>
-              <CachedAvatar
-                source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: Skin.radius(22),
-                  backgroundColor: theme.colors.surface3,
-                }}
-              />
+              <ApexAvatarRing active={apexFids.has(cast.author.fid)} size={44}>
+                <CachedAvatar
+                  source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: Skin.radius(22),
+                    backgroundColor: theme.colors.surface3,
+                  }}
+                />
+              </ApexAvatarRing>
             </TouchableOpacity>
             {/* Follow button - don't show for own profile */}
             {(() => {
@@ -3080,6 +3082,21 @@ function ThreadDetailView({
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{recastCount}</Text>
                 )}
               </TouchableOpacity>
+              {onTipPress && cast.author.fid > 0 && cast.author.fid !== currentUserFid && (
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6), paddingVertical: Skin.space(4), paddingHorizontal: Skin.space(2) }}
+                  onPress={() => onTipPress({
+                    castHash: cast.hash,
+                    castText: cast.text ?? '',
+                    authorFid: cast.author.fid,
+                    authorUsername: cast.author.username,
+                    authorDisplayName: cast.author.displayName,
+                  })}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <SnapIcon color={theme.colors.textMuted} size={16} />
+                </TouchableOpacity>
+              )}
             </View>
           );
         })()}
@@ -3498,6 +3515,7 @@ export function ProfileView({
   onLikeToggle,
   bottomInset = 0,
   currentUserFid,
+  onTipPress,
   hideBackButton = false,
 }: {
   fid: number;
@@ -3512,6 +3530,8 @@ export function ProfileView({
   likeStates: Map<string, { liked: boolean; count: number }>;
   onLikeToggle: (castHash: string, currentlyLiked: boolean, currentCount: number) => void;
   bottomInset?: number;
+  /** Opens the tip flow for a cast. Tip button hidden when omitted. */
+  onTipPress?: (target: TipTarget) => void;
   hideBackButton?: boolean;
 }) {
   const {
@@ -3524,6 +3544,17 @@ export function ProfileView({
     fetchNextPage,
     refetch,
   } = useFarcasterProfile({ fid, token });
+
+  // Apex gold ring — the profile owner plus any cast authors that appear
+  // in the list (recasts can carry other authors).
+  const profileAuthorFids = React.useMemo(() => {
+    const fids = new Set<number>([fid]);
+    for (const c of casts ?? []) {
+      if (c.author?.fid) fids.add(c.author.fid);
+    }
+    return Array.from(fids);
+  }, [fid, casts]);
+  const apexFids = useApexStatusForFids(profileAuthorFids);
 
   // Image viewer state
   const [viewerState, setViewerState] = useState<{ images: string[]; index: number } | null>(null);
@@ -3568,17 +3599,19 @@ export function ProfileView({
               activeOpacity={0.8}
               onPress={() => author.pfp?.url && setViewerState({ images: [author.pfp.url], index: 0 })}
             >
-              <CachedAvatar
-                source={author.pfp?.url ? { uri: author.pfp.url } : null}
-                style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: Skin.radius(40),
-                  borderWidth: Skin.border(4),
-                  borderColor: theme.colors.background,
-                  backgroundColor: theme.colors.surface3,
-                }}
-              />
+              <ApexAvatarRing active={apexFids.has(fid)} size={80}>
+                <CachedAvatar
+                  source={author.pfp?.url ? { uri: author.pfp.url } : null}
+                  style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: Skin.radius(40),
+                    borderWidth: Skin.border(4),
+                    borderColor: theme.colors.background,
+                    backgroundColor: theme.colors.surface3,
+                  }}
+                />
+              </ApexAvatarRing>
             </TouchableOpacity>
             <ProfileOverflowButton targetFid={fid} username={author.username} theme={theme} />
           </View>
@@ -3729,16 +3762,21 @@ export function ProfileView({
             <TouchableOpacity
               onPress={() => onOpenProfile(cast.author.fid, cast.author.username)}
             >
-              <CachedAvatar
-                source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: Skin.radius(22),
-                  marginRight: Skin.space(12),
-                  backgroundColor: theme.colors.surface3,
-                }}
-              />
+              <ApexAvatarRing
+                active={apexFids.has(cast.author.fid)}
+                size={44}
+                style={{ marginRight: Skin.space(12) }}
+              >
+                <CachedAvatar
+                  source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: Skin.radius(22),
+                    backgroundColor: theme.colors.surface3,
+                  }}
+                />
+              </ApexAvatarRing>
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
@@ -3981,6 +4019,21 @@ export function ProfileView({
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.recasts?.count}</Text>
                 )}
               </View>
+              {onTipPress && cast.author.fid > 0 && cast.author.fid !== currentUserFid && (
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
+                  onPress={() => onTipPress({
+                    castHash: cast.hash,
+                    castText: cast.text ?? '',
+                    authorFid: cast.author.fid,
+                    authorUsername: cast.author.username,
+                    authorDisplayName: cast.author.displayName,
+                  })}
+                  hitSlop={12}
+                >
+                  <SnapIcon color={theme.colors.textMuted} size={16} />
+                </TouchableOpacity>
+              )}
             </View>
           );
         })()}
@@ -4067,6 +4120,7 @@ function ChannelView({
   onLikeToggle,
   bottomInset = 0,
   currentUserFid,
+  onTipPress,
 }: {
   channelKey: string;
   token?: string;
@@ -4080,6 +4134,8 @@ function ChannelView({
   likeStates: Map<string, { liked: boolean; count: number }>;
   onLikeToggle: (castHash: string, currentlyLiked: boolean, currentCount: number) => void;
   bottomInset?: number;
+  /** Opens the tip flow for a cast. Tip button hidden when omitted. */
+  onTipPress?: (target: TipTarget) => void;
 }) {
   const {
     channel,
@@ -4090,6 +4146,16 @@ function ChannelView({
     hasNextPage,
     fetchNextPage,
   } = useFarcasterChannel({ channelKey, token });
+
+  // Apex gold ring for channel cast authors (batched, silent fallback).
+  const channelAuthorFids = React.useMemo(() => {
+    const fids = new Set<number>();
+    for (const c of casts ?? []) {
+      if (c.author?.fid) fids.add(c.author.fid);
+    }
+    return Array.from(fids);
+  }, [casts]);
+  const apexFids = useApexStatusForFids(channelAuthorFids);
 
   const renderChannelHeader = () => {
     const frameEmbed = channel?.headerActionMetadata?.frameEmbedNext?.frameEmbed;
@@ -4309,16 +4375,21 @@ function ChannelView({
             <TouchableOpacity
               onPress={() => onOpenProfile(cast.author.fid, cast.author.username)}
             >
-              <CachedAvatar
-                source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: Skin.radius(22),
-                  marginRight: Skin.space(12),
-                  backgroundColor: theme.colors.surface3,
-                }}
-              />
+              <ApexAvatarRing
+                active={apexFids.has(cast.author.fid)}
+                size={44}
+                style={{ marginRight: Skin.space(12) }}
+              >
+                <CachedAvatar
+                  source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: Skin.radius(22),
+                    backgroundColor: theme.colors.surface3,
+                  }}
+                />
+              </ApexAvatarRing>
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
@@ -4550,6 +4621,21 @@ function ChannelView({
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.recasts?.count}</Text>
                 )}
               </View>
+              {onTipPress && cast.author.fid > 0 && cast.author.fid !== currentUserFid && (
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
+                  onPress={() => onTipPress({
+                    castHash: cast.hash,
+                    castText: cast.text ?? '',
+                    authorFid: cast.author.fid,
+                    authorUsername: cast.author.username,
+                    authorDisplayName: cast.author.displayName,
+                  })}
+                  hitSlop={12}
+                >
+                  <SnapIcon color={theme.colors.textMuted} size={16} />
+                </TouchableOpacity>
+              )}
             </View>
           );
         })()}
@@ -4676,6 +4762,12 @@ interface FeedPostCardProps {
   onFollow: (fid: number) => void;
   onReport: (castHash: string, authorFid?: number) => void;
   onDelete: (castHash: string) => void;
+  /** Opens the tip flow for this cast. Tip button hidden when omitted. */
+  onTipPress?: (target: TipTarget) => void;
+  /** Gold Apex ring on the author avatar. Computed once at the list level
+   *  (useApexStatusForFids) and passed down as a boolean so memoized rows
+   *  don't churn. */
+  authorIsApex?: boolean;
 }
 
 // Square media-grid cell — used by the "Media" filter to render the
@@ -4870,6 +4962,8 @@ const FeedPostCard = React.memo(function FeedPostCard({
   onFollow,
   onReport,
   onDelete,
+  onTipPress,
+  authorIsApex = false,
 }: FeedPostCardProps) {
   const queryClient = useQueryClient();
   const navigateToThread = useCallback(() => {
@@ -4944,10 +5038,12 @@ const FeedPostCard = React.memo(function FeedPostCard({
       )}
       <Pressable onPress={navigateToThread} style={styles.postHeader}>
         <TouchableOpacity onPress={navigateToProfile} style={styles.avatarContainer}>
-          <Image
-            source={post.authorAvatar ? { uri: post.authorAvatar } : AVATAR_FALLBACK}
-            style={styles.avatar}
-          />
+          <ApexAvatarRing active={authorIsApex} size={44}>
+            <Image
+              source={post.authorAvatar ? { uri: post.authorAvatar } : AVATAR_FALLBACK}
+              style={styles.avatar}
+            />
+          </ApexAvatarRing>
           {!isFollowing && post.authorFid > 0 && (
             <TouchableOpacity
               style={[styles.followButton, { backgroundColor: theme.colors.primary }]}
@@ -5203,6 +5299,21 @@ const FeedPostCard = React.memo(function FeedPostCard({
             <Text style={styles.statText}>{recastCount}</Text>
           )}
         </TouchableOpacity>
+        {onTipPress && post.authorFid > 0 && post.authorFid !== currentUserFid && (
+          <TouchableOpacity
+            style={styles.statButton}
+            hitSlop={12}
+            onPress={() => onTipPress({
+              castHash: post.hash,
+              castText: post.content,
+              authorFid: post.authorFid,
+              authorUsername: post.username,
+              authorDisplayName: post.authorName,
+            })}
+          >
+            <SnapIcon color={theme.colors.textMuted} size={16} />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -5294,6 +5405,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   });
 
   const { openMiniapp } = useMiniappOverlay();
+  // Tip flow — one TipModal mounted at this level serves every surface
+  // (feed rows, thread detail, profile, channel); surfaces pass the cast
+  // info up via onTipPress.
+  const [tipTarget, setTipTarget] = useState<TipTarget | null>(null);
+  const handleOpenTip = useCallback((target: TipTarget) => setTipTarget(target), []);
   const [composeVisible, setComposeVisible] = useState(false);
   const [composeChannelKey, setComposeChannelKey] = useState<string | undefined>(undefined);
   const [composeChannelPickerVisible, setComposeChannelPickerVisible] = useState(false);
@@ -5849,6 +5965,12 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   // ParentContextLine renders @handle immediately instead of fid:N → @handle.
   useFarcasterUsersPrefetch(
     useMemo(() => filteredPosts.map((p) => p.parentAuthorFid), [filteredPosts]),
+  );
+
+  // Apex gold ring — one batched status lookup for all feed authors;
+  // FeedPostCard rows get a stable boolean so memoization holds.
+  const feedApexFids = useApexStatusForFids(
+    useMemo(() => filteredPosts.map((p) => p.authorFid), [filteredPosts]),
   );
 
   // Build search results list based on current tab
@@ -6756,6 +6878,8 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                       onFollow={handleFollow}
                       onReport={handleReportCast}
                       onDelete={handleDeleteCast}
+                      onTipPress={handleOpenTip}
+                      authorIsApex={feedApexFids.has(post.authorFid)}
                     />
                     {post.isProposal && (
                       <ProposalVoteBlock
@@ -6952,6 +7076,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   onFollow={handleFollow}
                   bottomInset={insets.bottom}
                   currentUserFid={currentUserFid}
+                  onTipPress={handleOpenTip}
                   maxCastLength={maxCastLength}
                   regularCastByteLimit={regularCastByteLimit}
                   governanceByHash={governanceByHash}
@@ -6976,6 +7101,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   likeStates={likeStates}
                   onLikeToggle={handleLikeToggle}
                   bottomInset={insets.bottom}
+                  onTipPress={handleOpenTip}
                 />,
                 `profile-${screen.fid}-${stackIndex}`
               );
@@ -6996,6 +7122,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   likeStates={likeStates}
                   onLikeToggle={handleLikeToggle}
                   bottomInset={insets.bottom}
+                  onTipPress={handleOpenTip}
                 />,
                 `channel-${screen.channelKey}-${stackIndex}`
               );
@@ -7324,6 +7451,17 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               setShareToChatUrl(null);
               setFeedShareSheet(null);
             }}
+          />
+
+          {/* Tip Modal — shared by feed rows, thread detail, profile and channel views */}
+          <TipModal
+            visible={tipTarget !== null}
+            onClose={() => setTipTarget(null)}
+            castHash={tipTarget?.castHash ?? ''}
+            castText={tipTarget?.castText ?? ''}
+            authorFid={tipTarget?.authorFid ?? 0}
+            authorUsername={tipTarget?.authorUsername ?? ''}
+            authorDisplayName={tipTarget?.authorDisplayName}
           />
 
         </Animated.View>

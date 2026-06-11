@@ -6,7 +6,10 @@ import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context';
 import { useCreateOfferOnListing, useCreateOfferOnName } from '@/hooks/useQNSMarketplace';
+import { getWalletPrivateKey, signQNSSignatureMessage } from '@/hooks/useQNSPayment';
+import { useWalletKeys } from '@/hooks/useWallet';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
+import { useWarpcastWallet } from '@/hooks/useWarpcastWallet';
 import {
   generateStealthOwnership,
   stealthOwnershipToApi,
@@ -50,7 +53,9 @@ export default function MakeOfferModal({
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const styles = createStyles(theme, isDark, insets);
-  const { activeWallet } = useWalletSelection();
+  const { refetch: fetchKeys } = useWalletKeys();
+  const { activeWallet, activeType } = useWalletSelection();
+  const { importedWallet } = useWarpcastWallet();
 
   const [token, setToken] = React.useState<'wQUIL' | 'USDC'>(listingToken || 'USDC');
   const [amount, setAmount] = React.useState('');
@@ -69,7 +74,7 @@ export default function MakeOfferModal({
     }
   }, [visible, listingToken]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!amount || parseFloat(amount) <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid offer amount.');
       return;
@@ -80,39 +85,49 @@ export default function MakeOfferModal({
       return;
     }
 
-    const stealth = generateStealthOwnership(user.quilibriumAddress);
-    const ownership = stealthOwnershipToApi(stealth);
+    try {
+      const stealth = generateStealthOwnership(user.quilibriumAddress);
+      const ownership = stealthOwnershipToApi(stealth);
 
-    const callbacks = {
-      onSuccess: () => {
-        Alert.alert('Offer Sent', `Your offer of ${amount} ${token} has been submitted.`);
-        onSuccess?.();
-        onClose();
-      },
-      onError: (err: Error) => {
-        Alert.alert('Error', err.message || 'Failed to create offer');
-      },
-    };
+      // Sign the QNS signature message (EIP-191) so the server can verify the buyer address
+      const walletPrivateKey = await getWalletPrivateKey(activeType, importedWallet, fetchKeys);
+      const { address: buyerAddress, signature } = await signQNSSignatureMessage(walletPrivateKey);
 
-    if (listingId) {
-      createOfferListing({
-        listingId,
-        token,
-        amount,
-        buyerAddress: activeWallet.address,
-        buyerOwnership: ownership,
-        expiresInHours: expiryHours,
-      }, callbacks);
-    } else if (name) {
-      createOfferName({
-        name,
-        nameType,
-        token,
-        amount,
-        buyerAddress: activeWallet.address,
-        buyerOwnership: ownership,
-        expiresInHours: expiryHours,
-      }, callbacks);
+      const callbacks = {
+        onSuccess: () => {
+          Alert.alert('Offer Sent', `Your offer of ${amount} ${token} has been submitted.`);
+          onSuccess?.();
+          onClose();
+        },
+        onError: (err: Error) => {
+          Alert.alert('Error', err.message || 'Failed to create offer');
+        },
+      };
+
+      if (listingId) {
+        // Listing offers always use the listing's token, so no token is sent
+        createOfferListing({
+          listingId,
+          amount,
+          buyerAddress,
+          buyerOwnership: ownership,
+          expiresInHours: expiryHours,
+          signature,
+        }, callbacks);
+      } else if (name) {
+        createOfferName({
+          name,
+          nameType,
+          token,
+          amount,
+          buyerAddress,
+          buyerOwnership: ownership,
+          expiresInHours: expiryHours,
+          signature,
+        }, callbacks);
+      }
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create offer');
     }
   };
 

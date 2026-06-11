@@ -1,4 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
+import { getCachedProfile, setCachedProfile } from '@/services/offline/farcasterFeedCache';
 
 const PROFILE_CASTS_URL = 'https://farcaster.xyz/~api/v2/profile-casts';
 
@@ -117,7 +119,7 @@ export interface ProfileCast {
   };
 }
 
-interface ProfilePage {
+export interface ProfilePage {
   casts: ProfileCast[];
   cursor?: string;
   author?: ProfileAuthor;
@@ -174,14 +176,34 @@ export function useFarcasterProfile({
   token,
   enabled = true,
 }: UseFarcasterProfileOptions) {
+  // Paint the last-known profile instantly from MMKV on cold start, then
+  // refresh in the background (initialDataUpdatedAt preserves staleness).
+  const cached = useMemo(() => getCachedProfile(fid), [fid]);
+
   const query = useInfiniteQuery({
     queryKey: ['farcaster-profile', fid],
     queryFn: ({ pageParam }) => fetchProfilePage(fid, token, pageParam),
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.cursor,
+    getNextPageParam: (lastPage) => {
+      if (!lastPage.cursor) return undefined;
+      return lastPage.cursor;
+    },
     enabled: enabled && fid > 0,
     staleTime: 1000 * 60 * 2, // 2 minutes
+    // Cap retained pages so a long scroll session doesn't pin every page
+    // in the JS heap; dropped pages refetch from the network on demand.
+    maxPages: 6,
+    initialData: cached?.data,
+    initialDataUpdatedAt: cached?.updatedAt,
   });
+
+  // Persist the freshest first page so re-opening this profile paints
+  // instantly.
+  useEffect(() => {
+    if (query.isFetched && query.data && query.data.pages.length > 0) {
+      setCachedProfile(fid, query.data);
+    }
+  }, [query.data, query.isFetched, fid]);
 
   // Flatten all pages into a single array
   const casts = query.data?.pages.flatMap((page) => page.casts) ?? [];

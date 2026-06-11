@@ -9,7 +9,7 @@ import { useBlockedFids } from '@/hooks/useBlockedFids';
 import { useMutedFids } from '@/hooks/useMutedFids';
 import type { EmbeddedCast } from '@/hooks/useFarcasterFeed';
 import { ImageViewer, AutoHeightImage, ImageCarousel, VideoPlayer, YouTubeEmbed, parseYouTubeUrl, extractYouTubeMatchesFromText } from '../media';
-import { CastText, LinkPreview, QuoteCast, FrameEmbed, LikeIcon, getLikeIconType, SnapEmbed, useSnapDetection } from '../content';
+import { CastText, LinkPreview, QuoteCast, FrameEmbed, LikeIcon, getLikeIconType, SnapEmbed, useSnapDetection, SnapIcon } from '../content';
 import { QuorumIdentityBadge } from '../content/QuorumIdentityBadge';
 import { SCREEN_HEIGHT, formatTimestamp, lookupUserByUsername } from '../utils';
 import * as Skin from '@/theme/skins/geometry';
@@ -33,6 +33,15 @@ interface ThreadDetailViewProps {
   /** Report any cast in the thread (main + replies). When undefined the
    *  flag icon is hidden. */
   onReport?: (castHash: string, castAuthorFid?: number) => void;
+  /** Opens the tip flow for a cast. When undefined the tip (snap) icon is
+   *  hidden — surfaces without a mounted TipModal simply omit this. */
+  onTipPress?: (target: {
+    castHash: string;
+    castText: string;
+    authorFid: number;
+    authorUsername: string;
+    authorDisplayName?: string;
+  }) => void;
   bottomInset?: number;
 }
 
@@ -51,6 +60,7 @@ export function ThreadDetailView({
   followStates,
   onFollow,
   onReport,
+  onTipPress,
   bottomInset = 0,
 }: ThreadDetailViewProps) {
   const { parentCasts, mainCast, replies, isLoading, error, channelContext } = useFarcasterThread({
@@ -395,6 +405,21 @@ export function ThreadDetailView({
               <Text style={styles.mutedText13}>{cast.replies?.count}</Text>
             )}
           </View>
+          {onTipPress && cast.author.fid > 0 && cast.author.fid !== currentUserFid && (
+            <TouchableOpacity
+              style={staticStyles.rowGap6}
+              onPress={() => onTipPress({
+                castHash: cast.hash,
+                castText: cast.text ?? '',
+                authorFid: cast.author.fid,
+                authorUsername: cast.author.username,
+                authorDisplayName: cast.author.displayName,
+              })}
+              hitSlop={8}
+            >
+              <SnapIcon color={theme.colors.textMuted} size={16} />
+            </TouchableOpacity>
+          )}
           {onReport && (
             <TouchableOpacity
               style={staticStyles.rowGap6}

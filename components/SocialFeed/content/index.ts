@@ -6,3 +6,4 @@ export { LinkPreview } from './LinkPreview';
 export { QuoteCast } from './QuoteCast';
 export { SnapEmbed, isSnapUrl, useSnapDetection } from './SnapEmbed';
 export type { SnapEmbedProps } from './SnapEmbed';
+export { SnapIcon } from './SnapIcon';

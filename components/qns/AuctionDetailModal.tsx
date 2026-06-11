@@ -11,9 +11,15 @@ import {
   usePlaceBid,
   useInstantBuy,
 } from '@/hooks/useQNSMarketplace';
-import { useAuctionPayment, type MarketplaceBuyStep } from '@/hooks/useQNSPayment';
-import { useWallet, aggregateAssets } from '@/hooks/useWallet';
+import {
+  useAuctionPayment,
+  getWalletPrivateKey,
+  signQNSSignatureMessage,
+  type MarketplaceBuyStep,
+} from '@/hooks/useQNSPayment';
+import { useWallet, aggregateAssets, useWalletKeys } from '@/hooks/useWallet';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
+import { useWarpcastWallet } from '@/hooks/useWarpcastWallet';
 import type { Auction } from '@/services/api/qnsClient';
 import {
   QNS_TOKEN_ADDRESSES,
@@ -101,7 +107,9 @@ export default function AuctionDetailModal({
   const styles = createStyles(theme, isDark, insets);
 
   const { balances } = useWallet();
-  const { activeWallet } = useWalletSelection();
+  const { refetch: fetchKeys } = useWalletKeys();
+  const { activeWallet, activeType } = useWalletSelection();
+  const { importedWallet } = useWarpcastWallet();
   const countdown = useCountdown(auction?.ends_at);
 
   const [bidAmount, setBidAmount] = React.useState('');
@@ -152,7 +160,7 @@ export default function AuctionDetailModal({
     return (current * 1.05).toFixed(2);
   }, [auction]);
 
-  const handlePlaceBid = () => {
+  const handlePlaceBid = async () => {
     if (!auction || !bidAmount || !user?.quilibriumAddress || !activeWallet) return;
 
     const amount = parseFloat(bidAmount);
@@ -162,23 +170,33 @@ export default function AuctionDetailModal({
       return;
     }
 
-    const stealth = generateStealthOwnership(user.quilibriumAddress);
-    const ownership = stealthOwnershipToApi(stealth);
+    try {
+      const stealth = generateStealthOwnership(user.quilibriumAddress);
+      const ownership = stealthOwnershipToApi(stealth);
 
-    placeBid({
-      auctionId: auction.id,
-      amount: bidAmount,
-      bidderAddress: activeWallet.address,
-      bidderOwnership: ownership,
-    }, {
-      onSuccess: () => {
-        Alert.alert('Bid Placed', `Your bid of ${bidAmount} ${tokenSymbol} has been placed.`);
-        setBidAmount('');
-      },
-      onError: (err) => {
-        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to place bid');
-      },
-    });
+      // Sign the QNS signature message (EIP-191) so the server can verify the bidder address
+      const walletPrivateKey = await getWalletPrivateKey(activeType, importedWallet, fetchKeys);
+      const { address: bidderAddress, signature } = await signQNSSignatureMessage(walletPrivateKey);
+
+      placeBid({
+        auctionId: auction.id,
+        amount: bidAmount,
+        bidderAddress,
+        bidderOwnership: ownership,
+        signature,
+        chain: selectedChain,
+      }, {
+        onSuccess: () => {
+          Alert.alert('Bid Placed', `Your bid of ${bidAmount} ${tokenSymbol} has been placed.`);
+          setBidAmount('');
+        },
+        onError: (err) => {
+          Alert.alert('Error', err instanceof Error ? err.message : 'Failed to place bid');
+        },
+      });
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to place bid');
+    }
   };
 
   const handleInstantBuy = () => {
@@ -191,35 +209,44 @@ export default function AuctionDetailModal({
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Buy Now',
-          onPress: () => {
-            const stealth = generateStealthOwnership(user.quilibriumAddress);
-            const ownership = stealthOwnershipToApi(stealth);
+          onPress: async () => {
+            try {
+              const stealth = generateStealthOwnership(user.quilibriumAddress);
+              const ownership = stealthOwnershipToApi(stealth);
 
-            instantBuy({
-              auctionId: auction.id,
-              buyerAddress: activeWallet.address,
-              buyerOwnership: ownership,
-              chain: selectedChain,
-            }, {
-              onSuccess: (result) => {
-                // Show payment flow
-                setShowPayment(true);
-                executePayment({
-                  auctionId: auction.id,
-                  chainName: selectedChain,
-                  tokenSymbol,
-                  platformAddress: result.platform_address,
-                  sellerAddress: result.seller_address,
-                  feeAmount: result.fee_amount,
-                  sellerAmount: result.seller_amount,
-                  paymentWindowEndsAt: result.payment_window,
-                  quilibriumAddress: user.quilibriumAddress,
-                }).then(r => { if (r) onSuccess?.(); });
-              },
-              onError: (err) => {
-                Alert.alert('Error', err instanceof Error ? err.message : 'Failed to initiate instant buy');
-              },
-            });
+              // Sign the QNS signature message (EIP-191) so the server can verify the buyer address
+              const walletPrivateKey = await getWalletPrivateKey(activeType, importedWallet, fetchKeys);
+              const { address: buyerAddress, signature } = await signQNSSignatureMessage(walletPrivateKey);
+
+              instantBuy({
+                auctionId: auction.id,
+                buyerAddress,
+                buyerOwnership: ownership,
+                signature,
+                chain: selectedChain,
+              }, {
+                onSuccess: (result) => {
+                  // Show payment flow
+                  setShowPayment(true);
+                  executePayment({
+                    auctionId: auction.id,
+                    chainName: selectedChain,
+                    tokenSymbol,
+                    platformAddress: result.platform_address,
+                    sellerAddress: result.seller_address,
+                    feeAmount: result.fee_amount,
+                    sellerAmount: result.seller_amount,
+                    paymentWindowEndsAt: result.payment_window,
+                    quilibriumAddress: user.quilibriumAddress,
+                  }).then(r => { if (r) onSuccess?.(); });
+                },
+                onError: (err) => {
+                  Alert.alert('Error', err instanceof Error ? err.message : 'Failed to initiate instant buy');
+                },
+              });
+            } catch (err) {
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to initiate instant buy');
+            }
           },
         },
       ]

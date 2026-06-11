@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
 import { isScamCast } from '@/services/farcaster/scamFilter';
+import { getCachedThread, setCachedThread } from '@/services/offline/farcasterFeedCache';
 import {
   getDefaultHypersnapClient,
   substituteHypersnapMentions,
@@ -425,6 +427,10 @@ export function useFarcasterThread({
   enabled = true,
   getPendingReplies,
 }: UseFarcasterThreadOptions) {
+  // Paint the last-known thread instantly from MMKV on cold start, then
+  // refresh in the background (initialDataUpdatedAt preserves staleness).
+  const cached = useMemo(() => getCachedThread(castHashPrefix), [castHashPrefix]);
+
   const query = useQuery({
     queryKey: ['farcaster-thread', username, castHashPrefix],
     queryFn: () => fetchThread(username, castHashPrefix, token),
@@ -434,7 +440,16 @@ export function useFarcasterThread({
     // (typical when navigating from a reply card into the parent's thread).
     enabled: enabled && Boolean(castHashPrefix),
     staleTime: 1000 * 60 * 2, // 2 minutes
+    initialData: cached?.casts,
+    initialDataUpdatedAt: cached?.updatedAt,
   });
+
+  // Persist the freshest casts so re-opening this thread paints instantly.
+  useEffect(() => {
+    if (query.isFetched && query.data && query.data.length > 0) {
+      setCachedThread(castHashPrefix, query.data);
+    }
+  }, [query.data, query.isFetched, castHashPrefix]);
 
   // Filter out "root-embed" casts (channel placeholders) AND any
   // wallet-drainer typo-squat casts (hyrpia.xyz). Then dedupe by hash

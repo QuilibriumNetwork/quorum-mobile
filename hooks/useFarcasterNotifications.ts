@@ -8,6 +8,7 @@
  */
 
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { useAuth } from '@/context/AuthContext';
 import {
   fetchFarcasterNotifications,
   type FarcasterNotification,
@@ -15,14 +16,20 @@ import {
 } from '@/services/farcasterClient';
 
 export function useFarcasterNotifications(token: string | undefined) {
+  // The auth token is deliberately NOT in the key — it changes on
+  // re-auth and would orphan the cached pages. fid is the data identity;
+  // the token is gated via `enabled` and used inside queryFn only.
+  const { user } = useAuth();
+  const fid = user?.farcaster?.fid;
+
   return useInfiniteQuery<
     FarcasterNotificationsPage,
     Error,
     { pages: FarcasterNotificationsPage[]; pageParams: (string | undefined)[] },
-    readonly ['farcaster-notifications', string | undefined],
+    readonly ['farcaster-notifications', number | undefined],
     string | undefined
   >({
-    queryKey: ['farcaster-notifications', token] as const,
+    queryKey: ['farcaster-notifications', fid] as const,
     queryFn: async ({ pageParam }) => {
       if (!token) return { notifications: [], nextCursor: null };
       // Errors propagate so React Query can surface them via `error`.
@@ -33,8 +40,14 @@ export function useFarcasterNotifications(token: string | undefined) {
       return await fetchFarcasterNotifications({ token, cursor: pageParam, limit: 25 });
     },
     initialPageParam: undefined,
-    getNextPageParam: (last) => last?.nextCursor ?? undefined,
-    enabled: !!token,
+    getNextPageParam: (last) => {
+      if (!last?.nextCursor) return undefined;
+      return last.nextCursor;
+    },
+    enabled: Boolean(token),
+    // Cap retained pages so a long session doesn't pin every page in the
+    // JS heap; dropped pages refetch from the network on demand.
+    maxPages: 6,
     staleTime: 30_000,
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,

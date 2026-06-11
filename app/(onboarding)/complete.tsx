@@ -9,7 +9,9 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth, useOnboarding } from '@/context';
+import { useToast } from '@/context/ToastContext';
 import { formatAddress, initializeEncryptionKeys, uploadUserRegistration } from '@/services/onboarding/keyService';
+import { logger } from '@quilibrium/quorum-shared';
 import { getPrivateKey } from '@/services/onboarding/secureStorage';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useCallback, useRef } from 'react';
@@ -20,6 +22,7 @@ export default function CompleteScreen() {
   const { theme } = useTheme();
   const { state, completeOnboarding } = useOnboarding();
   const { signIn, signOut } = useAuth();
+  const { showToast } = useToast();
   const [isNavigating, setIsNavigating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const hasNavigatedRef = useRef(false);
@@ -85,6 +88,16 @@ export default function CompleteScreen() {
           }
         } catch (encryptionError) {
           // Non-blocking - encryption can be initialized later
+          logger.warn(
+            '[onboarding] encryption key init failed:',
+            encryptionError instanceof Error ? encryptionError.message : encryptionError
+          );
+          showToast({
+            type: 'error',
+            title: 'Encryption Setup Failed',
+            message: 'Secure messaging setup did not finish. You can retry it later in Settings.',
+            duration: 8000,
+          });
         }
       } else {
         // Use synced profile data from import
@@ -104,7 +117,7 @@ export default function CompleteScreen() {
       setIsNavigating(false);
       hasNavigatedRef.current = false;
     }
-  }, [completeOnboarding, signIn, isNavigating, state.isImportedAccount, state.syncedConfig]);
+  }, [completeOnboarding, signIn, isNavigating, state.isImportedAccount, state.syncedConfig, showToast]);
 
   const privacyLabels: Record<string, string> = {
     maximum: 'Maximum Privacy',

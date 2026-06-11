@@ -8,7 +8,7 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Keyboard, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 
 import {
@@ -29,6 +29,7 @@ import type {
 } from '@/components/Chat';
 
 import { useAuth } from '@/context';
+import { useToast } from '@/context/ToastContext';
 import { flattenMessages, useMessages } from '@/hooks/chat/useMessages';
 import { useMembersWithPublicProfileFallback } from '@/hooks/useMembersWithPublicProfileFallback';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
@@ -89,6 +90,7 @@ export const DMChatArea = React.memo(function DMChatArea({
   draftsRef,
 }: DMChatAreaProps) {
   const { user } = useAuth();
+  const { showToast } = useToast();
 
   // Local state
   const [messageText, setMessageText] = useState('');
@@ -293,11 +295,13 @@ export const DMChatArea = React.memo(function DMChatArea({
     const result = await pickImage('library');
     if (result.cancelled) return;
     if (!result.success) {
-      if (result.error) Alert.alert('Error', result.error);
+      if (result.error) {
+        showToast({ type: 'error', title: 'Attachment Failed', message: result.error });
+      }
       return;
     }
     if (result.attachment) setPendingAttachment(result.attachment);
-  }, []);
+  }, [showToast]);
 
   const handleClearAttachment = useCallback(() => {
     setPendingAttachment(null);

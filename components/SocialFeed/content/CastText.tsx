@@ -1,5 +1,5 @@
 import type { AppTheme } from '@/theme';
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Text, TextStyle, View } from 'react-native';
 import { useTranslatable } from '@/services/translation/useTranslatable';
 import { TranslateToggle } from '@/components/translation/TranslateToggle';
@@ -61,6 +61,53 @@ function parseText(text: string): TextPart[] {
   return parts;
 }
 
+// Memoized per-part renderer so parts.map() doesn't recreate an onPress
+// closure for every mention/channel/link part on each CastText render.
+const CastTextPart = React.memo(function CastTextPart({
+  part,
+  accentStyle,
+  onMentionPress,
+  onChannelPress,
+  onLinkPress,
+}: {
+  part: TextPart;
+  accentStyle: TextStyle;
+  onMentionPress?: (username: string) => void;
+  onChannelPress?: (channelKey: string) => void;
+  onLinkPress?: (url: string) => void;
+}) {
+  const handlePress = useCallback(() => {
+    if (part.type === 'link') {
+      onLinkPress?.(part.value);
+    } else if (part.type === 'mention') {
+      onMentionPress?.(part.value);
+    } else if (part.type === 'channel') {
+      onChannelPress?.(part.value);
+    }
+  }, [part, onMentionPress, onChannelPress, onLinkPress]);
+
+  if (part.type === 'link') {
+    return (
+      <Text style={accentStyle} onPress={handlePress}>
+        {part.value}
+      </Text>
+    );
+  } else if (part.type === 'mention') {
+    return (
+      <Text style={accentStyle} onPress={handlePress}>
+        @{part.value}
+      </Text>
+    );
+  } else if (part.type === 'channel') {
+    return (
+      <Text style={accentStyle} onPress={handlePress}>
+        /{part.value}
+      </Text>
+    );
+  }
+  return <Text>{part.value}</Text>;
+});
+
 /**
  * Renders cast text with tappable @mentions, /channels, and links.
  */
@@ -84,40 +131,16 @@ export const CastText = React.memo(function CastText({
 
   const body = (
     <Text style={style}>
-      {parts.map((part, index) => {
-        if (part.type === 'link') {
-          return (
-            <Text
-              key={index}
-              style={accentStyle}
-              onPress={() => onLinkPress?.(part.value)}
-            >
-              {part.value}
-            </Text>
-          );
-        } else if (part.type === 'mention') {
-          return (
-            <Text
-              key={index}
-              style={accentStyle}
-              onPress={() => onMentionPress?.(part.value)}
-            >
-              @{part.value}
-            </Text>
-          );
-        } else if (part.type === 'channel') {
-          return (
-            <Text
-              key={index}
-              style={accentStyle}
-              onPress={() => onChannelPress?.(part.value)}
-            >
-              /{part.value}
-            </Text>
-          );
-        }
-        return <Text key={index}>{part.value}</Text>;
-      })}
+      {parts.map((part, index) => (
+        <CastTextPart
+          key={index}
+          part={part}
+          accentStyle={accentStyle}
+          onMentionPress={onMentionPress}
+          onChannelPress={onChannelPress}
+          onLinkPress={onLinkPress}
+        />
+      ))}
     </Text>
   );
 

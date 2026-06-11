@@ -41,7 +41,6 @@ export function useFollowingFids(): FollowingFids {
     enabled: Boolean(fid),
     initialData: cached,
     staleTime: 1000 * 60 * 30, // 30 minutes
-    refetchOnWindowFocus: true,
   });
 
   const fids = useMemo(() => new Set(query.data ?? []), [query.data]);

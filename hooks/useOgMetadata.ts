@@ -12,8 +12,8 @@
  *   - The metadata sits in the <head>; the first few KB of any page is
  *     enough — we never parse the body.
  *
- * Cached aggressively (gcTime: Infinity) since page metadata changes
- * rarely and a miss for a 404/empty page is itself a useful cache.
+ * Cached aggressively (24h gcTime) since page metadata changes rarely
+ * and a miss for a 404/empty page is itself a useful cache.
  */
 
 import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
@@ -216,7 +216,7 @@ export function useOgMetadata(
     queryFn: () => fetchUrlMetadata(url as string),
     enabled,
     staleTime: 24 * 60 * 60 * 1000,
-    gcTime: Number.POSITIVE_INFINITY,
-    retry: false,
+    gcTime: 24 * 60 * 60 * 1000,
+    retry: 1,
   } satisfies UseQueryOptions<UrlMetadata | null, Error>);
 }

@@ -12,6 +12,7 @@
 import { useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
 import {
   likeCast,
@@ -58,6 +59,7 @@ export function useFeedOptimistic() {
   const { farcasterAuthToken, user } = useAuth();
   const { submitCast } = useFarcasterSubmitCast({ token: farcasterAuthToken ?? undefined });
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   // After a pending cast lands, the open thread/feed must refetch so the real
   // server copy appears and the optimistic stub reconciles away (otherwise it
@@ -95,9 +97,10 @@ export function useFeedOptimistic() {
       } catch (e) {
         store.setLike(castHash, currentlyLiked, currentCount); // rollback
         logger.warn('[feedOptimistic] like failed:', e instanceof Error ? e.message : e);
+        showToast({ type: 'error', title: "Couldn't update", message: 'Check your connection and try again.' });
       }
     },
-    [farcasterAuthToken],
+    [farcasterAuthToken, showToast],
   );
 
   const toggleRecast = useCallback(
@@ -112,9 +115,10 @@ export function useFeedOptimistic() {
       } catch (e) {
         store.setRecast(castHash, currentlyRecasted, currentCount);
         logger.warn('[feedOptimistic] recast failed:', e instanceof Error ? e.message : e);
+        showToast({ type: 'error', title: "Couldn't update", message: 'Check your connection and try again.' });
       }
     },
-    [farcasterAuthToken],
+    [farcasterAuthToken, showToast],
   );
 
   const toggleFollow = useCallback(
@@ -128,9 +132,10 @@ export function useFeedOptimistic() {
       } catch (e) {
         store.setFollow(targetFid, currentlyFollowing);
         logger.warn('[feedOptimistic] follow failed:', e instanceof Error ? e.message : e);
+        showToast({ type: 'error', title: "Couldn't update", message: 'Check your connection and try again.' });
       }
     },
-    [farcasterAuthToken],
+    [farcasterAuthToken, showToast],
   );
 
   // Block has no write endpoint yet — this is an immediate local hide; if a
@@ -158,9 +163,10 @@ export function useFeedOptimistic() {
       } catch (e) {
         store.setDeleted(castHash, false); // restore
         logger.warn('[feedOptimistic] delete failed:', e instanceof Error ? e.message : e);
+        showToast({ type: 'error', title: "Couldn't delete", message: 'Check your connection and try again.' });
       }
     },
-    [user?.farcaster?.fid, farcasterAuthToken, refetchAfterSubmit],
+    [user?.farcaster?.fid, farcasterAuthToken, refetchAfterSubmit, showToast],
   );
 
   // ---- background submission queue --------------------------------------
