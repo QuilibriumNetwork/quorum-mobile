@@ -12,17 +12,19 @@ import React from 'react';
 import { Platform, Text, View } from 'react-native';
 import * as Skin from '@/theme/skins/geometry';
 
-function ProfileTabIcon({ color, focused }: { color: string; focused: boolean }) {
+function ProfileTabIcon({ color }: { color: string; focused: boolean }) {
   // The tab now defaults to the notifications inbox; profile/account is
   // a sub-route reached via the person icon in the header. Tab icon is
   // a bell to match. The OTA bolt that used to live here is now in the
   // notifications screen's headerLeft, so the only badge here is a
   // simple unread dot.
+  // Always render the outline icon — focus state is conveyed by the
+  // tab bar's active tint color, not by swapping to a filled variant.
   const { unreadCount } = useUnifiedNotifications();
   const showUnread = unreadCount > 0;
   return (
     <View>
-      <IconSymbol size={26} name={focused ? 'bell.fill' : 'bell'} color={color} />
+      <IconSymbol size={26} name="bell" color={color} />
       {showUnread && (
         <View
           style={{
@@ -73,8 +75,8 @@ export default function TabsLayout() {
         name="spaces"
         options={{
           title: 'Spaces',
-          tabBarIcon: ({ color, focused }) => (
-            <IconSymbol size={26} name={focused ? 'person.3.fill' : 'person.3'} color={color} />
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="person.3" color={color} />
           ),
         }}
       />
@@ -82,8 +84,8 @@ export default function TabsLayout() {
         name="messages"
         options={{
           title: 'Messages',
-          tabBarIcon: ({ color, focused }) => (
-            <IconSymbol size={26} name={focused ? 'message.fill' : 'message'} color={color} />
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="message" color={color} />
           ),
         }}
       />
@@ -116,8 +118,8 @@ export default function TabsLayout() {
         name="wallet"
         options={{
           title: 'Wallet',
-          tabBarIcon: ({ color, focused }) => (
-            <IconSymbol size={26} name={focused ? 'creditcard.fill' : 'creditcard'} color={color} />
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={26} name="wallet.pass" color={color} />
           ),
         }}
       />

@@ -108,6 +108,14 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+            // Opt-in side-by-side install: build with `-PsideBySide=true` to
+            // get a `.debug`-suffixed application ID so the dev build can be
+            // installed alongside the production app (from Play / sideloaded
+            // release APKs). Default build (no flag) is unchanged.
+            if (project.hasProperty('sideBySide')) {
+                applicationIdSuffix '.debug'
+                versionNameSuffix '-debug'
+            }
         }
         release {
             // Caution! In production, you need to generate your own keystore file.

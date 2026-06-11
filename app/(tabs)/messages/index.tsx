@@ -232,7 +232,7 @@ export default function MessagesInbox() {
             accessibilityRole="button"
             accessibilityLabel="New conversation"
           >
-            <IconSymbol name="square.and.pencil" size={22} color={theme.colors.textMain} />
+            <IconSymbol name="person.badge.plus" size={22} color={theme.colors.textMain} />
           </TouchableOpacity>
         </View>
       </View>

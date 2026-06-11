@@ -55,4 +55,12 @@ config.resolver.blockList = [
   /node_modules\/quorum-crypto\/node_modules\/.*/,
 ];
 
+// Windows-only: use Metro's Node crawler instead of Watchman.
+// Watchman's IPC pipe is built from the Windows account name; a non-ASCII
+// account name makes the fb-watchman client hang forever on "watch-project"
+// (facebook/watchman#572, #543). macOS/Linux/CI keep using Watchman.
+if (process.platform === 'win32') {
+  config.resolver.useWatchman = false;
+}
+
 module.exports = config;

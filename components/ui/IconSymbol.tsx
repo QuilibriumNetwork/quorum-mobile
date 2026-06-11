@@ -1,244 +1,362 @@
-// Fallback for using MaterialIcons on Android and web.
+// IconSymbol — temporary shim. Renders Tabler icons on all platforms via
+// @tabler/icons-react-native, keeping the legacy SF Symbol call signature so
+// the 121 existing call sites keep compiling unchanged.
+//
+// Why this exists: desktop manifests carry Tabler icon names (e.g. "users")
+// that the old SF-Symbol-only mapping threw on, crashing render trees on
+// mobile. This shim accepts both legacy SF names (via SF_TO_TABLER) and raw
+// Tabler semantic names from desktop. Unknown names render null.
+//
+// Phase 2 (after mobile bumps @quilibrium/quorum-shared to 2.1.0-25+): sweep
+// call sites to use the shared <Icon /> primitive with semantic names, then
+// delete this file. SF_TO_TABLER below is the migration cheat-sheet.
+// Plan: .agents/tasks/2026-06-09-migrate-iconsymbol-to-shared-icon-primitive.md
 
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { SymbolViewProps, SymbolWeight } from 'expo-symbols';
-import { ComponentProps } from 'react';
-import { Image, OpaqueColorValue, type ImageStyle, type StyleProp, type TextStyle } from 'react-native';
+import * as TablerIcons from '@tabler/icons-react-native';
+import type { SymbolViewProps, SymbolWeight } from 'expo-symbols';
+import type { ComponentType } from 'react';
+import {
+  Image,
+  OpaqueColorValue,
+  type ImageStyle,
+  type StyleProp,
+  type TextStyle,
+} from 'react-native';
 import { useThemeOptional } from '@/theme';
 
-type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
-export type IconSymbolName = keyof typeof MAPPING;
+export type IconSymbolName = SymbolViewProps['name'];
+
+interface TablerComponentName {
+  base: string;
+  filled?: string;
+}
+
+const tabler = (base: string, filled?: string): TablerComponentName => ({
+  base,
+  filled,
+});
 
 /**
- * Add your SF Symbols to Material Icons mappings here.
- * - see Material Icons in the [Icons Directory](https://icons.expo.fyi).
- * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
+ * Map legacy SF Symbol names to Tabler component names. `filled` is used when
+ * the SF name ends in `.fill` (or when we explicitly want the filled variant).
+ *
+ * Keep this list complete: every SF Symbol name passed to IconSymbol from
+ * existing call sites must appear here. Names sent in via desktop manifests
+ * (raw Tabler semantic names) don't need to be listed — they fall through to
+ * the dynamic lookup at the bottom of the resolver.
  */
-const MAPPING = {
-  'flag': 'flag',
-  'flag.fill': 'flag',
-  'nosign': 'block',
-  'ellipsis': 'more-horiz',
-  'doc': 'description',
-  'paintbrush': 'brush',
-  'circle': 'radio-button-unchecked',
-  'house.fill': 'home',
-  'paperplane': 'send',
-  'paperplane.fill': 'send',
-  'chevron.left.forwardslash.chevron.right': 'code',
-  'chevron.right': 'chevron-right',
-  'chevron.left': 'chevron-left',
-  'chevron.up': 'expand-less',
-  'chevron.down': 'expand-more',
-  'wallet.bifold.fill': 'wallet',
-  'bitcoinsign.circle': 'monetization-on',
-  // Onboarding icons
-  'lock.shield.fill': 'security',
-  'shield.checkered': 'verified-user',
-  'globe': 'public',
-  'hand.raised.fill': 'pan-tool',
-  'key.fill': 'vpn-key',
-  'plus.circle.fill': 'add-circle',
-  'rectangle.grid.2x2': 'apps',
-  'number': 'numbers',
-  'exclamationmark.circle.fill': 'error',
-  'exclamationmark.circle': 'error-outline',
-  'eye.fill': 'visibility',
-  'eye': 'visibility',
-  'eye.slash.fill': 'visibility-off',
-  'eye.slash': 'visibility-off',
-  'doc.on.doc': 'content-copy',
-  'exclamationmark.triangle.fill': 'warning',
-  'exclamationmark.triangle': 'warning',
-  'checkmark.circle.fill': 'check-circle',
-  'checkmark': 'check',
-  'person.fill': 'person',
-  'person.2.fill': 'group',
-  'bolt.fill': 'flash-on',
-  'server.rack': 'storage',
-  'doc.on.clipboard': 'content-paste',
-  'info.circle': 'info',
-  'info.circle.fill': 'info',
-  'camera.fill': 'photo-camera',
-  'photo': 'photo-library',
-  'camera': 'camera-alt',
-  // UserPanel icons
-  'waveform.path.ecg': 'graphic-eq',
-  'square.grid.2x2': 'grid-view',
-  'square.stack': 'collections',
-  'banknote.fill': 'account-balance-wallet',
-  'mic': 'mic',
-  'mic.fill': 'mic',
-  'headphones': 'headset',
-  'gearshape.fill': 'settings',
-  'gearshape': 'settings',
-  // Chat icons
-  'xmark.circle.fill': 'cancel',
-  'xmark': 'close',
-  'line.3.horizontal': 'menu',
-  'arrow.left': 'arrow-back',
-  'building.columns': 'account-balance',
-  'plus': 'add',
-  'face.smiling': 'emoji-emotions',
-  'photo.fill': 'image',
-  // Browser icons
-  'arrow.clockwise': 'refresh',
-  'exclamationmark.shield.fill': 'gpp-maybe',
-  'square.and.arrow.up': 'share',
-  'square.and.arrow.down': 'save-alt',
-  'safari': 'open-in-browser',
-  // Communication icons
-  'bubble.left.and.bubble.right': 'forum',
-  'bubble.left.and.bubble.right.fill': 'forum',
-  'bubble.left': 'chat-bubble-outline',
-  'phone': 'phone',
-  'phone.fill': 'phone',
-  'video': 'videocam',
-  'video.fill': 'videocam',
-  'video.slash.fill': 'videocam-off',
-  'square.and.pencil': 'edit',
-  'magnifyingglass': 'search',
-  'paperclip': 'attach-file',
-  'at': 'alternate-email',
-  'heart.fill': 'favorite',
-  // Wallet icons
-  'arrow.up.circle.fill': 'arrow-circle-up',
-  'arrow.down.circle.fill': 'arrow-circle-down',
-  'arrow.2.squarepath': 'swap-horiz',
-  'arrow.2.circlepath': 'sync',
-  // Media icons
-  'play.fill': 'play-arrow',
-  'pause.fill': 'pause',
-  // Social/Profile icons
-  'star.fill': 'star',
-  'mappin': 'place',
-  'crown.fill': 'workspace-premium',
-  'pencil': 'edit',
-  'shield.fill': 'shield',
-  'doc.text.fill': 'description',
-  'trash.fill': 'delete',
-  'arrow.counterclockwise': 'restore',
-  // Status icons
-  'wifi.slash': 'wifi-off',
-  // Additional icons
-  'arrow.right.circle.fill': 'arrow-circle-right',
-  'link': 'link',
-  'link.badge.plus': 'add-link',
-  'person.2': 'group',
-  'person.3': 'groups',
-  'person.3.fill': 'groups',
-  'person.badge.plus': 'person-add',
-  'play.circle.fill': 'play-circle-filled',
-  'questionmark': 'help-outline',
-  'shield': 'shield',
-  'shield.lefthalf.filled.trianglebadge.exclamationmark': 'gpp-bad',
-  'star': 'star-outline',
-  'trash': 'delete-outline',
-  'sparkles': 'auto-awesome',
-  // Additional missing icons
-  'arrow.up': 'arrow-upward',
-  'arrow.up.right': 'north-east',
-  'arrow.triangle.2.circlepath': 'repeat',
-  'bubble.left.fill': 'chat-bubble',
-  'heart': 'favorite-border',
-  'qrcode.viewfinder': 'qr-code-scanner',
-  'person.crop.circle.badge.exclamationmark': 'person-off',
-  // Reply icon used in MessageActionSheet
-  'arrowshape.turn.up.left.fill': 'reply',
-  // Recast/share icons used in Farcaster feed
-  'arrowshape.turn.up.right': 'repeat',
-  'arrowshape.turn.up.right.fill': 'repeat',
-  'arrowshape.turn.up.left': 'reply',
-  // Username/QNS icons
-  'ticket.fill': 'confirmation-number',
-  'checkmark.seal.fill': 'verified',
-  'hand.thumbsup.fill': 'thumb-up',
-  'hand.thumbsdown.fill': 'thumb-down',
-  'person.badge.shield.checkmark.fill': 'verified-user',
-  // Device icons
-  'iphone': 'smartphone',
-  'desktopcomputer': 'computer',
-  // Wallet transaction icons
-  'arrow.down.left': 'south-west',
-  'creditcard.fill': 'credit-card',
-  'wallet.pass': 'account-balance-wallet',
-  'wallet.pass.fill': 'account-balance-wallet',
-  'photo.on.rectangle.angled': 'collections',
-  'clock.arrow.circlepath': 'history',
-  'arrow.up.arrow.down': 'swap-vert',
-  'plus.circle': 'add-circle-outline',
-  'minus.circle': 'remove-circle-outline',
-  // Marketplace icons
-  'tag.fill': 'sell',
-  'rectangle.stack.fill': 'layers',
-  'play.rectangle.fill': 'slideshow',
-  'quote.bubble': 'format-quote',
-  'lock.fill': 'lock',
-  'person': 'person-outline',
-  'chart.xyaxis.line': 'show-chart',
-  'chart.bar.fill': 'bar-chart',
-  'arrow.up.right.square': 'open-in-new',
-  // Pin icons
-  'pin.fill': 'push-pin',
-  'pin': 'push-pin',
-  'pin.slash': 'push-pin',
-  // Bookmark icons
-  'bookmark': 'bookmark-border',
-  'bookmark.fill': 'bookmark',
-  'bookmark.slash.fill': 'bookmark-border',
-  'bookmark.slash': 'bookmark-border',
-  // Notification/mute icons
-  'bell': 'notifications-none',
-  'bell.slash.fill': 'notifications-off',
-  'bell.fill': 'notifications',
-  // More icons for new features
-  'checkmark.circle': 'check-circle-outline',
-  'text.bubble': 'textsms',
-  'star.square': 'stars',
-  'arrow.left.circle.fill': 'arrow-back',
-  'xmark.circle': 'cancel',
-  // Call screen icons
-  'mic.slash': 'mic-off',
-  'mic.slash.fill': 'mic-off',
-  'speaker.wave.1.fill': 'volume-down',
-  'speaker.wave.2': 'volume-up',
-  'speaker.wave.2.fill': 'volume-up',
-  'phone.down': 'call-end',
-  'phone.down.fill': 'call-end',
-  'camera.rotate': 'flip-camera-android',
-  'arrow.down.right.and.arrow.up.left': 'close-fullscreen',
-  'arrow.up.left.and.arrow.down.right': 'open-in-full',
-  'arrow.right.arrow.left': 'compare-arrows',
-  'clock': 'schedule',
-  'dot.radiowaves.up.forward': 'cell-tower',
-  'envelope.fill': 'email',
-  'envelope.open': 'drafts',
-  'faceid': 'face',
-  'hammer': 'build',
-  'hammer.fill': 'build',
-  'message': 'chat',
-  'message.fill': 'chat',
-  'qrcode': 'qr-code',
-  'storefront.fill': 'storefront',
-  'tag.slash': 'label-off',
-  'creditcard': 'credit-card',
-  'person.crop.circle': 'account-circle',
-  'person.crop.circle.fill': 'account-circle',
-  'safari.fill': 'explore',
-  'square.grid.2x2.fill': 'grid-view',
-  // Snap embed icons
-  'trophy.fill': 'emoji-events',
-  'flame.fill': 'local-fire-department',
-  'gift.fill': 'card-giftcard',
-  'centsign.circle.fill': 'monetization-on',
-  'minus': 'remove',
-  'arrow.down.right': 'south-east',
-} as IconMapping;
+const SF_TO_TABLER: Record<string, TablerComponentName> = {
+  // Status & flags
+  'flag': tabler('IconFlag', 'IconFlagFilled'),
+  'flag.fill': tabler('IconFlag', 'IconFlagFilled'),
+  'nosign': tabler('IconBan'),
+  'ellipsis': tabler('IconDots'),
+  'exclamationmark.circle': tabler('IconAlertCircle'),
+  'exclamationmark.circle.fill': tabler('IconAlertCircle', 'IconAlertCircleFilled'),
+  'exclamationmark.triangle': tabler('IconAlertTriangle'),
+  'exclamationmark.triangle.fill': tabler('IconAlertTriangle', 'IconAlertTriangleFilled'),
+  'checkmark.circle': tabler('IconCircleCheck'),
+  'checkmark.circle.fill': tabler('IconCircleCheck', 'IconCircleCheckFilled'),
+  'checkmark': tabler('IconCheck'),
+  'checkmark.seal.fill': tabler('IconRosetteDiscountCheck', 'IconRosetteDiscountCheckFilled'),
+
+  // Documents
+  'doc': tabler('IconFile'),
+  'doc.on.doc': tabler('IconCopy'),
+  'doc.on.clipboard': tabler('IconClipboard'),
+  'doc.text.fill': tabler('IconFileText', 'IconFileTextFilled'),
+
+  // Geometry
+  'circle': tabler('IconCircle'),
+  'paintbrush': tabler('IconBrush'),
+  'square.grid.2x2': tabler('IconLayoutGrid'),
+  'square.grid.2x2.fill': tabler('IconLayoutGrid'),
+  'rectangle.grid.2x2': tabler('IconLayoutGrid'),
+  'square.stack': tabler('IconStack2'),
+  'rectangle.stack.fill': tabler('IconStack2', 'IconStack2Filled'),
+  'number': tabler('IconHash'),
+
+  // Home & navigation
+  'house.fill': tabler('IconHome', 'IconHomeFilled'),
+  'chevron.left': tabler('IconChevronLeft'),
+  'chevron.right': tabler('IconChevronRight'),
+  'chevron.up': tabler('IconChevronUp'),
+  'chevron.down': tabler('IconChevronDown'),
+  'chevron.left.forwardslash.chevron.right': tabler('IconCode'),
+  'line.3.horizontal': tabler('IconMenu2'),
+
+  // Arrows
+  'arrow.left': tabler('IconArrowLeft'),
+  'arrow.up': tabler('IconArrowUp'),
+  'arrow.up.right': tabler('IconArrowUpRight'),
+  'arrow.down.left': tabler('IconArrowDownLeft'),
+  'arrow.down.right': tabler('IconArrowDownRight'),
+  'arrow.up.arrow.down': tabler('IconArrowsUpDown'),
+  'arrow.up.circle.fill': tabler('IconCircleArrowUp', 'IconCircleArrowUpFilled'),
+  'arrow.down.circle.fill': tabler('IconCircleArrowDown', 'IconCircleArrowDownFilled'),
+  'arrow.right.circle.fill': tabler('IconCircleArrowRight', 'IconCircleArrowRightFilled'),
+  'arrow.left.circle.fill': tabler('IconCircleArrowLeft', 'IconCircleArrowLeftFilled'),
+  'arrow.2.squarepath': tabler('IconArrowsExchange'),
+  'arrow.2.circlepath': tabler('IconRefresh'),
+  'arrow.triangle.2.circlepath': tabler('IconRepeat'),
+  'arrow.clockwise': tabler('IconRefresh'),
+  'arrow.counterclockwise': tabler('IconArrowBackUp'),
+  'arrow.right.arrow.left': tabler('IconArrowsExchange'),
+  'arrow.up.right.square': tabler('IconExternalLink'),
+  'arrowshape.turn.up.left': tabler('IconArrowBackUp'),
+  'arrowshape.turn.up.left.fill': tabler('IconArrowBackUp', 'IconArrowBackUpFilled'),
+  'arrowshape.turn.up.right': tabler('IconArrowForwardUp'),
+  'arrowshape.turn.up.right.fill': tabler('IconArrowForwardUp', 'IconArrowForwardUpFilled'),
+
+  // Send / send-arrow
+  'paperplane': tabler('IconSend'),
+  'paperplane.fill': tabler('IconSend', 'IconSendFilled'),
+
+  // Wallet & money
+  'wallet.bifold.fill': tabler('IconWallet'),
+  'wallet.pass': tabler('IconWallet'),
+  'wallet.pass.fill': tabler('IconWallet'),
+  'banknote.fill': tabler('IconCash'),
+  'creditcard': tabler('IconCreditCard'),
+  'creditcard.fill': tabler('IconCreditCard', 'IconCreditCardFilled'),
+  'bitcoinsign.circle': tabler('IconCurrencyBitcoin'),
+  'centsign.circle.fill': tabler('IconCurrencyDollar'),
+
+  // Security
+  'lock.fill': tabler('IconLock', 'IconLockFilled'),
+  'lock.shield.fill': tabler('IconShieldLock', 'IconShieldLockFilled'),
+  'shield': tabler('IconShield'),
+  'shield.fill': tabler('IconShield', 'IconShieldFilled'),
+  'shield.checkered': tabler('IconShieldCheck'),
+  'exclamationmark.shield.fill': tabler('IconShieldX', 'IconShieldXFilled'),
+  'shield.lefthalf.filled.trianglebadge.exclamationmark': tabler('IconShieldX'),
+  'key.fill': tabler('IconKey'),
+  'faceid': tabler('IconFaceId'),
+
+  // Add / remove
+  'plus': tabler('IconPlus'),
+  'minus': tabler('IconMinus'),
+  'plus.circle': tabler('IconCirclePlus'),
+  'plus.circle.fill': tabler('IconCirclePlus', 'IconCirclePlusFilled'),
+  'minus.circle': tabler('IconCircleMinus'),
+  'xmark': tabler('IconX'),
+  'xmark.circle': tabler('IconCircleX'),
+  'xmark.circle.fill': tabler('IconCircleX', 'IconCircleXFilled'),
+
+  // Globe / web
+  'globe': tabler('IconWorld'),
+  'safari': tabler('IconCompass'),
+  'safari.fill': tabler('IconCompass', 'IconCompassFilled'),
+
+  // People
+  'person': tabler('IconUser'),
+  'person.fill': tabler('IconUser', 'IconUserFilled'),
+  'person.2': tabler('IconUsers'),
+  'person.2.fill': tabler('IconUsers'),
+  'person.3': tabler('IconUsersGroup'),
+  'person.3.fill': tabler('IconUsersGroup'),
+  'person.badge.plus': tabler('IconUserPlus'),
+  'person.crop.circle': tabler('IconUserCircle'),
+  'person.crop.circle.fill': tabler('IconUserCircle', 'IconUserCircleFilled'),
+  'person.crop.circle.badge.exclamationmark': tabler('IconUserExclamation'),
+  'person.badge.shield.checkmark.fill': tabler('IconShieldCheck', 'IconShieldCheckFilled'),
+  'hand.raised.fill': tabler('IconHandStop'),
+  'hand.thumbsup.fill': tabler('IconThumbUp', 'IconThumbUpFilled'),
+  'hand.thumbsdown.fill': tabler('IconThumbDown', 'IconThumbDownFilled'),
+
+  // Eye
+  'eye': tabler('IconEye'),
+  'eye.fill': tabler('IconEye', 'IconEyeFilled'),
+  'eye.slash': tabler('IconEyeOff'),
+  'eye.slash.fill': tabler('IconEyeOff'),
+
+  // Hardware / signals
+  'bolt.fill': tabler('IconBolt', 'IconBoltFilled'),
+  'server.rack': tabler('IconServer'),
+  'wifi.slash': tabler('IconWifiOff'),
+  'dot.radiowaves.up.forward': tabler('IconBroadcast'),
+  'iphone': tabler('IconDeviceMobile'),
+  'desktopcomputer': tabler('IconDeviceDesktop'),
+  'qrcode': tabler('IconQrcode'),
+  'qrcode.viewfinder': tabler('IconScan'),
+
+  // Info
+  'info.circle': tabler('IconInfoCircle'),
+  'info.circle.fill': tabler('IconInfoCircle', 'IconInfoCircleFilled'),
+  'questionmark': tabler('IconQuestionMark'),
+
+  // Camera / image
+  'camera': tabler('IconCamera'),
+  'camera.fill': tabler('IconCamera', 'IconCameraFilled'),
+  'camera.rotate': tabler('IconCameraRotate'),
+  'photo': tabler('IconPhoto'),
+  'photo.fill': tabler('IconPhoto', 'IconPhotoFilled'),
+  'photo.on.rectangle.angled': tabler('IconPhoto'),
+
+  // Audio
+  'mic': tabler('IconMicrophone'),
+  'mic.fill': tabler('IconMicrophone', 'IconMicrophoneFilled'),
+  'mic.slash': tabler('IconMicrophoneOff'),
+  'mic.slash.fill': tabler('IconMicrophoneOff'),
+  'headphones': tabler('IconHeadphones'),
+  'speaker.wave.1.fill': tabler('IconVolume', 'IconVolumeFilled'),
+  'speaker.wave.2': tabler('IconVolume'),
+  'speaker.wave.2.fill': tabler('IconVolume', 'IconVolumeFilled'),
+  'waveform.path.ecg': tabler('IconChartLine'),
+
+  // Settings
+  'gearshape': tabler('IconSettings'),
+  'gearshape.fill': tabler('IconSettings', 'IconSettingsFilled'),
+
+  // Building / share
+  'building.columns': tabler('IconBuildingBank'),
+  'storefront.fill': tabler('IconBuildingStore', 'IconBuildingStoreFilled'),
+  'square.and.arrow.up': tabler('IconShare'),
+  'square.and.arrow.down': tabler('IconDownload'),
+
+  // Conversation
+  'bubble.left': tabler('IconMessage'),
+  'bubble.left.fill': tabler('IconMessage', 'IconMessageFilled'),
+  'bubble.left.and.bubble.right': tabler('IconMessages'),
+  'bubble.left.and.bubble.right.fill': tabler('IconMessages'),
+  'face.smiling': tabler('IconMoodSmile'),
+  'quote.bubble': tabler('IconQuote'),
+  'text.bubble': tabler('IconMessage'),
+  'message': tabler('IconMessage'),
+  'message.fill': tabler('IconMessage', 'IconMessageFilled'),
+  'magnifyingglass': tabler('IconSearch'),
+  'paperclip': tabler('IconPaperclip'),
+  'at': tabler('IconAt'),
+  'envelope.fill': tabler('IconMail', 'IconMailFilled'),
+  'envelope.open': tabler('IconMailOpened'),
+
+  // Calls
+  'phone': tabler('IconPhone'),
+  'phone.fill': tabler('IconPhone', 'IconPhoneFilled'),
+  'phone.down': tabler('IconPhoneOff'),
+  'phone.down.fill': tabler('IconPhoneOff'),
+  'video': tabler('IconVideo'),
+  'video.fill': tabler('IconVideo', 'IconVideoFilled'),
+  'video.slash.fill': tabler('IconVideoOff'),
+
+  // Edit
+  'square.and.pencil': tabler('IconEdit'),
+  'pencil': tabler('IconPencil'),
+  'hammer': tabler('IconHammer'),
+  'hammer.fill': tabler('IconHammer'),
+
+  // Hearts / likes
+  'heart': tabler('IconHeart'),
+  'heart.fill': tabler('IconHeart', 'IconHeartFilled'),
+
+  // Player
+  'play.fill': tabler('IconPlayerPlay', 'IconPlayerPlayFilled'),
+  'play.circle.fill': tabler('IconPlayerPlay', 'IconPlayerPlayFilled'),
+  'play.rectangle.fill': tabler('IconVideo', 'IconVideoFilled'),
+  'pause.fill': tabler('IconPlayerPause', 'IconPlayerPauseFilled'),
+
+  // Markers / locations
+  'mappin': tabler('IconMapPin', 'IconMapPinFilled'),
+  'crown.fill': tabler('IconCrown', 'IconCrownFilled'),
+  'star': tabler('IconStar'),
+  'star.fill': tabler('IconStar', 'IconStarFilled'),
+  'star.square': tabler('IconStar'),
+  'sparkles': tabler('IconSparkles'),
+  'trash': tabler('IconTrash'),
+  'trash.fill': tabler('IconTrash', 'IconTrashFilled'),
+
+  // Links
+  'link': tabler('IconLink'),
+  'link.badge.plus': tabler('IconLinkPlus'),
+
+  // Pins
+  'pin': tabler('IconPin'),
+  'pin.fill': tabler('IconPin', 'IconPinFilled'),
+  'pin.slash': tabler('IconPinnedOff'),
+
+  // Bookmarks
+  'bookmark': tabler('IconBookmark'),
+  'bookmark.fill': tabler('IconBookmark', 'IconBookmarkFilled'),
+  'bookmark.slash': tabler('IconBookmarkOff'),
+  'bookmark.slash.fill': tabler('IconBookmarkOff'),
+
+  // Notifications
+  'bell': tabler('IconBell'),
+  'bell.fill': tabler('IconBell', 'IconBellFilled'),
+  'bell.slash.fill': tabler('IconBellOff'),
+
+  // History / time
+  'clock': tabler('IconClock'),
+  'clock.arrow.circlepath': tabler('IconHistory'),
+
+  // Tags
+  'tag.fill': tabler('IconTag', 'IconTagFilled'),
+  'tag.slash': tabler('IconTagOff'),
+
+  // Charts
+  'chart.bar.fill': tabler('IconChartBar', 'IconChartBarFilled'),
+  'chart.xyaxis.line': tabler('IconChartLine'),
+
+  // Awards / rewards
+  'trophy.fill': tabler('IconTrophy', 'IconTrophyFilled'),
+  'flame.fill': tabler('IconFlame', 'IconFlameFilled'),
+  'gift.fill': tabler('IconGift', 'IconGiftFilled'),
+  'ticket.fill': tabler('IconTicket', 'IconTicketFilled'),
+
+  // Window controls
+  'arrow.down.right.and.arrow.up.left': tabler('IconMinimize'),
+  'arrow.up.left.and.arrow.down.right': tabler('IconMaximize'),
+};
 
 /**
- * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.
- * This ensures a consistent look across platforms, and optimal resource usage.
- * Icon `name`s are based on SF Symbols and require manual mapping to Material Icons.
+ * Resolve a name to a Tabler component. Tries (in order):
+ *   1. The SF_TO_TABLER table — covers all legacy SF Symbol names.
+ *   2. If `name` looks like a kebab-case semantic name ("users", "bell-off"),
+ *      PascalCase + "Icon" prefix and look up directly in TablerIcons.
+ *   3. If `name` is already a PascalCase Tabler component name, try it as-is.
+ *
+ * Returns null if nothing matches — caller fails soft.
+ */
+function pascalCase(s: string): string {
+  return s
+    .split(/[-.]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join('');
+}
+
+const warnedNames = new Set<string>();
+
+function resolveTablerComponent(name: string, wantFilled: boolean): ComponentType<any> | null {
+  const lib = TablerIcons as unknown as Record<string, ComponentType<any>>;
+
+  // 1. Legacy SF Symbol lookup
+  const entry = SF_TO_TABLER[name];
+  if (entry) {
+    if (wantFilled && entry.filled && lib[entry.filled]) {
+      return lib[entry.filled];
+    }
+    return lib[entry.base] ?? null;
+  }
+
+  // 2. Semantic kebab name (e.g. "users", "bell-off") sent from desktop manifests
+  const pascal = `Icon${pascalCase(name)}`;
+  if (lib[pascal]) {
+    if (wantFilled && lib[`${pascal}Filled`]) return lib[`${pascal}Filled`];
+    return lib[pascal];
+  }
+
+  // 3. Already-PascalCase Tabler component name
+  if (lib[name]) return lib[name];
+
+  return null;
+}
+
+/**
+ * Cross-platform icon component.
+ *
+ * Legacy signature preserved so existing call sites compile unchanged.
+ * Renders Tabler icons on all platforms via @tabler/icons-react-native.
  */
 export function IconSymbol({
   name,
@@ -270,9 +388,23 @@ export function IconSymbol({
     );
   }
 
-  const mappedName = MAPPING[name];
-  if (!mappedName) {
-    throw new Error(`IconSymbol: No Android/Material icon mapping for SF Symbol "${name}". Add it to MAPPING in IconSymbol.tsx`);
+  const nameStr = String(name);
+  const wantFilled = nameStr.endsWith('.fill');
+  const Component = resolveTablerComponent(nameStr, wantFilled);
+
+  if (!Component) {
+    if (__DEV__ && !warnedNames.has(nameStr)) {
+      warnedNames.add(nameStr);
+      console.warn(`IconSymbol: no Tabler mapping for "${nameStr}", rendering nothing.`);
+    }
+    return null;
   }
-  return <MaterialIcons color={color} size={size} name={mappedName} style={style} />;
+
+  return (
+    <Component
+      color={color as string}
+      size={size}
+      style={style}
+    />
+  );
 }

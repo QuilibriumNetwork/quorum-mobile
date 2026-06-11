@@ -28,7 +28,7 @@
     "@polkadot/keyring": "14.0.1",
     "@polkadot/util": "14.0.1",
     "@polkadot/util-crypto": "14.0.1",
-    "@quilibrium/quorum-shared": "2.1.0-24",
+    "@quilibrium/quorum-shared": "2.1.0-26",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "11.4.1",
     "@react-navigation/bottom-tabs": "7.4.7",
@@ -117,5 +117,6 @@
     "postinstall-postinstall": "2.1.0",
     "typescript": "5.9.2"
   },
-  "private": true
+  "private": true,
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
