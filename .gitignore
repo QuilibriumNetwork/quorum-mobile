@@ -8,7 +8,7 @@ node_modules/
 .ios-snapshot/
 
 # build
-modules/quorum-crypto/android/build/
+modules/*/android/build/
 
 # Expo
 .expo/
@@ -44,9 +44,6 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
-
-# build
-modules/quorum-crypto/android/build/
 
 # Local agent tooling (not synced with upstream)
 .agents/
