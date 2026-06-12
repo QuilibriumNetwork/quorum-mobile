@@ -10,6 +10,7 @@
 
 import {
   bytesToHex,
+  createChannelPermissionChecker,
   createRNWebSocketClient,
   int64ToBytes,
   logger,
@@ -33,9 +34,11 @@ import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { messagePreview as getSpaceMessagePreview, messageSenderName } from '@/utils/messagePreview';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type {
+  Channel,
   EncryptedWebSocketMessage,
   KickMessage,
   Message,
+  RemoveMessage,
   SealedMessage,
   Space,
   SpaceMember,
@@ -1813,9 +1816,59 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }
 
             if (contentType === 'remove-message') {
-              // Remove message from cache and storage
-              const removeContent = spaceMessage.content as { removeMessageId: string };
+              const removeContent = spaceMessage.content as RemoveMessage;
 
+              // Receive-side permission enforcement. The sender's own client
+              // gates the delete button, but we can't trust that — a modified
+              // or buggy client (or a space owner relying on the owner-bypass
+              // footgun) could broadcast a delete it shouldn't. So we re-validate
+              // here against the sender's role, exactly as desktop does
+              // (MessageService.ts remove-message handling). No isSpaceOwner
+              // bypass: receivers can't verify ownership, so owners must hold a
+              // role with message:delete to delete others' messages.
+              //
+              // Self-deletes never reach this handler — own echoes are filtered
+              // upstream (sent-envelope / senderId checks) and the local removal
+              // is optimistic — so this guard can't block a legitimate own delete.
+              const targetMessage = await storage.getMessage({
+                spaceId,
+                channelId,
+                messageId: removeContent.removeMessageId,
+              });
+
+              if (targetMessage) {
+                // Resolve the channel for read-only / manager-role handling.
+                const channel: Channel | undefined = space?.groups
+                  ?.find((g) => g.channels.find((c) => c.channelId === channelId))
+                  ?.channels.find((c) => c.channelId === channelId);
+
+                const checker = createChannelPermissionChecker({
+                  userAddress: removeContent.senderId,
+                  isSpaceOwner: false,
+                  space: space ?? undefined,
+                  channel,
+                });
+
+                if (!checker.canDeleteMessage(targetMessage)) {
+                  // Unauthorized delete — drop it, but still clear the inbox
+                  // entry so we don't reprocess it on every reconnect.
+                  logger.debug(
+                    `[SpaceMsg] dropped unauthorized remove-message from ${removeContent.senderId?.slice(0, 12)} for ${removeContent.removeMessageId?.slice(0, 12)}`
+                  );
+                  if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
+                    deleteSpaceInboxMessages(
+                      spaceInboxKey.address,
+                      [message.timestamp],
+                      { publicKey: spaceInboxKey.publicKey, privateKey: spaceInboxKey.privateKey }
+                    ).catch(err => {});
+                  }
+                  return;
+                }
+              }
+              // targetMessage missing → nothing to protect; honor the removal so
+              // a stale reference doesn't linger in the cache.
+
+              // Remove message from cache and storage
               queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
                 if (!old) return old;
                 return {
@@ -2993,7 +3046,36 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           }
 
           if (contentType === 'remove-message') {
-            const removeContent = spaceMessage.content as { removeMessageId: string };
+            const removeContent = spaceMessage.content as RemoveMessage;
+
+            // Receive-side permission enforcement — same rule as the live path
+            // above. Validate the sender's role before honoring a delete; never
+            // trust the sender's client. No isSpaceOwner bypass (receivers can't
+            // verify ownership). Self-deletes are filtered upstream as self-echoes,
+            // so this won't block legitimate own deletes.
+            const targetMessage = await storage.getMessage({
+              spaceId,
+              channelId,
+              messageId: removeContent.removeMessageId,
+            });
+            if (targetMessage) {
+              const channel: Channel | undefined = space?.groups
+                ?.find((g) => g.channels.find((c) => c.channelId === channelId))
+                ?.channels.find((c) => c.channelId === channelId);
+              const checker = createChannelPermissionChecker({
+                userAddress: removeContent.senderId,
+                isSpaceOwner: false,
+                space: space ?? undefined,
+                channel,
+              });
+              if (!checker.canDeleteMessage(targetMessage)) {
+                logger.debug(
+                  `[BatchMsg] dropped unauthorized remove-message from ${removeContent.senderId?.slice(0, 12)} for ${removeContent.removeMessageId?.slice(0, 12)}`
+                );
+                continue;
+              }
+            }
+
             queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
               if (!old) return old;
               return { ...old, pages: old.pages.map(page => ({
