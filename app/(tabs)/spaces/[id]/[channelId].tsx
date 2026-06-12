@@ -21,7 +21,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWebSocket, useSpaceCall } from '@/context';
 import { useQueryClient } from '@tanstack/react-query';
-import { queryKeys, type Message } from '@quilibrium/quorum-shared';
+import { canManageReadOnlyChannel, queryKeys, type Message } from '@quilibrium/quorum-shared';
 import { sendSpaceCallStartMessage } from '@/services/space/spaceMessageService';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
@@ -57,6 +57,23 @@ export default function SpaceChannelChat() {
   const hasRoleDelete = useHasPermission(spaceId, user?.address, 'message:delete');
   const hasPinPermission = hasRolePin || isSpaceOwner;
   const hasDeletePermission = hasRoleDelete || isSpaceOwner;
+
+  // The current channel object (not just its name). Read-only channels need
+  // isReadOnly + managerRoleIds to gate posting.
+  const currentChannel = useMemo(() => {
+    if (!channelsData || !channelId) return undefined;
+    return channelsData.find((c) => c.channelId === channelId);
+  }, [channelsData, channelId]);
+
+  // Can the current user post here? Regular channels: always. Read-only
+  // channels: only managers (a role in managerRoleIds). No owner bypass —
+  // receivers can't verify ownership, so owners must hold a manager role,
+  // matching desktop + the receive-side guard in WebSocketContext.
+  const canPost = useMemo(() => {
+    if (!currentChannel?.isReadOnly) return true;
+    if (!user?.address) return false;
+    return canManageReadOnlyChannel(user.address, false, spaceData ?? undefined, currentChannel);
+  }, [currentChannel, spaceData, user?.address]);
 
   const memberMap = useMemo<MemberMap>(() => {
     if (!membersData) return {};
@@ -141,11 +158,7 @@ export default function SpaceChannelChat() {
     [spaceId]
   );
 
-  const channelName = useMemo(() => {
-    if (!channelsData || !channelId) return 'Channel';
-    const ch = channelsData.find((c) => c.channelId === channelId);
-    return ch?.channelName ?? 'Channel';
-  }, [channelsData, channelId]);
+  const channelName = currentChannel?.channelName ?? 'Channel';
 
   const queryClient = useQueryClient();
   const { joinCall: joinSpaceCall } = useSpaceCall();
@@ -236,6 +249,8 @@ export default function SpaceChannelChat() {
         isSpaceOwner={isSpaceOwner}
         hasPinPermission={hasPinPermission}
         hasDeletePermission={hasDeletePermission}
+        canPost={canPost}
+        isReadOnlyChannel={!!currentChannel?.isReadOnly}
         onShowSidebars={handleShowSidebars}
         onUserPress={handleUserPress}
         onLinkPress={handleLinkPress}
