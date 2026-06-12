@@ -1977,6 +1977,28 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               return;
             }
 
+            // Unsupported control messages. Mobile has no handler for pin,
+            // mute, or thread control messages yet (pin/mute exist locally but
+            // don't sync from desktop; threads are unimplemented). Without this
+            // they fall through to the generic save below and render as junk
+            // chat bubbles (the renderer defaults unknown types to 'post').
+            // Drop them. Receiving + applying these is separate future feature
+            // work (pin-sync / mute-sync / threads), not done here.
+            if (
+              contentType === 'pin' ||
+              contentType === 'mute' ||
+              contentType === 'thread'
+            ) {
+              if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
+                deleteSpaceInboxMessages(
+                  spaceInboxKey.address,
+                  [message.timestamp],
+                  { publicKey: spaceInboxKey.publicKey, privateKey: spaceInboxKey.privateKey }
+                ).catch(err => {});
+              }
+              return;
+            }
+
             // Read-only channel enforcement (receive-side). Postable content
             // (post/embed/sticker) authored by a non-manager must not land in a
             // read-only channel — the sender's client should have blocked it, but
@@ -3186,6 +3208,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               return [...old, merged];
             });
 
+            continue;
+          }
+
+          // Unsupported control messages (pin/mute/thread) — same as the live
+          // path: mobile has no handler, so drop them before the generic save
+          // to avoid junk chat bubbles. Receiving/applying these is future
+          // feature work, not done here.
+          if (
+            contentType === 'pin' ||
+            contentType === 'mute' ||
+            contentType === 'thread'
+          ) {
             continue;
           }
 
