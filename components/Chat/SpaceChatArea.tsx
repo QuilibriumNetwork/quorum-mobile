@@ -64,6 +64,10 @@ interface SpaceChatAreaProps {
   isSpaceOwner: boolean;
   hasPinPermission: boolean;
   hasDeletePermission: boolean;
+  /** Whether the current user may post in this channel (false = read-only and not a manager). */
+  canPost?: boolean;
+  /** Whether this channel is read-only (drives the locked-composer banner copy). */
+  isReadOnlyChannel?: boolean;
   onShowSidebars: () => void;
   onUserPress: (userInfo: MessageUserInfo) => void;
   onLinkPress: (url: string) => void;
@@ -93,6 +97,8 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
   isSpaceOwner,
   hasPinPermission,
   hasDeletePermission,
+  canPost = true,
+  isReadOnlyChannel = false,
   onShowSidebars,
   onUserPress,
   onLinkPress,
@@ -719,31 +725,39 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
           onReport={handleReportMessage}
         />
 
-        <MessageInput
-          ref={spaceMessageInputRef}
-          value={messageText}
-          onChangeText={setMessageText}
-          onSend={handleSendMessage}
-          channelName={selectedChannelData?.name || 'general'}
-          theme={theme}
-          isSending={sendMessageMutation.isPending || sendEmbedMutation.isPending}
-          onAttachmentPress={handleAttachmentPress}
-          pendingAttachment={pendingAttachment}
-          onClearAttachment={handleClearAttachment}
-          bottomInset={0}
-          replyTo={replyToMessage}
-          onDismissReply={handleDismissReply}
-          castReplyAvailable={isCastReply && Boolean(farcasterAuthToken)}
-          alsoReplyOnFarcaster={alsoReplyOnFarcaster}
-          onToggleAlsoReplyOnFarcaster={setAlsoReplyOnFarcaster}
-          customEmojis={spaceData?.emojis}
-          stickers={spaceData?.stickers}
-          onSendSticker={handleSendSticker}
-          members={membersData}
-          channels={channelsData}
-          editingMessage={editingMessage}
-          onCancelEdit={handleCancelEdit}
-        />
+        {!canPost && isReadOnlyChannel ? (
+          <View style={styles.readOnlyBanner}>
+            <IconSymbol name="lock.fill" size={16} color={theme.colors.textMuted} />
+            <Text style={styles.readOnlyBannerText}>You cannot post in this channel</Text>
+          </View>
+        ) : (
+          <MessageInput
+            ref={spaceMessageInputRef}
+            value={messageText}
+            onChangeText={setMessageText}
+            onSend={handleSendMessage}
+            channelName={selectedChannelData?.name || 'general'}
+            theme={theme}
+            isSending={sendMessageMutation.isPending || sendEmbedMutation.isPending}
+            onAttachmentPress={handleAttachmentPress}
+            pendingAttachment={pendingAttachment}
+            onClearAttachment={handleClearAttachment}
+            bottomInset={0}
+            replyTo={replyToMessage}
+            onDismissReply={handleDismissReply}
+            castReplyAvailable={isCastReply && Boolean(farcasterAuthToken)}
+            alsoReplyOnFarcaster={alsoReplyOnFarcaster}
+            onToggleAlsoReplyOnFarcaster={setAlsoReplyOnFarcaster}
+            customEmojis={spaceData?.emojis}
+            stickers={spaceData?.stickers}
+            onSendSticker={handleSendSticker}
+            members={membersData}
+            channels={channelsData}
+            editingMessage={editingMessage}
+            onCancelEdit={handleCancelEdit}
+            disabled={!canPost}
+          />
+        )}
       </View>
 
       {pinnedMessagesPanelVisible && (
@@ -792,5 +806,20 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flex: 1,
     flexDirection: 'column',
     backgroundColor: theme.colors.surface1,
+  },
+  readOnlyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: theme.colors.surface2,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: theme.colors.border,
+  },
+  readOnlyBannerText: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
   },
 });

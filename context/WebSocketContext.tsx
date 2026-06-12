@@ -10,6 +10,7 @@
 
 import {
   bytesToHex,
+  canManageReadOnlyChannel,
   createChannelPermissionChecker,
   createRNWebSocketClient,
   int64ToBytes,
@@ -1976,6 +1977,43 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               return;
             }
 
+            // Read-only channel enforcement (receive-side). Postable content
+            // (post/embed/sticker) authored by a non-manager must not land in a
+            // read-only channel — the sender's client should have blocked it, but
+            // we can't trust that (same reasoning as the remove-message guard).
+            // Covers all three postable types and runs BEFORE storage.saveMessage
+            // so a dropped message can't resurrect from disk on refetch.
+            if (
+              contentType === 'post' ||
+              contentType === 'embed' ||
+              contentType === 'sticker'
+            ) {
+              const channel: Channel | undefined = space?.groups
+                ?.find((g) => g.channels.find((c) => c.channelId === channelId))
+                ?.channels.find((c) => c.channelId === channelId);
+
+              if (channel?.isReadOnly) {
+                const senderId = 'senderId' in spaceMessage.content
+                  ? spaceMessage.content.senderId
+                  : undefined;
+                const canPost = !!senderId
+                  && canManageReadOnlyChannel(senderId, false, space ?? undefined, channel);
+                if (!canPost) {
+                  logger.debug(
+                    `[SpaceMsg] dropped read-only-channel post from ${senderId?.slice(0, 12)} in ${channelId?.slice(0, 12)}`
+                  );
+                  if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
+                    deleteSpaceInboxMessages(
+                      spaceInboxKey.address,
+                      [message.timestamp],
+                      { publicKey: spaceInboxKey.publicKey, privateKey: spaceInboxKey.privateKey }
+                    ).catch(err => {});
+                  }
+                  return;
+                }
+              }
+            }
+
             // Regular message types (post, embed, sticker, join, leave, kick, etc.)
             // Save message to storage
             await storage.saveMessage(
@@ -3149,6 +3187,32 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             });
 
             continue;
+          }
+
+          // Read-only channel enforcement (receive-side) — same rule as the
+          // live path above. Drop non-manager post/embed/sticker before the
+          // save so it can't resurrect from disk.
+          if (
+            contentType === 'post' ||
+            contentType === 'embed' ||
+            contentType === 'sticker'
+          ) {
+            const channel: Channel | undefined = space?.groups
+              ?.find((g) => g.channels.find((c) => c.channelId === channelId))
+              ?.channels.find((c) => c.channelId === channelId);
+            if (channel?.isReadOnly) {
+              const senderId = 'senderId' in spaceMessage.content
+                ? spaceMessage.content.senderId
+                : undefined;
+              const canPost = !!senderId
+                && canManageReadOnlyChannel(senderId, false, space ?? undefined, channel);
+              if (!canPost) {
+                logger.debug(
+                  `[BatchMsg] dropped read-only-channel post from ${senderId?.slice(0, 12)} in ${channelId?.slice(0, 12)}`
+                );
+                continue;
+              }
+            }
           }
 
           // Regular message - save and update cache
