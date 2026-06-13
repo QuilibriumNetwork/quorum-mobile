@@ -1281,7 +1281,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   // silently (empty catch, bare `break`s) which made this
                   // impossible to diagnose. No keys or decrypted content are
                   // logged — only the spaceId (truncated) + the reason.
-                  logger.warn(`[space-manifest] received for space=${spaceId?.slice(0, 12)}`);
+                  logger.debug(`[space-manifest] received for space=${spaceId?.slice(0, 12)}`);
                   try {
                     const manifest = controlPayload.message.manifest;
                     if (!manifest) {
@@ -1358,7 +1358,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
                     // Save updated space
                     saveSpace(updatedSpace);
-                    logger.warn(`[space-manifest] applied + saved for space=${spaceId?.slice(0, 12)} (name="${updatedSpace.spaceName}", channels=${updatedSpace.groups?.flatMap(g => g.channels)?.length ?? 0})`);
+                    logger.debug(`[space-manifest] applied + saved for space=${spaceId?.slice(0, 12)} (name="${updatedSpace.spaceName}", channels=${updatedSpace.groups?.flatMap(g => g.channels)?.length ?? 0})`);
 
                     // Mirror linked Farcaster channels into the bindings MMKV
                     // so the picker hook (useSpaceBindings) sees the
@@ -3019,7 +3019,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // logged so a control message that never reaches handleIncomingMessage
           // can be traced (relevant to the space-manifest sync investigation).
           if (!msgResult.control_payload) {
-            logger.warn(`[batch-control] dropped: status=control but no control_payload (ts=${msgResult.timestamp})`);
+            logger.debug(`[batch-control] dropped: status=control but no control_payload (ts=${msgResult.timestamp})`);
             continue;
           }
           // Find the original message in the batch by timestamp
@@ -3041,7 +3041,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               logger.warn(`[batch-control] handleIncomingMessage threw (ts=${msgResult.timestamp}): ${err instanceof Error ? err.message : String(err)}`);
             }
           } else {
-            logger.warn(`[batch-control] dropped: no original batch message for ts=${msgResult.timestamp}`);
+            logger.debug(`[batch-control] dropped: no original batch message for ts=${msgResult.timestamp}`);
           }
           continue;
         }
