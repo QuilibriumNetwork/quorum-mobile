@@ -1066,6 +1066,10 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
           return renderCast(item);
         case 'error':
           return renderErrorMessage(item);
+        case 'unsupported':
+          // Defense-in-depth: filtered out upstream, so unreachable in practice.
+          // If one slips through, render nothing rather than a phantom 'post' bubble.
+          return null;
         case 'post':
         default:
           return renderPostMessage(item);
