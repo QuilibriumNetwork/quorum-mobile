@@ -288,7 +288,9 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
       }
     }
     out.sort((a, b) => a.timestamp - b.timestamp);
-    return filterMutedMessages(out);
+    // Drop 'unsupported' rows (no render branch) so they never reach the list.
+    const supported = out.filter((m) => m.renderType !== 'unsupported');
+    return filterMutedMessages(supported);
   }, [
     messagesPages,
     effectiveMemberMap,
@@ -764,7 +766,9 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         <PinnedMessagesPanel
           visible={pinnedMessagesPanelVisible}
           onClose={() => setPinnedMessagesPanelVisible(false)}
-          pinnedMessages={(pinnedMessages ?? []).map((msg: Message) => toDisplayMessage(msg, effectiveMemberMap, user?.address))}
+          pinnedMessages={(pinnedMessages ?? [])
+            .map((msg: Message) => toDisplayMessage(msg, effectiveMemberMap, user?.address))
+            .filter((m) => m.renderType !== 'unsupported')}
           onUnpin={hasPinPermission ? handleUnpinMessage : undefined}
           onNavigateToMessage={(messageId: string) => {
             spaceMessagesListRef.current?.scrollToMessage(messageId, true);

@@ -18,6 +18,7 @@ import {
   queryKeys,
 } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
+import { PERSISTABLE_TYPES } from '@/components/Chat/types';
 import React, {
   createContext,
   useCallback,
@@ -2033,18 +2034,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               return;
             }
 
-            // Unsupported control messages. Mobile has no handler for pin,
-            // mute, or thread control messages yet (pin/mute exist locally but
-            // don't sync from desktop; threads are unimplemented). Without this
-            // they fall through to the generic save below and render as junk
-            // chat bubbles (the renderer defaults unknown types to 'post').
-            // Drop them. Receiving + applying these is separate future feature
-            // work (pin-sync / mute-sync / threads), not done here.
-            if (
-              contentType === 'pin' ||
-              contentType === 'mute' ||
-              contentType === 'thread'
-            ) {
+            // Default-deny: only PERSISTABLE_TYPES reach saveMessage. Runs after
+            // the applied-type handlers above (reaction/edit/remove/update-profile,
+            // which all return earlier) and before the save. Subsumes the old
+            // pin/mute/thread guard plus any future type mobile doesn't yet render;
+            // opting one in means adding it to PERSISTABLE_TYPES + a render branch.
+            if (contentType && !PERSISTABLE_TYPES.has(contentType)) {
+              logger.debug(`[SpaceMsg] default-deny dropped unsupported type=${contentType}`);
               if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
                 deleteSpaceInboxMessages(
                   spaceInboxKey.address,
@@ -3221,13 +3217,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           }
 
           if (contentType === 'update-profile') {
-            // Mirror of the legacy handler at the top of this file. Without
-            // this branch the batch path falls through to the "Regular
-            // message" save below and the profile broadcast renders as a
-            // chat post (getMessageRenderType defaults unknown types to
-            // 'post'). The once-per-launch profile re-broadcast that fires
-            // on every connect would then spam every space with a phantom
-            // message every time anyone opened the app.
+            // Mirror of the live handler. Must run BEFORE the default-deny:
+            // update-profile is an applied type, not persistable, so without this
+            // the connect-time profile re-broadcast would be dropped and the
+            // member's profile update would never reach this device.
             const profileContent = spaceMessage.content as {
               senderId: string;
               displayName?: string;
@@ -3278,15 +3271,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             continue;
           }
 
-          // Unsupported control messages (pin/mute/thread) — same as the live
-          // path: mobile has no handler, so drop them before the generic save
-          // to avoid junk chat bubbles. Receiving/applying these is future
-          // feature work, not done here.
-          if (
-            contentType === 'pin' ||
-            contentType === 'mute' ||
-            contentType === 'thread'
-          ) {
+          // Default-deny — identical rule to the live path, same PERSISTABLE_TYPES
+          // set (no divergence). Runs after the applied-type handlers that
+          // `continue` earlier.
+          if (contentType && !PERSISTABLE_TYPES.has(contentType)) {
+            logger.debug(`[BatchMsg] default-deny dropped unsupported type=${contentType}`);
             continue;
           }
 

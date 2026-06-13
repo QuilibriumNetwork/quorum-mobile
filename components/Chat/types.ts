@@ -19,7 +19,50 @@ export type MessageRenderType =
   | 'call-event'  // Voice/video call event (1-to-1)
   | 'space-call'  // Space (group) call indicator
   | 'cast'        // Farcaster cast from a linked channel
-  | 'error';      // Malformed message — surfaced inline so prod issues are visible without logs
+  | 'error'       // Malformed message — surfaced inline so prod issues are visible without logs
+  | 'unsupported'; // Known-but-unrendered or genuinely unknown type — filtered out of the list, never bubble-rendered
+
+/**
+ * Default-deny allowlist of types mobile persists AND renders. Single source of
+ * truth shared by the receive paths (WebSocketContext live + batch) and the
+ * render fallback below. Anything not here fails closed: dropped before save,
+ * and mapped to 'unsupported' (then filtered out) if a pre-fix build persisted
+ * it — so a new/unrecognized desktop type produces nothing, not a junk bubble.
+ * Applied types (reaction/edit/remove/update-profile) and dropped control types
+ * (pin/mute/thread) are excluded because they never reach the save path.
+ */
+export const PERSISTABLE_TYPES: ReadonlySet<string> = new Set([
+  'post',
+  'embed',
+  'sticker',
+  'join',
+  'leave',
+  'kick',
+  'event',
+  'call-event',
+  'space-call-start',
+  'space-call-end',
+]);
+
+// Invariant: every persistable type must have a real render branch in
+// getMessageRenderType (i.e. not fall through to 'unsupported'), or the receive
+// path would save it while the render path filters it out — a message that
+// exists on disk but is invisible. The reverse (a render branch with no set
+// membership) is intentional for applied types (remove-message -> 'deleted')
+// that are consumed before the save path, so it isn't checked here. Dev-only;
+// stripped from production bundles by the `__DEV__` guard.
+if (__DEV__) {
+  for (const t of PERSISTABLE_TYPES) {
+    const rt = getMessageRenderType({ content: { type: t } } as unknown as SharedMessage);
+    if (rt === 'unsupported') {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[Chat/types] PERSISTABLE_TYPES contains '${t}' but getMessageRenderType maps it to 'unsupported' — ` +
+        `add a render branch or remove it from PERSISTABLE_TYPES.`
+      );
+    }
+  }
+}
 
 // Reaction display info
 export interface DisplayReaction {
@@ -264,8 +307,13 @@ export function getMessageRenderType(message: SharedMessage): MessageRenderType 
     case 'space-call-start':
     case 'space-call-end':
       return 'space-call';
-    default:
+    case 'post':
       return 'post';
+    default:
+      // Default-deny: unknown types map to 'unsupported' (not 'post', which made
+      // phantom empty bubbles). Catches types persisted by an older build; the
+      // chat areas filter 'unsupported' out before the list.
+      return 'unsupported';
   }
 }
 

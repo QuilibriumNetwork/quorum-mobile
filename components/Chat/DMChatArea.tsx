@@ -162,7 +162,10 @@ export const DMChatArea = React.memo(function DMChatArea({
   const dmMessages = useMemo(() => {
     if (!dmMessagesPages) return [];
     const allMessages = flattenMessages(dmMessagesPages.pages);
-    return allMessages.map((msg: Message) => toDisplayMessage(msg, effectiveDmMemberMap, user?.address));
+    // Drop 'unsupported' rows (no render branch) so they never reach the list.
+    return allMessages
+      .map((msg: Message) => toDisplayMessage(msg, effectiveDmMemberMap, user?.address))
+      .filter((m) => m.renderType !== 'unsupported');
   }, [dmMessagesPages, effectiveDmMemberMap, user?.address]);
 
   const dmSearch = useMessageSearch(dmMessages);
