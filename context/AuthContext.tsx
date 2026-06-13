@@ -49,6 +49,7 @@ export interface UserInfo {
   bio?: string;
   profileImage?: string;
   isProfilePublic?: boolean;    // Whether profile is visible to anyone (opt-in)
+  profileUpdatedAt?: number;    // ms epoch of last local profile write; used to decide whether a synced config (also Date.now()-stamped) is newer when bridging config -> user on login
   privacyLevel: PrivacyLevel;
   farcaster?: FarcasterInfo;
 }
@@ -307,15 +308,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
               }
             })();
 
-            // Config sync runs in parallel with encryption setup
+            // Config sync runs in parallel with encryption setup.
+            //
+            // This is the config -> user read-back bridge. Synced config fields
+            // (name, profile_image, bio, isProfilePublic) arrive from the server
+            // but only name/profile_image were previously copied into `user`, so
+            // a value set on another device (e.g. the public-profile toggle)
+            // never reached this device's `user` and showed stale. We now also
+            // bridge bio + isProfilePublic.
+            //
+            // Precedence: config sync is last-write-wins by server timestamp
+            // (saveConfig stamps config.timestamp = Date.now()). Only let the
+            // remote config win for the synced toggle/text fields when it is
+            // newer than this device's last local profile write
+            // (profileUpdatedAt), so an unsynced fresh local change isn't
+            // clobbered. name/profile_image keep their original truthy-fill
+            // behavior to avoid regressing the working display-name sync.
             const configTask = (async () => {
               try {
                 const config = await getConfig(parsedUser.address);
-                if (config.name || config.profile_image) {
+                const configIsNewer =
+                  typeof config.timestamp === 'number' &&
+                  config.timestamp > (parsedUser.profileUpdatedAt ?? 0);
+                if (config.name || config.profile_image || configIsNewer) {
                   const updatedUser = {
                     ...parsedUser,
                     displayName: config.name || parsedUser.displayName,
                     profileImage: config.profile_image || parsedUser.profileImage,
+                    ...(configIsNewer && {
+                      bio: config.bio ?? parsedUser.bio,
+                      isProfilePublic: config.isProfilePublic ?? parsedUser.isProfilePublic,
+                    }),
                   };
                   setUser(updatedUser);
                   mmkvStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
@@ -422,7 +445,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const updateProfile = useCallback((updates: Partial<UserInfo>) => {
     setUser((prev) => {
       if (!prev) return prev;
-      const updated = { ...prev, ...updates };
+      // Stamp the local write time so a later login can tell whether the
+      // synced config (also Date.now()-stamped in saveConfig) is newer than
+      // this device's last local change before overlaying it onto `user`.
+      const updated = { ...prev, ...updates, profileUpdatedAt: Date.now() };
       mmkvStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updated));
 
       // Sync profile changes to server config (if allowSync is enabled)
