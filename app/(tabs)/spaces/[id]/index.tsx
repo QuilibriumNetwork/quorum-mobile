@@ -5,7 +5,7 @@
  * Header provides quick access to settings and invite.
  */
 
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { useChannels } from '@/hooks/chat/useChannels';
 import { useReplyTracking } from '@/hooks/chat/useReplyTracking';
 import { useSpace } from '@/hooks/chat/useSpaces';
@@ -115,7 +115,11 @@ export default function SpaceChannelsScreen() {
                   onPress={() => handleSelectChannel(channel.channelId)}
                   activeOpacity={0.6}
                 >
-                  <IconSymbol name="number" size={18} color={theme.colors.textMuted} />
+                  <IconSymbol
+                    name={(channel.icon || 'number') as IconSymbolName}
+                    size={18}
+                    color={channel.iconColor || theme.colors.textMuted}
+                  />
                   <Text style={styles.channelName} numberOfLines={1}>
                     {channel.channelName}
                   </Text>
