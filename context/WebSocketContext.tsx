@@ -1273,9 +1273,19 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
                 case 'space-manifest':
                   // Space configuration update
+                  //
+                  // NOTE: every failure exit below is intentionally logged at
+                  // `warn` with a distinct `[space-manifest]` tag + reason, so a
+                  // desktop space change that doesn't reach mobile can be traced
+                  // to the exact gate that rejected it. The handler used to fail
+                  // silently (empty catch, bare `break`s) which made this
+                  // impossible to diagnose. No keys or decrypted content are
+                  // logged — only the spaceId (truncated) + the reason.
+                  logger.debug(`[space-manifest] received for space=${spaceId?.slice(0, 12)}`);
                   try {
                     const manifest = controlPayload.message.manifest;
                     if (!manifest) {
+                      logger.warn(`[space-manifest] dropped: no manifest field (space=${spaceId?.slice(0, 12)})`);
                       break;
                     }
 
@@ -1284,6 +1294,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     const quorumClient = getQuorumClient();
                     const spaceReg = await quorumClient.getSpaceRegistration(spaceId);
                     if (!spaceReg?.owner_public_keys?.includes(manifest.owner_public_key)) {
+                      logger.warn(`[space-manifest] dropped: owner key not in registration (space=${spaceId?.slice(0, 12)}, regKeys=${spaceReg?.owner_public_keys?.length ?? 'none'})`);
                       break;
                     }
 
@@ -1318,12 +1329,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     );
 
                     if (!isValid) {
+                      logger.warn(`[space-manifest] dropped: Ed448 signature invalid (space=${spaceId?.slice(0, 12)})`);
                       break;
                     }
 
                     // Decrypt the manifest using config key
                     const configKey = getSpaceKey(spaceId, 'config');
                     if (!configKey) {
+                      logger.warn(`[space-manifest] dropped: no config key stored for space=${spaceId?.slice(0, 12)} (likely missed a rekey)`);
                       break;
                     }
 
@@ -1345,6 +1358,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
                     // Save updated space
                     saveSpace(updatedSpace);
+                    logger.debug(`[space-manifest] applied + saved for space=${spaceId?.slice(0, 12)} (name="${updatedSpace.spaceName}", channels=${updatedSpace.groups?.flatMap(g => g.channels)?.length ?? 0})`);
 
                     // Mirror linked Farcaster channels into the bindings MMKV
                     // so the picker hook (useSpaceBindings) sees the
@@ -1364,9 +1378,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                       if (!old) return old;
                       return old.map((s: Space) => s.spaceId === spaceId ? updatedSpace : s);
                     });
+                    // Invalidate the channels query so channel-level changes
+                    // (name, isReadOnly/managerRoleIds, added/removed channels)
+                    // reach the UI immediately. useChannels derives from the
+                    // stored space but has a 5-min staleTime, so without this the
+                    // saved manifest wouldn't show until the cache expired or the
+                    // screen remounted. Also invalidate the spaces list so the
+                    // name updates even when that query wasn't already cached
+                    // (the setQueryData above no-ops when `old` is undefined).
+                    queryClient.invalidateQueries({ queryKey: queryKeys.channels.bySpace(spaceId) });
+                    queryClient.invalidateQueries({ queryKey: queryKeys.spaces.all });
                   } catch (err) {
-                    if (err instanceof Error) {
-                    }
+                    // Most failure modes throw here: getSpaceRegistration
+                    // (network), verifyEd448, JSON.parse of the manifest,
+                    // decryptInboxMessage (stale/missing config key), or
+                    // JSON.parse of the decrypted space. The error message
+                    // usually identifies which. Previously swallowed silently.
+                    logger.warn(`[space-manifest] dropped: threw while processing space=${spaceId?.slice(0, 12)}: ${err instanceof Error ? err.message : String(err)}`);
                   }
                   break;
 
@@ -2985,8 +3013,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           }
         }
 
-        if (msgResult.status === 'control' && msgResult.control_payload) {
-          // Control messages must be processed by JS for side effects
+        if (msgResult.status === 'control') {
+          // Control messages (incl. space-manifest) must be processed by JS for
+          // side effects. Two silent drop points used to live here; they're now
+          // logged so a control message that never reaches handleIncomingMessage
+          // can be traced (relevant to the space-manifest sync investigation).
+          if (!msgResult.control_payload) {
+            logger.debug(`[batch-control] dropped: status=control but no control_payload (ts=${msgResult.timestamp})`);
+            continue;
+          }
           // Find the original message in the batch by timestamp
           const originalMsg = batch.find(m => m.timestamp === msgResult.timestamp && m.encryptedContent);
           if (originalMsg) {
@@ -3002,7 +3037,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             preUnsealedCacheRef.current.set(cacheKey, msgResult.control_payload);
             try {
               await handleIncomingMessage(originalMsg);
-            } catch { /* ignore */ }
+            } catch (err) {
+              logger.warn(`[batch-control] handleIncomingMessage threw (ts=${msgResult.timestamp}): ${err instanceof Error ? err.message : String(err)}`);
+            }
+          } else {
+            logger.debug(`[batch-control] dropped: no original batch message for ts=${msgResult.timestamp}`);
           }
           continue;
         }

@@ -880,7 +880,14 @@ class QuorumCryptoModule : Module() {
 
                         for (m in 0 until messagesArr.length()) {
                             val msg = messagesArr.getJSONObject(m)
-                            val timestamp = msg.optInt("timestamp", 0)
+                            // Use optLong (64-bit): timestamps are millisecond-epoch
+                            // values (~1.7e12) that overflow a 32-bit Int, wrapping to
+                            // negative. The overflowed value is echoed into every result
+                            // and later matched against the original message's full-
+                            // precision timestamp in JS (WebSocketContext batch path),
+                            // so optInt silently dropped all control messages (e.g.
+                            // space-manifest updates) on Android.
+                            val timestamp = msg.optLong("timestamp", 0L)
 
                             val ephemeralPubKeyHex = msg.optString("ephemeral_public_key", "")
                             val envelope = msg.optString("envelope", "")
@@ -1146,7 +1153,14 @@ class QuorumCryptoModule : Module() {
 
                         for (m in 0 until messagesArr.length()) {
                             val msg = messagesArr.getJSONObject(m)
-                            val timestamp = msg.optInt("timestamp", 0)
+                            // Use optLong (64-bit): timestamps are millisecond-epoch
+                            // values (~1.7e12) that overflow a 32-bit Int, wrapping to
+                            // negative. The overflowed value is echoed into every result
+                            // and later matched against the original message's full-
+                            // precision timestamp in JS (WebSocketContext batch path),
+                            // so optInt silently dropped all control messages (e.g.
+                            // space-manifest updates) on Android.
+                            val timestamp = msg.optLong("timestamp", 0L)
                             val isDREnvelope = msg.optBoolean("is_double_ratchet_envelope", false)
                             val isInitEnvelope = msg.optBoolean("is_init_envelope", false)
                             val encryptedContent = msg.optString("encrypted_content", "")
