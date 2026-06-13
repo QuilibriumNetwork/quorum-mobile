@@ -330,19 +330,53 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 const configIsNewer =
                   typeof config.timestamp === 'number' &&
                   config.timestamp > (parsedUser.profileUpdatedAt ?? 0);
-                if (config.name || config.profile_image || configIsNewer) {
-                  const updatedUser = {
-                    ...parsedUser,
-                    displayName: config.name || parsedUser.displayName,
-                    profileImage: config.profile_image || parsedUser.profileImage,
+                if (!(config.name || config.profile_image || configIsNewer)) return;
+
+                // Privacy guard: for existing users we have no local write
+                // stamp yet, so a config that is merely "newer than 0" would
+                // win by default. Never let that silently turn a profile that
+                // is locally OFF back ON — an unexpected "public" is the worst
+                // failure direction for an opt-in privacy toggle. Once the user
+                // touches the setting again it gets a real stamp and normal
+                // LWW resumes.
+                const neverStamped = parsedUser.profileUpdatedAt === undefined;
+                const remotePublic = config.isProfilePublic ?? parsedUser.isProfilePublic;
+                const guardPublic =
+                  neverStamped && parsedUser.isProfilePublic === false && remotePublic
+                    ? false
+                    : remotePublic;
+
+                // Functional update + merge onto the freshest stored copy, so
+                // this doesn't clobber a concurrent write from farcasterPfpTask
+                // (which runs in parallel and also calls setUser).
+                setUser((prev) => {
+                  const base = prev ?? parsedUser;
+                  return {
+                    ...base,
+                    displayName: config.name || base.displayName,
+                    profileImage: config.profile_image || base.profileImage,
                     ...(configIsNewer && {
-                      bio: config.bio ?? parsedUser.bio,
-                      isProfilePublic: config.isProfilePublic ?? parsedUser.isProfilePublic,
+                      bio: config.bio ?? base.bio,
+                      isProfilePublic: guardPublic,
                     }),
                   };
-                  setUser(updatedUser);
-                  mmkvStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
-                }
+                });
+
+                const raw = mmkvStorage.getItem(STORAGE_KEYS.USER);
+                const cur = raw ? (JSON.parse(raw) as UserInfo) : parsedUser;
+                const merged: UserInfo = {
+                  ...cur,
+                  displayName: config.name || cur.displayName,
+                  profileImage: config.profile_image || cur.profileImage,
+                  ...(configIsNewer && {
+                    bio: config.bio ?? cur.bio,
+                    isProfilePublic:
+                      neverStamped && cur.isProfilePublic === false && remotePublic
+                        ? false
+                        : remotePublic,
+                  }),
+                };
+                mmkvStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(merged));
               } catch (configError) {
               }
             })();
