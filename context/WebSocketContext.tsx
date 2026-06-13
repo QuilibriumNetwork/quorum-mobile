@@ -1356,6 +1356,34 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     const decryptedText = new TextDecoder().decode(new Uint8Array(decryptedBytes));
                     const updatedSpace = JSON.parse(decryptedText) as Space;
 
+                    // Staleness guard. The hub replays historical log entries on
+                    // every reconnect (log-since-result), so OLD space manifests
+                    // routinely arrive after newer local changes. Applying them
+                    // blindly clobbers the newer state (e.g. a fresh rename snaps
+                    // back to an older name). Skip any manifest that is not newer
+                    // than what we already have.
+                    //
+                    // Compare the signed manifest.timestamp (set at broadcast
+                    // time) against the stored space's modifiedDate (the sender's
+                    // Date.now() when it last wrote the space). Fail OPEN: apply
+                    // when there's no stored space yet, when the stored space has
+                    // no modifiedDate, or on an exact tie — never block a
+                    // first-seen or legitimately-newer update.
+                    const existingSpace = getSpace(spaceId);
+                    const incomingTs = manifest.timestamp;
+                    const existingTs = existingSpace?.modifiedDate;
+                    if (
+                      existingSpace &&
+                      typeof existingTs === 'number' &&
+                      typeof incomingTs === 'number' &&
+                      incomingTs < existingTs
+                    ) {
+                      logger.debug(
+                        `[space-manifest] skipped: stale manifest for space=${spaceId?.slice(0, 12)} (incoming=${incomingTs} < local=${existingTs})`
+                      );
+                      break;
+                    }
+
                     // Save updated space
                     saveSpace(updatedSpace);
                     logger.debug(`[space-manifest] applied + saved for space=${spaceId?.slice(0, 12)} (name="${updatedSpace.spaceName}", channels=${updatedSpace.groups?.flatMap(g => g.channels)?.length ?? 0})`);
