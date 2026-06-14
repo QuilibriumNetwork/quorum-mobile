@@ -1,7 +1,9 @@
 import { BaseModal } from '@/components/shared';
+import { KickUserModal } from '@/components/KickUserModal';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
+import { useAuth } from '@/context';
 import { useToast } from '@/context/ToastContext';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
@@ -57,8 +59,10 @@ export default function UserProfileModal({
 }: UserProfileModalProps) {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
+  const { user: authUser } = useAuth();
   const insets = useSafeAreaInsets();
   const [loadingRoles, setLoadingRoles] = useState<Set<string>>(new Set());
+  const [kickVisible, setKickVisible] = useState(false);
 
   const assignRoleMutation = useAssignRole();
   const removeRoleMutation = useRemoveFromRole();
@@ -140,6 +144,13 @@ export default function UserProfileModal({
   const hasValidAvatar = user?.userAvatar?.startsWith('data:');
 
   const showRolesSection = roles && roles.length > 0 && (userRoles.length > 0 || isSpaceOwner);
+
+  // Whether this profile is the current user's own. Message/Mute/Kick don't
+  // make sense on yourself.
+  const isSelf = !!(user && authUser?.address && user.userId === authUser.address);
+
+  // Space owners can kick any member other than themselves
+  const canKick = !!(isSpaceOwner && spaceId && !isSelf);
 
   if (!user) return null;
 
@@ -245,49 +256,81 @@ export default function UserProfileModal({
         )}
 
         {/* Bio Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Bio</Text>
-          <View style={styles.bioContainer}>
-            <Text style={[styles.bioText, !user.bio && styles.bioPlaceholder]}>
-              {user.bio || 'No bio yet'}
-            </Text>
+        {user.bio && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Bio</Text>
+            <View style={styles.bioContainer}>
+              <Text style={styles.bioText}>{user.bio}</Text>
+            </View>
           </View>
-        </View>
+        )}
 
-        {/* Actions */}
-        <View style={styles.actionsContainer}>
-          {onStartDM && (
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => {
-                onStartDM(user.userId);
-                onClose();
-              }}
-            >
-              <IconSymbol name="bubble.left.fill" size={20} color="#fff" />
-              <Text style={styles.actionButtonText}>Message</Text>
-            </TouchableOpacity>
-          )}
-          {onMuteUser && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.muteButton]}
-              onPress={() => {
-                onMuteUser(user.userId);
-                onClose();
-              }}
-            >
-              <IconSymbol
-                name={isUserMuted ? 'bell.fill' : 'bell.slash.fill'}
-                size={20}
-                color="#fff"
-              />
-              <Text style={styles.actionButtonText}>
-                {isUserMuted ? 'Unmute' : 'Mute'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        {/* Actions - styled as tappable rows */}
+        {((onStartDM && !isSelf) || (onMuteUser && !isSelf) || canKick) && (
+          <View style={styles.actionsContainer}>
+            {onStartDM && !isSelf && (
+              <>
+                <View style={styles.divider} />
+                <TouchableOpacity
+                  style={styles.actionRow}
+                  onPress={() => {
+                    onStartDM(user.userId);
+                    onClose();
+                  }}
+                >
+                  <IconSymbol name="bubble.left" size={20} color={theme.colors.textMain} />
+                  <Text style={styles.actionRowText}>Message</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {onMuteUser && !isSelf && (
+              <>
+                <View style={styles.divider} />
+                <TouchableOpacity
+                  style={styles.actionRow}
+                  onPress={() => {
+                    onMuteUser(user.userId);
+                    onClose();
+                  }}
+                >
+                  <IconSymbol
+                    name={isUserMuted ? 'bell' : 'bell.slash'}
+                    size={20}
+                    color={theme.colors.textMain}
+                  />
+                  <Text style={styles.actionRowText}>
+                    {isUserMuted ? 'Unmute' : 'Mute'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {/* Kick (space owners only) - destructive row */}
+            {canKick && (
+              <>
+                <View style={styles.divider} />
+                <TouchableOpacity
+                  style={styles.actionRow}
+                  onPress={() => setKickVisible(true)}
+                >
+                  <IconSymbol name="person.crop.circle.badge.exclamationmark" size={20} color={theme.colors.danger} />
+                  <Text style={[styles.actionRowText, styles.dangerText]}>Kick from Space</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
       </ScrollView>
+
+      {canKick && (
+        <KickUserModal
+          visible={kickVisible}
+          onClose={() => setKickVisible(false)}
+          spaceId={spaceId!}
+          userName={user.userName}
+          userIcon={hasValidAvatar ? user.userAvatar : undefined}
+          userAddress={user.userId}
+        />
+      )}
     </BaseModal>
   );
 }
@@ -369,10 +412,6 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       color: theme.colors.textMain,
       lineHeight: Skin.font(20),
     },
-    bioPlaceholder: {
-      color: theme.colors.textMuted,
-      fontStyle: 'italic',
-    },
     rolesRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -398,7 +437,9 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       alignItems: 'center',
       gap: Skin.space(4),
       borderWidth: Skin.border(1),
-      borderColor: theme.colors.surface4,
+      // `border` (= surface6) is the token meant for borders; surface4 is a
+      // surface tone that washes out against lighter drawer surfaces. Re-skins.
+      borderColor: theme.colors.border,
       borderStyle: 'dashed',
       borderRadius: Skin.radius(14),
       paddingVertical: Skin.space(4),
@@ -411,25 +452,23 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     actionsContainer: {
       marginBottom: Skin.space(24),
-      gap: Skin.space(10),
     },
-    actionButton: {
+    divider: {
+      height: 1,
+      backgroundColor: theme.colors.border ?? theme.colors.surface3,
+    },
+    actionRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.primary,
       paddingVertical: Skin.space(14),
-      paddingHorizontal: Skin.space(24),
-      borderRadius: Skin.radius(12),
-      gap: Skin.space(8),
+      gap: Skin.space(12),
     },
-    muteButton: {
-      backgroundColor: theme.colors.surface4,
-    },
-    actionButtonText: {
+    actionRowText: {
       fontSize: Skin.font(16),
-      color: '#fff',
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
+      color: theme.colors.textMain,
+      fontFamily: theme.fonts.regular.fontFamily,
+    },
+    dangerText: {
+      color: theme.colors.danger,
     },
   });

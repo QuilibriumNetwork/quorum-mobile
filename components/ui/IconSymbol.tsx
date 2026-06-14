@@ -283,6 +283,7 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   // Notifications
   'bell': tabler('IconBell'),
   'bell.fill': tabler('IconBell', 'IconBellFilled'),
+  'bell.slash': tabler('IconBellOff'),
   'bell.slash.fill': tabler('IconBellOff'),
 
   // History / time

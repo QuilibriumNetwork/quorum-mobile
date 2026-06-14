@@ -17,7 +17,7 @@ export interface BaseModalProps {
   children: React.ReactNode;
   /** Fraction of screen height (0-1), default 0.9 */
   height?: number;
-  /** Backdrop opacity (0-1), default 0.5 */
+  /** Backdrop opacity (0-1), default 0.6 */
   backdropDarkness?: number;
   showHandle?: boolean;
   handleContainerStyle?: ViewStyle;
@@ -45,7 +45,7 @@ export function BaseModal({
   onClose,
   children,
   height = 0.9,
-  backdropDarkness = 0.5,
+  backdropDarkness = 0.6,
   showHandle = true,
   handleContainerStyle,
   testID,
@@ -180,9 +180,18 @@ const createStyles = (
       bottom: 0,
       left: 0,
       right: 0,
-      backgroundColor: theme.colors.background,
+      // Sheet sits a step above the page background so it reads as a distinct
+      // floating panel rather than blending into the dimmed backdrop — most
+      // noticeable in dark mode, where the page background is near-black.
+      backgroundColor: theme.colors.surface1,
       borderTopLeftRadius: Skin.radius(20),
       borderTopRightRadius: Skin.radius(20),
+      // Soft elevation so the rounded top edge reads above the backdrop.
+      shadowColor: '#000',
+      shadowOpacity: 0.3,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: -2 },
+      elevation: 12,
       ...frameAccentBorder(theme),
       ...(fillHeight ? { height: SCREEN_HEIGHT * height } : {}),
       ...(minHeight ? { minHeight: SCREEN_HEIGHT * minHeight } : {}),
