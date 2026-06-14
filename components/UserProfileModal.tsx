@@ -437,7 +437,9 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       alignItems: 'center',
       gap: Skin.space(4),
       borderWidth: Skin.border(1),
-      borderColor: theme.colors.surface4,
+      // `border` (= surface6) is the token meant for borders; surface4 is a
+      // surface tone that washes out against lighter drawer surfaces. Re-skins.
+      borderColor: theme.colors.border,
       borderStyle: 'dashed',
       borderRadius: Skin.radius(14),
       paddingVertical: Skin.space(4),
