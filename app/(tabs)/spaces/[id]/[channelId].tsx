@@ -6,8 +6,10 @@ import { SpaceChatArea, type MemberMap, type MessageUserInfo } from '@/component
 import { useAuth } from '@/context/AuthContext';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { useChannels } from '@/hooks/chat/useChannels';
-import { useHasPermission } from '@/hooks/chat/useRoleManagement';
+import { useHasPermission, useRoles } from '@/hooks/chat/useRoleManagement';
 import { useReplyTracking, setActiveChannel, clearActiveChannel } from '@/hooks/chat/useReplyTracking';
+import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
+import { useUserMuting } from '@/hooks/chat/useUserMuting';
 import { useSpace, useSpaceMembers } from '@/hooks/chat/useSpaces';
 import { useBookmarks } from '@/hooks/useUserConfig';
 import { getSpaceKey } from '@/services/config/spaceStorage';
@@ -47,6 +49,8 @@ export default function SpaceChannelChat() {
   const { data: channelsData } = useChannels(spaceId, { enabled: !!spaceId });
 
   const { bookmarks, addBookmark, removeBookmark, isBookmarked } = useBookmarks();
+  const startDirectMessage = useStartDirectMessage();
+  const { toggleMuteUser, isUserMuted } = useUserMuting(spaceId);
 
   const isSpaceOwner = useMemo(() => {
     if (!spaceId) return false;
@@ -57,6 +61,11 @@ export default function SpaceChannelChat() {
   const hasRoleDelete = useHasPermission(spaceId, user?.address, 'message:delete');
   const hasPinPermission = hasRolePin || isSpaceOwner;
   const hasDeletePermission = hasRoleDelete || isSpaceOwner;
+
+  // The space's roles, passed to UserProfileModal so the owner can assign /
+  // remove roles from a member's profile (tapped from a message avatar).
+  // Without this prop the modal's role section never renders.
+  const { data: roles } = useRoles(spaceId);
 
   // The current channel object (not just its name). Read-only channels need
   // isReadOnly + managerRoleIds to gate posting.
@@ -277,7 +286,14 @@ export default function SpaceChannelChat() {
             onClose={() => setSelectedUserProfile(null)}
             user={selectedUserProfile}
             spaceId={spaceId}
+            roles={roles}
             isSpaceOwner={isSpaceOwner}
+            onStartDM={(userId) => {
+              setSelectedUserProfile(null);
+              startDirectMessage(userId);
+            }}
+            onMuteUser={(userId) => toggleMuteUser(userId)}
+            isUserMuted={isUserMuted(selectedUserProfile.userId)}
             onOpenFarcasterProfile={({ fid, username }) => {
               setSelectedUserProfile(null);
               router.push({
