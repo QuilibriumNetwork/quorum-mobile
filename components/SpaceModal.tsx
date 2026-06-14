@@ -20,6 +20,15 @@ import { useWebSocket } from '@/context/WebSocketContext';
 import { useToast } from '@/context/ToastContext';
 import { haptics } from '@/utils/haptics';
 import * as Skin from '@/theme/skins/geometry';
+import {
+  validateSpaceName,
+  validateSpaceDescription,
+  MAX_NAME_LENGTH,
+} from '@quilibrium/quorum-shared';
+import {
+  translateValidationResult,
+  translateValidationResults,
+} from '@/hooks/validation/errorTranslator';
 
 interface SpaceModalProps {
   visible: boolean;
@@ -31,18 +40,11 @@ interface SpaceModalProps {
 
 type TabType = 'create' | 'join';
 
-// Space name validation - matches desktop
-const MIN_NAME_LENGTH = 2;
-const MAX_NAME_LENGTH = 50;
+// Space name min/max + XSS validation now come from @quilibrium/quorum-shared
+// (validateSpaceName). MAX_NAME_LENGTH is imported for the input's maxLength prop.
+// MAX_DESCRIPTION_LENGTH stays local — it's a mobile UI affordance passed into the
+// shared validateSpaceDescription(description, maxLength).
 const MAX_DESCRIPTION_LENGTH = 300;
-
-function validateSpaceName(name: string): string | null {
-  const trimmed = name.trim();
-  if (!trimmed) return 'Space name is required';
-  if (trimmed.length < MIN_NAME_LENGTH) return `Name must be at least ${MIN_NAME_LENGTH} characters`;
-  if (trimmed.length > MAX_NAME_LENGTH) return `Name must be ${MAX_NAME_LENGTH} characters or less`;
-  return null;
-}
 
 // Invite link validation
 function isValidInviteLink(link: string): boolean {
@@ -125,11 +127,12 @@ export default function SpaceModal({
     return spaces.some((s) => s.spaceId === validatedSpace.spaceId);
   }, [validatedSpace, spaces]);
 
-  // Validation
-  const nameError = validateSpaceName(spaceName);
-  const descriptionError = description.length > MAX_DESCRIPTION_LENGTH
-    ? `Description must be ${MAX_DESCRIPTION_LENGTH} characters or less`
-    : null;
+  // Validation (shared validators + mobile string translator)
+  const nameError = translateValidationResult(validateSpaceName(spaceName)) ?? null;
+  const descriptionError =
+    translateValidationResults(
+      validateSpaceDescription(description, MAX_DESCRIPTION_LENGTH)
+    )[0] ?? null;
   const canCreate = !nameError && !descriptionError && !createSpaceMutation.isPending;
   const canJoin = isValidInviteLink(inviteLink) && validatedSpace && !isAlreadyMember && !joinSpaceMutation.isPending;
 
