@@ -962,7 +962,27 @@ export interface SendEmbedMessageParams {
 }
 
 /**
- * Send an embed message (image/video)
+ * Split a base64 data URL ("data:<mime>;base64,<data>") into its mimeType and
+ * raw base64 payload. Returns null if the input is not a base64 data URL
+ * (e.g. a remote http(s) URL), in which case there is nothing to inline.
+ */
+function parseDataUrl(dataUrl: string): { mimeType: string; data: string } | null {
+  const match = /^data:([^;]+);base64,(.*)$/s.exec(dataUrl);
+  if (!match) return null;
+  return { mimeType: match[1], data: match[2] };
+}
+
+/**
+ * Send an image as a `post` + `embeddedMedia` (the converged cross-platform
+ * shape — see .agents/tasks/2026-06-13-converge-image-caption-to-post-embeddedmedia.md).
+ *
+ * Desktop already emits this shape and mobile's renderer reads `embeddedMedia`
+ * (toDisplayMessage). We stop emitting `type:'embed'` for sending; the embed
+ * renderer stays for receiving old persisted `embed` messages.
+ *
+ * `imageUrl`/`thumbnailUrl` arrive as base64 data URLs; we inline the raw
+ * base64 in `embeddedMedia[].data` exactly like desktop (thumbnail entry first
+ * when present, then the full image, sharing one `key`).
  */
 export async function sendEmbedMessage(
   params: SendEmbedMessageParams
@@ -972,27 +992,55 @@ export async function sendEmbedMessage(
     channelId,
     senderAddress,
     imageUrl,
-    videoUrl,
     thumbnailUrl,
-    width,
-    height,
     repliesToMessageId,
     text,
   } = params;
 
-  const content: EmbedMessage & { text?: string } = {
-    type: 'embed',
-    senderId: senderAddress,
-    imageUrl,
-    videoUrl,
-    thumbnailUrl,
-    width,
-    height,
-    repliesToMessageId,
-    text,
-  };
-
+  const content = buildPostWithEmbeddedMedia(senderAddress, imageUrl, thumbnailUrl, text, repliesToMessageId);
   return sendGenericMessage({ spaceId, channelId, senderAddress, content });
+}
+
+/**
+ * Build the `post` + `embeddedMedia` content from base64-data-URL image inputs.
+ * Shared by the send path and the optimistic-update path so the local sender
+ * and remote receiver render identically. Falls back to a plain `post` (no
+ * media) if `imageUrl` is missing or not an inlinable data URL.
+ */
+export function buildPostWithEmbeddedMedia(
+  senderAddress: string,
+  imageUrl?: string,
+  thumbnailUrl?: string,
+  text?: string,
+  repliesToMessageId?: string
+): PostMessage {
+  const embeddedMedia: NonNullable<PostMessage['embeddedMedia']> = [];
+  const image = imageUrl ? parseDataUrl(imageUrl) : null;
+  if (image) {
+    // One shared key links the thumbnail to its full image (the large-GIF case).
+    const key = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const thumb = thumbnailUrl ? parseDataUrl(thumbnailUrl) : null;
+    // Only emit a thumbnail entry when it's DISTINCT from the full image.
+    // Mobile's GIF processing sets thumbnailUrl === imageUrl (no separate static
+    // frame is generated), so a thumbnail entry there would just duplicate the
+    // full GIF bytes on the wire AND make receivers read it as a thumbnailed
+    // "large GIF". Dropping the duplicate avoids the double payload and the
+    // mis-classification. (GIF animation itself is a separate, pre-existing
+    // render concern — see the GIF bug report.)
+    if (thumb && thumb.data !== image.data) {
+      embeddedMedia.push({ type: 'image-thumbnail', key, data: thumb.data, mimeType: thumb.mimeType });
+    }
+    embeddedMedia.push({ type: 'image', key, data: image.data, mimeType: image.mimeType });
+  }
+
+  const content: PostMessage = {
+    type: 'post',
+    senderId: senderAddress,
+    text: text ?? '',
+    ...(repliesToMessageId ? { repliesToMessageId } : {}),
+    ...(embeddedMedia.length > 0 ? { embeddedMedia } : {}),
+  };
+  return content;
 }
 
 // Space Call Messages

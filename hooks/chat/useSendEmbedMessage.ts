@@ -4,9 +4,9 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth, useWebSocket } from '@/context';
-import { sendEmbedMessage } from '@/services/space/spaceMessageService';
+import { sendEmbedMessage, buildPostWithEmbeddedMedia } from '@/services/space/spaceMessageService';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
-import type { Message, GetMessagesResult, EmbedMessage } from '@quilibrium/quorum-shared';
+import type { Message, GetMessagesResult } from '@quilibrium/quorum-shared';
 
 export interface UseSendEmbedMessageParams {
   spaceId: string;
@@ -78,15 +78,14 @@ export function useSendEmbedMessage() {
         createdDate: timestamp,
         modifiedDate: timestamp,
         lastModifiedHash: '',
-        content: {
-          type: 'embed',
-          senderId: user.address,
-          imageUrl: params.imageUrl,
-          thumbnailUrl: params.thumbnailUrl,
-          width: params.width?.toString(),
-          height: params.height?.toString(),
-          text: params.text,
-        } as EmbedMessage & { text?: string },
+        // Mirror the sent shape (post + embeddedMedia) so the sender's own
+        // optimistic row renders through the same path as the received message.
+        content: buildPostWithEmbeddedMedia(
+          user.address,
+          params.imageUrl,
+          params.thumbnailUrl,
+          params.text
+        ),
         reactions: [],
         mentions: { memberIds: [], roleIds: [], channelIds: [] },
         sendStatus: 'sending',
