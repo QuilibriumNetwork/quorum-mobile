@@ -468,6 +468,7 @@ export interface JoinParticipant {
   preKey: string;       // Pre-key public key (hex)
   userIcon: string;
   displayName: string;
+  joinedAt: number;     // Join timestamp (ms since epoch) — must be in the signed blob (desktop verifies it)
   signature: string;    // Ed448 signature (base64)
 }
 
