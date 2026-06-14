@@ -68,6 +68,15 @@ import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Sw
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logger } from '@quilibrium/quorum-shared';
+import {
+  validateSpaceName,
+  validateSpaceDescription,
+  MAX_NAME_LENGTH,
+} from '@quilibrium/quorum-shared';
+import {
+  translateValidationResult,
+  translateValidationResults,
+} from '@/hooks/validation/errorTranslator';
 import * as Skin from '@/theme/skins/geometry';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -84,8 +93,10 @@ interface SpaceSettingsModalProps {
 type TabType = 'general' | 'account' | 'members' | 'channels' | 'linked' | 'roles' | 'emojis' | 'stickers' | 'invites' | 'danger';
 
 // Validation constants
-const MIN_NAME_LENGTH = 2;
-const MAX_NAME_LENGTH = 50;
+// Name min/max + XSS now come from @quilibrium/quorum-shared (validateSpaceName);
+// MAX_NAME_LENGTH is imported for the input's maxLength prop. MAX_DESCRIPTION_LENGTH
+// stays local — it's the mobile cap passed into shared validateSpaceDescription and
+// shown in the char counter.
 const MAX_DESCRIPTION_LENGTH = 300;
 const MAX_EMOJIS = 50;
 const MAX_STICKERS = 50;
@@ -811,20 +822,18 @@ export default function SpaceSettingsModal({
   const [iconPickerChannelId, setIconPickerChannelId] = useState<string | null>(null);
 
   // Validation
-  const nameError = useMemo(() => {
-    const trimmed = spaceName.trim();
-    if (!trimmed) return 'Space name is required';
-    if (trimmed.length < MIN_NAME_LENGTH) return `Name must be at least ${MIN_NAME_LENGTH} characters`;
-    if (trimmed.length > MAX_NAME_LENGTH) return `Name must be ${MAX_NAME_LENGTH} characters or less`;
-    return null;
-  }, [spaceName]);
+  const nameError = useMemo(
+    () => translateValidationResult(validateSpaceName(spaceName)) ?? null,
+    [spaceName]
+  );
 
-  const descriptionError = useMemo(() => {
-    if (description.length > MAX_DESCRIPTION_LENGTH) {
-      return `Description must be ${MAX_DESCRIPTION_LENGTH} characters or less`;
-    }
-    return null;
-  }, [description]);
+  const descriptionError = useMemo(
+    () =>
+      translateValidationResults(
+        validateSpaceDescription(description, MAX_DESCRIPTION_LENGTH)
+      )[0] ?? null,
+    [description]
+  );
 
   const hasGeneralChanges = useMemo(() => {
     if (!space) return false;
