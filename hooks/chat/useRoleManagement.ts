@@ -20,6 +20,7 @@ import { getSpace, saveSpace } from '@/services/config/spaceStorage';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import { broadcastSpaceUpdate } from '@/services/space/broadcastSpaceUpdate';
 import type { Space, Role, Permission } from '@quilibrium/quorum-shared';
+import { toggleRolePermission } from '@quilibrium/quorum-shared';
 
 /**
  * Generate a UUID v4 using crypto.getRandomValues
@@ -414,14 +415,7 @@ export function useToggleRolePermission() {
       }
 
       const existingRole = space.roles[roleIndex];
-      const hasPermission = existingRole.permissions.includes(params.permission);
-
-      const updatedRole: Role = {
-        ...existingRole,
-        permissions: hasPermission
-          ? existingRole.permissions.filter(p => p !== params.permission)
-          : [...existingRole.permissions, params.permission],
-      };
+      const updatedRole = toggleRolePermission(existingRole, params.permission);
 
       const updatedRoles = [...space.roles];
       updatedRoles[roleIndex] = updatedRole;
