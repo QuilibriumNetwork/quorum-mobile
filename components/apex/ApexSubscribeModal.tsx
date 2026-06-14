@@ -48,6 +48,7 @@ import React from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { APEX_GOLD } from '@/components/ui/ApexAvatarRing';
+import { SpaceIcon } from '@/components/ui/SpaceIcon';
 import * as Skin from '@/theme/skins/geometry';
 
 interface ApexSubscribeModalProps {
@@ -356,11 +357,7 @@ export default function ApexSubscribeModal({ visible, onClose, mode }: ApexSubsc
         {space.iconUrl ? (
           <Image source={{ uri: space.iconUrl }} style={styles.spaceIcon} />
         ) : (
-          <View style={[styles.spaceIcon, styles.spaceIconPlaceholder]}>
-            <Text style={styles.spaceIconPlaceholderText}>
-              {(space.name || '?').charAt(0).toUpperCase()}
-            </Text>
-          </View>
+          <SpaceIcon name={space.name} size={36} style={styles.spaceIcon} />
         )}
         <View style={styles.spaceInfo}>
           <Text style={styles.spaceName} numberOfLines={1}>
@@ -744,17 +741,6 @@ const createStyles = (theme: AppTheme) =>
       width: 36,
       height: 36,
       borderRadius: Skin.radius(8),
-    },
-    spaceIconPlaceholder: {
-      backgroundColor: theme.colors.surface3,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    spaceIconPlaceholderText: {
-      fontSize: Skin.font(15),
-      fontFamily: theme.fonts.bold.fontFamily,
-      fontWeight: theme.fonts.bold.fontWeight,
-      color: theme.colors.textMuted,
     },
     spaceInfo: {
       flex: 1,

@@ -1,4 +1,4 @@
-import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
+import { SpaceIcon } from '@/components/ui/SpaceIcon';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useToast } from '@/context/ToastContext';
 import { useWebSocket } from '@/context/WebSocketContext';
@@ -87,7 +87,7 @@ export default function DiscoverSpacesScreen() {
           {isValidAvatarUri(item.icon) ? (
             <Image source={{ uri: item.icon }} style={styles.cardIcon} />
           ) : (
-            <DefaultAvatar address={item.space_address} size={48} style={styles.cardIcon} />
+            <SpaceIcon name={item.name} size={48} style={styles.cardIcon} />
           )}
           <View style={styles.cardInfo}>
             <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>

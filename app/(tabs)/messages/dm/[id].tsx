@@ -258,7 +258,7 @@ export default function DMChatScreen() {
         {conversation.icon ? (
           <Image source={{ uri: conversation.icon }} style={styles.headerAvatar} />
         ) : (
-          <DefaultAvatar address={conversation.address || ''} size={28} />
+          <DefaultAvatar displayName={title} address={conversation.address || ''} size={28} />
         )}
         <Text style={[styles.headerName, { color: theme.colors.textMain }]} numberOfLines={1}>
           {title}

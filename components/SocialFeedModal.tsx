@@ -26,6 +26,7 @@ import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { ApexAvatarRing } from '@/components/ui/ApexAvatarRing';
 import { useApexStatusForFids } from '@/hooks/useApex';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
+import { SpaceIcon } from '@/components/ui/SpaceIcon';
 import { useAuth } from '@/context/AuthContext';
 import { useConversations, type ConversationWithPreview } from '@/hooks/chat/useConversations';
 import { useFarcasterConversations, useSendFarcasterDirectCast } from '@/hooks/chat/useFarcasterDirectCasts';
@@ -771,20 +772,11 @@ function ShareToChatModal({
                       }}
                       onPress={() => setSelectedSpace(space)}
                     >
-                      <View
-                        style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: Skin.radius(8),
-                          backgroundColor: theme.colors.accent,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Text style={{ color: '#fff', fontSize: Skin.font(16), fontWeight: '600' }}>
-                          {space.spaceName?.charAt(0).toUpperCase() ?? 'S'}
-                        </Text>
-                      </View>
+                      <SpaceIcon
+                        name={space.spaceName}
+                        size={40}
+                        style={{ borderRadius: Skin.radius(8) }}
+                      />
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: Skin.font(15), fontWeight: '500', color: theme.colors.textMain }}>
                           {space.spaceName}
@@ -1967,6 +1959,7 @@ function QuoteCast({
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Skin.space(8) }}>
           <CachedAvatar
             source={pfpUrl ? { uri: pfpUrl } : null}
+            fallbackName={displayName || username}
             style={{
               width: 24,
               height: 24,
@@ -2549,6 +2542,7 @@ function ThreadDetailView({
         {/* Avatar — mirrors a real cast row */}
         <CachedAvatar
           source={avatarUri ? { uri: avatarUri } : null}
+          fallbackName={pending.author.displayName || pending.author.username}
           style={{
             width: 44,
             height: 44,
@@ -2727,6 +2721,7 @@ function ThreadDetailView({
               <ApexAvatarRing active={apexFids.has(cast.author.fid)} size={44}>
                 <CachedAvatar
                   source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
+                  fallbackName={cast.author.displayName || cast.author.username}
                   style={{
                     width: 44,
                     height: 44,
@@ -3235,6 +3230,7 @@ function ThreadDetailView({
                 <View style={{ marginRight: Skin.space(12) }}>
                   <CachedAvatar
                     source={replyAvatarUri ? { uri: replyAvatarUri } : null}
+                    fallbackName={currentUser?.displayName || currentUser?.farcaster?.username}
                     style={{
                       width: 44,
                       height: 44,
@@ -3602,6 +3598,7 @@ export function ProfileView({
               <ApexAvatarRing active={apexFids.has(fid)} size={80}>
                 <CachedAvatar
                   source={author.pfp?.url ? { uri: author.pfp.url } : null}
+                  fallbackName={author.displayName || author.username}
                   style={{
                     width: 80,
                     height: 80,
@@ -3769,6 +3766,7 @@ export function ProfileView({
               >
                 <CachedAvatar
                   source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
+                  fallbackName={cast.author.displayName || cast.author.username}
                   style={{
                     width: 44,
                     height: 44,
@@ -4382,6 +4380,7 @@ function ChannelView({
               >
                 <CachedAvatar
                   source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
+                  fallbackName={cast.author.displayName || cast.author.username}
                   style={{
                     width: 44,
                     height: 44,
@@ -6065,6 +6064,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         <TouchableOpacity style={styles.searchResultItem} onPress={() => handleSearchUserPress(user)}>
           <CachedAvatar
             source={user.pfp?.url ? { uri: user.pfp.url } : null}
+            fallbackName={user.displayName || user.username}
             style={styles.searchResultAvatar}
           />
           <View style={styles.searchResultInfo}>
@@ -6114,6 +6114,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         <TouchableOpacity style={styles.searchResultItem} onPress={() => handleSearchCastPress(cast)}>
           <CachedAvatar
             source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
+            fallbackName={cast.author.displayName || cast.author.username}
             style={styles.searchResultAvatar}
           />
           <View style={styles.searchResultInfo}>
@@ -6786,6 +6787,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                           {/* Avatar — mirrors a real feed cast */}
                           <CachedAvatar
                             source={avatarUri ? { uri: avatarUri } : null}
+                            fallbackName={p.author.displayName || p.author.username}
                             style={{
                               width: 44,
                               height: 44,

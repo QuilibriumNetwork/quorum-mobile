@@ -109,7 +109,7 @@ export function InCallScreen() {
           />
         ) : (
           <View style={[styles.remoteVideoPlaceholder, { backgroundColor: theme.colors.surface1 }]}>
-            <DefaultAvatar address={activeCall.recipientAddress} size={96} />
+            <DefaultAvatar displayName={activeCall.recipientDisplayName} address={activeCall.recipientAddress} size={96} />
             <Text style={[styles.callerName, { color: theme.colors.text }]}>
               {activeCall.recipientDisplayName}
             </Text>
@@ -184,7 +184,7 @@ export function InCallScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 60, backgroundColor: theme.colors.background }]}>
       <View style={styles.callerInfo}>
-        <DefaultAvatar address={activeCall.recipientAddress} size={80} />
+        <DefaultAvatar displayName={activeCall.recipientDisplayName} address={activeCall.recipientAddress} size={80} />
         <Text style={[styles.callerName, { color: theme.colors.text }]}>
           {activeCall.recipientDisplayName}
         </Text>

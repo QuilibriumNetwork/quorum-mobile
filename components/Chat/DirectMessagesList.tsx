@@ -154,7 +154,7 @@ const DMConversationItem = React.memo(function DMConversationItem({
         {hasValidIcon ? (
           <Image source={{ uri: item.icon }} style={styles.avatar} />
         ) : (
-          <DefaultAvatar address={item.address || ''} size={48} />
+          <DefaultAvatar displayName={displayName} address={item.address || ''} size={48} />
         )}
         {hasUnread && <View style={styles.unreadBadge} />}
         {isFarcaster && (

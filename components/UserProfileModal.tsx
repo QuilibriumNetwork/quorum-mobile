@@ -156,7 +156,7 @@ export default function UserProfileModal({
             {hasValidAvatar ? (
               <Image source={{ uri: user.userAvatar }} style={styles.avatar} />
             ) : (
-              <DefaultAvatar address={user.userId} size={100} style={styles.avatar} />
+              <DefaultAvatar displayName={user.userName} address={user.userId} size={100} style={styles.avatar} />
             )}
           </View>
           <Text style={styles.displayName}>{user.userName}</Text>
