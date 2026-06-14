@@ -865,7 +865,8 @@ export default function SpaceSettingsModal({
       await updateSpaceMutation.mutateAsync({
         spaceId,
         spaceName: spaceName.trim(),
-        description: description.trim() || undefined,
+        // keep "" so a cleared description saves (undefined would fall back to the old value)
+        description: description.trim(),
         iconUrl: iconUrl || undefined,
         bannerUrl: bannerUrl || undefined,
         isRepudiable,
