@@ -582,10 +582,15 @@ export function useJoinSpace() {
             const identityKeyHex = bytesToHex(deviceKeyset.identityPublicKey);
             const preKeyHex = bytesToHex(deviceKeyset.preKeyPublicKey);
 
-            // Build the message to sign (same as desktop)
-            // address + id + inboxAddress + pubKey + inboxKey + identityKey + preKey + userIcon + displayName
+            // Build the message to sign (must match desktop byte-for-byte).
+            // Desktop signs a 10-field blob ending in joinedAt (InvitationService.ts:826-838);
+            // mobile previously signed only 9 fields (stopping at displayName), so desktop's
+            // verify always failed and never saved us as a space member. Append joinedAt last.
+            // address + id + inboxAddress + pubKey + inboxKey + identityKey + preKey + userIcon + displayName + joinedAt
             const userIcon = user?.profileImage || '';
             const displayName = user?.displayName || user?.username || '';
+            // Mint once so the signed value and the wire value are identical.
+            const joinedAt = Date.now();
             const msgToSign = user!.address +
               ratchet.id +
               inboxAddress +
@@ -594,8 +599,13 @@ export function useJoinSpace() {
               identityKeyHex +
               preKeyHex +
               userIcon +
-              displayName;
-            const msgToSignBase64 = btoa(msgToSign);
+              displayName +
+              joinedAt;
+            // UTF-8 base64 to match desktop's Buffer.from(str,'utf-8').toString('base64').
+            // (Plain btoa() is latin1 and throws/diverges on non-ASCII display names or pfp URLs.)
+            const msgToSignBase64 = numberArrayToBase64(
+              Array.from(new TextEncoder().encode(msgToSign))
+            );
 
             // Sign with the inbox private key (Ed448)
             const inboxPrivateKeyBase64 = numberArrayToBase64(inboxKeypair.private_key);
@@ -612,6 +622,7 @@ export function useJoinSpace() {
               preKey: preKeyHex,
               userIcon: userIcon,
               displayName: displayName,
+              joinedAt,
               signature: signatureBase64,
             };
 
