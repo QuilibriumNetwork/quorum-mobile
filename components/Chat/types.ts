@@ -416,8 +416,32 @@ export function toDisplayMessage(
     if (content.height) displayMessage.mediaHeight = parseInt(content.height, 10);
   }
 
-  // Check for embedded image URLs in post text (e.g., from desktop sending "[Media]" with URL)
-  if (content.type === 'post' && displayMessage.content) {
+  // Desktop (and converged mobile) sends a captioned/standalone image as a
+  // `post` with the image bytes inlined in `content.embeddedMedia`, NOT as an
+  // `embed`. Extract the image here so it renders through the existing embed
+  // image path; the `post.text` stays as the caption (already in
+  // displayMessage.content via getMessageText).
+  let renderedEmbeddedMedia = false;
+  if (content.type === 'post' && Array.isArray(content.embeddedMedia) && content.embeddedMedia.length > 0) {
+    const media = content.embeddedMedia;
+    const image = media.find((m) => m.type === 'image');
+    if (image) {
+      // Match a thumbnail to the full image by shared `key` (the large-GIF /
+      // thumbnailed case). data is raw base64 (no data: prefix) — wrap it.
+      const thumbnail = media.find((m) => m.type === 'image-thumbnail' && m.key === image.key);
+      displayMessage.renderType = 'embed';
+      displayMessage.imageUrl = `data:${image.mimeType};base64,${image.data}`;
+      if (thumbnail) {
+        displayMessage.thumbnailUrl = `data:${thumbnail.mimeType};base64,${thumbnail.data}`;
+      }
+      renderedEmbeddedMedia = true;
+    }
+  }
+
+  // Back-compat: older desktop builds sent images as "[Media]" + an inline
+  // image URL in the post text. Only scan when embeddedMedia didn't already
+  // produce an image, so we don't double-handle a converged message.
+  if (!renderedEmbeddedMedia && content.type === 'post' && displayMessage.content) {
     const embeddedImages = extractImageUrls(displayMessage.content);
     if (embeddedImages.length > 0) {
       // Upgrade to embed render type and extract the image
