@@ -43,6 +43,8 @@ import {
   useReorderChannels,
 } from '@/hooks/chat';
 import { useSpaceMembers } from '@/hooks/chat/useSpaces';
+import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
+import { useUserMuting } from '@/hooks/chat/useUserMuting';
 import { useDeleteSpace, useLeaveSpace, useUpdateSpace } from '@/hooks/chat/useSpaceSettings';
 import { useSpaceApexConfig, useSetSpaceApexConfig } from '@/hooks/useApex';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
@@ -64,7 +66,10 @@ import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
 import { hexToBytes, type Emoji, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
 import * as Clipboard from 'expo-clipboard';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import type { UserProfileInfo } from '@/components/UserProfileModal';
+
+const UserProfileModal = React.lazy(() => import('@/components/UserProfileModal'));
 import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -487,6 +492,18 @@ export default function SpaceSettingsModal({
     const ownerKey = getSpaceKey(spaceId, 'owner');
     return !!ownerKey;
   }, [spaceId]);
+
+  // Tapping a member avatar opens their profile (same as tapping an avatar on
+  // a message). This is the members-list entry point for viewing a profile,
+  // messaging/muting the user, and — for owners — assigning/removing roles.
+  const [selectedUserProfile, setSelectedUserProfile] = useState<UserProfileInfo | null>(null);
+  const startDirectMessage = useStartDirectMessage();
+  // Own the mute logic locally (same hook the channel screen uses) so the
+  // members-list profile modal can Mute/Unmute regardless of whether the
+  // parent passed mute props. Falls back to the parent props if provided.
+  const { toggleMuteUser: localToggleMuteUser, isUserMuted: localIsUserMuted } = useUserMuting(spaceId);
+  const toggleMuteUser = onToggleMuteUser ?? localToggleMuteUser;
+  const isUserMutedFn = isUserMuted ?? localIsUserMuted;
 
   // Load space data
   const [space, setSpace] = useState<Space | null>(null);
@@ -1717,6 +1734,7 @@ export default function SpaceSettingsModal({
 
 
   const renderMembersTab = () => (
+    <>
     <ScrollView
       style={styles.membersScrollView}
       showsVerticalScrollIndicator={true}
@@ -1731,7 +1749,26 @@ export default function SpaceSettingsModal({
           const memberRoles = getMemberRoles(member.address);
           return (
             <View key={member.address} style={styles.memberItem}>
-              <View style={styles.memberAvatar}>
+              <TouchableOpacity
+                style={styles.memberAvatar}
+                activeOpacity={0.7}
+                onPress={() => {
+                  // Enrich with fields the SpaceMember record carries that the
+                  // shared type doesn't declare (farcaster linkage).
+                  const m = member as typeof member & {
+                    farcasterFid?: number;
+                    farcasterUsername?: string;
+                  };
+                  setSelectedUserProfile({
+                    userId: member.address,
+                    userName: member.display_name || member.name || truncateAddress(member.address),
+                    userAvatar: member.profile_image,
+                    bio: member.bio,
+                    farcasterFid: m.farcasterFid,
+                    farcasterUsername: m.farcasterUsername,
+                  });
+                }}
+              >
                 {member.profile_image ? (
                   <Image source={{ uri: member.profile_image }} style={styles.memberAvatarImage} />
                 ) : (
@@ -1741,7 +1778,7 @@ export default function SpaceSettingsModal({
                     size={44}
                   />
                 )}
-              </View>
+              </TouchableOpacity>
               <View style={styles.memberInfo}>
                 <Text style={styles.memberName}>
                   {member.display_name || member.name || truncateAddress(member.address)}
@@ -1804,6 +1841,26 @@ export default function SpaceSettingsModal({
           </View>
         )}
     </ScrollView>
+
+    {selectedUserProfile && (
+      <Suspense fallback={null}>
+        <UserProfileModal
+          visible
+          onClose={() => setSelectedUserProfile(null)}
+          user={selectedUserProfile}
+          spaceId={spaceId}
+          roles={roles}
+          isSpaceOwner={isSpaceOwner}
+          onStartDM={(userId) => {
+            setSelectedUserProfile(null);
+            startDirectMessage(userId);
+          }}
+          onMuteUser={(userId) => toggleMuteUser(userId)}
+          isUserMuted={isUserMutedFn(selectedUserProfile.userId)}
+        />
+      </Suspense>
+    )}
+    </>
   );
 
   const renderChannelsTab = () => (
