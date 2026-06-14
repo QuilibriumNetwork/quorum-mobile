@@ -34,7 +34,7 @@ export function IncomingCallScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 60, backgroundColor: theme.colors.background }]}>
       <View style={styles.callerInfo}>
-        <DefaultAvatar address={incomingCall.callerAddress} size={96} />
+        <DefaultAvatar displayName={incomingCall.callerDisplayName} address={incomingCall.callerAddress} size={96} />
         <Text style={[styles.callerName, { color: theme.colors.text }]}>
           {incomingCall.callerDisplayName}
         </Text>

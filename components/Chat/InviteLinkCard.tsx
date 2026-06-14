@@ -13,6 +13,7 @@ import { useTheme, type AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { SpaceIcon } from '@/components/ui/SpaceIcon';
 import * as Skin from '@/theme/skins/geometry';
 
 // Valid invite link prefixes for detection
@@ -192,11 +193,7 @@ export function InviteLinkCard({
         {spaceInfo.iconUrl ? (
           <Image source={{ uri: spaceInfo.iconUrl }} style={styles.icon} />
         ) : (
-          <View style={styles.iconPlaceholder}>
-            <Text style={styles.iconPlaceholderText}>
-              {spaceInfo.spaceName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
+          <SpaceIcon name={spaceInfo.spaceName} size={44} style={styles.icon} />
         )}
       </View>
 
@@ -270,20 +267,6 @@ const createStyles = (theme: AppTheme) =>
       width: 44,
       height: 44,
       borderRadius: Skin.radius(8),
-    },
-    iconPlaceholder: {
-      width: 44,
-      height: 44,
-      borderRadius: Skin.radius(8),
-      backgroundColor: theme.colors.primary + '20',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    iconPlaceholderText: {
-      fontSize: Skin.font(20),
-      fontFamily: theme.fonts.bold.fontFamily,
-      fontWeight: theme.fonts.bold.fontWeight,
-      color: theme.colors.primary,
     },
     infoContainer: {
       flex: 1,

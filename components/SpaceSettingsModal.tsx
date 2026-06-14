@@ -20,6 +20,7 @@ import ShareInviteSheet from '@/components/ShareInviteSheet';
 import { BaseModal } from '@/components/shared';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { IconPicker } from '@/components/ui/IconPicker';
+import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useAuth, useWebSocket } from '@/context';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import { maybeSendUpdateProfileMessage } from '@/services/space/spaceMessageService';
@@ -1734,11 +1735,11 @@ export default function SpaceSettingsModal({
                 {member.profile_image ? (
                   <Image source={{ uri: member.profile_image }} style={styles.memberAvatarImage} />
                 ) : (
-                  <View style={styles.memberAvatarPlaceholder}>
-                    <Text style={styles.memberAvatarText}>
-                      {(member.display_name || member.name || member.address).charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
+                  <DefaultAvatar
+                    displayName={member.display_name || member.name}
+                    address={member.address}
+                    size={44}
+                  />
                 )}
               </View>
               <View style={styles.memberInfo}>
@@ -3213,20 +3214,6 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       width: 44,
       height: 44,
       borderRadius: Skin.radius(22),
-    },
-    memberAvatarPlaceholder: {
-      width: 44,
-      height: 44,
-      borderRadius: Skin.radius(22),
-      backgroundColor: theme.colors.surface5,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    memberAvatarText: {
-      fontSize: Skin.font(18),
-      fontFamily: theme.fonts.bold.fontFamily,
-      fontWeight: theme.fonts.bold.fontWeight,
-      color: theme.colors.textMain,
     },
     memberInfo: {
       flex: 1,

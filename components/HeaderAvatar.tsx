@@ -26,6 +26,8 @@ export function HeaderAvatar() {
   // profile image first, then Farcaster pfp as fallback so the header
   // avatar matches the profile screen.
   const uri = user?.profileImage || user?.farcaster?.pfpUrl || undefined;
+  // When no photo, fall back to name initials (not the generic blue logo).
+  const fallbackName = user?.displayName || user?.primaryUsername || '';
 
   return (
     <TouchableOpacity
@@ -43,7 +45,7 @@ export function HeaderAvatar() {
           },
         ]}
       >
-        <CachedAvatar source={uri ? { uri } : null} style={styles.avatar} />
+        <CachedAvatar source={uri ? { uri } : null} style={styles.avatar} fallbackName={fallbackName} />
       </View>
     </TouchableOpacity>
   );

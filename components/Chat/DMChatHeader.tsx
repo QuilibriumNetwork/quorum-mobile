@@ -54,7 +54,7 @@ export const DMChatHeader = React.memo(function DMChatHeader({
         {conversation.icon ? (
           <Image source={{ uri: conversation.icon }} style={styles.avatar} />
         ) : (
-          <DefaultAvatar address={conversation.address || ''} size={32} />
+          <DefaultAvatar displayName={conversation.displayName} address={conversation.address || ''} size={32} />
         )}
         <Text style={styles.title} numberOfLines={1}>{displayName}</Text>
       </View>

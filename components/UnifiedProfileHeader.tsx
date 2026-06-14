@@ -66,6 +66,7 @@ export default function UnifiedProfileHeader({
         <CachedAvatar
           source={avatarUri ? { uri: avatarUri } : null}
           style={styles.mergedAvatar}
+          fallbackName={displayName}
         />
         <View style={styles.editBadge}>
           <IconSymbol name="pencil" size={12} color="#fff" />
@@ -115,6 +116,7 @@ function QuorumOnlyHeader({
         <CachedAvatar
           source={user.profileImage ? { uri: user.profileImage } : null}
           style={styles.mergedAvatar}
+          fallbackName={displayName}
         />
         <View style={styles.editBadge}>
           <IconSymbol name="pencil" size={12} color="#fff" />
@@ -157,6 +159,7 @@ function QuorumCard({
       <CachedAvatar
         source={user.profileImage ? { uri: user.profileImage } : null}
         style={styles.cardAvatar}
+        fallbackName={displayName}
       />
       <View style={styles.cardText}>
         <View style={styles.cardLabelRow}>
@@ -193,6 +196,7 @@ function FarcasterCard({
       <CachedAvatar
         source={avatarUri ? { uri: avatarUri } : null}
         style={styles.cardAvatar}
+        fallbackName={displayName}
       />
       <View style={styles.cardText}>
         <View style={styles.cardLabelRow}>

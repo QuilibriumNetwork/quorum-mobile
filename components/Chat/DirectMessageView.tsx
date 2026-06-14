@@ -85,7 +85,7 @@ export function DirectMessageView({
         {conversation.icon ? (
           <Image source={{ uri: conversation.icon }} style={styles.headerAvatar} />
         ) : (
-          <DefaultAvatar address={conversation.address || ''} size={40} />
+          <DefaultAvatar displayName={displayName} address={conversation.address || ''} size={40} />
         )}
         <View style={styles.headerInfo}>
           <Text style={styles.headerName} numberOfLines={1}>

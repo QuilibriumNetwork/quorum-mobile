@@ -111,7 +111,7 @@ export function KickUserModal({
           {userIcon ? (
             <Image source={{ uri: userIcon }} style={styles.avatar} />
           ) : (
-            <DefaultAvatar address={userAddress} size={40} />
+            <DefaultAvatar displayName={userName} address={userAddress} size={40} />
           )}
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>

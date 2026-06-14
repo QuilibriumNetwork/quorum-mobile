@@ -139,7 +139,7 @@ export default function NotificationsScreen() {
           {item.actorAvatarUrl ? (
             <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
           ) : item.source === 'farcaster' ? (
-            <DefaultAvatar address={item.id} size={36} />
+            <DefaultAvatar displayName={item.title} address={item.id} size={36} />
           ) : (
             <View style={styles.iconWrap}>
               <IconSymbol name="bell.fill" color={theme.colors.primary} size={18} />

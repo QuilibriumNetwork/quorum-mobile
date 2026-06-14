@@ -1,4 +1,4 @@
-import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
+import { SpaceIcon } from '@/components/ui/SpaceIcon';
 import { HeaderAvatar } from '@/components/HeaderAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useSpaces } from '@/hooks/chat/useSpaces';
@@ -60,7 +60,7 @@ const SpaceRow = React.memo(function SpaceRow({
         {isValidAvatarUri(item.icon) ? (
           <Image source={{ uri: item.icon }} style={styles.avatar} />
         ) : (
-          <DefaultAvatar address={item.id} size={48} style={styles.avatar} />
+          <SpaceIcon name={item.name} size={48} style={styles.avatar} />
         )}
       </View>
       <View style={styles.rowContent}>
