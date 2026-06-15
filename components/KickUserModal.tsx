@@ -2,9 +2,8 @@
  * KickUserModal - Modal for kicking a user from a space
  *
  * Features:
- * - Two-step confirmation to prevent accidental kicks
+ * - Single-press kick (reaching this modal IS the deliberate confirmation)
  * - Shows user avatar and truncated address
- * - 5-second timeout between confirmation steps
  * - Minimum 3-second overlay display during operation
  * - Modal locked during operation (can't close)
  */
@@ -41,49 +40,41 @@ export function KickUserModal({
 
   const {
     kicking,
-    confirmationStep,
-    handleKickClick,
     kickUserFromSpace,
-    resetConfirmation,
   } = useUserKicking({ spaceId });
 
-  // Reset confirmation when modal closes
+  // Reset the saving overlay when the modal closes.
   useEffect(() => {
     if (!visible) {
-      resetConfirmation();
       setIsSaving(false);
     }
-  }, [visible, resetConfirmation]);
+  }, [visible]);
 
+  // Single press kicks — reaching this modal (via a member's Kick button) is
+  // already the deliberate confirmation step, so no in-modal double-tap.
   const handleKickWithOverlay = useCallback(async () => {
-    if (confirmationStep === 0) {
-      // First click - just advance to confirmation step
-      handleKickClick(userAddress, () => {});
-    } else {
-      // Second click - execute kick with overlay
-      if (!userAddress) return;
+    if (!userAddress) return;
 
-      setIsSaving(true);
+    setIsSaving(true);
 
-      // Ensure minimum 3 second overlay display time
-      const startTime = Date.now();
-      const minDisplayTime = 3000;
+    // Ensure minimum 3 second overlay display time
+    const startTime = Date.now();
+    const minDisplayTime = 3000;
 
-      try {
-        await kickUserFromSpace(userAddress);
+    try {
+      await kickUserFromSpace(userAddress);
 
-        // If operation completed too quickly, wait for minimum display time
-        const elapsed = Date.now() - startTime;
-        if (elapsed < minDisplayTime) {
-          await new Promise(resolve => setTimeout(resolve, minDisplayTime - elapsed));
-        }
-
-        onClose();
-      } catch (error) {
-        setIsSaving(false);
+      // If operation completed too quickly, wait for minimum display time
+      const elapsed = Date.now() - startTime;
+      if (elapsed < minDisplayTime) {
+        await new Promise(resolve => setTimeout(resolve, minDisplayTime - elapsed));
       }
+
+      onClose();
+    } catch (error) {
+      setIsSaving(false);
     }
-  }, [confirmationStep, handleKickClick, kickUserFromSpace, userAddress, onClose]);
+  }, [kickUserFromSpace, userAddress, onClose]);
 
   const styles = createStyles(theme);
 
@@ -146,9 +137,7 @@ export function KickUserModal({
             onPress={handleKickWithOverlay}
             disabled={isSaving || kicking}
           >
-            <Text style={styles.kickButtonText}>
-              {confirmationStep === 0 ? 'Kick' : 'Click again to confirm'}
-            </Text>
+            <Text style={styles.kickButtonText}>Kick</Text>
           </TouchableOpacity>
         </View>
       </View>

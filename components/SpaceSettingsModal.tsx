@@ -17,7 +17,7 @@
 import { KickUserModal } from '@/components/KickUserModal';
 import SpaceChannelBindingPicker from '@/components/SpaceChannelBindingPicker';
 import ShareInviteSheet from '@/components/ShareInviteSheet';
-import { BaseModal } from '@/components/shared';
+import { BaseModal, TypeToConfirmModal } from '@/components/shared';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { IconPicker } from '@/components/ui/IconPicker';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
@@ -809,7 +809,7 @@ export default function SpaceSettingsModal({
   const [directorySubmitted, setDirectorySubmitted] = useState(false);
 
   // Delete/Leave confirmation
-  const [deleteConfirmStep, setDeleteConfirmStep] = useState(0);
+  const [showDeleteSpaceConfirm, setShowDeleteSpaceConfirm] = useState(false);
   const [leaveConfirmStep, setLeaveConfirmStep] = useState(0);
 
   // Kick modal state
@@ -870,7 +870,7 @@ export default function SpaceSettingsModal({
     setGeneratedInviteType(null);
     setInviteType('private');
     setHasLoadedExistingInvite(false);
-    setDeleteConfirmStep(0);
+    setShowDeleteSpaceConfirm(false);
     setLeaveConfirmStep(0);
     setKickTarget(null);
     onClose();
@@ -1356,12 +1356,7 @@ export default function SpaceSettingsModal({
   }, [space, spaceId, moveChannelMutation]);
 
   const handleDeleteSpace = useCallback(async () => {
-    if (deleteConfirmStep === 0) {
-      setDeleteConfirmStep(1);
-      setTimeout(() => setDeleteConfirmStep(0), 5000);
-      return;
-    }
-
+    setShowDeleteSpaceConfirm(false);
     try {
       await deleteSpaceMutation.mutateAsync({ spaceId });
       handleClose();
@@ -1369,7 +1364,17 @@ export default function SpaceSettingsModal({
     } catch (error) {
       Alert.alert('Error', 'Failed to delete space');
     }
-  }, [spaceId, deleteConfirmStep, deleteSpaceMutation, handleClose, onSpaceDeleted]);
+  }, [spaceId, deleteSpaceMutation, handleClose, onSpaceDeleted]);
+
+  // Channel + member counts shown in the Delete-Space type-to-confirm modal
+  // (mirrors desktop's Danger.tsx stats).
+  const deleteSpaceStats = useMemo(
+    () => [
+      { label: 'Channels', value: (space?.groups ?? []).reduce((n, g) => n + (g.channels?.length ?? 0), 0) },
+      { label: 'Members', value: members.length },
+    ],
+    [space?.groups, members.length],
+  );
 
   const handleLeaveSpace = useCallback(async () => {
     if (leaveConfirmStep === 0) {
@@ -2511,15 +2516,13 @@ export default function SpaceSettingsModal({
         </Text>
         <TouchableOpacity
           style={styles.dangerButton}
-          onPress={handleDeleteSpace}
+          onPress={() => setShowDeleteSpaceConfirm(true)}
           disabled={deleteSpaceMutation.isPending}
         >
           {deleteSpaceMutation.isPending ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text style={styles.dangerButtonText}>
-              {deleteConfirmStep === 0 ? 'Delete Space' : 'Click again to confirm'}
-            </Text>
+            <Text style={styles.dangerButtonText}>Delete Space</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -2674,6 +2677,18 @@ export default function SpaceSettingsModal({
           spaceName={space.spaceName}
         />
       )}
+
+      {/* Delete Space — type-to-confirm (T3, desktop parity: type "delete") */}
+      <TypeToConfirmModal
+        visible={showDeleteSpaceConfirm}
+        title="Delete Space"
+        body="This permanently removes the Space and all its settings. This cannot be undone."
+        keyword="delete"
+        confirmLabel="Delete Space"
+        stats={deleteSpaceStats}
+        onConfirm={handleDeleteSpace}
+        onCancel={() => setShowDeleteSpaceConfirm(false)}
+      />
     </BaseModal>
   );
 }

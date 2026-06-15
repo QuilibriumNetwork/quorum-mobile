@@ -5,7 +5,7 @@ import MarketplaceModal from '@/components/qns/MarketplaceModal';
 import OffersModal from '@/components/qns/OffersModal';
 import NameDetailModal from '@/components/qns/NameDetailModal';
 import RegisterPaymentModal from '@/components/qns/RegisterPaymentModal';
-import { BaseModal } from '@/components/shared';
+import { BaseModal, TypeToConfirmModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ApexAvatarRing, APEX_GOLD } from '@/components/ui/ApexAvatarRing';
 import { useApexSubscription, type ApexSubscriptionState } from '@/hooks/useApex';
@@ -309,6 +309,8 @@ export default function ProfileModal({
   const [activeTab, setActiveTab] = React.useState<'profile' | 'premium' | 'settings'>('profile');
   const [usernameSearch, setUsernameSearch] = React.useState('');
   const [inviteCode, setInviteCode] = React.useState('');
+  // Reset App Data — type-to-confirm (T3: the only catastrophic op; wipes keys).
+  const [showResetConfirm, setShowResetConfirm] = React.useState(false);
   // Hypersnap signer opt-in. Mirrors the MMKV-persisted choice that the
   // first-run prompt writes; this switch is the only way to change the
   // choice after that prompt has been answered.
@@ -703,25 +705,13 @@ export default function ProfileModal({
     }
   }, [setAllowSync]);
 
-  const handleResetAppData = () => {
-    Alert.alert(
-      'Reset App Data',
-      'This will delete all your data including your private keys. Make sure you have backed up your recovery phrase. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            // Clear React Query cache
-            queryClient.clear();
-            // Sign out clears MMKV storage and secure storage
-            await signOut();
-            onClose();
-          },
-        },
-      ]
-    );
+  const handleResetAppData = async () => {
+    setShowResetConfirm(false);
+    // Clear React Query cache
+    queryClient.clear();
+    // Sign out clears MMKV storage and secure storage
+    await signOut();
+    onClose();
   };
 
   const handleExportRecoveryPhrase = React.useCallback(() => {
@@ -2248,7 +2238,7 @@ export default function ProfileModal({
             {/* Danger Zone */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Danger Zone</Text>
-              <TouchableOpacity style={[styles.actionButton, styles.dangerButton]} onPress={handleResetAppData}>
+              <TouchableOpacity style={[styles.actionButton, styles.dangerButton]} onPress={() => setShowResetConfirm(true)}>
                 <IconSymbol name="arrow.counterclockwise" size={20} color={theme.colors.danger} />
                 <Text style={[styles.actionButtonText, styles.dangerText]}>Reset App Data</Text>
               </TouchableOpacity>
@@ -2552,6 +2542,17 @@ export default function ProfileModal({
           ))}
         </ScrollView>
       </BaseModal>
+
+      {/* Reset App Data — type-to-confirm (T3, type "reset") */}
+      <TypeToConfirmModal
+        visible={showResetConfirm}
+        title="Reset App Data"
+        body="This permanently deletes all your data, including your private keys. Back up your recovery phrase first — this cannot be undone."
+        keyword="reset"
+        confirmLabel="Reset App Data"
+        onConfirm={handleResetAppData}
+        onCancel={() => setShowResetConfirm(false)}
+      />
     </>
   );
 }
