@@ -18,7 +18,7 @@ import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
-import { deleteSkin, listSkins, saveSkin } from '@/services/theme/skinPrefs';
+import { deleteSkin, listSkins, saveSkin, type AppearancePref } from '@/services/theme/skinPrefs';
 import { validateSkin } from '@/theme/skins/validate';
 import { SAMPLE_SKINS } from '@/theme/skins/samples';
 import type { SkinOverride } from '@/theme/skins/types';
@@ -30,11 +30,50 @@ import {
   type SkinSummary,
 } from '@/services/skins/skinsClient';
 import { SkinEditor } from '@/components/skins/SkinEditor';
+import { SkinSwatch } from '@/components/skins/SkinSwatch';
+import { LightTheme, DarkTheme } from '@/theme';
 import { logger } from '@quilibrium/quorum-shared';
 import * as Skin from '@/theme/skins/geometry';
 
+/** Swatch preview (accent + background + own corner radius) for a skin row. */
+interface SwatchSpec {
+  accent: string;
+  background: string;
+  cornerRadius: number;
+}
+
+/**
+ * Resolve a skin's preview swatch WITHOUT applying it.
+ *
+ * - Colors: the skin's own `accent`/`surface1` for its base; a color-less skin
+ *   (Brutalist/Roomy — geometry only) falls back to the UNSKINNED base theme's
+ *   real accent/surface1, NOT a grey placeholder. That fallback is fixed per
+ *   `base` (light vs dark) so the chip never shifts with the app's live
+ *   appearance toggle — a skin pins its own base.
+ * - Corner radius: mirrors `geometry.ts:radius()`, scaled by the SKIN's OWN
+ *   `deriveGeometry`. The base multiplier is the unskinned `LightTheme.radii.md`
+ *   — using the LIVE `theme.radii.md` was the bug that made every swatch turn
+ *   square whenever a square-corner skin (Brutalist) was the active one.
+ */
+function swatchForSkin(skin: SkinOverride): SwatchSpec {
+  const baseTheme = skin.base === 'dark' ? DarkTheme : LightTheme;
+  const tokens = skin.colors?.[skin.base];
+  const { radiusScale, radiusSet } = Skin.deriveGeometry(skin);
+  const cornerRadius =
+    radiusSet !== undefined
+      ? radiusSet === 0
+        ? 0
+        : radiusSet
+      : Math.round(baseTheme.radii.md * radiusScale);
+  return {
+    accent: tokens?.accent ?? baseTheme.colors.accent,
+    background: tokens?.surface1 ?? baseTheme.colors.surface1,
+    cornerRadius,
+  };
+}
+
 export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { theme, activeSkin, setActiveSkin } = useTheme();
+  const { theme, activeSkin, setActiveSkin, appearance, setAppearance } = useTheme();
   const { user } = useAuth();
   const address = user?.address;
   const [refresh, setRefresh] = React.useState(0);
@@ -245,6 +284,21 @@ export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: ()
               description="The built-in Quorum theme"
               active={!activeSkin}
               onPress={() => apply(null)}
+              // Default = the built-in unskinned theme, so ALL of its swatch
+              // (accent, background, radius) must come from the base theme, not
+              // the live `theme` — otherwise an active skin (e.g. Midnight Neon)
+              // bleeds its purple accent / square corners into the Default chip.
+              // Tracks light/dark via `theme.dark`, which is correct.
+              swatch={{
+                accent: (theme.dark ? DarkTheme : LightTheme).colors.accent,
+                background: (theme.dark ? DarkTheme : LightTheme).colors.surface1,
+                cornerRadius: (theme.dark ? DarkTheme : LightTheme).radii.md,
+              }}
+              footer={
+                !activeSkin ? (
+                  <AppearanceSegments value={appearance} onChange={setAppearance} theme={theme} />
+                ) : undefined
+              }
               theme={theme}
             />
             {skins.map((skin) => {
@@ -258,6 +312,7 @@ export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: ()
                   onPress={() => apply(skin)}
                   onLongPress={isSample ? undefined : () => confirmDelete(skin)}
                   onDelete={isSample ? undefined : () => confirmDelete(skin)}
+                  swatch={swatchForSkin(skin)}
                   theme={theme}
                 />
               );
@@ -284,6 +339,10 @@ export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: ()
                 description={`${entry.authorName ? `by ${entry.authorName} · ` : ''}${entry.installs} install${entry.installs === 1 ? '' : 's'}`}
                 active={activeSkin?.id === entry.id}
                 onPress={() => installFromGallery(entry, true)}
+                // No swatch here on purpose: gallery summaries carry no color
+                // data, so a chip would be a misleading all-grey fake-preview
+                // identical for every skin. Real per-skin gallery previews are
+                // deferred — see .agents/tasks/2026-06-15-skin-gallery-real-color-swatches.md.
                 theme={theme}
               />
             ))}
@@ -302,6 +361,8 @@ function SkinRow({
   onPress,
   onLongPress,
   onDelete,
+  swatch,
+  footer,
   theme,
 }: {
   label: string;
@@ -310,35 +371,114 @@ function SkinRow({
   onPress: () => void;
   onLongPress?: () => void;
   onDelete?: () => void;
+  swatch?: SwatchSpec;
+  footer?: React.ReactNode;
   theme: ReturnType<typeof useTheme>['theme'];
 }) {
+  // When a footer is present (the Default row), the highlighted card wraps BOTH
+  // the tappable label and the footer so the pills sit inside the same rounded
+  // container. Without a footer, the highlight stays on the touchable itself so
+  // every other row looks exactly as before.
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      onLongPress={onLongPress}
+    <View
       style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: Skin.space(12),
-        paddingVertical: Skin.space(14),
-        paddingHorizontal: Skin.space(16),
         borderRadius: theme.radii.md,
-        backgroundColor: active ? theme.colors.surface3 : 'transparent',
+        backgroundColor: active && footer ? theme.colors.surface3 : 'transparent',
         marginHorizontal: Skin.space(12),
         marginBottom: Skin.space(4),
       }}
     >
-      <View style={{ flex: 1 }}>
-        <Text style={{ color: theme.colors.textMain, fontWeight: '600', fontSize: Skin.font(15) }}>{label}</Text>
-        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>{description}</Text>
-      </View>
-      {active && <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.accent} />}
-      {onDelete && (
-        <TouchableOpacity onPress={onDelete} hitSlop={10} style={{ padding: Skin.space(4) }}>
-          <IconSymbol name="trash" size={18} color={theme.colors.textMuted} />
-        </TouchableOpacity>
-      )}
-    </TouchableOpacity>
+      <TouchableOpacity
+        onPress={onPress}
+        onLongPress={onLongPress}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: Skin.space(12),
+          paddingVertical: Skin.space(14),
+          paddingHorizontal: Skin.space(16),
+          borderRadius: theme.radii.md,
+          backgroundColor: active && !footer ? theme.colors.surface3 : 'transparent',
+        }}
+      >
+        {swatch && (
+          <SkinSwatch
+            accent={swatch.accent}
+            background={swatch.background}
+            cornerRadius={swatch.cornerRadius}
+            theme={theme}
+          />
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: theme.colors.textMain, fontWeight: '600', fontSize: Skin.font(15) }}>{label}</Text>
+          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>{description}</Text>
+        </View>
+        {active && <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.accent} />}
+        {onDelete && (
+          <TouchableOpacity onPress={onDelete} hitSlop={10} style={{ padding: Skin.space(4) }}>
+            <IconSymbol name="trash" size={18} color={theme.colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+      {footer}
+    </View>
+  );
+}
+
+const APPEARANCE_SEGMENTS: { key: AppearancePref; label: string }[] = [
+  { key: 'system', label: 'System' },
+  { key: 'light', label: 'Light' },
+  { key: 'dark', label: 'Dark' },
+];
+
+function AppearanceSegments({
+  value,
+  onChange,
+  theme,
+}: {
+  value: AppearancePref;
+  onChange: (pref: AppearancePref) => void;
+  theme: ReturnType<typeof useTheme>['theme'];
+}) {
+  return (
+    <View
+      accessibilityRole="radiogroup"
+      style={{
+        flexDirection: 'row',
+        gap: Skin.space(8),
+        paddingHorizontal: Skin.space(16),
+        paddingBottom: Skin.space(12),
+      }}
+    >
+      {APPEARANCE_SEGMENTS.map((seg) => {
+        const active = value === seg.key;
+        return (
+          <TouchableOpacity
+            key={seg.key}
+            onPress={() => onChange(seg.key)}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: active }}
+            accessibilityLabel={`${seg.label} appearance`}
+            style={{
+              paddingHorizontal: Skin.space(14),
+              paddingVertical: Skin.space(7),
+              borderRadius: theme.radii.pill,
+              backgroundColor: active ? theme.colors.surface3 : 'transparent',
+            }}
+          >
+            <Text
+              style={{
+                color: active ? theme.colors.textMain : theme.colors.textMuted,
+                fontWeight: '600',
+                fontSize: Skin.font(13),
+              }}
+            >
+              {seg.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
   );
 }
 

@@ -65,7 +65,7 @@ import { retryPushPrefsSyncIfDirty } from '@/services/notifications/pushPrefsSyn
 import { registerBackgroundNotificationTask } from '@/services/notifications/pushReceivedTask';
 import { CustomThemeProvider, useTheme } from '@/theme';
 import { AppBackground } from '@/components/ui/AppBackground';
-import { getActiveSkin } from '@/services/theme/skinPrefs';
+import { getActiveSkin, getAppearancePref } from '@/services/theme/skinPrefs';
 import { ensureSkinFontLoaded } from '@/theme/skins/fontLoader';
 import { setSkinGeometry } from '@/theme/skins/geometry';
 import { bumpStyleVersion } from '@/theme/skins/skinnableStyleSheet';
@@ -267,6 +267,9 @@ export default function RootLayout() {
     bumpStyleVersion();
     return skin;
   }, []);
+  // Appearance pref is a synchronous MMKV read — available before first paint,
+  // same as the skin tokens, so a manual light/dark choice never flashes.
+  const bootAppearance = React.useMemo(() => getAppearancePref(), []);
   const [skinReady, setSkinReady] = React.useState(false);
   React.useEffect(() => {
     let cancelled = false;
@@ -290,7 +293,7 @@ export default function RootLayout() {
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
       }}
     >
-      <CustomThemeProvider defaultAccentColor="blue" defaultSkin={bootSkin}>
+      <CustomThemeProvider defaultAccentColor="blue" defaultSkin={bootSkin} defaultAppearance={bootAppearance}>
         <StorageProvider>
           <AuthProvider>
             <AuthAwareApiProvider>
