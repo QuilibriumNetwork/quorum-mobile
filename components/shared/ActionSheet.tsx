@@ -11,9 +11,12 @@
  * Dismissed by tapping the backdrop or swiping down (inherited from BaseModal);
  * there is no separate Cancel row, matching the rest of the app's sheets.
  *
- * This is the single source of truth for the "icon-left + label-right" row used
- * across every modal/drawer/sheet. See
- * .agents/reports/2026-06-15-modal-link-row-audit-and-unified-component.md
+ * Rows are rendered via the shared `ActionRow` / `ActionRowGroup` primitives —
+ * the single source of truth for the "icon-left + label-right" row. Surfaces
+ * that can't use this bottom-sheet shell (embedded scroll lists, sheets with
+ * Switch rows or a confirm dialog on top) import those primitives directly.
+ *
+ * See .agents/reports/2026-06-15-modal-link-row-audit-and-unified-component.md
  *
  * @example flat list
  *   <ActionSheet
@@ -40,29 +43,15 @@
 
 import React, { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { BaseModal } from '@/components/shared/BaseModal';
-import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
+import { ActionRow, ActionRowGroup, type ActionRowProps } from '@/components/shared/ActionRow';
 import { useTheme, type AppTheme } from '@/theme';
 import { haptics } from '@/utils/haptics';
 import * as Skin from '@/theme/skins/geometry';
 
-export interface ActionRowItem {
-  label: string;
-  /** IconSymbol name. Omit to leave an aligned spacer, or use `leading`. */
-  icon?: string;
-  /** Runs after the sheet animates closed. */
+/** A single action. `onPress` is required (the sheet runs it after closing). */
+export interface ActionRowItem extends Omit<ActionRowProps, 'onPress' | 'isLast' | 'style'> {
   onPress: () => void;
-  destructive?: boolean;
-  disabled?: boolean;
-  /** Optional secondary line under the label. */
-  sublabel?: string;
-  /** Trailing affordance: a chevron, or any custom node (toggle, send icon…). */
-  trailing?: 'chevron' | React.ReactNode;
-  /** Success-tinted active state (e.g. selected / recasted). */
-  active?: boolean;
-  /** Custom leading element (avatar, SpaceIcon) rendered instead of `icon`. */
-  leading?: React.ReactNode;
 }
 
 export interface ActionSheetSection {
@@ -86,65 +75,6 @@ interface ActionSheetProps {
 
 /** Back-compat alias — old call sites typed against `ActionSheetAction`. */
 export type ActionSheetAction = ActionRowItem;
-
-function ActionRow({
-  item,
-  isLast,
-  onPress,
-  theme,
-  styles,
-}: {
-  item: ActionRowItem;
-  isLast: boolean;
-  onPress: (item: ActionRowItem) => void;
-  theme: AppTheme;
-  styles: ReturnType<typeof createStyles>;
-}) {
-  const color = item.disabled
-    ? theme.colors.textMuted
-    : item.destructive
-      ? theme.colors.danger
-      : item.active
-        ? theme.colors.success
-        : theme.colors.textMain;
-
-  return (
-    <TouchableOpacity
-      style={[styles.actionRow, isLast && styles.actionRowLast]}
-      onPress={() => onPress(item)}
-      activeOpacity={0.6}
-      disabled={item.disabled}
-      accessibilityRole="button"
-      accessibilityLabel={item.label}
-      accessibilityState={{ disabled: !!item.disabled }}
-    >
-      {item.leading ? (
-        item.leading
-      ) : item.icon ? (
-        // icon name is validated by IconSymbol's mapping at runtime; the strict
-        // union type is too narrow for a generic wrapper.
-        <IconSymbol name={item.icon as IconSymbolName} size={20} color={color} />
-      ) : (
-        <View style={styles.iconSpacer} />
-      )}
-
-      <View style={styles.labelColumn}>
-        <Text style={[styles.actionLabel, { color }]}>{item.label}</Text>
-        {item.sublabel ? (
-          <Text style={styles.actionSublabel} numberOfLines={1}>
-            {item.sublabel}
-          </Text>
-        ) : null}
-      </View>
-
-      {item.trailing === 'chevron' ? (
-        <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
-      ) : item.trailing ? (
-        item.trailing
-      ) : null}
-    </TouchableOpacity>
-  );
-}
 
 export function ActionSheet({
   visible,
@@ -194,18 +124,15 @@ export function ActionSheet({
             {section.title ? (
               <Text style={styles.sectionTitle}>{section.title}</Text>
             ) : null}
-            <View style={styles.group}>
+            <ActionRowGroup>
               {section.items.map((item, iIndex) => (
                 <ActionRow
                   key={`${item.label}-${iIndex}`}
-                  item={item}
-                  isLast={iIndex === section.items.length - 1}
-                  onPress={handleActionPress}
-                  theme={theme}
-                  styles={styles}
+                  {...item}
+                  onPress={() => handleActionPress(item)}
                 />
               ))}
-            </View>
+            </ActionRowGroup>
           </View>
         ))}
       </View>
@@ -250,42 +177,5 @@ const createStyles = (theme: AppTheme) =>
       marginTop: Skin.space(4),
       marginBottom: Skin.space(8),
       marginHorizontal: Skin.space(8),
-    },
-    group: {
-      // Whole stack shifted down one ramp step: sheet surface0, card surface2,
-      // divider surface4 — keeps the relative spacing but darkens the overall
-      // menu. (Sheet bg set via BaseModal's backgroundColor prop above.)
-      backgroundColor: theme.colors.surface2,
-      borderRadius: Skin.radius(14),
-      overflow: 'hidden',
-    },
-    actionRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Skin.space(12),
-      paddingHorizontal: Skin.space(16),
-      paddingVertical: Skin.space(14),
-      minHeight: 44,
-      // Full 1px (not hairlineWidth ~0.5px, which was barely visible). surface4
-      // against the surface2 card after the down-one-step shift.
-      borderBottomWidth: Skin.border(1),
-      borderBottomColor: theme.colors.surface4,
-    },
-    actionRowLast: {
-      borderBottomWidth: 0,
-    },
-    iconSpacer: {
-      width: 20,
-    },
-    labelColumn: {
-      flex: 1,
-    },
-    actionLabel: {
-      ...theme.textStyles.callout,
-    },
-    actionSublabel: {
-      ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
-      marginTop: Skin.space(1),
     },
   });
