@@ -5,7 +5,12 @@ import type { SkinOverride } from './skins/types';
 import { ensureSkinFontLoaded } from './skins/fontLoader';
 import { setSkinGeometry } from './skins/geometry';
 import { bumpStyleVersion } from './skins/skinnableStyleSheet';
-import { saveSkin, setActiveSkinId } from '@/services/theme/skinPrefs';
+import {
+  saveSkin,
+  setActiveSkinId,
+  setAppearancePref,
+  type AppearancePref,
+} from '@/services/theme/skinPrefs';
 
 type ThemeContextType = {
   theme: ReturnType<typeof createTheme>;
@@ -14,6 +19,11 @@ type ThemeContextType = {
   /** The applied custom skin, or null for the built-in theme. */
   activeSkin: SkinOverride | null;
   setIsDark: (isDark: boolean) => void;
+  /** Manual appearance choice for the built-in theme: system | light | dark. */
+  appearance: AppearancePref;
+  /** Set + persist the appearance choice. Canonical entry point for the UI —
+   *  use this instead of setIsDark so the choice survives restarts. */
+  setAppearance: (pref: AppearancePref) => void;
   setAccentColor: (color: AccentColor) => void;
   toggleTheme: () => void;
   /** Apply (or clear) a skin. Loads its embedded font before switching so
@@ -42,6 +52,8 @@ type ThemeProviderProps = {
   children: ReactNode;
   defaultAccentColor?: AccentColor;
   forceTheme?: 'light' | 'dark' | null;
+  /** Appearance pref restored from storage at boot (see app/_layout.tsx). */
+  defaultAppearance?: AppearancePref;
   /** Skin resolved + font-preloaded at boot (see app/_layout.tsx). */
   defaultSkin?: SkinOverride | null;
 };
@@ -50,10 +62,13 @@ export const CustomThemeProvider: React.FC<ThemeProviderProps> = ({
   children,
   defaultAccentColor = 'blue',
   forceTheme = null,
+  defaultAppearance = 'system',
   defaultSkin = null,
 }) => {
   const deviceColorScheme = useDeviceColorScheme();
-  const [isDarkOverride, setIsDarkOverride] = useState<boolean | null>(null);
+  const [isDarkOverride, setIsDarkOverride] = useState<boolean | null>(
+    defaultAppearance === 'system' ? null : defaultAppearance === 'dark',
+  );
   const [accentColor, setAccentColor] = useState<AccentColor>(defaultAccentColor);
   const [skin, setSkin] = useState<SkinOverride | null>(defaultSkin);
 
@@ -75,6 +90,14 @@ export const CustomThemeProvider: React.FC<ThemeProviderProps> = ({
   const setIsDarkCb = useCallback((dark: boolean) => {
     setIsDarkOverride(dark);
   }, []);
+
+  const setAppearance = useCallback((pref: AppearancePref) => {
+    setAppearancePref(pref); // persist first
+    setIsDarkOverride(pref === 'system' ? null : pref === 'dark');
+  }, []);
+
+  const appearance: AppearancePref =
+    isDarkOverride === null ? 'system' : isDarkOverride ? 'dark' : 'light';
 
   const setActiveSkin = useCallback(async (next: SkinOverride | null) => {
     if (next) {
@@ -101,12 +124,14 @@ export const CustomThemeProvider: React.FC<ThemeProviderProps> = ({
     isDark,
     accentColor,
     activeSkin: skin,
+    appearance,
     setIsDark: setIsDarkCb,
+    setAppearance,
     setAccentColor,
     toggleTheme,
     setActiveSkin,
     previewSkin,
-  }), [theme, isDark, accentColor, skin, setIsDarkCb, setAccentColor, toggleTheme, setActiveSkin, previewSkin]);
+  }), [theme, isDark, accentColor, skin, appearance, setIsDarkCb, setAppearance, setAccentColor, toggleTheme, setActiveSkin, previewSkin]);
 
   return (
     <ThemeContext.Provider value={value}>
