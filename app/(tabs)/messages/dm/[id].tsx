@@ -8,6 +8,9 @@ import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useConversation } from '@/hooks/chat/useConversations';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
+import { useStorageAdapter } from '@/context/StorageContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@quilibrium/quorum-shared';
 import type { Conversation } from '@quilibrium/quorum-shared';
 import { useUserPublicProfile } from '@/hooks/useUserPublicProfile';
 import { useBookmarks } from '@/hooks/useUserConfig';
@@ -125,6 +128,9 @@ export default function DMChatScreen() {
 
   const { bookmarks, addBookmark, removeBookmark, isBookmarked } = useBookmarks();
 
+  const storage = useStorageAdapter();
+  const queryClient = useQueryClient();
+
   const draftsRef = useRef<Map<string, string>>(new Map());
 
   const { openMiniapp } = useMiniappOverlay();
@@ -175,6 +181,17 @@ export default function DMChatScreen() {
   const handleOpenDmSettings = useCallback(() => {
     setSettingsVisible(true);
   }, []);
+
+  // Delete this conversation locally (DMs are E2E-encrypted, so this only
+  // removes it from this device). The confirm lives in DMSettingsSheet; this
+  // is the previously-unwired effect. Refresh the conversation list and leave
+  // the now-deleted screen.
+  const handleDeleteConversation = useCallback(async () => {
+    if (!conversationId) return;
+    await storage.deleteConversation(conversationId);
+    queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all('direct') });
+    router.back();
+  }, [conversationId, storage, queryClient]);
 
   const { initiateCall } = useCall();
   const handleCallPress = useCallback(() => {
@@ -360,6 +377,7 @@ export default function DMChatScreen() {
             conversationId={conversationId}
             displayName={title}
             theme={theme}
+            onDeleteConversation={handleDeleteConversation}
             isRepudiable={conversation.isRepudiable}
             saveEditHistory={conversation.saveEditHistory}
           />

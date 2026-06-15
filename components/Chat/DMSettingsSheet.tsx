@@ -3,11 +3,12 @@
  */
 
 import type { AppTheme } from '@/theme';
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, Alert, Switch } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { resetDMSession } from '@/hooks/chat/useSendDirectMessage';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import * as Skin from '@/theme/skins/geometry';
 
 interface DMSettingsSheetProps {
@@ -36,52 +37,46 @@ export function DMSettingsSheet({
   onToggleEditHistory,
 }: DMSettingsSheetProps) {
   const styles = createStyles(theme);
+  const { confirm, confirmDialog } = useConfirmDialog();
+  // While a confirm dialog is open on top of this sheet, swallow the sheet's own
+  // back/backdrop dismissal so an Android back cancels the confirm rather than
+  // tearing down this sheet (which is conditionally mounted by the parent).
+  const [isConfirming, setIsConfirming] = useState(false);
 
   if (!visible) return null;
 
-  const handleDeleteConversation = () => {
-    Alert.alert(
-      'Delete Conversation',
-      `This will delete the conversation with ${displayName} from your device only. The other person will still have the conversation on their device.`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            onDeleteConversation?.();
-            onClose();
-          },
-        },
-      ]
-    );
+  const guardedClose = () => {
+    if (isConfirming) return;
+    onClose();
   };
 
-  const handleFixEncryption = () => {
+  const handleDeleteConversation = async () => {
+    setIsConfirming(true);
+    const ok = await confirm({
+      title: 'Delete Conversation',
+      message: `This will delete the conversation with ${displayName} from your device only. The other person will still have the conversation on their device.`,
+      confirmLabel: 'Delete',
+    });
+    setIsConfirming(false);
+    if (!ok) return;
+    onDeleteConversation?.();
+    onClose();
+  };
+
+  const handleFixEncryption = async () => {
+    setIsConfirming(true);
+    const ok = await confirm({
+      title: 'Fix Encryption',
+      message: `This will reset the encryption session with ${displayName}. The next message will establish a fresh secure connection.\n\nUse this if messages are failing to send or decrypt.`,
+      confirmLabel: 'Reset Session',
+    });
+    setIsConfirming(false);
+    if (!ok) return;
+    resetDMSession(conversationId);
+    onClose();
     Alert.alert(
-      'Fix Encryption',
-      `This will reset the encryption session with ${displayName}. The next message will establish a fresh secure connection.\n\nUse this if messages are failing to send or decrypt.`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Reset Session',
-          style: 'destructive',
-          onPress: () => {
-            resetDMSession(conversationId);
-            onClose();
-            Alert.alert(
-              'Session Reset',
-              'The encryption session has been reset. Your next message will establish a fresh secure connection.'
-            );
-          },
-        },
-      ]
+      'Session Reset',
+      'The encryption session has been reset. Your next message will establish a fresh secure connection.'
     );
   };
 
@@ -90,10 +85,10 @@ export function DMSettingsSheet({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={guardedClose}
     >
       <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable style={styles.backdrop} onPress={guardedClose} />
         <View style={styles.container}>
           <View style={styles.header}>
             <Text style={styles.headerText}>Conversation Settings</Text>
@@ -156,6 +151,7 @@ export function DMSettingsSheet({
           </TouchableOpacity>
         </View>
       </View>
+      {confirmDialog}
     </Modal>
   );
 }

@@ -5,6 +5,7 @@ import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
 import { useAuth } from '@/context';
 import { useToast } from '@/context/ToastContext';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
 import { useAssignRole, useRemoveFromRole, useSpaces } from '@/hooks/chat';
@@ -59,6 +60,7 @@ export default function UserProfileModal({
 }: UserProfileModalProps) {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const { user: authUser } = useAuth();
   const insets = useSafeAreaInsets();
   const [loadingRoles, setLoadingRoles] = useState<Set<string>>(new Set());
@@ -110,6 +112,16 @@ export default function UserProfileModal({
 
   const removeRole = async (roleId: string) => {
     if (!spaceId || !user) return;
+    // Removing a role broadcasts the change to every member, so confirm it (T1).
+    const roleName = userRoles.find(r => r.roleId === roleId)?.displayName;
+    const ok = await confirm({
+      title: 'Remove Role',
+      message: roleName
+        ? `Remove the "${roleName}" role from ${user.userName}? This change is visible to everyone in the space.`
+        : `Remove this role from ${user.userName}? This change is visible to everyone in the space.`,
+      confirmLabel: 'Remove',
+    });
+    if (!ok) return;
     setLoadingRoles(prev => new Set(prev).add(roleId));
     try {
       await removeRoleMutation.mutateAsync({
@@ -222,27 +234,44 @@ export default function UserProfileModal({
             {/* Current roles */}
             {userRoles.length > 0 && (
               <View style={styles.rolesRow}>
-                {userRoles.map(role => (
-                  <View key={role.roleId} style={[styles.roleBadge, { backgroundColor: role.color + '20' }]}>
-                    {loadingRoles.has(role.roleId) ? (
-                      <ActivityIndicator size={10} color={role.color} />
-                    ) : (
-                      <View style={[styles.roleBadgeDot, { backgroundColor: role.color }]} />
-                    )}
-                    <Text style={[styles.roleBadgeText, { color: role.color }]}>
-                      {role.displayName}
-                    </Text>
-                    {isSpaceOwner && (
-                      <TouchableOpacity
-                        onPress={() => handleRemoveRole(role.roleId)}
-                        disabled={loadingRoles.has(role.roleId)}
-                        hitSlop={6}
-                      >
+                {userRoles.map(role => {
+                  const isLoading = loadingRoles.has(role.roleId);
+                  // Owners can remove a role by tapping anywhere on the pill;
+                  // the ✕ is just the affordance. Non-owners get a static badge.
+                  // Visual (background tint + color dot) follows the shared
+                  // role-color palette from PR #92.
+                  const badgeContent = (
+                    <>
+                      {isLoading ? (
+                        <ActivityIndicator size={10} color={role.color} />
+                      ) : (
+                        <View style={[styles.roleBadgeDot, { backgroundColor: role.color }]} />
+                      )}
+                      <Text style={[styles.roleBadgeText, { color: role.color }]}>
+                        {role.displayName}
+                      </Text>
+                      {isSpaceOwner && (
                         <IconSymbol name="xmark" size={10} color={role.color} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))}
+                      )}
+                    </>
+                  );
+                  return isSpaceOwner ? (
+                    <TouchableOpacity
+                      key={role.roleId}
+                      style={[styles.roleBadge, { backgroundColor: role.color + '20' }]}
+                      onPress={() => handleRemoveRole(role.roleId)}
+                      disabled={isLoading}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${role.displayName} role`}
+                    >
+                      {badgeContent}
+                    </TouchableOpacity>
+                  ) : (
+                    <View key={role.roleId} style={[styles.roleBadge, { backgroundColor: role.color + '20' }]}>
+                      {badgeContent}
+                    </View>
+                  );
+                })}
               </View>
             )}
 
@@ -347,6 +376,7 @@ export default function UserProfileModal({
           userAddress={user.userId}
         />
       )}
+      {confirmDialog}
     </BaseModal>
   );
 }
