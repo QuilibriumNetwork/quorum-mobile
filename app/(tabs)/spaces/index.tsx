@@ -10,13 +10,16 @@ import { haptics } from '@/utils/haptics';
 import type { Space } from '@quilibrium/quorum-shared';
 import { FlashList } from '@shopify/flash-list';
 import { router, Stack } from 'expo-router';
-import React, { Suspense, useCallback, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
 
-const SpaceModal = React.lazy(() => import('@/components/SpaceModal'));
+// Prefetch helper: warm the lazy chunk in the background so the first tap on the
+// "+" add-space button opens the modal instantly (no on-demand import wait).
+const importSpaceModal = () => import('@/components/SpaceModal');
+const SpaceModal = React.lazy(importSpaceModal);
 
 interface SpaceItem {
   id: string;
@@ -97,6 +100,11 @@ export default function SpacesIndex() {
   const [search, setSearch] = useState('');
   const [spaceModalVisible, setSpaceModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Warm the add-space modal chunk in the background once the screen is open.
+  useEffect(() => {
+    void importSpaceModal();
+  }, []);
 
   const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 

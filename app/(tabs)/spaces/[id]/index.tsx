@@ -14,20 +14,33 @@ import type { EdgeInsets } from 'react-native-safe-area-context';
 import { haptics } from '@/utils/haptics';
 import type { Group } from '@quilibrium/quorum-shared';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { Suspense, useCallback, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
 
-const SpaceSettingsModal = React.lazy(() => import('@/components/SpaceSettingsModal'));
-const InviteModal = React.lazy(() => import('@/components/InviteModal'));
+// Prefetch helpers: warm the lazy chunks in the background after the screen
+// mounts so the first tap on the gear / invite opens instantly instead of
+// waiting on the on-demand import.
+const importSpaceSettingsModal = () => import('@/components/SpaceSettingsModal');
+const importInviteModal = () => import('@/components/InviteModal');
+
+const SpaceSettingsModal = React.lazy(importSpaceSettingsModal);
+const InviteModal = React.lazy(importInviteModal);
 
 export default function SpaceChannelsScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const spaceId = typeof params.id === 'string' ? params.id : undefined;
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+
+  // Warm the lazy modal chunks in the background once the screen is open so the
+  // first open of space settings / invite is instant.
+  useEffect(() => {
+    void importSpaceSettingsModal();
+    void importInviteModal();
+  }, []);
 
   const { data: spaceData, isLoading } = useSpace(spaceId, { enabled: !!spaceId });
   useChannels(spaceId, { enabled: !!spaceId });

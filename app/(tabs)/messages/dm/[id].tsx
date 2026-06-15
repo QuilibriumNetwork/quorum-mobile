@@ -20,16 +20,23 @@ import { truncateAddress } from '@/utils/formatAddress';
 import { useTheme } from '@/theme';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { Suspense, useCallback, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
-const UserProfileModal = React.lazy(() => import('@/components/UserProfileModal'));
+// Prefetch helpers: warm the lazy chunks in the background after the screen
+// mounts so the first tap on the info icon / a profile opens instantly instead
+// of waiting on the on-demand import. Paths are declared once and reused by both
+// React.lazy() and the prefetch so they can't drift.
+const importUserProfileModal = () => import('@/components/UserProfileModal');
+const importDMSettingsSheet = () => import('@/components/Chat/DMSettingsSheet');
+
+const UserProfileModal = React.lazy(importUserProfileModal);
 const DMSettingsSheet = React.lazy(() =>
-  import('@/components/Chat/DMSettingsSheet').then((m) => ({ default: m.DMSettingsSheet }))
+  importDMSettingsSheet().then((m) => ({ default: m.DMSettingsSheet }))
 );
 
 export default function DMChatScreen() {
@@ -43,6 +50,13 @@ export default function DMChatScreen() {
     fcPfp?: string;
   }>();
   const conversationId = typeof params.id === 'string' ? decodeURIComponent(params.id) : undefined;
+
+  // Warm the lazy modal chunks in the background once the screen is open so the
+  // first open of the info sheet / a profile is instant (no on-demand import wait).
+  useEffect(() => {
+    void importDMSettingsSheet();
+    void importUserProfileModal();
+  }, []);
 
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
