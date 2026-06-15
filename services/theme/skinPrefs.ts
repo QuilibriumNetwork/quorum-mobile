@@ -83,3 +83,22 @@ export function getActiveSkin(): SkinOverride | null {
   const id = getActiveSkinId();
   return id ? getSkin(id) : null;
 }
+
+/** User's manual appearance choice for the BUILT-IN theme. Has no effect while
+ *  a custom skin is active (skins pin their own base). Stored independently of
+ *  the active skin so it survives switching to a skin and back. */
+export type AppearancePref = 'system' | 'light' | 'dark';
+
+const K_APPEARANCE = 'appearancePref';
+
+/** Manual appearance choice; 'system' (follow device) when unset or invalid. */
+export function getAppearancePref(): AppearancePref {
+  const raw = skinPrefsStore.getString(K_APPEARANCE);
+  return raw === 'light' || raw === 'dark' ? raw : 'system';
+}
+
+export function setAppearancePref(pref: AppearancePref): void {
+  // Store only an explicit override; 'system' is the absence of a key.
+  if (pref === 'system') skinPrefsStore.remove(K_APPEARANCE);
+  else skinPrefsStore.set(K_APPEARANCE, pref);
+}
