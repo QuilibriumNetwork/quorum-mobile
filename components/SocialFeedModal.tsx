@@ -82,7 +82,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { setAudioModeAsync } from 'expo-audio';
 import { Image as ExpoImage } from 'expo-image';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, BackHandler, Dimensions, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View, type KeyboardEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Alert, Animated, BackHandler, Dimensions, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View, type KeyboardEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReanimatedModule, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -248,7 +248,7 @@ function CastText({
   onLinkPress,
 }: {
   text: string;
-  style?: StyleProp<ViewStyle>;
+  style?: StyleProp<TextStyle>;
   theme: AppTheme;
   onMentionPress?: (username: string) => void;
   onChannelPress?: (channelKey: string) => void;
@@ -3127,7 +3127,6 @@ function ThreadDetailView({
               <View style={{ marginLeft: Skin.space(56) }}>
                 <TextInput
                   ref={replyInputRef}
-                  onFocus={() => setIsEditorFocused(true)}
                   onBlur={() => setIsEditorFocused(false)}
                   style={{
                     minHeight: 40,
@@ -3147,6 +3146,7 @@ function ThreadDetailView({
                     setReplyCursorPosition(e.nativeEvent.selection.end);
                   }}
                   onFocus={() => {
+                    setIsEditorFocused(true);
                     // Scroll to bottom when input is focused so the editor is visible
                     setTimeout(() => {
                       scrollViewRef.current?.scrollToEnd({ animated: true });
