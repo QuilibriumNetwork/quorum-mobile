@@ -6,14 +6,14 @@
  */
 
 import { base64ToHex, numberArrayToBase64 } from '@/utils/encoding';
-import * as ed448Module from '@noble/curves/ed448';
+import * as ed448Module from '@noble/curves/ed448.js';
 import { bytesToHex, hexToBytes, concatBytes } from '@noble/hashes/utils.js';
 // @ts-ignore - module resolution works at runtime
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import * as bip39 from '@scure/bip39';
-import { wordlist } from '@scure/bip39/wordlists/english';
+import { wordlist } from '@scure/bip39/wordlists/english.js';
 import * as multihashes from 'multihashes';
 import bs58 from 'bs58';
 

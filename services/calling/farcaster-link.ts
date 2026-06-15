@@ -3,8 +3,8 @@ import { getFarcasterCustodyKey } from '@/services/onboarding/secureStorage';
 import { ensurePrivateKey } from '@/services/onboarding/keyService';
 import { NativeCryptoProvider } from '@/services/crypto/native-provider';
 import { hexToBytes } from '@quilibrium/quorum-shared';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { keccak_256 } from '@noble/hashes/sha3';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 
 /**
  * Generate a bidirectional Farcaster ↔ Quorum identity link.

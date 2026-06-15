@@ -294,7 +294,7 @@ export default function BrowserScreen() {
     if (navState.title && !name) {
       setTitle(navState.title);
     }
-    setLoading(navState.loading);
+    setLoading(navState.loading ?? false);
   };
 
   const handleGoBack = () => {

@@ -70,7 +70,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDark ? theme.colors.surface00 : theme.colors.surface1,
+      backgroundColor: isDark ? theme.colors.surface0 : theme.colors.surface1,
     },
     scrollView: {
       flex: 1,

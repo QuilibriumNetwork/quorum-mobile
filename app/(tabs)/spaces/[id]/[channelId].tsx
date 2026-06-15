@@ -16,7 +16,7 @@ import { getSpaceKey } from '@/services/config/spaceStorage';
 import { useTheme } from '@/theme';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { Suspense, useCallback, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -28,15 +28,31 @@ import { sendSpaceCallStartMessage } from '@/services/space/spaceMessageService'
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
-const UserProfileModal = React.lazy(() => import('@/components/UserProfileModal'));
-const InviteModal = React.lazy(() => import('@/components/InviteModal'));
-const SpaceSettingsModal = React.lazy(() => import('@/components/SpaceSettingsModal'));
+// Prefetch helpers: warm the lazy chunks in the background after the screen
+// mounts so the first tap on the gear / invite / a profile opens instantly
+// instead of waiting on the on-demand import. SpaceSettingsModal in particular
+// is a large component, so warming it removes a noticeable first-open delay.
+const importUserProfileModal = () => import('@/components/UserProfileModal');
+const importInviteModal = () => import('@/components/InviteModal');
+const importSpaceSettingsModal = () => import('@/components/SpaceSettingsModal');
+
+const UserProfileModal = React.lazy(importUserProfileModal);
+const InviteModal = React.lazy(importInviteModal);
+const SpaceSettingsModal = React.lazy(importSpaceSettingsModal);
 const CastThreadModal = React.lazy(() => import('@/components/CastThreadModal'));
 
 export default function SpaceChannelChat() {
   const params = useLocalSearchParams<{ id: string; channelId: string }>();
   const spaceId = typeof params.id === 'string' ? params.id : undefined;
   const channelId = typeof params.channelId === 'string' ? params.channelId : undefined;
+
+  // Warm the lazy modal chunks in the background once the screen is open so the
+  // first open of space settings / invite / a profile is instant.
+  useEffect(() => {
+    void importSpaceSettingsModal();
+    void importUserProfileModal();
+    void importInviteModal();
+  }, []);
 
   const { theme } = useTheme();
   const { user } = useAuth();

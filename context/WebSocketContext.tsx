@@ -2117,11 +2117,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             {
               const preview = getSpaceMessagePreview(spaceMessage);
               const senderId = ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined);
-              const senderMember = spaceId ? await storage.getSpaceMember(spaceId, senderId) : undefined;
+              const senderMember = spaceId && senderId ? await storage.getSpaceMember(spaceId, senderId) : undefined;
               const senderName = messageSenderName(
                 senderId,
                 fullUserAddrRef.current ?? undefined,
-                senderMember ? { [senderId]: senderMember } : undefined
+                senderId && senderMember ? { [senderId]: senderMember } : undefined
               );
               recordSpaceActivity(spaceId, {
                 timestamp: spaceMessage.createdDate || Date.now(),
@@ -3328,11 +3328,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           {
             const preview = getSpaceMessagePreview(spaceMessage);
             const senderId = ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined);
-            const senderMember = spaceId ? await storage.getSpaceMember(spaceId, senderId) : undefined;
+            const senderMember = spaceId && senderId ? await storage.getSpaceMember(spaceId, senderId) : undefined;
             const senderName = messageSenderName(
               senderId,
               fullUserAddrRef.current ?? undefined,
-              senderMember ? { [senderId]: senderMember } : undefined
+              senderId && senderMember ? { [senderId]: senderMember } : undefined
             );
             recordSpaceActivity(spaceId, {
               timestamp: spaceMessage.createdDate || Date.now(),

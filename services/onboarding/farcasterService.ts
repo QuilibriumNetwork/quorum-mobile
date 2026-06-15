@@ -6,14 +6,14 @@
  * - ed25519 keys for signers
  */
 
-import { ed25519 } from '@noble/curves/ed25519';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha512 } from '@noble/hashes/sha2.js';
 import * as bip39 from '@scure/bip39';
-import { wordlist } from '@scure/bip39/wordlists/english';
+import { wordlist } from '@scure/bip39/wordlists/english.js';
 
 export interface FarcasterKeys {
   custodyAddress: string;      // Ethereum address (0x...)

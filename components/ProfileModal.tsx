@@ -1320,6 +1320,12 @@ export default function ProfileModal({
       return;
     }
 
+    // Capture the validated markers so the async onPress closure below has
+    // non-undefined values (the guard above can't narrow record.ownership
+    // through the closure boundary).
+    const oneTimeKeyB64 = record.ownership.one_time_key;
+    const verificationKeyB64 = record.ownership.verification_key;
+
     Alert.alert(
       'Make Name Resolvable',
       `Allow others to look up your public key via @${name}?\n\nThis enables encrypted messaging to your address.`,
@@ -1341,8 +1347,8 @@ export default function ProfileModal({
               );
 
               // Decode the stealth markers from the bucket record
-              const oneTimeKey = Uint8Array.from(atob(record.ownership.one_time_key), c => c.charCodeAt(0));
-              const verificationKey = Uint8Array.from(atob(record.ownership.verification_key), c => c.charCodeAt(0));
+              const oneTimeKey = Uint8Array.from(atob(oneTimeKeyB64), c => c.charCodeAt(0));
+              const verificationKey = Uint8Array.from(atob(verificationKeyB64), c => c.charCodeAt(0));
 
               // Generate timestamp and nonce
               const timestamp = Math.floor(Date.now() / 1000);
@@ -3190,7 +3196,6 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       color: theme.colors.textMain,
       fontFamily: 'monospace',
       lineHeight: Skin.font(18),
-      wordBreak: 'break-all',
     },
     recoveryPhraseActions: {
       flexDirection: 'row',

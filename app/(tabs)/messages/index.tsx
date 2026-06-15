@@ -17,13 +17,16 @@ import { truncateAddress } from '@/utils/formatAddress';
 import { isValidAvatarUri } from '@/utils/validation';
 import { FlashList } from '@shopify/flash-list';
 import { router, Stack } from 'expo-router';
-import React, { Suspense, useCallback, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Platform, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
 
-const NewConversationModal = React.lazy(() => import('@/components/NewConversationModal'));
+// Prefetch helper: warm the lazy chunk in the background so the first tap on the
+// "new conversation" button opens the modal instantly (no on-demand import wait).
+const importNewConversationModal = () => import('@/components/NewConversationModal');
+const NewConversationModal = React.lazy(importNewConversationModal);
 
 // Row for the DMs list
 interface InboxItem {
@@ -116,6 +119,11 @@ export default function MessagesInbox() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+
+  // Warm the new-conversation modal chunk in the background once the screen is open.
+  useEffect(() => {
+    void importNewConversationModal();
+  }, []);
 
   const {
     conversations,
@@ -278,10 +286,6 @@ export default function MessagesInbox() {
           data={items}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          // Rows are 68px when there's no subtitle wrap, ~82px with one line
-          // of preview text. Use a slightly-over average so FlashList doesn't
-          // unmount cells it thinks are off-screen when they actually aren't.
-          estimatedItemSize={82}
           // Keep more off-screen cells alive so scrolling back up doesn't
           // briefly blank the first few rows while they remount.
           drawDistance={1200}

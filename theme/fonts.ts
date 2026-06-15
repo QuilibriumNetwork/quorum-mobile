@@ -26,7 +26,22 @@ export const DEFAULT_FONT_FAMILY = 'System';
  * consumer picks it up. Embedded skin fonts are single-face, so all weights
  * share one family and rely on synthetic bolding (see fontLoader).
  */
-export function makeFonts(fontFamily: string = DEFAULT_FONT_FAMILY) {
+type FontFace = { fontFamily: string; fontWeight: '400' | '500' | '700' | '900' };
+
+type FontMap = {
+  regular: FontFace;
+  medium: FontFace;
+  bold: FontFace;
+  heavy: FontFace;
+  /**
+   * Optional faces a skin may add. Not produced by the default map, so consumers
+   * must access them defensively (e.g. `theme.fonts.mono?.fontFamily || fallback`).
+   */
+  mono?: FontFace;
+  semiBold?: FontFace;
+};
+
+export function makeFonts(fontFamily: string = DEFAULT_FONT_FAMILY): FontMap {
   return {
     regular: { fontFamily, fontWeight: '400' as const },
     medium: { fontFamily, fontWeight: '500' as const },

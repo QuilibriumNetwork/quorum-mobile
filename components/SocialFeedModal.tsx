@@ -82,7 +82,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { setAudioModeAsync } from 'expo-audio';
 import { Image as ExpoImage } from 'expo-image';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, BackHandler, Dimensions, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View, type KeyboardEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Alert, Animated, BackHandler, Dimensions, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View, type KeyboardEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReanimatedModule, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -248,7 +248,7 @@ function CastText({
   onLinkPress,
 }: {
   text: string;
-  style?: StyleProp<ViewStyle>;
+  style?: StyleProp<TextStyle>;
   theme: AppTheme;
   onMentionPress?: (username: string) => void;
   onChannelPress?: (channelKey: string) => void;
@@ -1685,7 +1685,7 @@ function MiniappAwareLinkPreview({
       <FrameEmbed
         imageUrl={m.imageUrl ?? m.iconUrl ?? og.image ?? ''}
         buttonTitle={m.buttonTitle ?? 'Open'}
-        actionUrl={m.homeUrl}
+        actionUrl={m.homeUrl!}
         theme={theme}
         onPress={() => onOpenMiniApp?.(m.homeUrl!)}
       />
@@ -3127,7 +3127,6 @@ function ThreadDetailView({
               <View style={{ marginLeft: Skin.space(56) }}>
                 <TextInput
                   ref={replyInputRef}
-                  onFocus={() => setIsEditorFocused(true)}
                   onBlur={() => setIsEditorFocused(false)}
                   style={{
                     minHeight: 40,
@@ -3147,6 +3146,7 @@ function ThreadDetailView({
                     setReplyCursorPosition(e.nativeEvent.selection.end);
                   }}
                   onFocus={() => {
+                    setIsEditorFocused(true);
                     // Scroll to bottom when input is focused so the editor is visible
                     setTimeout(() => {
                       scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -6233,7 +6233,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         '[SocialFeedModal] main cast submit threw:',
         err instanceof Error ? err.message : String(err),
       );
-      setPostError(err?.message ?? 'Failed to publish cast.');
+      setPostError(err instanceof Error ? err.message : 'Failed to publish cast.');
     } finally {
       setPosting(false);
     }
@@ -6486,10 +6486,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               numColumns={activeFilter === 'media' ? 3 : 1}
               // Hint FlashList with the row size so recycling computes
               // accurate slot positions without measuring during scroll.
-              // Grid mode: a single tile is one row's height. Card mode:
-              // an average post is ~400px once media + actions are
-              // accounted for.
-              estimatedItemSize={activeFilter === 'media' ? GRID_TILE_SIZE : 400}
               extraData={likeStates}
               keyExtractor={(item) => item.id}
               showsVerticalScrollIndicator={false}

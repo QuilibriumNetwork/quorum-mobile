@@ -833,8 +833,8 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
     setCanGoBack(navState.canGoBack);
     setCanGoForward(navState.canGoForward);
     setCurrentUrl(navState.url);
-    setTitle(navState.title);
-    setLoading(navState.loading);
+    setTitle(navState.title ?? '');
+    setLoading(navState.loading ?? false);
   };
 
   const handleGoBack = () => {

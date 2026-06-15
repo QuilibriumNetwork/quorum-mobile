@@ -354,7 +354,6 @@ export function DirectMessagesList({
         data={filteredConversations}
         keyExtractor={(item) => item.conversationId}
         renderItem={renderItem}
-        estimatedItemSize={73}
         refreshControl={
           onRefresh ? (
             <RefreshControl

@@ -23,9 +23,9 @@ import bs58 from 'bs58';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { ripemd160 } from '@noble/hashes/legacy.js';
-import { secp256k1, schnorr } from '@noble/curves/secp256k1';
+import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 import * as bitcoinerlabSecp from '@bitcoinerlab/secp256k1';
-import { ed25519 } from '@noble/curves/ed25519';
+import { ed25519 } from '@noble/curves/ed25519.js';
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { Keyring } from '@polkadot/keyring';
 

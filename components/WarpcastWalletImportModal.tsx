@@ -186,7 +186,7 @@ export default function WarpcastWalletImportModal({
 
   // Derive custody address from private key
   const getCustodyAddressFromKey = async (privateKeyHex: string): Promise<string> => {
-    const { secp256k1 } = await import('@noble/curves/secp256k1');
+    const { secp256k1 } = await import('@noble/curves/secp256k1.js');
     const { keccak_256 } = await import('@noble/hashes/sha3.js');
     const { hexToBytes, bytesToHex } = await import('@noble/hashes/utils.js');
 

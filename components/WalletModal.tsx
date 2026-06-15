@@ -284,6 +284,7 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
       await Clipboard.setStringAsync(address);
       showToast({
         type: 'success',
+        title: 'Copied',
         message: `${getChainName(chain)} address copied`,
       });
     };
