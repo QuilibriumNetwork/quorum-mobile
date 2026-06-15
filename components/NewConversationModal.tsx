@@ -148,8 +148,8 @@ export default function NewConversationModal({
         address: targetAddress,
         type: 'direct',
         timestamp: Date.now(),
-        displayName: usernameToResolve ? `@${usernameToResolve}` : undefined,
-        icon: undefined,
+        displayName: usernameToResolve ? `@${usernameToResolve}` : '',
+        icon: '',
         lastReadTimestamp: undefined,
       });
 

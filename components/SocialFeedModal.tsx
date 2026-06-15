@@ -1685,7 +1685,7 @@ function MiniappAwareLinkPreview({
       <FrameEmbed
         imageUrl={m.imageUrl ?? m.iconUrl ?? og.image ?? ''}
         buttonTitle={m.buttonTitle ?? 'Open'}
-        actionUrl={m.homeUrl}
+        actionUrl={m.homeUrl!}
         theme={theme}
         onPress={() => onOpenMiniApp?.(m.homeUrl!)}
       />
@@ -6233,7 +6233,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         '[SocialFeedModal] main cast submit threw:',
         err instanceof Error ? err.message : String(err),
       );
-      setPostError(err?.message ?? 'Failed to publish cast.');
+      setPostError(err instanceof Error ? err.message : 'Failed to publish cast.');
     } finally {
       setPosting(false);
     }

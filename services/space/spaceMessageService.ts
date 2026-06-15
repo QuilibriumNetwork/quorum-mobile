@@ -894,7 +894,7 @@ export async function maybeSendUpdateProfileMessage(
 /** Clear the gate for a (spaceId, senderAddress) — used when the user
  *  leaves a space or signs out so a fresh rejoin re-broadcasts. */
 export function clearProfileBroadcastState(spaceId: string, senderAddress: string): void {
-  getProfileBroadcastStore().delete(profileBroadcastKey(spaceId, senderAddress));
+  getProfileBroadcastStore().remove(profileBroadcastKey(spaceId, senderAddress));
 }
 
 /**
@@ -938,7 +938,7 @@ export function runProfileBroadcastMigrations(): void {
   // new signatures (which include Farcaster fields when linked).
   for (const k of store.getAllKeys()) {
     if (k === MIGRATIONS_KEY) continue;
-    store.delete(k);
+    store.remove(k);
   }
 
   done[tag] = true;
