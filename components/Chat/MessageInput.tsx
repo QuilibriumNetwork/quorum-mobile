@@ -577,10 +577,21 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
               autoCorrect={false}
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
                 <IconSymbol name="xmark.circle.fill" size={16} color={theme.colors.textMuted} />
               </TouchableOpacity>
             )}
+            {/* Close the picker. The composer also dismisses it on text input,
+                but an explicit control is clearer. */}
+            <TouchableOpacity
+              onPress={handleToggleEmojiPicker}
+              hitSlop={8}
+              style={styles.emojiCloseButton}
+              accessibilityRole="button"
+              accessibilityLabel="Close emoji picker"
+            >
+              <IconSymbol name="xmark" size={18} color={theme.colors.textMuted} />
+            </TouchableOpacity>
           </View>
 
           {/* Category tabs */}
@@ -994,40 +1005,55 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Skin.space(12),
-    paddingVertical: Skin.space(8),
-    borderBottomWidth: Skin.border(1),
-    borderBottomColor: theme.colors.border ?? theme.colors.surface3,
+    paddingHorizontal: Skin.space(14),
+    // More breathing room: clears the panel's rounded top and gives the field
+    // air before the category band. No bottom border — the band below provides
+    // separation by color instead of a hard line.
+    paddingTop: Skin.space(14),
+    paddingBottom: Skin.space(12),
     gap: Skin.space(8),
   },
   searchInput: {
     flex: 1,
-    fontSize: Skin.font(14),
-    lineHeight: Skin.font(18),
+    fontSize: Skin.font(15),
+    lineHeight: Skin.font(20),
     color: theme.colors.textMain,
     fontFamily: theme.fonts.regular.fontFamily,
     padding: 0,
   },
+  emojiCloseButton: {
+    marginLeft: Skin.space(4),
+  },
   categoryTabs: {
-    maxHeight: 40,
-    borderBottomWidth: Skin.border(1),
-    borderBottomColor: theme.colors.border ?? theme.colors.surface3,
+    // A continuous band (no top/bottom separators) one shade below the panel
+    // (panel is surface5). Tall enough that the 20px emoji + pill padding
+    // aren't clipped.
+    maxHeight: 48,
+    backgroundColor: theme.colors.surface4,
   },
   categoryTabsContent: {
-    paddingHorizontal: Skin.space(4),
+    paddingHorizontal: Skin.space(6),
+    // Vertical padding inside the band so the active pill floats and never
+    // touches the band's edges.
+    paddingVertical: Skin.space(6),
     alignItems: 'center',
   },
   categoryTab: {
-    paddingHorizontal: Skin.space(10),
-    paddingVertical: Skin.space(6),
+    paddingHorizontal: Skin.space(9),
+    paddingVertical: Skin.space(5),
     marginHorizontal: Skin.space(2),
-    borderRadius: Skin.radius(8),
+    borderRadius: Skin.radius(10),
   },
   categoryTabActive: {
-    backgroundColor: theme.colors.surface3 ?? theme.colors.surface2,
+    // Floating pill one step above the band so it reads as raised, inset by the
+    // content padding so it never touches the band edges.
+    backgroundColor: theme.colors.surface6,
   },
   categoryTabEmoji: {
     fontSize: Skin.font(20),
+    // Explicit line-height so the glyph box is tall enough on Android (where
+    // emoji overshoot the default line box and clip).
+    lineHeight: Skin.font(26),
   },
   emojiGrid: {
     flex: 1,
