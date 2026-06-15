@@ -65,7 +65,7 @@ import { pickImage, compressAvatarImage } from '@/services/media/imageAttachment
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
-import { hexToBytes, type Emoji, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
+import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, type Emoji, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
 import * as Clipboard from 'expo-clipboard';
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import type { UserProfileInfo } from '@/components/UserProfileModal';
@@ -108,17 +108,9 @@ const MAX_DESCRIPTION_LENGTH = 300;
 const MAX_EMOJIS = 50;
 const MAX_STICKERS = 50;
 
-// Role colors palette
-const ROLE_COLORS = [
-  '#ef4444', '#f97316', '#f59e0b', '#eab308',
-  '#84cc16', '#22c55e', '#14b8a6', '#06b6d4',
-  '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6',
-  '#a855f7', '#d946ef', '#ec4899', '#f43f5e',
-];
-
-function getRandomColor(): string {
-  return ROLE_COLORS[Math.floor(Math.random() * ROLE_COLORS.length)];
-}
+// Role colors are now a shared palette: roles store a named token and a default
+// color is derived from the roleId in useAddRole (getDefaultRoleColor), resolved
+// to hex on read in useRoles (getRoleColorHex). No local random-hex palette.
 
 // Available permissions for roles
 const AVAILABLE_PERMISSIONS: { value: Permission; label: string }[] = [
@@ -131,18 +123,23 @@ const AVAILABLE_PERMISSIONS: { value: Permission; label: string }[] = [
 // RoleEditor component for inline editing
 interface RoleEditorProps {
   role: Role;
+  /** All roles in the space — used to validate tag/name uniqueness on save. */
+  allRoles: Role[];
   spaceId: string;
   theme: AppTheme;
   styles: ReturnType<typeof createStyles>;
   onDelete: () => void;
 }
 
-function RoleEditor({ role, spaceId, theme, styles, onDelete }: RoleEditorProps) {
+function RoleEditor({ role, allRoles, spaceId, theme, styles, onDelete }: RoleEditorProps) {
   const [displayName, setDisplayName] = useState(role.displayName);
   const [roleTag, setRoleTag] = useState(role.roleTag);
   const [permissions, setPermissions] = useState<Permission[]>(role.permissions);
   const [isPublic, setIsPublic] = useState(role.isPublic !== false);
   const [showPermissions, setShowPermissions] = useState(false);
+  // Inline error when the typed tag/name collides with another role. The text
+  // stays as the user typed it (so they can fix it); nothing is persisted.
+  const [conflictError, setConflictError] = useState<string | null>(null);
 
   const updateRoleMutation = useUpdateRole();
 
@@ -157,19 +154,37 @@ function RoleEditor({ role, spaceId, theme, styles, onDelete }: RoleEditorProps)
 
   const handleSave = useCallback(async () => {
     if (!hasChanges) return;
+    // The tag is normalized the same way the mutation stores it, so validate
+    // the normalized value. Block the save (and surface an inline error) if the
+    // tag or name collides with another role in the space.
+    const normalizedTag = roleTag.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const conflict = findRoleConflict(
+      allRoles,
+      { roleTag: normalizedTag, displayName },
+      role.roleId,
+    );
+    if (conflict) {
+      setConflictError(
+        conflict.field === 'roleTag'
+          ? `Tag "@${normalizedTag}" is already used by another role`
+          : `Name "${displayName.trim()}" is already used by another role`,
+      );
+      return;
+    }
+    setConflictError(null);
     try {
       await updateRoleMutation.mutateAsync({
         spaceId,
         roleId: role.roleId,
         displayName,
-        roleTag: roleTag.toLowerCase().replace(/[^a-z0-9_]/g, ''),
+        roleTag: normalizedTag,
         permissions,
         isPublic,
       });
     } catch (error) {
       Alert.alert('Error', 'Failed to save role');
     }
-  }, [spaceId, role.roleId, displayName, roleTag, permissions, isPublic, hasChanges, updateRoleMutation]);
+  }, [spaceId, role.roleId, allRoles, displayName, roleTag, permissions, isPublic, hasChanges, updateRoleMutation]);
 
   // Auto-save when permissions or isPublic change (toggle actions)
   const isInitialMount = React.useRef(true);
@@ -194,12 +209,20 @@ function RoleEditor({ role, spaceId, theme, styles, onDelete }: RoleEditorProps)
       <View style={styles.roleHeader}>
         <View style={[styles.roleColorDot, { backgroundColor: role.color }]} />
         <View style={styles.roleInfo}>
+          <TextInput
+            style={[styles.roleNameInput, { color: role.color }]}
+            value={displayName}
+            onChangeText={(text) => { setDisplayName(text); setConflictError(null); }}
+            onBlur={handleSave}
+            placeholder="Role Name"
+            placeholderTextColor={theme.colors.textMuted}
+          />
           <View style={styles.roleTagRow}>
             <Text style={styles.roleTagPrefix}>@</Text>
             <TextInput
               style={styles.roleTagInput}
               value={roleTag}
-              onChangeText={(text) => setRoleTag(text.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+              onChangeText={(text) => { setRoleTag(text.toLowerCase().replace(/[^a-z0-9_]/g, '')); setConflictError(null); }}
               onBlur={handleSave}
               placeholder="tag"
               placeholderTextColor={theme.colors.textMuted}
@@ -207,14 +230,9 @@ function RoleEditor({ role, spaceId, theme, styles, onDelete }: RoleEditorProps)
               autoCorrect={false}
             />
           </View>
-          <TextInput
-            style={[styles.roleNameInput, { color: role.color }]}
-            value={displayName}
-            onChangeText={setDisplayName}
-            onBlur={handleSave}
-            placeholder="Role Name"
-            placeholderTextColor={theme.colors.textMuted}
-          />
+          {conflictError ? (
+            <Text style={styles.roleConflictError}>{conflictError}</Text>
+          ) : null}
         </View>
         <View style={styles.roleActions}>
           <TouchableOpacity
@@ -1134,18 +1152,22 @@ export default function SpaceSettingsModal({
 
   const handleAddRole = useCallback(async () => {
     try {
+      // Auto-numbered unique defaults ("New Role 2", "newrole-2", …) so
+      // repeatedly tapping add never creates duplicate-named roles (this
+      // section auto-saves; there is no save gate to validate against).
+      const { displayName, roleTag } = getUniqueRoleDefaults(roles);
       await addRoleMutation.mutateAsync({
         spaceId,
-        displayName: 'New Role',
-        roleTag: 'newrole',
-        color: getRandomColor(),
+        displayName,
+        roleTag,
+        // color omitted — the hook derives a stable token from the roleId.
         permissions: [],
         isPublic: true,
       });
     } catch (error) {
       Alert.alert('Error', 'Failed to add role');
     }
-  }, [spaceId, addRoleMutation]);
+  }, [spaceId, addRoleMutation, roles]);
 
   const handleDeleteRole = useCallback(async (roleId: string) => {
     const ok = await confirm({
@@ -2073,6 +2095,7 @@ export default function SpaceSettingsModal({
         <RoleEditor
           key={role.roleId}
           role={role}
+          allRoles={roles}
           spaceId={spaceId}
           theme={theme}
           styles={styles}
@@ -2930,14 +2953,15 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     roleTagRow: {
       flexDirection: 'row',
       alignItems: 'center',
+      marginTop: Skin.space(2),
     },
     roleTagPrefix: {
-      fontSize: Skin.font(12),
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
     },
     roleTagInput: {
-      fontSize: Skin.font(12),
+      fontSize: Skin.font(13),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
       color: theme.colors.textMuted,
       padding: 0,
@@ -2948,7 +2972,11 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       padding: 0,
-      marginTop: Skin.space(2),
+    },
+    roleConflictError: {
+      fontSize: Skin.font(12),
+      color: theme.colors.danger,
+      marginTop: Skin.space(4),
     },
     rolePermissionsHeader: {
       flexDirection: 'row',

@@ -110,7 +110,7 @@ export default function UserProfileModal({
     }
   };
 
-  const handleRemoveRole = async (roleId: string) => {
+  const removeRole = async (roleId: string) => {
     if (!spaceId || !user) return;
     // Removing a role broadcasts the change to every member, so confirm it (T1).
     const roleName = userRoles.find(r => r.roleId === roleId)?.displayName;
@@ -142,6 +142,20 @@ export default function UserProfileModal({
         return next;
       });
     }
+  };
+
+  // Confirm before removing a role from the user (don't fire immediately).
+  const handleRemoveRole = (roleId: string) => {
+    const role = userRoles.find(r => r.roleId === roleId);
+    const roleLabel = role ? role.displayName : 'this role';
+    Alert.alert(
+      'Remove role',
+      `Remove ${roleLabel} from ${user?.userName ?? 'this user'}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => { void removeRole(roleId); } },
+      ],
+    );
   };
 
 
@@ -224,11 +238,15 @@ export default function UserProfileModal({
                   const isLoading = loadingRoles.has(role.roleId);
                   // Owners can remove a role by tapping anywhere on the pill;
                   // the ✕ is just the affordance. Non-owners get a static badge.
+                  // Visual (background tint + color dot) follows the shared
+                  // role-color palette from PR #92.
                   const badgeContent = (
                     <>
                       {isLoading ? (
                         <ActivityIndicator size={10} color={role.color} />
-                      ) : null}
+                      ) : (
+                        <View style={[styles.roleBadgeDot, { backgroundColor: role.color }]} />
+                      )}
                       <Text style={[styles.roleBadgeText, { color: role.color }]}>
                         {role.displayName}
                       </Text>
@@ -240,7 +258,7 @@ export default function UserProfileModal({
                   return isSpaceOwner ? (
                     <TouchableOpacity
                       key={role.roleId}
-                      style={[styles.roleBadge, { borderColor: role.color }]}
+                      style={[styles.roleBadge, { backgroundColor: role.color + '20' }]}
                       onPress={() => handleRemoveRole(role.roleId)}
                       disabled={isLoading}
                       accessibilityRole="button"
@@ -249,7 +267,7 @@ export default function UserProfileModal({
                       {badgeContent}
                     </TouchableOpacity>
                   ) : (
-                    <View key={role.roleId} style={[styles.roleBadge, { borderColor: role.color }]}>
+                    <View key={role.roleId} style={[styles.roleBadge, { backgroundColor: role.color + '20' }]}>
                       {badgeContent}
                     </View>
                   );
@@ -450,10 +468,16 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: Skin.space(6),
-      borderWidth: Skin.border(1),
+      // Tinted fill + a solid color dot (matches the members-list pill) so the
+      // pill reads against any drawer surface, not relying on a thin border.
       borderRadius: Skin.radius(14),
       paddingVertical: Skin.space(4),
       paddingHorizontal: Skin.space(10),
+    },
+    roleBadgeDot: {
+      width: 8,
+      height: 8,
+      borderRadius: Skin.radius(4),
     },
     roleBadgeText: {
       fontSize: Skin.font(13),
