@@ -18,7 +18,7 @@ import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
-import { deleteSkin, listSkins, saveSkin } from '@/services/theme/skinPrefs';
+import { deleteSkin, listSkins, saveSkin, type AppearancePref } from '@/services/theme/skinPrefs';
 import { validateSkin } from '@/theme/skins/validate';
 import { SAMPLE_SKINS } from '@/theme/skins/samples';
 import type { SkinOverride } from '@/theme/skins/types';
@@ -34,7 +34,7 @@ import { logger } from '@quilibrium/quorum-shared';
 import * as Skin from '@/theme/skins/geometry';
 
 export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { theme, activeSkin, setActiveSkin } = useTheme();
+  const { theme, activeSkin, setActiveSkin, appearance, setAppearance } = useTheme();
   const { user } = useAuth();
   const address = user?.address;
   const [refresh, setRefresh] = React.useState(0);
@@ -245,6 +245,11 @@ export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: ()
               description="The built-in Quorum theme"
               active={!activeSkin}
               onPress={() => apply(null)}
+              footer={
+                !activeSkin ? (
+                  <AppearanceSegments value={appearance} onChange={setAppearance} theme={theme} />
+                ) : undefined
+              }
               theme={theme}
             />
             {skins.map((skin) => {
@@ -302,6 +307,7 @@ function SkinRow({
   onPress,
   onLongPress,
   onDelete,
+  footer,
   theme,
 }: {
   label: string;
@@ -310,35 +316,95 @@ function SkinRow({
   onPress: () => void;
   onLongPress?: () => void;
   onDelete?: () => void;
+  footer?: React.ReactNode;
   theme: ReturnType<typeof useTheme>['theme'];
 }) {
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      onLongPress={onLongPress}
+    <View>
+      <TouchableOpacity
+        onPress={onPress}
+        onLongPress={onLongPress}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: Skin.space(12),
+          paddingVertical: Skin.space(14),
+          paddingHorizontal: Skin.space(16),
+          borderRadius: theme.radii.md,
+          backgroundColor: active ? theme.colors.surface3 : 'transparent',
+          marginHorizontal: Skin.space(12),
+          marginBottom: Skin.space(4),
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: theme.colors.textMain, fontWeight: '600', fontSize: Skin.font(15) }}>{label}</Text>
+          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>{description}</Text>
+        </View>
+        {active && <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.accent} />}
+        {onDelete && (
+          <TouchableOpacity onPress={onDelete} hitSlop={10} style={{ padding: Skin.space(4) }}>
+            <IconSymbol name="trash" size={18} color={theme.colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+      {footer}
+    </View>
+  );
+}
+
+const APPEARANCE_SEGMENTS: { key: AppearancePref; label: string }[] = [
+  { key: 'system', label: 'System' },
+  { key: 'light', label: 'Light' },
+  { key: 'dark', label: 'Dark' },
+];
+
+function AppearanceSegments({
+  value,
+  onChange,
+  theme,
+}: {
+  value: AppearancePref;
+  onChange: (pref: AppearancePref) => void;
+  theme: ReturnType<typeof useTheme>['theme'];
+}) {
+  return (
+    <View
       style={{
         flexDirection: 'row',
-        alignItems: 'center',
-        gap: Skin.space(12),
-        paddingVertical: Skin.space(14),
+        gap: Skin.space(8),
         paddingHorizontal: Skin.space(16),
-        borderRadius: theme.radii.md,
-        backgroundColor: active ? theme.colors.surface3 : 'transparent',
-        marginHorizontal: Skin.space(12),
-        marginBottom: Skin.space(4),
+        paddingBottom: Skin.space(8),
       }}
     >
-      <View style={{ flex: 1 }}>
-        <Text style={{ color: theme.colors.textMain, fontWeight: '600', fontSize: Skin.font(15) }}>{label}</Text>
-        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>{description}</Text>
-      </View>
-      {active && <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.accent} />}
-      {onDelete && (
-        <TouchableOpacity onPress={onDelete} hitSlop={10} style={{ padding: Skin.space(4) }}>
-          <IconSymbol name="trash" size={18} color={theme.colors.textMuted} />
-        </TouchableOpacity>
-      )}
-    </TouchableOpacity>
+      {APPEARANCE_SEGMENTS.map((seg) => {
+        const active = value === seg.key;
+        return (
+          <TouchableOpacity
+            key={seg.key}
+            onPress={() => onChange(seg.key)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={`Appearance: ${seg.label}`}
+            style={{
+              paddingHorizontal: Skin.space(14),
+              paddingVertical: Skin.space(7),
+              borderRadius: theme.radii.pill,
+              backgroundColor: active ? theme.colors.surface3 : 'transparent',
+            }}
+          >
+            <Text
+              style={{
+                color: active ? theme.colors.textMain : theme.colors.textMuted,
+                fontWeight: '600',
+                fontSize: Skin.font(13),
+              }}
+            >
+              {seg.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
   );
 }
 
