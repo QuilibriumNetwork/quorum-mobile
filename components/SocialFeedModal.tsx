@@ -444,7 +444,7 @@ function ShareActionSheet({
 
   const actions = [
     {
-      icon: isRecasted ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right',
+      icon: 'arrow.triangle.2.circlepath',
       label: isRecasted ? 'Undo recast' : 'Recast',
       color: isRecasted ? theme.colors.success : theme.colors.textMain,
       onPress: onRecast,
@@ -546,29 +546,6 @@ function ShareActionSheet({
               </Text>
             </TouchableOpacity>
           ))}
-
-          {/* Cancel button */}
-          <TouchableOpacity
-            style={{
-              marginTop: Skin.space(8),
-              marginHorizontal: Skin.space(16),
-              paddingVertical: Skin.space(14),
-              backgroundColor: theme.colors.surface2,
-              borderRadius: Skin.radius(12),
-              alignItems: 'center',
-            }}
-            onPress={onClose}
-          >
-            <Text
-              style={{
-                fontSize: Skin.font(16),
-                fontWeight: '600',
-                color: theme.colors.textMain,
-              }}
-            >
-              Cancel
-            </Text>
-          </TouchableOpacity>
         </View>
       </Pressable>
     </Modal>
@@ -3069,7 +3046,7 @@ function ThreadDetailView({
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <IconSymbol
-                  name={isRecasted ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right'}
+                  name="arrow.triangle.2.circlepath"
                   color={isRecasted ? theme.colors.success : theme.colors.textMuted}
                   size={16}
                 />
@@ -4009,7 +3986,7 @@ export function ProfileView({
               </TouchableOpacity>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
                 <IconSymbol
-                  name={cast.viewerContext?.recast ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right'}
+                  name="arrow.triangle.2.circlepath"
                   color={cast.viewerContext?.recast ? theme.colors.success : theme.colors.textMuted}
                   size={16}
                 />
@@ -4612,7 +4589,7 @@ function ChannelView({
               </TouchableOpacity>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
                 <IconSymbol
-                  name={cast.viewerContext?.recast ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right'}
+                  name="arrow.triangle.2.circlepath"
                   color={cast.viewerContext?.recast ? theme.colors.success : theme.colors.textMuted}
                   size={16}
                 />
@@ -5290,7 +5267,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
           onPress={() => onOpenShareSheet(post.hash, post.username ?? '', post.content ?? '', isRecasted, recastCount, post.authorFid)}
         >
           <IconSymbol
-            name={isRecasted ? "arrowshape.turn.up.right.fill" : "arrowshape.turn.up.right"}
+            name="arrow.triangle.2.circlepath"
             color={isRecasted ? theme.colors.success : theme.colors.textMuted}
             size={16}
           />

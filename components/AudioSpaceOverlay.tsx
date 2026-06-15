@@ -951,7 +951,7 @@ function ChatPanel({
                       style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4) }}
                       accessibilityLabel={recasted ? 'Undo recast' : 'Recast'}
                     >
-                      <IconSymbol name="arrowshape.turn.up.right" size={14} color={recasted ? theme.colors.success : theme.colors.textMuted} />
+                      <IconSymbol name="arrow.triangle.2.circlepath" size={14} color={recasted ? theme.colors.success : theme.colors.textMuted} />
                       {recastCount > 0 && (
                         <Text style={{ color: recasted ? theme.colors.success : theme.colors.textMuted, fontSize: Skin.font(12) }}>{recastCount}</Text>
                       )}

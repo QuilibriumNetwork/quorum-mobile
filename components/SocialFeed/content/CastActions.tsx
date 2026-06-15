@@ -83,7 +83,7 @@ export const CastActions = React.memo(function CastActions({
 
       <View style={styles.actionButton}>
         <IconSymbol
-          name={isRecast ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right'}
+          name="arrow.triangle.2.circlepath"
           color={isRecast ? theme.colors.success : theme.colors.textMuted}
           size={16}
         />

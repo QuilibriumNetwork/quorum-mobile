@@ -293,7 +293,7 @@ export function HegemonyGovernanceView({ theme, token }: { theme: AppTheme; toke
             {/* Counts */}
             <View style={{ flexDirection: 'row', gap: Skin.space(14), marginTop: Skin.space(10) }}>
               <Count icon="heart" value={c.likes} theme={theme} />
-              <Count icon="arrowshape.turn.up.right" value={c.recasts} theme={theme} />
+              <Count icon="arrow.triangle.2.circlepath" value={c.recasts} theme={theme} />
               <Count icon="bubble.left" value={c.replies} theme={theme} />
             </View>
           </View>
