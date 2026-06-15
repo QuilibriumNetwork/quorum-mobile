@@ -4,13 +4,18 @@
  * Drop-in replacement for ActionSheetIOS / Alert.alert that:
  *   - Matches the app's dark/light theme
  *   - Renders consistently on iOS and Android
- *   - Supports an optional icon per action
+ *   - Supports an optional icon (or custom leading element) per action
  *   - Marks destructive actions in red
+ *   - Supports flat lists (`actions`) OR grouped sections (`sections`)
  *
  * Dismissed by tapping the backdrop or swiping down (inherited from BaseModal);
  * there is no separate Cancel row, matching the rest of the app's sheets.
  *
- * @example
+ * This is the single source of truth for the "icon-left + label-right" row used
+ * across every modal/drawer/sheet. See
+ * .agents/reports/2026-06-15-modal-link-row-audit-and-unified-component.md
+ *
+ * @example flat list
  *   <ActionSheet
  *     visible={visible}
  *     onClose={() => setVisible(false)}
@@ -21,6 +26,16 @@
  *       { label: 'Delete', icon: 'trash', onPress: handleDelete, destructive: true },
  *     ]}
  *   />
+ *
+ * @example grouped sections
+ *   <ActionSheet
+ *     visible={visible}
+ *     onClose={onClose}
+ *     sections={[
+ *       { title: 'Spaces', items: spaceRows },
+ *       { title: 'Direct messages', items: dmRows },
+ *     ]}
+ *   />
  */
 
 import React, { useCallback } from 'react';
@@ -28,28 +43,107 @@ import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { BaseModal } from '@/components/shared/BaseModal';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
-import { textStyles, useTheme, type AppTheme } from '@/theme';
+import { useTheme, type AppTheme } from '@/theme';
 import { haptics } from '@/utils/haptics';
 import * as Skin from '@/theme/skins/geometry';
 
-export interface ActionSheetAction {
+export interface ActionRowItem {
   label: string;
+  /** IconSymbol name. Omit to leave an aligned spacer, or use `leading`. */
   icon?: string;
-  /** Runs after the sheet animates closed */
+  /** Runs after the sheet animates closed. */
   onPress: () => void;
   destructive?: boolean;
   disabled?: boolean;
+  /** Optional secondary line under the label. */
+  sublabel?: string;
+  /** Trailing affordance: a chevron, or any custom node (toggle, send icon…). */
+  trailing?: 'chevron' | React.ReactNode;
+  /** Success-tinted active state (e.g. selected / recasted). */
+  active?: boolean;
+  /** Custom leading element (avatar, SpaceIcon) rendered instead of `icon`. */
+  leading?: React.ReactNode;
+}
+
+export interface ActionSheetSection {
+  /** Optional uppercase header shown above the group. */
+  title?: string;
+  items: ActionRowItem[];
 }
 
 interface ActionSheetProps {
   visible: boolean;
   onClose: () => void;
-  /** Optional title shown at the top in bold */
+  /** Optional title shown at the top in bold. */
   title?: string;
-  /** Optional secondary message under the title */
+  /** Optional secondary message under the title. */
   message?: string;
-  /** List of tappable actions — rendered vertically */
-  actions: ActionSheetAction[];
+  /** Flat list of actions (back-compat). Provide this OR `sections`. */
+  actions?: ActionRowItem[];
+  /** Grouped sections. Provide this OR `actions`. */
+  sections?: ActionSheetSection[];
+}
+
+/** Back-compat alias — old call sites typed against `ActionSheetAction`. */
+export type ActionSheetAction = ActionRowItem;
+
+function ActionRow({
+  item,
+  isLast,
+  onPress,
+  theme,
+  styles,
+}: {
+  item: ActionRowItem;
+  isLast: boolean;
+  onPress: (item: ActionRowItem) => void;
+  theme: AppTheme;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const color = item.disabled
+    ? theme.colors.textMuted
+    : item.destructive
+      ? theme.colors.danger
+      : item.active
+        ? theme.colors.success
+        : theme.colors.textMain;
+
+  return (
+    <TouchableOpacity
+      style={[styles.actionRow, isLast && styles.actionRowLast]}
+      onPress={() => onPress(item)}
+      activeOpacity={0.6}
+      disabled={item.disabled}
+      accessibilityRole="button"
+      accessibilityLabel={item.label}
+      accessibilityState={{ disabled: !!item.disabled }}
+    >
+      {item.leading ? (
+        item.leading
+      ) : item.icon ? (
+        // icon name is validated by IconSymbol's mapping at runtime; the strict
+        // union type is too narrow for a generic wrapper.
+        <IconSymbol name={item.icon as IconSymbolName} size={20} color={color} />
+      ) : (
+        <View style={styles.iconSpacer} />
+      )}
+
+      <View style={styles.labelColumn}>
+        <Text style={[styles.actionLabel, { color }]}>{item.label}</Text>
+        {item.sublabel ? (
+          <Text style={styles.actionSublabel} numberOfLines={1}>
+            {item.sublabel}
+          </Text>
+        ) : null}
+      </View>
+
+      {item.trailing === 'chevron' ? (
+        <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+      ) : item.trailing ? (
+        item.trailing
+      ) : null}
+    </TouchableOpacity>
+  );
 }
 
 export function ActionSheet({
@@ -58,19 +152,24 @@ export function ActionSheet({
   title,
   message,
   actions,
+  sections,
 }: ActionSheetProps) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
 
+  // Normalize flat `actions` into a single unnamed section.
+  const resolvedSections: ActionSheetSection[] =
+    sections ?? (actions ? [{ items: actions }] : []);
+
   const handleActionPress = useCallback(
-    (action: ActionSheetAction) => {
-      if (action.disabled) return;
+    (item: ActionRowItem) => {
+      if (item.disabled) return;
       haptics.selection();
-      // Close first so the user sees the sheet dismiss, then run the action
-      // on next tick. Prevents visual awkwardness when the action opens
-      // another modal.
+      // Close first so the user sees the sheet dismiss, then run the action on
+      // next tick. Prevents visual awkwardness when the action opens another
+      // modal.
       onClose();
-      setTimeout(() => action.onPress(), 120);
+      setTimeout(() => item.onPress(), 120);
     },
     [onClose],
   );
@@ -85,36 +184,25 @@ export function ActionSheet({
           </View>
         )}
 
-        <View style={styles.actions}>
-          {actions.map((action, index) => {
-            const isLast = index === actions.length - 1;
-            const color = action.disabled
-              ? theme.colors.textMuted
-              : action.destructive
-                ? theme.colors.danger
-                : theme.colors.textMain;
-            return (
-              <TouchableOpacity
-                key={`${action.label}-${index}`}
-                style={[styles.actionRow, isLast && styles.actionRowLast]}
-                onPress={() => handleActionPress(action)}
-                activeOpacity={0.6}
-                disabled={action.disabled}
-              >
-                {action.icon ? (
-                  // icon name is validated by IconSymbol's mapping at runtime;
-                  // the strict union type is too narrow for a generic wrapper.
-                  <IconSymbol name={action.icon as IconSymbolName} size={20} color={color} />
-                ) : (
-                  <View style={styles.iconSpacer} />
-                )}
-                <Text style={[styles.actionLabel, { color }]}>
-                  {action.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {resolvedSections.map((section, sIndex) => (
+          <View key={`section-${sIndex}`} style={styles.section}>
+            {section.title ? (
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+            ) : null}
+            <View style={styles.group}>
+              {section.items.map((item, iIndex) => (
+                <ActionRow
+                  key={`${item.label}-${iIndex}`}
+                  item={item}
+                  isLast={iIndex === section.items.length - 1}
+                  onPress={handleActionPress}
+                  theme={theme}
+                  styles={styles}
+                />
+              ))}
+            </View>
+          </View>
+        ))}
       </View>
     </BaseModal>
   );
@@ -143,7 +231,19 @@ const createStyles = (theme: AppTheme) =>
       textAlign: 'center',
       marginTop: Skin.space(2),
     },
-    actions: {
+    section: {
+      marginBottom: Skin.space(12),
+    },
+    sectionTitle: {
+      ...theme.textStyles.footnote,
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginTop: Skin.space(4),
+      marginBottom: Skin.space(8),
+      marginHorizontal: Skin.space(8),
+    },
+    group: {
       backgroundColor: theme.colors.surface2,
       borderRadius: Skin.radius(14),
       overflow: 'hidden',
@@ -151,9 +251,10 @@ const createStyles = (theme: AppTheme) =>
     actionRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: Skin.space(14),
+      gap: Skin.space(12),
       paddingHorizontal: Skin.space(16),
       paddingVertical: Skin.space(14),
+      minHeight: 44,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: theme.colors.surface4,
     },
@@ -163,8 +264,15 @@ const createStyles = (theme: AppTheme) =>
     iconSpacer: {
       width: 20,
     },
-    actionLabel: {
-      ...theme.textStyles.body,
+    labelColumn: {
       flex: 1,
+    },
+    actionLabel: {
+      ...theme.textStyles.callout,
+    },
+    actionSublabel: {
+      ...theme.textStyles.footnote,
+      color: theme.colors.textMuted,
+      marginTop: Skin.space(1),
     },
   });
