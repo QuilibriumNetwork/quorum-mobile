@@ -6,9 +6,9 @@
  *   - Renders consistently on iOS and Android
  *   - Supports an optional icon per action
  *   - Marks destructive actions in red
- *   - Includes an always-present Cancel button
  *
- * Built on top of BaseModal so we inherit swipe-to-dismiss + backdrop.
+ * Dismissed by tapping the backdrop or swiping down (inherited from BaseModal);
+ * there is no separate Cancel row, matching the rest of the app's sheets.
  *
  * @example
  *   <ActionSheet
@@ -50,8 +50,6 @@ interface ActionSheetProps {
   message?: string;
   /** List of tappable actions — rendered vertically */
   actions: ActionSheetAction[];
-  /** Cancel button label — defaults to "Cancel" */
-  cancelLabel?: string;
 }
 
 export function ActionSheet({
@@ -60,7 +58,6 @@ export function ActionSheet({
   title,
   message,
   actions,
-  cancelLabel = 'Cancel',
 }: ActionSheetProps) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
@@ -118,14 +115,6 @@ export function ActionSheet({
             );
           })}
         </View>
-
-        <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={onClose}
-          activeOpacity={0.6}
-        >
-          <Text style={styles.cancelText}>{cancelLabel}</Text>
-        </TouchableOpacity>
       </View>
     </BaseModal>
   );
@@ -158,7 +147,6 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.surface2,
       borderRadius: Skin.radius(14),
       overflow: 'hidden',
-      marginBottom: Skin.space(10),
     },
     actionRow: {
       flexDirection: 'row',
@@ -178,17 +166,5 @@ const createStyles = (theme: AppTheme) =>
     actionLabel: {
       ...theme.textStyles.body,
       flex: 1,
-    },
-    cancelButton: {
-      backgroundColor: theme.colors.surface2,
-      borderRadius: Skin.radius(14),
-      paddingVertical: Skin.space(14),
-      alignItems: 'center',
-    },
-    cancelText: {
-      ...theme.textStyles.body,
-      fontFamily: theme.fonts.bold.fontFamily,
-      fontWeight: theme.fonts.bold.fontWeight,
-      color: theme.colors.textMain,
     },
   });

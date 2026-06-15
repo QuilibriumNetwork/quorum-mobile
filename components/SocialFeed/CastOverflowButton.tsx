@@ -88,7 +88,18 @@ export function CastOverflowButton({
   const isOwnCast =
     typeof authorFid === 'number' && authorFid > 0 && authorFid === ownFid && !!onDelete;
 
+  // Ordered least-destructive → most-destructive, top to bottom:
+  // Translate, then (own) Delete or (others) Mute/Block, then Report last.
   const actions: ActionSheetAction[] = [
+    ...(canTranslate
+      ? [
+          {
+            label: 'Translate',
+            icon: 'globe',
+            onPress: () => requestTranslateText(castText!),
+          },
+        ]
+      : []),
     ...(isOwnCast
       ? [
           {
@@ -106,21 +117,6 @@ export function CastOverflowButton({
           },
         ]
       : []),
-    ...(canTranslate
-      ? [
-          {
-            label: 'Translate',
-            icon: 'globe',
-            onPress: () => requestTranslateText(castText!),
-          },
-        ]
-      : []),
-    {
-      label: 'Report cast',
-      icon: 'flag',
-      destructive: true,
-      onPress: () => onReport(castHash, authorFid),
-    },
     ...(canModerateUser
       ? [
           isMuted
@@ -169,6 +165,12 @@ export function CastOverflowButton({
               },
         ]
       : []),
+    {
+      label: 'Report cast',
+      icon: 'flag',
+      destructive: true,
+      onPress: () => onReport(castHash, authorFid),
+    },
   ];
 
   return (
