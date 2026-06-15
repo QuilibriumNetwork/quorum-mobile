@@ -18,6 +18,7 @@ import { KickUserModal } from '@/components/KickUserModal';
 import SpaceChannelBindingPicker from '@/components/SpaceChannelBindingPicker';
 import ShareInviteSheet from '@/components/ShareInviteSheet';
 import { BaseModal, TypeToConfirmModal } from '@/components/shared';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { IconPicker } from '@/components/ui/IconPicker';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
@@ -810,7 +811,7 @@ export default function SpaceSettingsModal({
 
   // Delete/Leave confirmation
   const [showDeleteSpaceConfirm, setShowDeleteSpaceConfirm] = useState(false);
-  const [leaveConfirmStep, setLeaveConfirmStep] = useState(0);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   // Kick modal state
   const [kickTarget, setKickTarget] = useState<{
@@ -871,7 +872,6 @@ export default function SpaceSettingsModal({
     setInviteType('private');
     setHasLoadedExistingInvite(false);
     setShowDeleteSpaceConfirm(false);
-    setLeaveConfirmStep(0);
     setKickTarget(null);
     onClose();
   }, [onClose]);
@@ -988,32 +988,25 @@ export default function SpaceSettingsModal({
   const handleDeleteEmoji = useCallback(async (emojiId: string) => {
     if (!space) return;
 
-    Alert.alert(
-      'Delete Emoji',
-      'Are you sure you want to delete this emoji?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const updatedEmojis = (space.emojis || []).filter(e => e.id !== emojiId);
-              await updateSpaceMutation.mutateAsync({
-                spaceId,
-                emojis: updatedEmojis,
-              });
+    const ok = await confirm({
+      title: 'Delete Emoji',
+      message: 'Are you sure you want to delete this emoji? This removes it for everyone in the space.',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      const updatedEmojis = (space.emojis || []).filter(e => e.id !== emojiId);
+      await updateSpaceMutation.mutateAsync({
+        spaceId,
+        emojis: updatedEmojis,
+      });
 
-              const updated = getSpace(spaceId);
-              setSpace(updated);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete emoji');
-            }
-          },
-        },
-      ]
-    );
-  }, [space, spaceId, updateSpaceMutation]);
+      const updated = getSpace(spaceId);
+      setSpace(updated);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to delete emoji');
+    }
+  }, [space, spaceId, updateSpaceMutation, confirm]);
 
   const handleSaveEmojiName = useCallback(async (emojiId: string) => {
     if (!space || !editingEmojiName.trim()) {
@@ -1089,32 +1082,25 @@ export default function SpaceSettingsModal({
   const handleDeleteSticker = useCallback(async (stickerId: string) => {
     if (!space) return;
 
-    Alert.alert(
-      'Delete Sticker',
-      'Are you sure you want to delete this sticker?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const updatedStickers = (space.stickers || []).filter(s => s.id !== stickerId);
-              await updateSpaceMutation.mutateAsync({
-                spaceId,
-                stickers: updatedStickers,
-              });
+    const ok = await confirm({
+      title: 'Delete Sticker',
+      message: 'Are you sure you want to delete this sticker? This removes it for everyone in the space.',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      const updatedStickers = (space.stickers || []).filter(s => s.id !== stickerId);
+      await updateSpaceMutation.mutateAsync({
+        spaceId,
+        stickers: updatedStickers,
+      });
 
-              const updated = getSpace(spaceId);
-              setSpace(updated);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete sticker');
-            }
-          },
-        },
-      ]
-    );
-  }, [space, spaceId, updateSpaceMutation]);
+      const updated = getSpace(spaceId);
+      setSpace(updated);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to delete sticker');
+    }
+  }, [space, spaceId, updateSpaceMutation, confirm]);
 
   const handleSaveStickerName = useCallback(async (stickerId: string) => {
     if (!space || !editingStickerNameValue.trim()) {
@@ -1162,25 +1148,18 @@ export default function SpaceSettingsModal({
   }, [spaceId, addRoleMutation]);
 
   const handleDeleteRole = useCallback(async (roleId: string) => {
-    Alert.alert(
-      'Delete Role',
-      'Are you sure you want to delete this role?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteRoleMutation.mutateAsync({ spaceId, roleId });
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete role');
-            }
-          },
-        },
-      ]
-    );
-  }, [spaceId, deleteRoleMutation]);
+    const ok = await confirm({
+      title: 'Delete Role',
+      message: 'Are you sure you want to delete this role? It will be removed from every member who has it. This cannot be undone.',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await deleteRoleMutation.mutateAsync({ spaceId, roleId });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to delete role');
+    }
+  }, [spaceId, deleteRoleMutation, confirm]);
 
   // Channel/Group handlers
   const handleAddGroup = useCallback(async () => {
@@ -1225,27 +1204,20 @@ export default function SpaceSettingsModal({
       return;
     }
 
-    Alert.alert(
-      'Delete Group',
-      `Are you sure you want to delete "${group.groupName}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteGroupMutation.mutateAsync({ spaceId, groupIndex });
-              const updated = getSpace(spaceId);
-              setSpace(updated);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete group');
-            }
-          },
-        },
-      ]
-    );
-  }, [space, spaceId, deleteGroupMutation]);
+    const ok = await confirm({
+      title: 'Delete Group',
+      message: `Are you sure you want to delete "${group.groupName}"? This removes the group for everyone in the space.`,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await deleteGroupMutation.mutateAsync({ spaceId, groupIndex });
+      const updated = getSpace(spaceId);
+      setSpace(updated);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to delete group');
+    }
+  }, [space, spaceId, deleteGroupMutation, confirm]);
 
   const handleAddChannel = useCallback(async (groupIndex: number) => {
     if (!newChannelName.trim()) {
@@ -1288,31 +1260,24 @@ export default function SpaceSettingsModal({
   }, [spaceId, editingChannelName, updateChannelMutation]);
 
   const handleDeleteChannel = useCallback(async (channelId: string, channelName: string) => {
-    Alert.alert(
-      'Delete Channel',
-      `Are you sure you want to delete #${channelName}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteChannelMutation.mutateAsync({ spaceId, channelId });
-              const updated = getSpace(spaceId);
-              setSpace(updated);
-            } catch (error: unknown) {
-              if (error instanceof Error && error.message?.includes('default channel')) {
-                Alert.alert('Cannot Delete', 'You cannot delete the default channel');
-              } else {
-                Alert.alert('Error', 'Failed to delete channel');
-              }
-            }
-          },
-        },
-      ]
-    );
-  }, [spaceId, deleteChannelMutation]);
+    const ok = await confirm({
+      title: 'Delete Channel',
+      message: `Are you sure you want to delete #${channelName}? This removes the channel and its messages for everyone. This cannot be undone.`,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await deleteChannelMutation.mutateAsync({ spaceId, channelId });
+      const updated = getSpace(spaceId);
+      setSpace(updated);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message?.includes('default channel')) {
+        Alert.alert('Cannot Delete', 'You cannot delete the default channel');
+      } else {
+        Alert.alert('Error', 'Failed to delete channel');
+      }
+    }
+  }, [spaceId, deleteChannelMutation, confirm]);
 
   const handleMoveChannelUp = useCallback(async (groupIndex: number, channelIndex: number) => {
     if (channelIndex === 0) return;
@@ -1377,12 +1342,12 @@ export default function SpaceSettingsModal({
   );
 
   const handleLeaveSpace = useCallback(async () => {
-    if (leaveConfirmStep === 0) {
-      setLeaveConfirmStep(1);
-      setTimeout(() => setLeaveConfirmStep(0), 5000);
-      return;
-    }
-
+    const ok = await confirm({
+      title: 'Leave Space',
+      message: "You won't be able to rejoin unless you are re-invited. Your existing messages will NOT be deleted.",
+      confirmLabel: 'Leave Space',
+    });
+    if (!ok) return;
     try {
       await leaveSpaceMutation.mutateAsync({ spaceId });
       handleClose();
@@ -1390,7 +1355,7 @@ export default function SpaceSettingsModal({
     } catch (error) {
       Alert.alert('Error', 'Failed to leave space');
     }
-  }, [spaceId, leaveConfirmStep, leaveSpaceMutation, handleClose, onSpaceLeft]);
+  }, [spaceId, leaveSpaceMutation, handleClose, onSpaceLeft, confirm]);
 
   // Owner tabs
   const ownerTabs: { key: TabType; label: string; icon: string }[] = [
@@ -1722,7 +1687,7 @@ export default function SpaceSettingsModal({
                 <ActivityIndicator size="small" color={theme.colors.danger} />
               ) : (
                 <Text style={styles.dangerButtonOutlineText}>
-                  {leaveConfirmStep === 0 ? 'Leave Space' : 'Click again to confirm'}
+                  Leave Space
                 </Text>
               )}
             </TouchableOpacity>
@@ -2689,6 +2654,7 @@ export default function SpaceSettingsModal({
         onConfirm={handleDeleteSpace}
         onCancel={() => setShowDeleteSpaceConfirm(false)}
       />
+      {confirmDialog}
     </BaseModal>
   );
 }

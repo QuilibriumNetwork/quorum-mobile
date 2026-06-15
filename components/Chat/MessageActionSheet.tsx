@@ -6,10 +6,11 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, Dimensions } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { getRecentEmojis } from '@/services/emojiFrecency';
 import { requestTranslateText } from '@/services/translation/forceTranslate';
 import {
@@ -72,6 +73,15 @@ export function MessageActionSheet({
   theme,
 }: MessageActionSheetProps) {
   const styles = createStyles(theme);
+  const { confirm, confirmDialog } = useConfirmDialog();
+  // While a confirm dialog is open ON TOP of this sheet, swallow the sheet's own
+  // back/backdrop dismissal — otherwise an Android back could close the sheet
+  // (unmounting the confirm) instead of cancelling the confirm.
+  const [isConfirming, setIsConfirming] = useState(false);
+  const guardedClose = () => {
+    if (isConfirming) return;
+    onClose();
+  };
   const [quickEmojis, setQuickEmojis] = useState<string[]>(DEFAULT_QUICK_REACTIONS);
 
   // "Translate" is shown only when on-device translation is available
@@ -122,8 +132,17 @@ export function MessageActionSheet({
     onClose();
   };
 
-  const handlePin = () => {
+  const handlePin = async () => {
     if (isPinned) {
+      // Unpinning broadcasts to every member, so confirm it (T1).
+      setIsConfirming(true);
+      const ok = await confirm({
+        title: 'Unpin Message',
+        message: 'This removes the message from the pinned list for everyone in this channel.',
+        confirmLabel: 'Unpin',
+      });
+      setIsConfirming(false);
+      if (!ok) return;
       onUnpin?.();
     } else {
       onPin?.();
@@ -158,22 +177,17 @@ export function MessageActionSheet({
     onClose();
   };
 
-  const handleDelete = () => {
-    Alert.alert(
-      'Delete Message',
-      'Are you sure you want to delete this message?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            onDelete?.();
-            onClose();
-          },
-        },
-      ]
-    );
+  const handleDelete = async () => {
+    setIsConfirming(true);
+    const ok = await confirm({
+      title: 'Delete Message',
+      message: 'This permanently removes the message. This cannot be undone.',
+      confirmLabel: 'Delete',
+    });
+    setIsConfirming(false);
+    if (!ok) return;
+    onDelete?.();
+    onClose();
   };
 
   return (
@@ -181,10 +195,10 @@ export function MessageActionSheet({
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={guardedClose}
     >
       <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable style={styles.backdrop} onPress={guardedClose} />
         <View style={styles.container}>
           {/* Drag handle */}
           <View style={styles.handleContainer}>
@@ -349,6 +363,9 @@ export function MessageActionSheet({
           </View>
         </View>
       </View>
+      {/* Centered confirm for Delete / Unpin. Renders above the sheet; back +
+          backdrop resolve to cancel (owned by CenterModal). */}
+      {confirmDialog}
     </Modal>
   );
 }

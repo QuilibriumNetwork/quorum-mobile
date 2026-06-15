@@ -36,6 +36,7 @@ import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
 import { useSendDirectEmbedMessage } from '@/hooks/chat/useSendDirectEmbedMessage';
 import { useSendDirectReaction, useRemoveDirectReaction } from '@/hooks/chat/useSendDirectReaction';
 import { useEditDirectMessage } from '@/hooks/chat/useEditDirectMessage';
+import { useDeleteDirectMessage } from '@/hooks/chat/useDeleteDirectMessage';
 import { canEditMessage } from '@/hooks/chat/useEditSpaceMessage';
 import { toRecipientInfo, useHasEncryptionSession, useRecipientRegistration } from '@/hooks/chat/useRecipientRegistration';
 import { useMessageSearch } from '@/hooks/chat/useMessageSearch';
@@ -125,6 +126,7 @@ export const DMChatArea = React.memo(function DMChatArea({
   const addDirectReactionMutation = useSendDirectReaction();
   const removeDirectReactionMutation = useRemoveDirectReaction();
   const editDirectMessageMutation = useEditDirectMessage();
+  const deleteDirectMessageMutation = useDeleteDirectMessage();
 
   // Encryption
   const { data: recipientRegistration } = useRecipientRegistration(recipientAddress);
@@ -342,6 +344,17 @@ export const DMChatArea = React.memo(function DMChatArea({
     return canEditMessage(message, user?.address);
   }, [user?.address]);
 
+  // DM messages are E2E-encrypted, so deletion is local-only and you can only
+  // remove your own messages. The confirm dialog lives in MessageActionSheet.
+  const checkCanDeleteMessage = useCallback((message: DisplayMessage) => {
+    return !!user?.address && message.userId === user.address;
+  }, [user?.address]);
+
+  const handleDeleteMessage = useCallback((messageId: string) => {
+    if (!conversationId || !recipientAddress) return;
+    deleteDirectMessageMutation.mutate({ conversationId, recipientAddress, messageId });
+  }, [conversationId, recipientAddress, deleteDirectMessageMutation]);
+
   const handleAddReaction = useCallback((messageId: string, emoji: string) => {
     if (!conversationId || !recipientAddress) return;
     haptics.selection();
@@ -465,6 +478,8 @@ export const DMChatArea = React.memo(function DMChatArea({
         onLinkPress={onLinkPress}
         onEdit={handleEditMessage}
         canEditMessage={checkCanEditMessage}
+        onDelete={handleDeleteMessage}
+        canDeleteMessage={checkCanDeleteMessage}
         onBookmark={handleBookmarkMessage}
         isBookmarked={isBookmarked}
         onReport={handleReportMessage}

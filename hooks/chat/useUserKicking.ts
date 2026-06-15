@@ -1,8 +1,8 @@
 /**
  * useUserKicking - Hook for kicking users from a space
  *
- * Implements a two-step confirmation pattern to prevent accidental kicks.
- * The actual kick operation involves:
+ * Confirmation is handled by the caller (KickUserModal presents a deliberate
+ * confirm screen), so this hook just executes the kick. The kick operation:
  * 1. Generating new config keypair
  * 2. Updating space registration with new config key
  * 3. Removing user from all roles
@@ -12,7 +12,7 @@
  * 7. Marking user as kicked locally
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context';
 import { useWebSocket } from '@/context/WebSocketContext';
@@ -25,21 +25,10 @@ interface UseUserKickingOptions {
 export function useUserKicking(options: UseUserKickingOptions) {
   const { spaceId } = options;
   const [kicking, setKicking] = useState(false);
-  const [confirmationStep, setConfirmationStep] = useState(0); // 0: initial, 1: awaiting confirmation
-  const [confirmationTimeout, setConfirmationTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   const queryClient = useQueryClient();
   const { enqueueOutbound } = useWebSocket();
   const { user } = useAuth();
-
-  // Clean up timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (confirmationTimeout) {
-        clearTimeout(confirmationTimeout);
-      }
-    };
-  }, [confirmationTimeout]);
 
   /**
    * Execute the kick operation with full cryptographic rekey
@@ -96,44 +85,8 @@ export function useUserKicking(options: UseUserKickingOptions) {
     [spaceId, user?.address, queryClient, enqueueOutbound]
   );
 
-  /**
-   * Handle kick button click with two-step confirmation
-   */
-  const handleKickClick = useCallback(
-    (userAddress: string, onSuccess?: () => void) => {
-      if (confirmationStep === 0) {
-        setConfirmationStep(1);
-        // Reset confirmation after 5 seconds
-        const timeout = setTimeout(() => setConfirmationStep(0), 5000);
-        setConfirmationTimeout(timeout);
-      } else {
-        // Clear the timeout since we're confirming
-        if (confirmationTimeout) {
-          clearTimeout(confirmationTimeout);
-          setConfirmationTimeout(null);
-        }
-        kickUserFromSpace(userAddress, onSuccess);
-      }
-    },
-    [confirmationStep, confirmationTimeout, kickUserFromSpace]
-  );
-
-  /**
-   * Reset the confirmation state
-   */
-  const resetConfirmation = useCallback(() => {
-    setConfirmationStep(0);
-    if (confirmationTimeout) {
-      clearTimeout(confirmationTimeout);
-      setConfirmationTimeout(null);
-    }
-  }, [confirmationTimeout]);
-
   return {
     kicking,
-    confirmationStep,
-    handleKickClick,
     kickUserFromSpace,
-    resetConfirmation,
   };
 }

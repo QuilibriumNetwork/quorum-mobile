@@ -16,6 +16,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useBlockedFids } from '@/hooks/useBlockedFids';
 import { useMutedFids } from '@/hooks/useMutedFids';
 import { useUserVisibilityActions } from '@/hooks/useUserVisibilityActions';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { requestTranslateText } from '@/services/translation/forceTranslate';
 import {
   ensureAvailabilityProbed,
@@ -55,6 +56,7 @@ export function CastOverflowButton({
   const { fids: blockedFids } = useBlockedFids();
   const { fids: mutedFids } = useMutedFids();
   const { mute, unmute, block, unblock } = useUserVisibilityActions();
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const [sheetOpen, setSheetOpen] = React.useState(false);
 
@@ -93,19 +95,13 @@ export function CastOverflowButton({
             label: 'Delete cast',
             icon: 'trash',
             destructive: true,
-            onPress: () => {
-              Alert.alert(
-                'Delete cast?',
-                'This permanently removes your cast for everyone.',
-                [
-                  { text: 'Cancel', style: 'cancel' as const },
-                  {
-                    text: 'Delete',
-                    style: 'destructive' as const,
-                    onPress: () => onDelete!(castHash),
-                  },
-                ],
-              );
+            onPress: async () => {
+              const ok = await confirm({
+                title: 'Delete cast?',
+                message: 'This permanently removes your cast for everyone. This cannot be undone.',
+                confirmLabel: 'Delete',
+              });
+              if (ok) onDelete!(castHash);
             },
           },
         ]
@@ -191,6 +187,7 @@ export function CastOverflowButton({
         title={authorUsername ? `@${authorUsername}` : undefined}
         actions={actions}
       />
+      {confirmDialog}
     </View>
   );
 }

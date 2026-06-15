@@ -6,6 +6,7 @@ import OffersModal from '@/components/qns/OffersModal';
 import NameDetailModal from '@/components/qns/NameDetailModal';
 import RegisterPaymentModal from '@/components/qns/RegisterPaymentModal';
 import { BaseModal, TypeToConfirmModal } from '@/components/shared';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ApexAvatarRing, APEX_GOLD } from '@/components/ui/ApexAvatarRing';
 import { useApexSubscription, type ApexSubscriptionState } from '@/hooks/useApex';
@@ -512,77 +513,71 @@ export default function ProfileModal({
   // `styles` as a prop) aren't invalidated on every render.
   const styles = React.useMemo(() => createStyles(theme, isDark, insets), [theme, isDark, insets]);
 
+  const { confirm, confirmDialog } = useConfirmDialog();
+
   // Handle device removal
   const handleRemoveDevice = React.useCallback((identityPublicKey: string) => {
-    Alert.alert(
-      'Remove Device',
-      'Are you sure you want to remove this device? It will no longer be able to receive encrypted messages for your account.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            if (!user?.address) return;
+    void (async () => {
+      const ok = await confirm({
+        title: 'Remove Device',
+        message:
+          'Are you sure you want to remove this device? It will no longer be able to receive encrypted messages for your account.',
+        confirmLabel: 'Remove',
+      });
+      if (!ok) return;
+      if (!user?.address) return;
 
-            setIsRemovingDevice(true);
-            try {
-              // Get our keys for signing
-              const [userPrivateKey, userPublicKey, deviceKeyset] = await Promise.all([
-                getPrivateKey(),
-                getPublicKey(),
-                getDeviceKeyset(),
-              ]);
+      setIsRemovingDevice(true);
+      try {
+        // Get our keys for signing
+        const [userPrivateKey, userPublicKey, deviceKeyset] = await Promise.all([
+          getPrivateKey(),
+          getPublicKey(),
+          getDeviceKeyset(),
+        ]);
 
-              if (!userPrivateKey || !userPublicKey || !deviceKeyset) {
-                throw new Error('Missing keys for device removal');
-              }
+        if (!userPrivateKey || !userPublicKey || !deviceKeyset) {
+          throw new Error('Missing keys for device removal');
+        }
 
-              // Filter out the device to remove
-              const remainingDevices = deviceRegistrations.filter(
-                (d) => d.identity_public_key !== identityPublicKey
-              );
+        // Filter out the device to remove
+        const remainingDevices = deviceRegistrations.filter(
+          (d) => d.identity_public_key !== identityPublicKey
+        );
 
-              // Upload updated registration
-              await uploadUserRegistrationWithDevices(
-                user.address,
-                userPublicKey,
-                userPrivateKey,
-                remainingDevices
-              );
+        // Upload updated registration
+        await uploadUserRegistrationWithDevices(
+          user.address,
+          userPublicKey,
+          userPrivateKey,
+          remainingDevices
+        );
 
-              // Update local state
-              setDeviceRegistrations(remainingDevices);
-              Alert.alert('Success', 'Device removed successfully.');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to remove device. Please try again.');
-            } finally {
-              setIsRemovingDevice(false);
-            }
-          },
-        },
-      ]
-    );
-  }, [user?.address, deviceRegistrations]);
+        // Update local state
+        setDeviceRegistrations(remainingDevices);
+        Alert.alert('Success', 'Device removed successfully.');
+      } catch (error) {
+        Alert.alert('Error', 'Failed to remove device. Please try again.');
+      } finally {
+        setIsRemovingDevice(false);
+      }
+    })();
+  }, [user?.address, deviceRegistrations, confirm]);
 
   // Handle reset all DM sessions
   const handleResetAllSessions = React.useCallback(() => {
-    Alert.alert(
-      'Reset All DM Sessions',
-      'This will reset all your encrypted DM sessions. Your next message to each contact will establish a fresh secure connection.\n\nUse this if you are experiencing persistent decryption errors.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset All',
-          style: 'destructive',
-          onPress: () => {
-            encryptionStateStorage.clearAll();
-            Alert.alert('Success', 'All DM sessions have been reset. Your next message to each contact will establish a fresh secure connection.');
-          },
-        },
-      ]
-    );
-  }, []);
+    void (async () => {
+      const ok = await confirm({
+        title: 'Reset All DM Sessions',
+        message:
+          'This will reset all your encrypted DM sessions. Your next message to each contact will establish a fresh secure connection.\n\nUse this if you are experiencing persistent decryption errors.',
+        confirmLabel: 'Reset All',
+      });
+      if (!ok) return;
+      encryptionStateStorage.clearAll();
+      Alert.alert('Success', 'All DM sessions have been reset. Your next message to each contact will establish a fresh secure connection.');
+    })();
+  }, [confirm]);
 
   // Public profile opt-in — requires explicit consent via a confirmation
   // dialog the FIRST time the user enables it, since flipping this means
@@ -834,20 +829,15 @@ export default function ProfileModal({
   };
 
   const handleDisconnectFarcaster = () => {
-    Alert.alert(
-      'Disconnect Farcaster',
-      'Are you sure you want to disconnect your Farcaster account?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Disconnect',
-          style: 'destructive',
-          onPress: () => {
-            updateProfile({ farcaster: undefined });
-          },
-        },
-      ]
-    );
+    void (async () => {
+      const ok = await confirm({
+        title: 'Disconnect Farcaster',
+        message: 'Are you sure you want to disconnect your Farcaster account?',
+        confirmLabel: 'Disconnect',
+      });
+      if (!ok) return;
+      updateProfile({ farcaster: undefined });
+    })();
   };
 
   const handlePickImage = React.useCallback(async () => {
@@ -2391,6 +2381,21 @@ export default function ProfileModal({
             ))}
           </ScrollView>
         </BaseModal>
+
+        {/* Reset App Data — type-to-confirm (T3, type "reset") */}
+        <TypeToConfirmModal
+          visible={showResetConfirm}
+          title="Reset App Data"
+          body="This permanently deletes all your data, including your private keys. Back up your recovery phrase first — this cannot be undone."
+          keyword="reset"
+          confirmLabel="Reset App Data"
+          onConfirm={handleResetAppData}
+          onCancel={() => setShowResetConfirm(false)}
+        />
+        {/* Destructive confirms (Remove Device, Reset DM Sessions, Disconnect
+            Farcaster). The dialog must live in BOTH the route-mode and modal-mode
+            returns — route mode is how Settings opens this screen. */}
+        {confirmDialog}
       </>
     );
   }
@@ -2553,6 +2558,7 @@ export default function ProfileModal({
         onConfirm={handleResetAppData}
         onCancel={() => setShowResetConfirm(false)}
       />
+      {confirmDialog}
     </>
   );
 }
