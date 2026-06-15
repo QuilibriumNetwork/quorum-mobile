@@ -1138,11 +1138,6 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         scrollEventThrottle={64}
         onStartReached={handleEndReached}
         onStartReachedThreshold={0.5}
-        // Message rows are highly variable (text wrap, embeds, reactions). Using
-        // a realistic average prevents FlashList from aggressively unmounting
-        // cells that end up taller than expected, which caused the "first few
-        // messages vanishing on scroll" quirk.
-        estimatedItemSize={110}
         // Keep a larger window of rendered cells alive so that scrolling back
         // toward the top doesn't briefly render empty space before the older
         // cells remount.

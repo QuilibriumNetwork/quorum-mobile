@@ -235,7 +235,6 @@ export default function SpacesIndex() {
           data={items}
           keyExtractor={item => item.id}
           renderItem={renderItem}
-          estimatedItemSize={72}
           drawDistance={800}
           contentContainerStyle={styles.listContent}
           refreshControl={

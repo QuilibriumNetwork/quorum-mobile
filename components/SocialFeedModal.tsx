@@ -6486,10 +6486,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               numColumns={activeFilter === 'media' ? 3 : 1}
               // Hint FlashList with the row size so recycling computes
               // accurate slot positions without measuring during scroll.
-              // Grid mode: a single tile is one row's height. Card mode:
-              // an average post is ~400px once media + actions are
-              // accounted for.
-              estimatedItemSize={activeFilter === 'media' ? GRID_TILE_SIZE : 400}
               extraData={likeStates}
               keyExtractor={(item) => item.id}
               showsVerticalScrollIndicator={false}

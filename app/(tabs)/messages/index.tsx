@@ -286,10 +286,6 @@ export default function MessagesInbox() {
           data={items}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          // Rows are 68px when there's no subtitle wrap, ~82px with one line
-          // of preview text. Use a slightly-over average so FlashList doesn't
-          // unmount cells it thinks are off-screen when they actually aren't.
-          estimatedItemSize={82}
           // Keep more off-screen cells alive so scrolling back up doesn't
           // briefly blank the first few rows while they remount.
           drawDistance={1200}
