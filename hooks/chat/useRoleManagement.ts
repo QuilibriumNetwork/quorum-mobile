@@ -20,7 +20,17 @@ import { getSpace, saveSpace } from '@/services/config/spaceStorage';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import { broadcastSpaceUpdate } from '@/services/space/broadcastSpaceUpdate';
 import type { Space, Role, Permission } from '@quilibrium/quorum-shared';
-import { toggleRolePermission } from '@quilibrium/quorum-shared';
+import { toggleRolePermission, getRoleColorHex, getDefaultRoleColor } from '@quilibrium/quorum-shared';
+
+/**
+ * Resolve a role's stored `color` (a palette token, or a legacy raw hex /
+ * desktop CSS-var string) to a render-safe hex. Returns a NEW role object so
+ * consumers can use `role.color` directly in RN style props. Idempotent on
+ * already-hex values.
+ */
+function withResolvedColor(role: Role): Role {
+  return { ...role, color: getRoleColorHex(role.color) };
+}
 
 /**
  * Generate a UUID v4 using crypto.getRandomValues
@@ -45,7 +55,10 @@ export function useRoles(spaceId: string | undefined) {
     queryFn: async (): Promise<Role[]> => {
       if (!spaceId) return [];
       const space = getSpace(spaceId);
-      return space?.roles ?? [];
+      // Resolve each role's color to a render-safe hex here, the single read
+      // chokepoint, so every consumer (pills, editor) gets a usable color —
+      // including legacy desktop roles stored as `rgb(var(--success))`.
+      return (space?.roles ?? []).map(withResolvedColor);
     },
     enabled: !!spaceId,
   });
@@ -115,7 +128,12 @@ interface AddRoleParams {
   spaceId: string;
   displayName: string;
   roleTag: string;
-  color: string;
+  /**
+   * Optional palette token (e.g. 'blue'). If omitted, a stable, distinct color
+   * is derived from the new roleId via `getDefaultRoleColor` — deterministic so
+   * the same role resolves to the same color on every device, and it syncs.
+   */
+  color?: string;
   permissions?: Permission[];
   isPublic?: boolean;
 }
@@ -134,11 +152,14 @@ export function useAddRole() {
         throw new Error('Space not found');
       }
 
+      const roleId = generateUUID();
       const newRole: Role = {
-        roleId: generateUUID(),
+        roleId,
         displayName: params.displayName,
         roleTag: params.roleTag,
-        color: params.color,
+        // Store a portable palette TOKEN (not a raw hex). Default deterministically
+        // from the roleId so the color is stable + distinct + syncs.
+        color: params.color ?? getDefaultRoleColor(roleId),
         members: [],
         permissions: params.permissions ?? [],
         isPublic: params.isPublic ?? true,
