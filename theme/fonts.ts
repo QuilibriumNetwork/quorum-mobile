@@ -12,8 +12,13 @@
  * always the same body text.
  */
 
-/** The bundled default font family. */
-export const DEFAULT_FONT_FAMILY = 'AtAero';
+/**
+ * The default font family. `'System'` is React Native's sentinel for the
+ * platform's native UI font: San Francisco on iOS, and Roboto / the user's
+ * chosen system font on Android (RN falls back to the device default for an
+ * unrecognized family). No bundled font is used unless a skin overrides this.
+ */
+export const DEFAULT_FONT_FAMILY = 'System';
 
 /**
  * Build the weight→{family,weight} map for a given font family. A skin swaps

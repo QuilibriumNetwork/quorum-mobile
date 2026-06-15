@@ -22,7 +22,6 @@ installReactQueryRnBridges();
 
 import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { useFonts } from 'expo-font';
 import { Slot, router, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -255,10 +254,6 @@ function StatusBarWrapper() {
 }
 
 export default function RootLayout() {
-  const [loaded] = useFonts({
-    AtAero: require('../assets/fonts/AtAeroVARVF.ttf'),
-  });
-
   // Resolve the active skin synchronously (MMKV) and preload its embedded font
   // before revealing the UI, so a skinned launch never flashes the default
   // theme/font. Tokens (colors/radii/borders) apply instantly; only the font
@@ -281,7 +276,7 @@ export default function RootLayout() {
     return () => { cancelled = true; };
   }, [bootSkin]);
 
-  if (!loaded || !skinReady) {
+  if (!skinReady) {
     return null;
   }
 
