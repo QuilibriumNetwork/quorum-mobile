@@ -319,8 +319,19 @@ function SkinRow({
   footer?: React.ReactNode;
   theme: ReturnType<typeof useTheme>['theme'];
 }) {
+  // When a footer is present (the Default row), the highlighted card wraps BOTH
+  // the tappable label and the footer so the pills sit inside the same rounded
+  // container. Without a footer, the highlight stays on the touchable itself so
+  // every other row looks exactly as before.
   return (
-    <View>
+    <View
+      style={{
+        borderRadius: theme.radii.md,
+        backgroundColor: active && footer ? theme.colors.surface3 : 'transparent',
+        marginHorizontal: Skin.space(12),
+        marginBottom: Skin.space(4),
+      }}
+    >
       <TouchableOpacity
         onPress={onPress}
         onLongPress={onLongPress}
@@ -331,9 +342,7 @@ function SkinRow({
           paddingVertical: Skin.space(14),
           paddingHorizontal: Skin.space(16),
           borderRadius: theme.radii.md,
-          backgroundColor: active ? theme.colors.surface3 : 'transparent',
-          marginHorizontal: Skin.space(12),
-          marginBottom: Skin.space(4),
+          backgroundColor: active && !footer ? theme.colors.surface3 : 'transparent',
         }}
       >
         <View style={{ flex: 1 }}>
@@ -373,7 +382,7 @@ function AppearanceSegments({
         flexDirection: 'row',
         gap: Skin.space(8),
         paddingHorizontal: Skin.space(16),
-        paddingBottom: Skin.space(8),
+        paddingBottom: Skin.space(12),
       }}
     >
       {APPEARANCE_SEGMENTS.map((seg) => {
