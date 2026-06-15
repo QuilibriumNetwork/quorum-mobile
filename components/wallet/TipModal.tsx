@@ -438,7 +438,7 @@ export default function TipModal({
     <BaseModal visible={visible} onClose={onClose} height={0.75} avoidKeyboard>
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <SnapIcon color={theme.colors.textMain} size={20} />
+          <SnapIcon color={theme.colors.textMain} size={26} />
           <Text style={styles.title}>Tip</Text>
         </View>
         <TouchableOpacity onPress={onClose}>

@@ -26,6 +26,8 @@ export interface BaseModalProps {
   fillHeight?: boolean;
   /** Fraction of screen height (0-1) */
   minHeight?: number;
+  /** Sheet background color. Defaults to surface1. */
+  backgroundColor?: string;
 }
 
 /**
@@ -52,6 +54,7 @@ export function BaseModal({
   avoidKeyboard = false,
   fillHeight = false,
   minHeight,
+  backgroundColor,
 }: BaseModalProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -87,7 +90,7 @@ export function BaseModal({
     };
   }, [avoidKeyboard]);
 
-  const styles = createStyles(theme, insets, height, backdropDarkness, fillHeight, minHeight);
+  const styles = createStyles(theme, insets, height, backdropDarkness, fillHeight, minHeight, backgroundColor);
 
   // Calculate bottom offset and max height when keyboard is visible
   const keyboardVisible = avoidKeyboard && keyboardHeight > 0;
@@ -165,7 +168,8 @@ const createStyles = (
   height: number,
   backdropDarkness: number,
   fillHeight: boolean,
-  minHeight?: number
+  minHeight?: number,
+  backgroundColor?: string
 ) =>
   StyleSheet.create({
     container: {
@@ -183,7 +187,7 @@ const createStyles = (
       // Sheet sits a step above the page background so it reads as a distinct
       // floating panel rather than blending into the dimmed backdrop — most
       // noticeable in dark mode, where the page background is near-black.
-      backgroundColor: theme.colors.surface1,
+      backgroundColor: backgroundColor ?? theme.colors.surface1,
       borderTopLeftRadius: Skin.radius(20),
       borderTopRightRadius: Skin.radius(20),
       // Soft elevation so the rounded top edge reads above the backdrop.

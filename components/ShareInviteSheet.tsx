@@ -14,6 +14,7 @@
 
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { ActionRow, ActionRowGroup } from '@/components/shared';
 import { useToast } from '@/context/ToastContext';
 import { useConversations } from '@/hooks/chat/useConversations';
 import { useShareInvite } from '@/hooks/chat/useInviteManagement';
@@ -155,36 +156,34 @@ export default function ShareInviteSheet({
             </View>
           )}
 
-          {directConversations.map((conv) => {
-            const sending = sendingTo === conv.conversationId;
-            return (
-              <TouchableOpacity
-                key={conv.conversationId}
-                style={styles.row}
-                onPress={() => handleSendToDM(conv.conversationId, conv.address, conv.displayName)}
-                disabled={!!sendingTo}
-                activeOpacity={0.7}
-              >
-                <CachedAvatar
-                  source={conv.icon ? { uri: conv.icon } : null}
-                  style={styles.avatar}
-                />
-                <View style={styles.rowText}>
-                  <Text style={styles.rowName} numberOfLines={1}>
-                    {conv.displayName || conv.address.slice(0, 12)}
-                  </Text>
-                  <Text style={styles.rowAddress} numberOfLines={1}>
-                    {conv.address.slice(0, 16)}…
-                  </Text>
-                </View>
-                {sending ? (
-                  <ActivityIndicator size="small" color={theme.colors.accent} />
-                ) : (
-                  <IconSymbol name="paperplane.fill" size={16} color={theme.colors.accent} />
-                )}
-              </TouchableOpacity>
-            );
-          })}
+          {directConversations.length > 0 && (
+            <ActionRowGroup>
+              {directConversations.map((conv) => {
+                const sending = sendingTo === conv.conversationId;
+                return (
+                  <ActionRow
+                    key={conv.conversationId}
+                    leading={
+                      <CachedAvatar
+                        source={conv.icon ? { uri: conv.icon } : null}
+                        style={styles.avatar}
+                      />
+                    }
+                    label={conv.displayName || conv.address.slice(0, 12)}
+                    sublabel={`${conv.address.slice(0, 16)}…`}
+                    trailing={
+                      sending ? (
+                        <ActivityIndicator size="small" color={theme.colors.accent} />
+                      ) : (
+                        <IconSymbol name="paperplane.fill" size={16} color={theme.colors.accent} />
+                      )
+                    }
+                    onPress={() => handleSendToDM(conv.conversationId, conv.address, conv.displayName)}
+                  />
+                );
+              })}
+            </ActionRowGroup>
+          )}
         </ScrollView>
 
         <View style={styles.footer}>
@@ -281,32 +280,11 @@ const createStyles = (theme: AppTheme, insets: { top: number; bottom: number; le
       color: theme.colors.textMuted,
       textAlign: 'center',
     },
-    row: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Skin.space(12),
-      paddingVertical: Skin.space(10),
-      paddingHorizontal: Skin.space(4),
-    },
     avatar: {
       width: 40,
       height: 40,
       borderRadius: Skin.radius(20),
       backgroundColor: theme.colors.surface3,
-    },
-    rowText: {
-      flex: 1,
-      minWidth: 0,
-    },
-    rowName: {
-      fontSize: Skin.font(15),
-      fontWeight: '600',
-      color: theme.colors.textStrong,
-    },
-    rowAddress: {
-      fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
-      marginTop: Skin.space(2),
     },
     footer: {
       paddingVertical: Skin.space(12),

@@ -346,7 +346,7 @@ export function ChannelView({
           </TouchableOpacity>
           <View style={staticStyles.actionButton}>
             <IconSymbol
-              name={cast.viewerContext?.recast ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right'}
+              name="arrow.triangle.2.circlepath"
               color={cast.viewerContext?.recast ? theme.colors.success : theme.colors.textMuted}
               size={16}
             />

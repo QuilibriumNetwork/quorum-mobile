@@ -5,8 +5,19 @@ import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LikeIcon, getLikeIconType } from './LikeIcon';
 import { SnapIcon } from './SnapIcon';
+import { SnapIconOutline } from './SnapIconVariants';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
+
+// Tip-icon source. 'current' = existing OpenMoji SnapIcon (in use now);
+// 'outline' = the chosen future replacement (see SnapIconVariants). Flip to
+// 'outline' to swap it in everywhere CastActions renders.
+const SNAP_VARIANT: 'current' | 'outline' = 'current';
+
+function SnapTipIcon({ color, size }: { color: string; size: number }) {
+  if (SNAP_VARIANT === 'outline') return <SnapIconOutline color={color} size={size} />;
+  return <SnapIcon color={color} size={size} />;
+}
 
 interface CastActionsProps {
   castHash: string;
@@ -60,7 +71,7 @@ export const CastActions = React.memo(function CastActions({
           isLiked={liked}
           color={theme.colors.textMuted}
           activeColor={theme.colors.danger}
-          size={16}
+          size={20}
         />
         {count > 0 && (
           <Text style={[styles.countText, { color: theme.colors.textMuted }]}>
@@ -73,7 +84,7 @@ export const CastActions = React.memo(function CastActions({
         style={styles.actionButton}
         onPress={onReplyPress}
       >
-        <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={16} />
+        <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
         {replyCount > 0 && (
           <Text style={[styles.countText, { color: theme.colors.textMuted }]}>
             {replyCount}
@@ -83,9 +94,9 @@ export const CastActions = React.memo(function CastActions({
 
       <View style={styles.actionButton}>
         <IconSymbol
-          name={isRecast ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right'}
+          name="arrow.triangle.2.circlepath"
           color={isRecast ? theme.colors.success : theme.colors.textMuted}
-          size={16}
+          size={20}
         />
         {recastCount > 0 && (
           <Text style={[styles.countText, { color: theme.colors.textMuted }]}>
@@ -96,7 +107,7 @@ export const CastActions = React.memo(function CastActions({
 
       {onTipPress && (
         <TouchableOpacity style={styles.actionButton} onPress={onTipPress}>
-          <SnapIcon color={theme.colors.textMuted} size={16} />
+          <SnapTipIcon color={theme.colors.textMuted} size={24} />
         </TouchableOpacity>
       )}
     </View>

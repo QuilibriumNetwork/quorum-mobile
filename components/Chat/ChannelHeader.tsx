@@ -7,6 +7,12 @@ import * as Skin from '@/theme/skins/geometry';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Expands the tap target of header icon buttons without changing layout (the
+// glyphs and their 16px spacing stay identical). Horizontal slop is kept at 8
+// so adjacent icons' touch zones meet but don't overlap; vertical slop is
+// larger since nothing sits above/below in the header row. ~34x42 effective.
+const headerIconHitSlop = { top: 12, bottom: 12, left: 8, right: 8 };
+
 interface ChannelHeaderProps {
   channelName: string;
   sidebarsVisible: boolean;
@@ -38,7 +44,7 @@ export const ChannelHeader = React.memo(function ChannelHeader({
     <View style={styles.container}>
       <View style={styles.left}>
         {!sidebarsVisible && (
-          <TouchableOpacity onPress={onShowSidebars} style={styles.menuButton}>
+          <TouchableOpacity onPress={onShowSidebars} style={styles.menuButton} hitSlop={headerIconHitSlop}>
             <IconSymbol name="line.3.horizontal" color={theme.colors.textMuted} size={20} />
           </TouchableOpacity>
         )}
@@ -47,27 +53,27 @@ export const ChannelHeader = React.memo(function ChannelHeader({
       </View>
       <View style={styles.right}>
         {onOpenSearch && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenSearch}>
+          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenSearch} hitSlop={headerIconHitSlop}>
             <IconSymbol name="magnifyingglass" color={theme.colors.textMuted} size={18} />
           </TouchableOpacity>
         )}
         {onOpenPinnedMessages && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenPinnedMessages}>
+          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenPinnedMessages} hitSlop={headerIconHitSlop}>
             <IconSymbol name="pin.fill" color={pinnedCount > 0 ? theme.colors.primary : theme.colors.textMuted} size={18} />
           </TouchableOpacity>
         )}
         {onOpenBookmarks && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenBookmarks}>
+          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenBookmarks} hitSlop={headerIconHitSlop}>
             <IconSymbol name="bookmark" color={theme.colors.textMuted} size={18} />
           </TouchableOpacity>
         )}
         {onInvite && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onInvite}>
+          <TouchableOpacity style={styles.headerIconButton} onPress={onInvite} hitSlop={headerIconHitSlop}>
             <IconSymbol name="person.badge.plus" color={theme.colors.textMuted} size={18} />
           </TouchableOpacity>
         )}
         {onOpenSettings && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenSettings}>
+          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenSettings} hitSlop={headerIconHitSlop}>
             <IconSymbol name="gearshape" color={theme.colors.textMuted} size={18} />
           </TouchableOpacity>
         )}

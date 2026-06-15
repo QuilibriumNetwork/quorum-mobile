@@ -14,6 +14,12 @@ import * as Skin from '@/theme/skins/geometry';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Expands the tap target of header icon buttons without changing layout (the
+// glyphs and their 16px spacing stay identical). Horizontal slop is kept at 8
+// so adjacent icons' touch zones meet but don't overlap; vertical slop is
+// larger since nothing sits above/below in the header row. ~34x42 effective.
+const headerIconHitSlop = { top: 12, bottom: 12, left: 8, right: 8 };
+
 interface DMChatHeaderProps {
   conversation: Conversation;
   sidebarsVisible: boolean;
@@ -47,7 +53,11 @@ export const DMChatHeader = React.memo(function DMChatHeader({
     <View style={styles.container}>
       <View style={styles.left}>
         {!sidebarsVisible && (
-          <TouchableOpacity onPress={onShowSidebars} style={styles.menuButton}>
+          <TouchableOpacity
+            onPress={onShowSidebars}
+            style={styles.menuButton}
+            hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
+          >
             <IconSymbol name="line.3.horizontal" color={theme.colors.textMuted} size={20} />
           </TouchableOpacity>
         )}
@@ -60,21 +70,21 @@ export const DMChatHeader = React.memo(function DMChatHeader({
       </View>
       <View style={styles.right}>
         {onVideoCallPress && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onVideoCallPress}>
+          <TouchableOpacity style={styles.headerIconButton} onPress={onVideoCallPress} hitSlop={headerIconHitSlop}>
             <IconSymbol name="video" color={theme.colors.textMuted} size={18} />
           </TouchableOpacity>
         )}
         {onCallPress && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onCallPress}>
+          <TouchableOpacity style={styles.headerIconButton} onPress={onCallPress} hitSlop={headerIconHitSlop}>
             <IconSymbol name="phone" color={theme.colors.textMuted} size={18} />
           </TouchableOpacity>
         )}
         {onOpenSearch && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenSearch}>
+          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenSearch} hitSlop={headerIconHitSlop}>
             <IconSymbol name="magnifyingglass" color={theme.colors.textMuted} size={18} />
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={styles.headerIconButton} onPress={onInfoPress}>
+        <TouchableOpacity style={styles.headerIconButton} onPress={onInfoPress} hitSlop={headerIconHitSlop}>
           <IconSymbol name="info.circle" color={theme.colors.textMuted} size={18} />
         </TouchableOpacity>
       </View>

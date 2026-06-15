@@ -1,4 +1,4 @@
-import { BaseModal } from '@/components/shared';
+import { BaseModal, ActionRow, ActionRowGroup } from '@/components/shared';
 import { KickUserModal } from '@/components/KickUserModal';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
@@ -313,55 +313,37 @@ export default function UserProfileModal({
         {/* Actions - styled as tappable rows */}
         {((onStartDM && !isSelf) || (onMuteUser && !isSelf) || canKick) && (
           <View style={styles.actionsContainer}>
-            {onStartDM && !isSelf && (
-              <>
-                <View style={styles.divider} />
-                <TouchableOpacity
-                  style={styles.actionRow}
+            <ActionRowGroup>
+              {onStartDM && !isSelf && (
+                <ActionRow
+                  icon="bubble.left"
+                  label="Message"
                   onPress={() => {
                     onStartDM(user.userId);
                     onClose();
                   }}
-                >
-                  <IconSymbol name="bubble.left" size={20} color={theme.colors.textMain} />
-                  <Text style={styles.actionRowText}>Message</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {onMuteUser && !isSelf && (
-              <>
-                <View style={styles.divider} />
-                <TouchableOpacity
-                  style={styles.actionRow}
+                />
+              )}
+              {onMuteUser && !isSelf && (
+                <ActionRow
+                  icon={isUserMuted ? 'bell' : 'bell.slash'}
+                  label={isUserMuted ? 'Unmute' : 'Mute'}
                   onPress={() => {
                     onMuteUser(user.userId);
                     onClose();
                   }}
-                >
-                  <IconSymbol
-                    name={isUserMuted ? 'bell' : 'bell.slash'}
-                    size={20}
-                    color={theme.colors.textMain}
-                  />
-                  <Text style={styles.actionRowText}>
-                    {isUserMuted ? 'Unmute' : 'Mute'}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {/* Kick (space owners only) - destructive row */}
-            {canKick && (
-              <>
-                <View style={styles.divider} />
-                <TouchableOpacity
-                  style={styles.actionRow}
+                />
+              )}
+              {/* Kick (space owners only) - destructive row */}
+              {canKick && (
+                <ActionRow
+                  icon="person.crop.circle.badge.exclamationmark"
+                  label="Kick from Space"
+                  destructive
                   onPress={() => setKickVisible(true)}
-                >
-                  <IconSymbol name="person.crop.circle.badge.exclamationmark" size={20} color={theme.colors.danger} />
-                  <Text style={[styles.actionRowText, styles.dangerText]}>Kick from Space</Text>
-                </TouchableOpacity>
-              </>
-            )}
+                />
+              )}
+            </ActionRowGroup>
           </View>
         )}
       </ScrollView>
@@ -504,23 +486,5 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     actionsContainer: {
       marginBottom: Skin.space(24),
-    },
-    divider: {
-      height: 1,
-      backgroundColor: theme.colors.border ?? theme.colors.surface3,
-    },
-    actionRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: Skin.space(14),
-      gap: Skin.space(12),
-    },
-    actionRowText: {
-      fontSize: Skin.font(16),
-      color: theme.colors.textMain,
-      fontFamily: theme.fonts.regular.fontFamily,
-    },
-    dangerText: {
-      color: theme.colors.danger,
     },
   });

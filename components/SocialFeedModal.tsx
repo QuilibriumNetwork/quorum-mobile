@@ -8,7 +8,11 @@ import { LiveSpacesStrip } from '@/components/SocialFeed/content/LiveSpacesStrip
 import { FarcasterTokenEmbed } from '@/components/SocialFeed/content/FarcasterTokenEmbed';
 import { LikeIcon, getLikeIconType } from '@/components/SocialFeed/content/LikeIcon';
 import { SnapIcon } from '@/components/SocialFeed/content/SnapIcon';
+// Outline snap-icon candidate, kept for a future swap (see SnapIconVariants).
+// import { SnapIconOutline } from '@/components/SocialFeed/content/SnapIconVariants';
 import TipModal, { type TipTarget } from '@/components/wallet/TipModal';
+import { ActionSheet, type ActionRowItem } from '@/components/shared/ActionSheet';
+import { ActionRow, ActionRowGroup } from '@/components/shared/ActionRow';
 import { useMiniappManifest } from '@/hooks/useMiniappManifest';
 import { useOgMetadata } from '@/hooks/useOgMetadata';
 import { SnapEmbed, useSnapDetection } from '@/components/SocialFeed/content/SnapEmbed';
@@ -416,8 +420,6 @@ interface ShareActionSheetProps {
   isRecasted: boolean;
   recastCount: number;
   token?: string;
-  theme: AppTheme;
-  bottomInset: number;
   onClose: () => void;
   onRecast: () => void;
   onQuote: () => void;
@@ -427,152 +429,41 @@ interface ShareActionSheetProps {
 
 function ShareActionSheet({
   visible,
-  castHash,
-  castAuthor,
   isRecasted,
-  recastCount,
   token,
-  theme,
-  bottomInset,
   onClose,
   onRecast,
   onQuote,
   onShareToChat,
   onNativeShare,
 }: ShareActionSheetProps) {
-  if (!visible) return null;
-
-  const actions = [
+  const actions: ActionRowItem[] = [
     {
-      icon: isRecasted ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right',
+      icon: 'arrow.triangle.2.circlepath',
       label: isRecasted ? 'Undo recast' : 'Recast',
-      color: isRecasted ? theme.colors.success : theme.colors.textMain,
+      active: isRecasted,
       onPress: onRecast,
       disabled: !token,
     },
     {
       icon: 'quote.bubble',
       label: 'Quote',
-      color: theme.colors.textMain,
       onPress: onQuote,
       disabled: !token,
     },
     {
       icon: 'paperplane',
       label: 'Share to chat',
-      color: theme.colors.textMain,
       onPress: onShareToChat,
-      disabled: false,
     },
     {
       icon: 'square.and.arrow.up',
       label: 'Share',
-      color: theme.colors.textMain,
       onPress: onNativeShare,
-      disabled: false,
     },
   ];
 
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <Pressable
-        style={{
-          flex: 1,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          justifyContent: 'flex-end',
-        }}
-        onPress={onClose}
-      >
-        <View
-          style={{
-            backgroundColor: theme.colors.surface1,
-            borderTopLeftRadius: Skin.radius(16),
-            borderTopRightRadius: Skin.radius(16),
-            paddingTop: Skin.space(12),
-            paddingBottom: bottomInset + 12,
-          }}
-        >
-          {/* Handle bar */}
-          <View
-            style={{
-              width: 36,
-              height: 4,
-              backgroundColor: theme.colors.surface4,
-              borderRadius: Skin.radius(2),
-              alignSelf: 'center',
-              marginBottom: Skin.space(16),
-            }}
-          />
-
-          {actions.map((action, index) => (
-            <TouchableOpacity
-              key={index}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingVertical: Skin.space(14),
-                paddingHorizontal: Skin.space(20),
-                opacity: action.disabled ? 0.5 : 1,
-              }}
-              onPress={async () => {
-                if (!action.disabled) {
-                  onClose();
-                  // Small delay to allow modal to close before showing native share
-                  await new Promise(resolve => setTimeout(resolve, 100));
-                  action.onPress();
-                }
-              }}
-              disabled={action.disabled}
-            >
-              <IconSymbol
-                name={action.icon as IconSymbolName}
-                size={22}
-                color={action.color}
-              />
-              <Text
-                style={{
-                  marginLeft: Skin.space(16),
-                  fontSize: Skin.font(16),
-                  color: action.color,
-                  fontWeight: '500',
-                }}
-              >
-                {action.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-
-          {/* Cancel button */}
-          <TouchableOpacity
-            style={{
-              marginTop: Skin.space(8),
-              marginHorizontal: Skin.space(16),
-              paddingVertical: Skin.space(14),
-              backgroundColor: theme.colors.surface2,
-              borderRadius: Skin.radius(12),
-              alignItems: 'center',
-            }}
-            onPress={onClose}
-          >
-            <Text
-              style={{
-                fontSize: Skin.font(16),
-                fontWeight: '600',
-                color: theme.colors.textMain,
-              }}
-            >
-              Cancel
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </Pressable>
-    </Modal>
-  );
+  return <ActionSheet visible={visible} onClose={onClose} actions={actions} />;
 }
 
 // Share to chat modal - lets user pick a space/channel or DM to share the cast link
@@ -584,6 +475,42 @@ interface ShareToChatModalProps {
   onClose: () => void;
   onSent: () => void;
 }
+
+// Styles for the ShareToChat row lists. Color-dependent entries are functions
+// of theme; the rest are static. Rows themselves come from the shared ActionRow
+// primitive — only the section header, group spacing, and avatar chrome live here.
+const shareToChatStyles = {
+  sectionHeader: (theme: AppTheme) => ({
+    fontSize: Skin.font(13),
+    fontWeight: '600' as const,
+    color: theme.colors.textMuted,
+    paddingHorizontal: Skin.space(16),
+    paddingTop: Skin.space(16),
+    paddingBottom: Skin.space(8),
+  }),
+  group: {
+    marginHorizontal: Skin.space(12),
+    marginBottom: Skin.space(4),
+  },
+  dmAvatar: (theme: AppTheme) => ({
+    width: 40,
+    height: 40,
+    borderRadius: Skin.radius(20),
+    backgroundColor: theme.colors.surface3,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  }),
+  dmAvatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: Skin.radius(20),
+  },
+  farcasterBadge: {
+    width: 18,
+    height: 18,
+    opacity: 0.7,
+  },
+};
 
 function ShareToChatModal({
   visible,
@@ -748,113 +675,68 @@ function ShareToChatModal({
               {/* Spaces Section */}
               {spaces.length > 0 && (
                 <>
-                  <Text
-                    style={{
-                      fontSize: Skin.font(13),
-                      fontWeight: '600',
-                      color: theme.colors.textMuted,
-                      paddingHorizontal: Skin.space(16),
-                      paddingTop: Skin.space(16),
-                      paddingBottom: Skin.space(8),
-                    }}
-                  >
-                    SPACES
-                  </Text>
-                  {spaces.map((space) => (
-                    <TouchableOpacity
-                      key={space.spaceId}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        paddingHorizontal: Skin.space(16),
-                        paddingVertical: Skin.space(12),
-                        gap: Skin.space(12),
-                      }}
-                      onPress={() => setSelectedSpace(space)}
-                    >
-                      <SpaceIcon
-                        name={space.spaceName}
-                        size={40}
-                        style={{ borderRadius: Skin.radius(8) }}
+                  <Text style={shareToChatStyles.sectionHeader(theme)}>SPACES</Text>
+                  <ActionRowGroup style={shareToChatStyles.group}>
+                    {spaces.map((space) => (
+                      <ActionRow
+                        key={space.spaceId}
+                        leading={
+                          <SpaceIcon
+                            name={space.spaceName}
+                            size={40}
+                            style={{ borderRadius: Skin.radius(8) }}
+                          />
+                        }
+                        label={space.spaceName}
+                        sublabel={`${space.groups?.reduce((acc, g) => acc + (g.channels?.length ?? 0), 0) ?? 0} channels`}
+                        trailing="chevron"
+                        onPress={() => setSelectedSpace(space)}
                       />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: Skin.font(15), fontWeight: '500', color: theme.colors.textMain }}>
-                          {space.spaceName}
-                        </Text>
-                        <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMuted }}>
-                          {space.groups?.reduce((acc, g) => acc + (g.channels?.length ?? 0), 0) ?? 0} channels
-                        </Text>
-                      </View>
-                      <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
-                    </TouchableOpacity>
-                  ))}
+                    ))}
+                  </ActionRowGroup>
                 </>
               )}
 
               {/* DMs Section - Merged and sorted by timestamp */}
               {allDMs.length > 0 && (
                 <>
-                  <Text
-                    style={{
-                      fontSize: Skin.font(13),
-                      fontWeight: '600',
-                      color: theme.colors.textMuted,
-                      paddingHorizontal: Skin.space(16),
-                      paddingTop: Skin.space(16),
-                      paddingBottom: Skin.space(8),
-                    }}
-                  >
-                    DIRECT MESSAGES
-                  </Text>
-                  {allDMs.map((conv: any) => {
-                    const isFarcaster = conv.source === 'farcaster';
-                    return (
-                      <TouchableOpacity
-                        key={conv.conversationId}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          paddingHorizontal: Skin.space(16),
-                          paddingVertical: Skin.space(12),
-                          gap: Skin.space(12),
-                        }}
-                        onPress={() => isFarcaster ? handleSelectFarcasterDM(conv) : handleSelectDM(conv)}
-                      >
-                        <View
-                          style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: Skin.radius(20),
-                            backgroundColor: theme.colors.surface3,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          {conv.icon ? (
-                            <Image source={{ uri: conv.icon }} style={{ width: 40, height: 40, borderRadius: Skin.radius(20) }} />
-                          ) : (
-                            <IconSymbol name="person.fill" size={20} color={theme.colors.textMuted} />
-                          )}
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: Skin.font(15), fontWeight: '500', color: theme.colors.textMain }}>
-                            {conv.displayName || (isFarcaster ? conv.farcasterUsername : conv.address?.slice(0, 12) + '...') || 'Unknown'}
-                          </Text>
-                          {isFarcaster && conv.farcasterUsername && conv.displayName !== conv.farcasterUsername && (
-                            <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMuted }}>
-                              @{conv.farcasterUsername}
-                            </Text>
-                          )}
-                        </View>
-                        {isFarcaster && (
-                          <Image
-                            source={require('../assets/images/farcaster.png')}
-                            style={{ width: 18, height: 18, opacity: 0.7 }}
-                          />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
+                  <Text style={shareToChatStyles.sectionHeader(theme)}>DIRECT MESSAGES</Text>
+                  <ActionRowGroup style={shareToChatStyles.group}>
+                    {allDMs.map((conv: any) => {
+                      const isFarcaster = conv.source === 'farcaster';
+                      const showHandle =
+                        isFarcaster && conv.farcasterUsername && conv.displayName !== conv.farcasterUsername;
+                      return (
+                        <ActionRow
+                          key={conv.conversationId}
+                          leading={
+                            <View style={shareToChatStyles.dmAvatar(theme)}>
+                              {conv.icon ? (
+                                <Image source={{ uri: conv.icon }} style={shareToChatStyles.dmAvatarImage} />
+                              ) : (
+                                <IconSymbol name="person.fill" size={20} color={theme.colors.textMuted} />
+                              )}
+                            </View>
+                          }
+                          label={
+                            conv.displayName ||
+                            (isFarcaster ? conv.farcasterUsername : conv.address?.slice(0, 12) + '...') ||
+                            'Unknown'
+                          }
+                          sublabel={showHandle ? `@${conv.farcasterUsername}` : undefined}
+                          trailing={
+                            isFarcaster ? (
+                              <Image
+                                source={require('../assets/images/farcaster.png')}
+                                style={shareToChatStyles.farcasterBadge}
+                              />
+                            ) : undefined
+                          }
+                          onPress={() => (isFarcaster ? handleSelectFarcasterDM(conv) : handleSelectDM(conv))}
+                        />
+                      );
+                    })}
+                  </ActionRowGroup>
                 </>
               )}
 
@@ -871,24 +753,16 @@ function ShareToChatModal({
           {/* Channel list when space is selected */}
           {!isSending && selectedSpace && (
             <ScrollView style={{ flex: 1 }}>
-              {channels.map((channel) => (
-                <TouchableOpacity
-                  key={channel.channelId}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    paddingHorizontal: Skin.space(16),
-                    paddingVertical: Skin.space(12),
-                    gap: Skin.space(12),
-                  }}
-                  onPress={() => handleSelectChannel(channel)}
-                >
-                  <IconSymbol name="number" size={20} color={theme.colors.textMuted} />
-                  <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>
-                    {channel.channelName}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              <ActionRowGroup style={shareToChatStyles.group}>
+                {channels.map((channel) => (
+                  <ActionRow
+                    key={channel.channelId}
+                    icon="number"
+                    label={channel.channelName}
+                    onPress={() => handleSelectChannel(channel)}
+                  />
+                ))}
+              </ActionRowGroup>
               {channels.length === 0 && (
                 <View style={{ padding: Skin.space(40), alignItems: 'center' }}>
                   <Text style={{ color: theme.colors.textMuted }}>No channels in this space</Text>
@@ -3038,7 +2912,7 @@ function ThreadDetailView({
                   isLiked={isLiked}
                   color={theme.colors.textMuted}
                   activeColor={theme.colors.danger}
-                  size={16}
+                  size={20}
                 />
                 {likeCount > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
@@ -3049,7 +2923,7 @@ function ThreadDetailView({
                 onPress={() => onOpenThread(cast.author.username, cast.hash.slice(0, 10), cast)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={16} />
+                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
                 {(cast.replies?.count ?? 0) > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
                 )}
@@ -3069,9 +2943,9 @@ function ThreadDetailView({
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <IconSymbol
-                  name={isRecasted ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right'}
+                  name="arrow.triangle.2.circlepath"
                   color={isRecasted ? theme.colors.success : theme.colors.textMuted}
-                  size={16}
+                  size={20}
                 />
                 {recastCount > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{recastCount}</Text>
@@ -3089,7 +2963,7 @@ function ThreadDetailView({
                   })}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <SnapIcon color={theme.colors.textMuted} size={16} />
+                  <SnapIcon color={theme.colors.textMuted} size={24} />
                 </TouchableOpacity>
               )}
             </View>
@@ -3449,8 +3323,6 @@ function ThreadDetailView({
         isRecasted={shareSheetCast?.isRecasted ?? false}
         recastCount={shareSheetCast?.recastCount ?? 0}
         token={token}
-        theme={theme}
-        bottomInset={bottomInset}
         onClose={() => setShareSheetCast(null)}
         onRecast={() => {
           if (shareSheetCast) {
@@ -3992,7 +3864,7 @@ export function ProfileView({
                   isLiked={isLiked}
                   color={theme.colors.textMuted}
                   activeColor={theme.colors.danger}
-                  size={16}
+                  size={20}
                 />
                 {likeCount > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
@@ -4002,16 +3874,16 @@ export function ProfileView({
                 style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
                 onPress={navigateToThread}
               >
-                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={16} />
+                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
                 {(cast.replies?.count ?? 0) > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
                 )}
               </TouchableOpacity>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
                 <IconSymbol
-                  name={cast.viewerContext?.recast ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right'}
+                  name="arrow.triangle.2.circlepath"
                   color={cast.viewerContext?.recast ? theme.colors.success : theme.colors.textMuted}
-                  size={16}
+                  size={20}
                 />
                 {(cast.recasts?.count ?? 0) > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.recasts?.count}</Text>
@@ -4029,7 +3901,7 @@ export function ProfileView({
                   })}
                   hitSlop={12}
                 >
-                  <SnapIcon color={theme.colors.textMuted} size={16} />
+                  <SnapIcon color={theme.colors.textMuted} size={24} />
                 </TouchableOpacity>
               )}
             </View>
@@ -4595,7 +4467,7 @@ function ChannelView({
                   isLiked={isLiked}
                   color={theme.colors.textMuted}
                   activeColor={theme.colors.danger}
-                  size={16}
+                  size={20}
                 />
                 {likeCount > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
@@ -4605,16 +4477,16 @@ function ChannelView({
                 style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
                 onPress={navigateToThread}
               >
-                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={16} />
+                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
                 {(cast.replies?.count ?? 0) > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
                 )}
               </TouchableOpacity>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
                 <IconSymbol
-                  name={cast.viewerContext?.recast ? 'arrowshape.turn.up.right.fill' : 'arrowshape.turn.up.right'}
+                  name="arrow.triangle.2.circlepath"
                   color={cast.viewerContext?.recast ? theme.colors.success : theme.colors.textMuted}
-                  size={16}
+                  size={20}
                 />
                 {(cast.recasts?.count ?? 0) > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.recasts?.count}</Text>
@@ -4632,7 +4504,7 @@ function ChannelView({
                   })}
                   hitSlop={12}
                 >
-                  <SnapIcon color={theme.colors.textMuted} size={16} />
+                  <SnapIcon color={theme.colors.textMuted} size={24} />
                 </TouchableOpacity>
               )}
             </View>
@@ -5268,7 +5140,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
             isLiked={isLiked}
             color={theme.colors.textMuted}
             activeColor={theme.colors.danger}
-            size={16}
+            size={20}
           />
           {likeCount > 0 && (
             <Text style={styles.statText}>{likeCount}</Text>
@@ -5279,7 +5151,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
           onPress={navigateToReply}
           hitSlop={12}
         >
-          <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={16} />
+          <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
           {post.stats.replies !== '0' && (
             <Text style={styles.statText}>{post.stats.replies}</Text>
           )}
@@ -5290,9 +5162,9 @@ const FeedPostCard = React.memo(function FeedPostCard({
           onPress={() => onOpenShareSheet(post.hash, post.username ?? '', post.content ?? '', isRecasted, recastCount, post.authorFid)}
         >
           <IconSymbol
-            name={isRecasted ? "arrowshape.turn.up.right.fill" : "arrowshape.turn.up.right"}
+            name="arrow.triangle.2.circlepath"
             color={isRecasted ? theme.colors.success : theme.colors.textMuted}
-            size={16}
+            size={20}
           />
           {recastCount > 0 && (
             <Text style={styles.statText}>{recastCount}</Text>
@@ -5310,7 +5182,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
               authorDisplayName: post.authorName,
             })}
           >
-            <SnapIcon color={theme.colors.textMuted} size={16} />
+            <SnapIcon color={theme.colors.textMuted} size={24} />
           </TouchableOpacity>
         )}
       </View>
@@ -7396,8 +7268,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             isRecasted={feedShareSheet?.isRecasted ?? false}
             recastCount={feedShareSheet?.recastCount ?? 0}
             token={token}
-            theme={theme}
-            bottomInset={insets.bottom}
             onClose={() => setFeedShareSheet(null)}
             onRecast={() => {
               if (feedShareSheet) {

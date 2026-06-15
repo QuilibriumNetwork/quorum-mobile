@@ -10,6 +10,7 @@ import { View, Text, StyleSheet, Modal, Pressable, Dimensions } from 'react-nati
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { ActionRow, ActionRowGroup } from '@/components/shared';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { getRecentEmojis } from '@/services/emojiFrecency';
 import { requestTranslateText } from '@/services/translation/forceTranslate';
@@ -237,129 +238,52 @@ export function MessageActionSheet({
 
           {/* Action Buttons */}
           <View style={styles.actionsContainer}>
-            {onReply && (
-              <>
-                <TouchableOpacity style={styles.actionButton} onPress={handleReply}>
-                  <IconSymbol
-                    name="arrowshape.turn.up.left.fill"
-                    size={20}
-                    color={theme.colors.textMain}
-                  />
-                  <Text style={styles.actionText}>Reply</Text>
-                </TouchableOpacity>
-                <View style={styles.divider} />
-              </>
-            )}
-            {canEdit && onEdit && (
-              <>
-                <TouchableOpacity style={styles.actionButton} onPress={handleEdit}>
-                  <IconSymbol
-                    name="pencil"
-                    size={20}
-                    color={theme.colors.textMain}
-                  />
-                  <Text style={styles.actionText}>Edit Message</Text>
-                </TouchableOpacity>
-                <View style={styles.divider} />
-              </>
-            )}
-            {hasEditHistory && onViewEditHistory && (
-              <>
-                <TouchableOpacity style={styles.actionButton} onPress={handleViewEditHistory}>
-                  <IconSymbol
-                    name="clock.arrow.circlepath"
-                    size={20}
-                    color={theme.colors.textMain}
-                  />
-                  <Text style={styles.actionText}>View Edit History</Text>
-                </TouchableOpacity>
-                <View style={styles.divider} />
-              </>
-            )}
-            {canPin && (onPin || onUnpin) && (
-              <>
-                <TouchableOpacity style={styles.actionButton} onPress={handlePin}>
-                  <IconSymbol
-                    name={isPinned ? 'pin.slash' : 'pin.fill'}
-                    size={20}
-                    color={theme.colors.textMain}
-                  />
-                  <Text style={styles.actionText}>{isPinned ? 'Unpin Message' : 'Pin Message'}</Text>
-                </TouchableOpacity>
-                <View style={styles.divider} />
-              </>
-            )}
-            {onBookmark && (
-              <>
-                <TouchableOpacity style={styles.actionButton} onPress={handleBookmark}>
-                  <IconSymbol
-                    name={isBookmarked ? 'bookmark.slash.fill' : 'bookmark'}
-                    size={20}
-                    color={theme.colors.textMain}
-                  />
-                  <Text style={styles.actionText}>
-                    {isBookmarked ? 'Remove Bookmark' : 'Bookmark'}
-                  </Text>
-                </TouchableOpacity>
-                <View style={styles.divider} />
-              </>
-            )}
-            {messageText && (
-              <>
-                <TouchableOpacity style={styles.actionButton} onPress={handleCopyText}>
-                  <IconSymbol
-                    name="doc.on.doc"
-                    size={20}
-                    color={theme.colors.textMain}
-                  />
-                  <Text style={styles.actionText}>Copy Text</Text>
-                </TouchableOpacity>
-                <View style={styles.divider} />
-              </>
-            )}
-            {canTranslate && (
-              <>
-                <TouchableOpacity style={styles.actionButton} onPress={handleTranslate}>
-                  <IconSymbol name="globe" size={20} color={theme.colors.textMain} />
-                  <Text style={styles.actionText}>Translate</Text>
-                </TouchableOpacity>
-                <View style={styles.divider} />
-              </>
-            )}
-            <TouchableOpacity style={styles.actionButton} onPress={handleReact}>
-              <IconSymbol
-                name="face.smiling"
-                size={20}
-                color={theme.colors.textMain}
-              />
-              <Text style={styles.actionText}>Add Reaction</Text>
-            </TouchableOpacity>
-            {onReport && (
-              <>
-                <View style={styles.divider} />
-                <TouchableOpacity style={styles.actionButton} onPress={handleReport}>
-                  <IconSymbol
-                    name="flag"
-                    size={20}
-                    color={theme.colors.danger}
-                  />
-                  <Text style={[styles.actionText, styles.dangerText]}>Report</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {canDelete && onDelete && (
-              <>
-                <View style={styles.divider} />
-                <TouchableOpacity style={styles.actionButton} onPress={handleDelete}>
-                  <IconSymbol
-                    name="trash"
-                    size={20}
-                    color={theme.colors.danger}
-                  />
-                  <Text style={[styles.actionText, styles.dangerText]}>Delete</Text>
-                </TouchableOpacity>
-              </>
-            )}
+            <ActionRowGroup>
+              {onReply && (
+                <ActionRow
+                  icon="arrowshape.turn.up.left.fill"
+                  label="Reply"
+                  onPress={handleReply}
+                />
+              )}
+              {canEdit && onEdit && (
+                <ActionRow icon="pencil" label="Edit Message" onPress={handleEdit} />
+              )}
+              {hasEditHistory && onViewEditHistory && (
+                <ActionRow
+                  icon="clock.arrow.circlepath"
+                  label="View Edit History"
+                  onPress={handleViewEditHistory}
+                />
+              )}
+              {canPin && (onPin || onUnpin) && (
+                <ActionRow
+                  icon={isPinned ? 'pin.slash' : 'pin.fill'}
+                  label={isPinned ? 'Unpin Message' : 'Pin Message'}
+                  onPress={handlePin}
+                />
+              )}
+              {onBookmark && (
+                <ActionRow
+                  icon={isBookmarked ? 'bookmark.slash.fill' : 'bookmark'}
+                  label={isBookmarked ? 'Remove Bookmark' : 'Bookmark'}
+                  onPress={handleBookmark}
+                />
+              )}
+              {messageText && (
+                <ActionRow icon="doc.on.doc" label="Copy Text" onPress={handleCopyText} />
+              )}
+              {canTranslate && (
+                <ActionRow icon="globe" label="Translate" onPress={handleTranslate} />
+              )}
+              <ActionRow icon="face.smiling" label="Add Reaction" onPress={handleReact} />
+              {onReport && (
+                <ActionRow icon="flag" label="Report" destructive onPress={handleReport} />
+              )}
+              {canDelete && onDelete && (
+                <ActionRow icon="trash" label="Delete" destructive onPress={handleDelete} />
+              )}
+            </ActionRowGroup>
           </View>
         </View>
       </View>
@@ -400,8 +324,6 @@ const createStyles = (theme: AppTheme) =>
     quickReactionsContainer: {
       paddingVertical: Skin.space(12),
       paddingHorizontal: Skin.space(16),
-      borderBottomWidth: Skin.border(1),
-      borderBottomColor: theme.colors.border ?? theme.colors.surface3,
     },
     quickReactionsContent: {
       flexDirection: 'row',
@@ -419,27 +341,8 @@ const createStyles = (theme: AppTheme) =>
       fontSize: Skin.font(22),
     },
     actionsContainer: {
+      paddingHorizontal: Skin.space(12),
       paddingVertical: Skin.space(4),
-    },
-    actionButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: Skin.space(14),
-      paddingHorizontal: Skin.space(20),
-      gap: Skin.space(12),
-    },
-    actionText: {
-      fontSize: Skin.font(16),
-      color: theme.colors.textMain,
-      fontFamily: theme.fonts.regular.fontFamily,
-    },
-    dangerText: {
-      color: theme.colors.danger,
-    },
-    divider: {
-      height: 1,
-      backgroundColor: theme.colors.border ?? theme.colors.surface3,
-      marginHorizontal: Skin.space(16),
     },
   });
 
