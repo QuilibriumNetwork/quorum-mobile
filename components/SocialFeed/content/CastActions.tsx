@@ -5,19 +5,8 @@ import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LikeIcon, getLikeIconType } from './LikeIcon';
 import { SnapIcon } from './SnapIcon';
-import { SnapIconOutline } from './SnapIconVariants';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
-
-// Tip-icon source. 'current' = existing OpenMoji SnapIcon (in use now);
-// 'outline' = the chosen future replacement (see SnapIconVariants). Flip to
-// 'outline' to swap it in everywhere CastActions renders.
-const SNAP_VARIANT: 'current' | 'outline' = 'current';
-
-function SnapTipIcon({ color, size }: { color: string; size: number }) {
-  if (SNAP_VARIANT === 'outline') return <SnapIconOutline color={color} size={size} />;
-  return <SnapIcon color={color} size={size} />;
-}
 
 interface CastActionsProps {
   castHash: string;
@@ -107,7 +96,7 @@ export const CastActions = React.memo(function CastActions({
 
       {onTipPress && (
         <TouchableOpacity style={styles.actionButton} onPress={onTipPress}>
-          <SnapTipIcon color={theme.colors.textMuted} size={24} />
+          <SnapIcon color={theme.colors.textMuted} size={24} />
         </TouchableOpacity>
       )}
     </View>

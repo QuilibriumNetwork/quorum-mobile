@@ -8,8 +8,6 @@ import { LiveSpacesStrip } from '@/components/SocialFeed/content/LiveSpacesStrip
 import { FarcasterTokenEmbed } from '@/components/SocialFeed/content/FarcasterTokenEmbed';
 import { LikeIcon, getLikeIconType } from '@/components/SocialFeed/content/LikeIcon';
 import { SnapIcon } from '@/components/SocialFeed/content/SnapIcon';
-// Outline snap-icon candidate, kept for a future swap (see SnapIconVariants).
-// import { SnapIconOutline } from '@/components/SocialFeed/content/SnapIconVariants';
 import TipModal, { type TipTarget } from '@/components/wallet/TipModal';
 import { ActionSheet, type ActionRowItem } from '@/components/shared/ActionSheet';
 import { ActionRow, ActionRowGroup } from '@/components/shared/ActionRow';
