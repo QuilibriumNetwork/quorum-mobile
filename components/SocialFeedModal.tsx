@@ -9,6 +9,7 @@ import { FarcasterTokenEmbed } from '@/components/SocialFeed/content/FarcasterTo
 import { LikeIcon, getLikeIconType } from '@/components/SocialFeed/content/LikeIcon';
 import { SnapIcon } from '@/components/SocialFeed/content/SnapIcon';
 import TipModal, { type TipTarget } from '@/components/wallet/TipModal';
+import { ActionSheet, type ActionRowItem } from '@/components/shared/ActionSheet';
 import { useMiniappManifest } from '@/hooks/useMiniappManifest';
 import { useOgMetadata } from '@/hooks/useOgMetadata';
 import { SnapEmbed, useSnapDetection } from '@/components/SocialFeed/content/SnapEmbed';
@@ -416,8 +417,6 @@ interface ShareActionSheetProps {
   isRecasted: boolean;
   recastCount: number;
   token?: string;
-  theme: AppTheme;
-  bottomInset: number;
   onClose: () => void;
   onRecast: () => void;
   onQuote: () => void;
@@ -427,129 +426,41 @@ interface ShareActionSheetProps {
 
 function ShareActionSheet({
   visible,
-  castHash,
-  castAuthor,
   isRecasted,
-  recastCount,
   token,
-  theme,
-  bottomInset,
   onClose,
   onRecast,
   onQuote,
   onShareToChat,
   onNativeShare,
 }: ShareActionSheetProps) {
-  if (!visible) return null;
-
-  const actions = [
+  const actions: ActionRowItem[] = [
     {
       icon: 'arrow.triangle.2.circlepath',
       label: isRecasted ? 'Undo recast' : 'Recast',
-      color: isRecasted ? theme.colors.success : theme.colors.textMain,
+      active: isRecasted,
       onPress: onRecast,
       disabled: !token,
     },
     {
       icon: 'quote.bubble',
       label: 'Quote',
-      color: theme.colors.textMain,
       onPress: onQuote,
       disabled: !token,
     },
     {
       icon: 'paperplane',
       label: 'Share to chat',
-      color: theme.colors.textMain,
       onPress: onShareToChat,
-      disabled: false,
     },
     {
       icon: 'square.and.arrow.up',
       label: 'Share',
-      color: theme.colors.textMain,
       onPress: onNativeShare,
-      disabled: false,
     },
   ];
 
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <Pressable
-        style={{
-          flex: 1,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          justifyContent: 'flex-end',
-        }}
-        onPress={onClose}
-      >
-        <View
-          style={{
-            backgroundColor: theme.colors.surface1,
-            borderTopLeftRadius: Skin.radius(16),
-            borderTopRightRadius: Skin.radius(16),
-            paddingTop: Skin.space(12),
-            paddingBottom: bottomInset + 12,
-          }}
-        >
-          {/* Handle bar */}
-          <View
-            style={{
-              width: 36,
-              height: 4,
-              backgroundColor: theme.colors.surface4,
-              borderRadius: Skin.radius(2),
-              alignSelf: 'center',
-              marginBottom: Skin.space(16),
-            }}
-          />
-
-          {actions.map((action, index) => (
-            <TouchableOpacity
-              key={index}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingVertical: Skin.space(14),
-                paddingHorizontal: Skin.space(20),
-                opacity: action.disabled ? 0.5 : 1,
-              }}
-              onPress={async () => {
-                if (!action.disabled) {
-                  onClose();
-                  // Small delay to allow modal to close before showing native share
-                  await new Promise(resolve => setTimeout(resolve, 100));
-                  action.onPress();
-                }
-              }}
-              disabled={action.disabled}
-            >
-              <IconSymbol
-                name={action.icon as IconSymbolName}
-                size={22}
-                color={action.color}
-              />
-              <Text
-                style={{
-                  marginLeft: Skin.space(16),
-                  fontSize: Skin.font(16),
-                  color: action.color,
-                  fontWeight: '500',
-                }}
-              >
-                {action.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </Pressable>
-    </Modal>
-  );
+  return <ActionSheet visible={visible} onClose={onClose} actions={actions} />;
 }
 
 // Share to chat modal - lets user pick a space/channel or DM to share the cast link
@@ -3426,8 +3337,6 @@ function ThreadDetailView({
         isRecasted={shareSheetCast?.isRecasted ?? false}
         recastCount={shareSheetCast?.recastCount ?? 0}
         token={token}
-        theme={theme}
-        bottomInset={bottomInset}
         onClose={() => setShareSheetCast(null)}
         onRecast={() => {
           if (shareSheetCast) {
@@ -7373,8 +7282,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             isRecasted={feedShareSheet?.isRecasted ?? false}
             recastCount={feedShareSheet?.recastCount ?? 0}
             token={token}
-            theme={theme}
-            bottomInset={insets.bottom}
             onClose={() => setFeedShareSheet(null)}
             onRecast={() => {
               if (feedShareSheet) {

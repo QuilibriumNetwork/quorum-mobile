@@ -175,7 +175,12 @@ export function ActionSheet({
   );
 
   return (
-    <BaseModal visible={visible} onClose={onClose} showHandle>
+    <BaseModal
+      visible={visible}
+      onClose={onClose}
+      showHandle
+      backgroundColor={theme.colors.surface0}
+    >
       <View style={styles.container}>
         {(title || message) && (
           <View style={styles.header}>
@@ -212,6 +217,9 @@ const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
       paddingHorizontal: Skin.space(12),
+      // Breathing room below the handle bar before the first group, so the menu
+      // doesn't crowd the top edge of the sheet.
+      paddingTop: Skin.space(12),
       paddingBottom: Skin.space(8),
     },
     header: {
@@ -244,6 +252,9 @@ const createStyles = (theme: AppTheme) =>
       marginHorizontal: Skin.space(8),
     },
     group: {
+      // Whole stack shifted down one ramp step: sheet surface0, card surface2,
+      // divider surface4 — keeps the relative spacing but darkens the overall
+      // menu. (Sheet bg set via BaseModal's backgroundColor prop above.)
       backgroundColor: theme.colors.surface2,
       borderRadius: Skin.radius(14),
       overflow: 'hidden',
@@ -255,7 +266,9 @@ const createStyles = (theme: AppTheme) =>
       paddingHorizontal: Skin.space(16),
       paddingVertical: Skin.space(14),
       minHeight: 44,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      // Full 1px (not hairlineWidth ~0.5px, which was barely visible). surface4
+      // against the surface2 card after the down-one-step shift.
+      borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface4,
     },
     actionRowLast: {
