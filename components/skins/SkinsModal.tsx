@@ -30,8 +30,47 @@ import {
   type SkinSummary,
 } from '@/services/skins/skinsClient';
 import { SkinEditor } from '@/components/skins/SkinEditor';
+import { SkinSwatch } from '@/components/skins/SkinSwatch';
+import { LightTheme, DarkTheme } from '@/theme';
 import { logger } from '@quilibrium/quorum-shared';
 import * as Skin from '@/theme/skins/geometry';
+
+/** Swatch preview (accent + background + own corner radius) for a skin row. */
+interface SwatchSpec {
+  accent: string;
+  background: string;
+  cornerRadius: number;
+}
+
+/**
+ * Resolve a skin's preview swatch WITHOUT applying it.
+ *
+ * - Colors: the skin's own `accent`/`surface1` for its base; a color-less skin
+ *   (Brutalist/Roomy — geometry only) falls back to the UNSKINNED base theme's
+ *   real accent/surface1, NOT a grey placeholder. That fallback is fixed per
+ *   `base` (light vs dark) so the chip never shifts with the app's live
+ *   appearance toggle — a skin pins its own base.
+ * - Corner radius: mirrors `geometry.ts:radius()`, scaled by the SKIN's OWN
+ *   `deriveGeometry`. The base multiplier is the unskinned `LightTheme.radii.md`
+ *   — using the LIVE `theme.radii.md` was the bug that made every swatch turn
+ *   square whenever a square-corner skin (Brutalist) was the active one.
+ */
+function swatchForSkin(skin: SkinOverride): SwatchSpec {
+  const baseTheme = skin.base === 'dark' ? DarkTheme : LightTheme;
+  const tokens = skin.colors?.[skin.base];
+  const { radiusScale, radiusSet } = Skin.deriveGeometry(skin);
+  const cornerRadius =
+    radiusSet !== undefined
+      ? radiusSet === 0
+        ? 0
+        : radiusSet
+      : Math.round(baseTheme.radii.md * radiusScale);
+  return {
+    accent: tokens?.accent ?? baseTheme.colors.accent,
+    background: tokens?.surface1 ?? baseTheme.colors.surface1,
+    cornerRadius,
+  };
+}
 
 export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { theme, activeSkin, setActiveSkin, appearance, setAppearance } = useTheme();
@@ -245,6 +284,16 @@ export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: ()
               description="The built-in Quorum theme"
               active={!activeSkin}
               onPress={() => apply(null)}
+              // Default = the built-in unskinned theme, so ALL of its swatch
+              // (accent, background, radius) must come from the base theme, not
+              // the live `theme` — otherwise an active skin (e.g. Midnight Neon)
+              // bleeds its purple accent / square corners into the Default chip.
+              // Tracks light/dark via `theme.dark`, which is correct.
+              swatch={{
+                accent: (theme.dark ? DarkTheme : LightTheme).colors.accent,
+                background: (theme.dark ? DarkTheme : LightTheme).colors.surface1,
+                cornerRadius: (theme.dark ? DarkTheme : LightTheme).radii.md,
+              }}
               footer={
                 !activeSkin ? (
                   <AppearanceSegments value={appearance} onChange={setAppearance} theme={theme} />
@@ -263,6 +312,7 @@ export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: ()
                   onPress={() => apply(skin)}
                   onLongPress={isSample ? undefined : () => confirmDelete(skin)}
                   onDelete={isSample ? undefined : () => confirmDelete(skin)}
+                  swatch={swatchForSkin(skin)}
                   theme={theme}
                 />
               );
@@ -289,6 +339,10 @@ export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: ()
                 description={`${entry.authorName ? `by ${entry.authorName} · ` : ''}${entry.installs} install${entry.installs === 1 ? '' : 's'}`}
                 active={activeSkin?.id === entry.id}
                 onPress={() => installFromGallery(entry, true)}
+                // No swatch here on purpose: gallery summaries carry no color
+                // data, so a chip would be a misleading all-grey fake-preview
+                // identical for every skin. Real per-skin gallery previews are
+                // deferred — see .agents/tasks/2026-06-15-skin-gallery-real-color-swatches.md.
                 theme={theme}
               />
             ))}
@@ -307,6 +361,7 @@ function SkinRow({
   onPress,
   onLongPress,
   onDelete,
+  swatch,
   footer,
   theme,
 }: {
@@ -316,6 +371,7 @@ function SkinRow({
   onPress: () => void;
   onLongPress?: () => void;
   onDelete?: () => void;
+  swatch?: SwatchSpec;
   footer?: React.ReactNode;
   theme: ReturnType<typeof useTheme>['theme'];
 }) {
@@ -345,6 +401,14 @@ function SkinRow({
           backgroundColor: active && !footer ? theme.colors.surface3 : 'transparent',
         }}
       >
+        {swatch && (
+          <SkinSwatch
+            accent={swatch.accent}
+            background={swatch.background}
+            cornerRadius={swatch.cornerRadius}
+            theme={theme}
+          />
+        )}
         <View style={{ flex: 1 }}>
           <Text style={{ color: theme.colors.textMain, fontWeight: '600', fontSize: Skin.font(15) }}>{label}</Text>
           <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>{description}</Text>
@@ -378,6 +442,7 @@ function AppearanceSegments({
 }) {
   return (
     <View
+      accessibilityRole="radiogroup"
       style={{
         flexDirection: 'row',
         gap: Skin.space(8),
@@ -391,9 +456,9 @@ function AppearanceSegments({
           <TouchableOpacity
             key={seg.key}
             onPress={() => onChange(seg.key)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={`Appearance: ${seg.label}`}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: active }}
+            accessibilityLabel={`${seg.label} appearance`}
             style={{
               paddingHorizontal: Skin.space(14),
               paddingVertical: Skin.space(7),
