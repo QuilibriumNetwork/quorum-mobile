@@ -8,7 +8,8 @@ import { LiveSpacesStrip } from '@/components/SocialFeed/content/LiveSpacesStrip
 import { FarcasterTokenEmbed } from '@/components/SocialFeed/content/FarcasterTokenEmbed';
 import { LikeIcon, getLikeIconType } from '@/components/SocialFeed/content/LikeIcon';
 import { SnapIcon } from '@/components/SocialFeed/content/SnapIcon';
-import { SnapIconOutline, SnapIconFilled } from '@/components/SocialFeed/content/SnapIconVariants';
+// Outline snap-icon candidate, kept for a future swap (see SnapIconVariants).
+// import { SnapIconOutline } from '@/components/SocialFeed/content/SnapIconVariants';
 import TipModal, { type TipTarget } from '@/components/wallet/TipModal';
 import { ActionSheet, type ActionRowItem } from '@/components/shared/ActionSheet';
 import { ActionRow, ActionRowGroup } from '@/components/shared/ActionRow';
@@ -2911,7 +2912,7 @@ function ThreadDetailView({
                   isLiked={isLiked}
                   color={theme.colors.textMuted}
                   activeColor={theme.colors.danger}
-                  size={16}
+                  size={20}
                 />
                 {likeCount > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
@@ -2922,7 +2923,7 @@ function ThreadDetailView({
                 onPress={() => onOpenThread(cast.author.username, cast.hash.slice(0, 10), cast)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={16} />
+                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
                 {(cast.replies?.count ?? 0) > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
                 )}
@@ -2944,7 +2945,7 @@ function ThreadDetailView({
                 <IconSymbol
                   name="arrow.triangle.2.circlepath"
                   color={isRecasted ? theme.colors.success : theme.colors.textMuted}
-                  size={16}
+                  size={20}
                 />
                 {recastCount > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{recastCount}</Text>
@@ -2962,7 +2963,7 @@ function ThreadDetailView({
                   })}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <SnapIcon color={theme.colors.textMuted} size={16} />
+                  <SnapIcon color={theme.colors.textMuted} size={24} />
                 </TouchableOpacity>
               )}
             </View>
@@ -3863,7 +3864,7 @@ export function ProfileView({
                   isLiked={isLiked}
                   color={theme.colors.textMuted}
                   activeColor={theme.colors.danger}
-                  size={16}
+                  size={20}
                 />
                 {likeCount > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
@@ -3873,7 +3874,7 @@ export function ProfileView({
                 style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
                 onPress={navigateToThread}
               >
-                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={16} />
+                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
                 {(cast.replies?.count ?? 0) > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
                 )}
@@ -3882,7 +3883,7 @@ export function ProfileView({
                 <IconSymbol
                   name="arrow.triangle.2.circlepath"
                   color={cast.viewerContext?.recast ? theme.colors.success : theme.colors.textMuted}
-                  size={16}
+                  size={20}
                 />
                 {(cast.recasts?.count ?? 0) > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.recasts?.count}</Text>
@@ -3900,7 +3901,7 @@ export function ProfileView({
                   })}
                   hitSlop={12}
                 >
-                  <SnapIcon color={theme.colors.textMuted} size={16} />
+                  <SnapIcon color={theme.colors.textMuted} size={24} />
                 </TouchableOpacity>
               )}
             </View>
@@ -4466,7 +4467,7 @@ function ChannelView({
                   isLiked={isLiked}
                   color={theme.colors.textMuted}
                   activeColor={theme.colors.danger}
-                  size={16}
+                  size={20}
                 />
                 {likeCount > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
@@ -4476,7 +4477,7 @@ function ChannelView({
                 style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
                 onPress={navigateToThread}
               >
-                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={16} />
+                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
                 {(cast.replies?.count ?? 0) > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
                 )}
@@ -4485,7 +4486,7 @@ function ChannelView({
                 <IconSymbol
                   name="arrow.triangle.2.circlepath"
                   color={cast.viewerContext?.recast ? theme.colors.success : theme.colors.textMuted}
-                  size={16}
+                  size={20}
                 />
                 {(cast.recasts?.count ?? 0) > 0 && (
                   <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.recasts?.count}</Text>
@@ -4503,7 +4504,7 @@ function ChannelView({
                   })}
                   hitSlop={12}
                 >
-                  <SnapIcon color={theme.colors.textMuted} size={16} />
+                  <SnapIcon color={theme.colors.textMuted} size={24} />
                 </TouchableOpacity>
               )}
             </View>
@@ -5139,7 +5140,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
             isLiked={isLiked}
             color={theme.colors.textMuted}
             activeColor={theme.colors.danger}
-            size={16}
+            size={20}
           />
           {likeCount > 0 && (
             <Text style={styles.statText}>{likeCount}</Text>
@@ -5150,7 +5151,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
           onPress={navigateToReply}
           hitSlop={12}
         >
-          <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={16} />
+          <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
           {post.stats.replies !== '0' && (
             <Text style={styles.statText}>{post.stats.replies}</Text>
           )}
@@ -5163,7 +5164,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
           <IconSymbol
             name="arrow.triangle.2.circlepath"
             color={isRecasted ? theme.colors.success : theme.colors.textMuted}
-            size={16}
+            size={20}
           />
           {recastCount > 0 && (
             <Text style={styles.statText}>{recastCount}</Text>
@@ -5181,12 +5182,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
               authorDisplayName: post.authorName,
             })}
           >
-            {/* TEMP compare row: current | outline | filled. Pick one, then revert. */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(8) }}>
-              <SnapIcon color={theme.colors.textMuted} size={16} />
-              <SnapIconOutline color={theme.colors.textMuted} size={16} />
-              <SnapIconFilled color={theme.colors.textMuted} size={16} />
-            </View>
+            <SnapIcon color={theme.colors.textMuted} size={24} />
           </TouchableOpacity>
         )}
       </View>
