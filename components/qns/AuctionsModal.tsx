@@ -192,7 +192,7 @@ export default function AuctionsModal({
         </View>
 
         <FlatList
-          data={auctions ?? []}
+          data={auctions?.auctions ?? []}
           renderItem={renderAuction}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
