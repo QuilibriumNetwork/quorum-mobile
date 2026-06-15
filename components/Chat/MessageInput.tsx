@@ -1,5 +1,6 @@
 import type { AppTheme } from '@/theme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { SendIcon } from '@/components/Chat/SendIcon';
 import { useEmojiFrecency } from '@/hooks/useEmojiFrecency';
 import { useDebouncedValue } from '@/hooks/useFarcasterSearch';
 import type { ProcessedAttachment } from '@/services/media/imageAttachment';
@@ -823,18 +824,20 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         </View>
         <View style={styles.actions}>
           <TouchableOpacity
-            style={[styles.sendButton]}
+            style={[
+              styles.sendButton,
+              {
+                backgroundColor: canSend ? theme.colors.accent : theme.colors.surface6,
+                opacity: canSend ? 1 : 0.6,
+              },
+            ]}
             onPress={handleSend}
             disabled={!canSend}
           >
             {isSending ? (
-              <ActivityIndicator size="small" color={theme.colors.primary} />
+              <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <IconSymbol
-                name="paperplane.fill"
-                color={canSend ? theme.colors.primary : theme.colors.textMuted}
-                size={24}
-              />
+              <SendIcon color="#fff" size={18} />
             )}
           </TouchableOpacity>
         </View>
@@ -976,8 +979,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     padding: Skin.space(4),
   },
   sendButton: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
