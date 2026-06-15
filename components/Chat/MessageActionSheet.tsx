@@ -324,8 +324,6 @@ const createStyles = (theme: AppTheme) =>
     quickReactionsContainer: {
       paddingVertical: Skin.space(12),
       paddingHorizontal: Skin.space(16),
-      borderBottomWidth: Skin.border(1),
-      borderBottomColor: theme.colors.border ?? theme.colors.surface3,
     },
     quickReactionsContent: {
       flexDirection: 'row',
