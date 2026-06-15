@@ -3,8 +3,8 @@
 import { base64ToHex, numberArrayToBase64 } from '@/utils/encoding';
 import { InteractionManager } from 'react-native';
 import { sha512 } from '@noble/hashes/sha2.js';
-import { gcm } from '@noble/ciphers/aes';
-import { randomBytes } from '@noble/ciphers/webcrypto';
+import { gcm } from '@noble/ciphers/aes.js';
+import { randomBytes } from '@noble/ciphers/webcrypto.js';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { getQuorumClient } from '../api/quorumClient';
 import { getPrivateKey, getPublicKey } from '../onboarding/secureStorage';

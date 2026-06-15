@@ -18,8 +18,8 @@
  * report to a real account.
  */
 
-import { gcm } from '@noble/ciphers/aes';
-import { randomBytes } from '@noble/hashes/utils';
+import { gcm } from '@noble/ciphers/aes.js';
+import { randomBytes } from '@noble/hashes/utils.js';
 import { getQuorumClient } from '@/services/api/quorumClient';
 import { NativeCryptoProvider } from '@/services/crypto/native-provider';
 import { ensurePrivateKey } from '@/services/onboarding/keyService';
