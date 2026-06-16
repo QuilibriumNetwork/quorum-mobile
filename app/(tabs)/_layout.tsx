@@ -6,6 +6,7 @@ import { MiniappOverlayProvider } from '@/context/MiniappOverlayContext';
 import { SwapModalProvider } from '@/context/SwapModalContext';
 import { useUnifiedNotifications } from '@/hooks/useUnifiedNotifications';
 import { feedActiveTabBus } from '@/services/ui/feedActiveTab';
+import { useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { useTheme } from '@/theme';
 import { Tabs } from 'expo-router';
 import React from 'react';
@@ -44,6 +45,11 @@ function ProfileTabIcon({ color }: { color: string; focused: boolean }) {
 
 export default function TabsLayout() {
   const { theme } = useTheme();
+  // Hide the bottom tab bar while the chat composer's emoji panel is open so
+  // the panel gets the full bottom of the screen. The chat screens
+  // simultaneously drop their bottomChromeHeight so the panel extends into the
+  // vacated space (no gap).
+  const composerPanelOpen = useComposerPanelVisible();
 
   return (
     <SwapModalProvider>
@@ -68,6 +74,8 @@ export default function TabsLayout() {
           position: 'absolute' as const,
           borderTopWidth: 0,
           elevation: 0,
+          // Collapse the bar while the composer emoji panel is open.
+          ...(composerPanelOpen ? { display: 'none' as const } : null),
         },
       }}
     >

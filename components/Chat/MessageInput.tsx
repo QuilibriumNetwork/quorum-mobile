@@ -11,6 +11,7 @@ import { ActivityIndicator, Image, useWindowDimensions, NativeSyntheticEvent, Pl
 import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useComposerPanel } from '@/hooks/useComposerPanel';
+import { composerPanelVisibleStore } from '@/services/ui/composerPanelVisible';
 import * as Skin from '@/theme/skins/geometry';
 
 
@@ -266,6 +267,15 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
       refreshRecent();
     }
   }, [showEmojiPicker, refreshRecent]);
+
+  // Publish the panel's open state so the Tabs layout can hide the bottom tab
+  // bar (more room for emojis) and the chat screen can drop its bottom-chrome
+  // height so the panel extends into the freed space. Reset to false on unmount
+  // so a composer leaving the tree never leaves the tab bar hidden.
+  useEffect(() => {
+    composerPanelVisibleStore.set(showEmojiPicker);
+  }, [showEmojiPicker]);
+  useEffect(() => () => composerPanelVisibleStore.set(false), []);
 
   // Autocomplete state
   const [autocompleteType, setAutocompleteType] = useState<'mention' | 'channel' | null>(null);

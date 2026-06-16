@@ -15,6 +15,7 @@ import { useBookmarks } from '@/hooks/useUserConfig';
 import { getSpaceKey } from '@/services/config/spaceStorage';
 import { useTheme } from '@/theme';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
@@ -59,6 +60,11 @@ export default function SpaceChannelChat() {
   const { enqueueOutbound, isConnected } = useWebSocket();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
+  // While the composer emoji panel is open the tab bar is hidden, so reclaim
+  // its space (zero padding + 0 chrome height) and let the panel reach the
+  // screen bottom.
+  const composerPanelOpen = useComposerPanelVisible();
+  const effectiveChromeHeight = composerPanelOpen ? 0 : tabBarHeight;
 
   const { data: spaceData } = useSpace(spaceId, { enabled: !!spaceId });
   const { data: membersData } = useSpaceMembers(spaceId, { enabled: !!spaceId });
@@ -251,7 +257,7 @@ export default function SpaceChannelChat() {
       style={[
         styles.container,
         {
-          paddingBottom: tabBarHeight,
+          paddingBottom: effectiveChromeHeight,
           backgroundColor: theme.colors.surface1,
         },
       ]}
@@ -287,7 +293,7 @@ export default function SpaceChannelChat() {
         isBookmarked={isBookmarked}
         addBookmark={addBookmark}
         removeBookmark={removeBookmark}
-        tabBarHeight={tabBarHeight}
+        tabBarHeight={effectiveChromeHeight}
         theme={theme}
         draftsRef={draftsRef}
         onChannelLinkPress={handleChannelLinkPress}
