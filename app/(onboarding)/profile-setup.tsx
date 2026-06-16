@@ -16,6 +16,18 @@ import { useOnboarding } from '@/context';
 import { OnboardingLayout, StepNavigation } from '@/components/onboarding';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import * as Skin from '@/theme/skins/geometry';
+import {
+  validateDisplayName,
+  validateUserBio,
+} from '@quilibrium/quorum-shared';
+import {
+  translateValidationResult,
+  translateValidationResults,
+  displayNameLiveError,
+  bioLiveError,
+  capDisplayName,
+  capBio,
+} from '@/hooks/validation/errorTranslator';
 
 export default function ProfileSetupScreen() {
   const { theme } = useTheme();
@@ -25,6 +37,8 @@ export default function ProfileSetupScreen() {
   const [displayName, setDisplayName] = useState(state.profile.displayName ?? '');
   const [bio, setBio] = useState(state.profile.bio ?? '');
   const [profileImage, setProfileImage] = useState<string | undefined>(state.profile.profileImageUri);
+  const [nameError, setNameError] = useState<string | undefined>(undefined);
+  const [bioError, setBioError] = useState<string | undefined>(undefined);
 
   // Sync from state.profile if it changes (e.g., from config sync during import)
   // Only update fields that are empty locally but have values in state
@@ -77,9 +91,21 @@ export default function ProfileSetupScreen() {
   };
 
   const handleContinue = () => {
+    const trimmedName = displayName.trim();
+    const trimmedBio = bio.trim();
+
+    // Validate only what the user actually entered — both fields are optional
+    // at onboarding (the screen is skippable). Shared byte validators match
+    // Farcaster's USER_DATA limits so a name/bio set here can be published later.
+    const nameMsg = trimmedName ? translateValidationResult(validateDisplayName(trimmedName)) : undefined;
+    const bioMsg = trimmedBio ? translateValidationResults(validateUserBio(trimmedBio))[0] : undefined;
+    setNameError(nameMsg);
+    setBioError(bioMsg);
+    if (nameMsg || bioMsg) return;
+
     updateProfile({
-      displayName: displayName.trim() || undefined,
-      bio: bio.trim() || undefined,
+      displayName: trimmedName || undefined,
+      bio: trimmedBio || undefined,
       profileImageUri: profileImage,
     });
     skipProfile(); // This advances to next step
@@ -148,11 +174,18 @@ export default function ProfileSetupScreen() {
               <TextInput
                 style={styles.textInput}
                 value={displayName}
-                onChangeText={setDisplayName}
+                onChangeText={(t) => { const v = capDisplayName(t); setDisplayName(v); setNameError(displayNameLiveError(v)); }}
                 placeholder="Your name"
                 placeholderTextColor={theme.colors.textMuted}
-                maxLength={50}
+                // Hard-capped to MAX_DISPLAY_NAME_BYTES by bytes (capDisplayName).
+                // No maxLength (counts chars, not bytes). The live error surfaces
+                // only the non-length rules (.q / impersonation / XSS / reserved).
+                aria-label="Display name"
+                aria-invalid={!!nameError}
               />
+              {nameError ? (
+                <Text style={styles.fieldError} role="alert">{nameError}</Text>
+              ) : null}
             </View>
 
             <View style={styles.inputGroup}>
@@ -160,15 +193,18 @@ export default function ProfileSetupScreen() {
               <TextInput
                 style={[styles.textInput, styles.bioInput]}
                 value={bio}
-                onChangeText={setBio}
+                onChangeText={(t) => { const v = capBio(t); setBio(v); setBioError(bioLiveError(v)); }}
                 placeholder="Tell us about yourself..."
                 placeholderTextColor={theme.colors.textMuted}
                 multiline
                 numberOfLines={3}
-                maxLength={160}
                 textAlignVertical="top"
+                aria-label="Bio"
+                aria-invalid={!!bioError}
               />
-              <Text style={styles.charCount}>{bio.length}/160</Text>
+              {bioError ? (
+                <Text style={styles.fieldError} role="alert">{bioError}</Text>
+              ) : null}
             </View>
           </View>
         </ScrollView>
@@ -178,6 +214,7 @@ export default function ProfileSetupScreen() {
           onNext={handleContinue}
           onSkip={handleSkip}
           nextLabel={hasAnyInput ? 'Continue' : 'Skip'}
+          nextDisabled={!!nameError || !!bioError}
           showSkip={!!hasAnyInput}
           skipLabel="Skip for now"
           isLoading={state.isLoading}
@@ -288,10 +325,10 @@ const createStyles = (theme: AppTheme) =>
       minHeight: 80,
       textAlignVertical: 'top',
     },
-    charCount: {
+    fieldError: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.danger,
       fontFamily: theme.fonts.regular.fontFamily,
-      textAlign: 'right',
+      marginTop: Skin.space(1),
     },
   });

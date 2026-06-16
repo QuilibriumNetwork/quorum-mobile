@@ -13,6 +13,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
+import {
+  validateDisplayName,
+  validateUserBio,
+} from '@quilibrium/quorum-shared';
+import {
+  translateValidationResult,
+  translateValidationResults,
+  displayNameLiveError,
+  bioLiveError,
+  capDisplayName,
+  capBio,
+} from '@/hooks/validation/errorTranslator';
 
 export type EditScope = 'quorum' | 'farcaster' | 'both';
 
@@ -36,6 +48,8 @@ export default function UnifiedProfileEditModal({
   const [bio, setBio] = useState('');
   const [avatar, setAvatar] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [nameError, setNameError] = useState<string | undefined>(undefined);
+  const [bioError, setBioError] = useState<string | undefined>(undefined);
 
   // Load the live Farcaster profile so farcaster-scoped edits seed from
   // the Farcaster-side fields rather than the Quorum-side fields.
@@ -164,6 +178,19 @@ export default function UnifiedProfileEditModal({
   };
 
   const handleSave = async () => {
+    // Validate against the shared byte limits before doing anything. Both
+    // fields are optional (empty = leave/clear), so only validate non-empty
+    // values. This also guards the Farcaster publish below — a name/bio over
+    // Farcaster's USER_DATA byte caps must be blocked locally with a clear
+    // message instead of letting /v2/me return an opaque HTTP 400.
+    const trimmedName = displayName.trim();
+    const trimmedBio = bio.trim();
+    const nameMsg = trimmedName ? translateValidationResult(validateDisplayName(trimmedName)) : undefined;
+    const bioMsg = trimmedBio ? translateValidationResults(validateUserBio(trimmedBio))[0] : undefined;
+    setNameError(nameMsg);
+    setBioError(bioMsg);
+    if (nameMsg || bioMsg) return;
+
     setSaving(true);
     try {
       const quorumTargeted = scope === 'quorum' || scope === 'both';
@@ -214,26 +241,40 @@ export default function UnifiedProfileEditModal({
           <Text style={styles.fieldLabel}>Display Name</Text>
           <TextInput
             value={displayName}
-            onChangeText={setDisplayName}
+            onChangeText={(t) => { const v = capDisplayName(t); setDisplayName(v); setNameError(displayNameLiveError(v)); }}
             placeholder="Your name"
             placeholderTextColor={theme.colors.textMuted}
             style={styles.input}
             autoCapitalize="words"
-            maxLength={60}
+            // Hard-capped to MAX_DISPLAY_NAME_BYTES by bytes in onChangeText
+            // (capDisplayName) — kinder than making the user delete on mobile.
+            // No maxLength: it counts chars, not bytes. The live error only
+            // surfaces the non-length rules (.q / impersonation / XSS / reserved).
+            aria-label="Display name"
+            aria-invalid={!!nameError}
           />
+          {nameError ? (
+            <Text style={styles.fieldError} role="alert">{nameError}</Text>
+          ) : null}
         </View>
 
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>Bio</Text>
           <TextInput
             value={bio}
-            onChangeText={setBio}
+            onChangeText={(t) => { const v = capBio(t); setBio(v); setBioError(bioLiveError(v)); }}
             placeholder="Tell people about yourself..."
             placeholderTextColor={theme.colors.textMuted}
             style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
             multiline
-            maxLength={256}
+            // Hard-capped to MAX_BIO_BYTES by bytes in onChangeText (capBio).
+            // No maxLength (counts chars, not bytes).
+            aria-label="Bio"
+            aria-invalid={!!bioError}
           />
+          {bioError ? (
+            <Text style={styles.fieldError} role="alert">{bioError}</Text>
+          ) : null}
         </View>
 
         <View style={styles.actions}>
@@ -245,9 +286,9 @@ export default function UnifiedProfileEditModal({
             <Text style={[styles.buttonLabel, { color: theme.colors.textMain }]}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.button, styles.buttonPrimary]}
+            style={[styles.button, styles.buttonPrimary, (saving || !!nameError || !!bioError) && styles.buttonDisabled]}
             onPress={handleSave}
-            disabled={saving}
+            disabled={saving || !!nameError || !!bioError}
           >
             {saving ? (
               <ActivityIndicator color="#fff" />
@@ -312,6 +353,11 @@ function createStyles(theme: AppTheme) {
       fontWeight: '600',
       color: theme.colors.textMuted,
     },
+    fieldError: {
+      fontSize: Skin.font(12),
+      color: theme.colors.danger,
+      marginTop: Skin.space(1),
+    },
     input: {
       borderWidth: Skin.border(1),
       borderColor: theme.colors.surface3,
@@ -339,6 +385,9 @@ function createStyles(theme: AppTheme) {
     },
     buttonSecondary: {
       backgroundColor: theme.colors.surface2,
+    },
+    buttonDisabled: {
+      opacity: 0.5,
     },
     buttonLabel: {
       fontSize: Skin.font(15),

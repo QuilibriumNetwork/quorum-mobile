@@ -2006,11 +2006,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               //      sent their update, or join control was missed), we
               //      still record the profile so the next member-list
               //      fetch surfaces the right data.
-              //   2. Treat empty strings as "no change" rather than
-              //      "clear the field". A common partial-update mistake
-              //      on the sender side was to broadcast an avatar
-              //      change with `displayName: ''`, which under the old
-              //      handler clobbered everyone's stored display name.
+              //   2. Per-field clear semantics: displayName and bio use a
+              //      presence check (!== undefined) so an empty string is a
+              //      DELIBERATE clear (desktop now omits a field on the wire
+              //      when it didn't change, so '' is always intentional —
+              //      this is why the old "empty = no change" guard for
+              //      displayName was dropped). userIcon stays on the truthy
+              //      guard (icons aren't cleared via this path; an empty
+              //      avatar would just blank the member's icon by mistake).
               const profileContent = spaceMessage.content as {
                 senderId: string;
                 displayName?: string;
@@ -2048,7 +2051,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   address: profileContent.senderId,
                   inbox_address: '',
                 }),
-                ...(profileContent.displayName ? { display_name: profileContent.displayName } : {}),
+                // Presence check (not truthy): an empty displayName is a
+                // deliberate per-space-name clear ("use my global/QNS name
+                // here"), matching bio's semantics and desktop's receiver.
+                // The sender omits displayName on bio/avatar-only edits, so
+                // '' on the wire is always an intentional clear.
+                ...(profileContent.displayName !== undefined ? { display_name: profileContent.displayName } : {}),
                 ...(profileContent.userIcon ? { profile_image: profileContent.userIcon } : {}),
                 ...(profileContent.bio !== undefined ? { bio: profileContent.bio } : {}),
                 ...(profileContent.farcasterFid !== undefined && profileContent.farcasterFid > 0
@@ -3307,7 +3315,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 address: profileContent.senderId,
                 inbox_address: '',
               }),
-              ...(profileContent.displayName ? { display_name: profileContent.displayName } : {}),
+              // Presence check (not truthy): empty displayName = deliberate
+              // per-space-name clear, matching bio + desktop's receiver. See
+              // the matching comment in the JS-path handler above.
+              ...(profileContent.displayName !== undefined ? { display_name: profileContent.displayName } : {}),
               ...(profileContent.userIcon ? { profile_image: profileContent.userIcon } : {}),
               ...(profileContent.bio !== undefined ? { bio: profileContent.bio } : {}),
               ...(profileContent.farcasterFid !== undefined && profileContent.farcasterFid > 0
