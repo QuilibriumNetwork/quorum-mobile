@@ -1070,6 +1070,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   emojiPanelInner: {
     flex: 1,
     backgroundColor: theme.colors.surface4,
+    borderTopLeftRadius: Skin.radius(16),
+    borderTopRightRadius: Skin.radius(16),
+    // Clip the search bar / category band to the rounded top corners.
+    overflow: 'hidden',
   },
   searchContainer: {
     flexDirection: 'row',
