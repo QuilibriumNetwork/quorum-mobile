@@ -85,21 +85,31 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   const panelOpenSV = useSharedValue(0);
   const [panelOpen, setPanelOpen] = useState(false);
   const panelOpenRef = useRef(false);
+  // Set while closing the panel BY bringing the keyboard back. During this
+  // window the spacer holds the panel footprint until the rising keyboard
+  // catches up, so the pill never drops to the bottom and bounces back up.
+  const closingSV = useSharedValue(0);
 
   // Capture the keyboard height whenever it's meaningfully open so the panel
-  // can match it. onMove fires continuously; we latch the height and also
-  // mirror it to the module-level session cache for future cold opens.
+  // can match it. We latch the height on settle and, once the keyboard is fully
+  // up, end any in-progress close hand-off.
   useKeyboardHandler(
     {
       onEnd: (e) => {
         'worklet';
         if (e.height > 0) {
           lastKeyboardHeight.value = e.height;
+          // The keyboard has finished appearing — the close hand-off is done,
+          // so the spacer can resume plainly following the live keyboard.
+          closingSV.value = 0;
           // Mirror the settled height to the JS-thread module cache so a future
           // composer mount can seed from it. Hopping to JS only on settle (not
           // every onMove frame) keeps this cheap, and avoids reading a shared
           // value during render (which Reanimated strict mode warns about).
           runOnJS(rememberSessionKeyboardHeight)(e.height);
+        } else {
+          // Keyboard fully hidden — nothing is bridging to, clear the flag.
+          closingSV.value = 0;
         }
       },
     },
@@ -113,52 +123,86 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   // resting bottom inset is added when nothing is open and fades out (via
   // keyboard progress) as the keyboard/panel takes over.
   const spacerHeight = useDerivedValue(() => {
+    const panelFootprint = Math.max(lastKeyboardHeight.value - bottomChromeHeight, 0);
     if (panelOpenSV.value === 1) {
       // Panel fully open: the keyboard footprint minus the chrome we sit above.
-      return Math.max(lastKeyboardHeight.value - bottomChromeHeight, 0);
+      return panelFootprint;
     }
     // useReanimatedKeyboardAnimation().height is NEGATIVE-going (0 -> -kbHeight),
     // matching the library's own components which negate it. Flip the sign to
     // get the positive on-screen keyboard height.
     const liveKeyboardHeight = -keyboardHeight.value;
     const kb = Math.max(liveKeyboardHeight - bottomChromeHeight, 0);
+    if (closingSV.value === 1) {
+      // Closing the panel by summoning the keyboard back: hold the panel
+      // footprint and let the RISING keyboard meet it. Math.max means the pill
+      // stays put and the hand-off is seamless once the keyboard catches up —
+      // no drop-to-bottom-then-bounce.
+      return Math.max(kb, panelFootprint);
+    }
     // progress goes 0 -> 1 as the keyboard appears; fade the resting inset out.
     const progress = Math.min(Math.max(keyboardProgress.value, 0), 1);
     return kb + bottomInset * (1 - progress);
   });
 
   const openPanel = useCallback(() => {
+    // Any prior close hand-off is moot once we're opening again.
+    closingSV.value = 0;
     panelOpenRef.current = true;
     panelOpenSV.value = 1;
     setPanelOpen(true);
     Keyboard.dismiss();
-  }, [panelOpenSV]);
+  }, [panelOpenSV, closingSV]);
 
   const closePanel = useCallback(() => {
     // Cheap to call on hot paths (e.g. every keystroke): bail if already closed
     // so we don't write the shared value or schedule a no-op state update.
     if (!panelOpenRef.current) return;
+    // Plain close (no keyboard hand-off — e.g. hardware-keyboard typing): clear
+    // any closing flag so the spacer follows the live keyboard directly.
+    closingSV.value = 0;
     panelOpenRef.current = false;
     panelOpenSV.value = 0;
     setPanelOpen(false);
-  }, [panelOpenSV]);
+  }, [panelOpenSV, closingSV]);
+
+  // Close the panel AND bring the keyboard back, holding the pill's position
+  // throughout (no drop-and-bounce). Order matters: arm the closing hand-off
+  // and summon the keyboard BEFORE flipping panelOpen, so the spacer never
+  // sees the "panel closed, keyboard still down" state with a 0 footprint.
+  const closePanelAndRestoreKeyboard = useCallback(
+    (refocus: () => void) => {
+      if (!panelOpenRef.current) return;
+      closingSV.value = 1;
+      refocus();
+      panelOpenRef.current = false;
+      panelOpenSV.value = 0;
+      setPanelOpen(false);
+    },
+    [panelOpenSV, closingSV]
+  );
 
   const togglePanel = useCallback(
     (refocus: () => void) => {
       if (panelOpenRef.current) {
-        closePanel();
-        refocus();
+        closePanelAndRestoreKeyboard(refocus);
       } else {
         openPanel();
       }
     },
-    [openPanel, closePanel]
+    [openPanel, closePanelAndRestoreKeyboard]
   );
 
-  // When the input refocuses (keyboard comes back), make sure the panel is
-  // closed so the spacer switches back to following the keyboard. closePanel
-  // already no-ops when the panel isn't open.
-  const onInputFocus = closePanel;
+  // When the input gains focus (e.g. user taps the text field) while the panel
+  // is open, the keyboard is on its way back — arm the same closing hand-off so
+  // the pill holds position instead of dropping and bouncing.
+  const onInputFocus = useCallback(() => {
+    if (!panelOpenRef.current) return;
+    closingSV.value = 1;
+    panelOpenRef.current = false;
+    panelOpenSV.value = 0;
+    setPanelOpen(false);
+  }, [panelOpenSV, closingSV]);
 
   return {
     panelOpen,
