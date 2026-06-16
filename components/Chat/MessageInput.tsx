@@ -227,8 +227,6 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   const containerDynamicStyle = useMemo(() => ({
     width: screenWidth,
   }), [screenWidth]);
-  const availableWidth = screenWidth - 180;
-  const maxPlaceholderNameLength = Math.max(8, Math.min(Math.floor(availableWidth / 8.5), 24));
   const inputRef = useRef<TextInput>(null);
   const valueRef = useRef(value);
   const onChangeTextRef = useRef(onChangeText);
@@ -823,26 +821,11 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         </View>
       )}
 
-      {/* The composer pill — one rounded container holding the left-side
-          buttons, the growing text input, and the circular send button. */}
+      {/* The composer pill — one rounded container with the emoji toggle on the
+          left, the growing text input, then the attach + send buttons on the
+          right. */}
       <View style={styles.pill}>
         <View style={styles.leftButtons}>
-          {/* Attach (+) hides while composing to give the text room. */}
-          {!isComposing && (
-            <TouchableOpacity
-              style={styles.inputIconButton}
-              onPress={onAttachmentPress}
-              disabled={disabled}
-              accessibilityRole="button"
-              accessibilityLabel="Attach image"
-            >
-              <IconSymbol
-                name="plus"
-                color={disabled ? theme.colors.textMuted : theme.colors.textSubtle}
-                size={27}
-              />
-            </TouchableOpacity>
-          )}
           <TouchableOpacity
             style={styles.inputIconButton}
             onPress={handleToggleEmojiPicker}
@@ -863,7 +846,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           value={value}
           onChangeText={handleTextChange}
           onSelectionChange={handleSelectionChange}
-          placeholder={editingMessage ? 'Edit message...' : isDM ? `Message ${channelName.length > maxPlaceholderNameLength ? channelName.slice(0, maxPlaceholderNameLength) + '…' : channelName}` : `Message #${channelName}`}
+          placeholder={editingMessage ? 'Edit message...' : 'Message...'}
           placeholderTextColor={theme.colors.textMuted}
           style={styles.input}
           editable={!disabled}
@@ -879,25 +862,43 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           }}
         />
 
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            {
-              backgroundColor: canSend ? theme.colors.accent : theme.colors.surface6,
-              opacity: canSend ? 1 : 0.6,
-            },
-          ]}
-          onPress={handleSend}
-          disabled={!canSend}
-          accessibilityRole="button"
-          accessibilityLabel="Send message"
-        >
-          {isSending ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <SendIcon color="#fff" size={18} />
+        <View style={styles.rightButtons}>
+          {/* Attach hides while composing to give the text room. */}
+          {!isComposing && (
+            <TouchableOpacity
+              style={styles.inputIconButton}
+              onPress={onAttachmentPress}
+              disabled={disabled}
+              accessibilityRole="button"
+              accessibilityLabel="Attach image"
+            >
+              <IconSymbol
+                name="paperclip"
+                color={disabled ? theme.colors.textMuted : theme.colors.textSubtle}
+                size={27}
+              />
+            </TouchableOpacity>
           )}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              {
+                backgroundColor: canSend ? theme.colors.accent : theme.colors.surface6,
+                opacity: canSend ? 1 : 0.6,
+              },
+            ]}
+            onPress={handleSend}
+            disabled={!canSend}
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+          >
+            {isSending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <SendIcon color="#fff" size={18} />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Animated spacer beneath the pill. Closed: it follows the keyboard so
@@ -1020,18 +1021,20 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontWeight: 'bold',
   },
   // The single pill: rounded container holding left buttons, the growing
-  // input, and the circular send button. Bottom-aligned so the send button
-  // and buttons stay anchored as the multiline input grows upward.
+  // input, and the circular send button. Children are bottom-aligned so that
+  // when the input wraps to multiple lines the buttons + send stay anchored to
+  // the last line; for a single line everything lands on the same baseline.
   pill: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     backgroundColor: theme.colors.surface5,
-    borderRadius: Skin.radius(22),
+    // Large radius => the short ends are always perfect semicircles regardless
+    // of the pill's current height (single line vs wrapped).
+    borderRadius: 999,
     paddingVertical: Skin.space(4),
     paddingLeft: Skin.space(4),
     // Keep the send circle hugging the pill's right edge (~1px gap).
     paddingRight: 1,
-    minHeight: 44,
     // A small breathing gap between the pill and whatever sits below it
     // (the keyboard or the emoji panel), so the pill never touches them.
     marginBottom: Skin.space(8),
@@ -1039,21 +1042,27 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   leftButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    // Pin to the bottom of the pill so buttons align with the last input line.
-    alignSelf: 'flex-end',
-    paddingBottom: Skin.space(2),
+  },
+  rightButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Skin.space(2),
   },
   input: {
     flex: 1,
     color: theme.colors.textMain,
     paddingHorizontal: Skin.space(8),
-    paddingTop: Platform.OS === 'ios' ? Skin.space(8) : Skin.space(4),
-    paddingBottom: Platform.OS === 'ios' ? Skin.space(8) : Skin.space(4),
+    // Zero vertical padding: the 36px line box (minHeight) plus the pill's own
+    // 4px vertical padding gives a ~44px single-line pill. textAlignVertical
+    // centers the glyphs so they don't sit low.
+    paddingTop: 0,
+    paddingBottom: 0,
     fontFamily: theme.fonts.regular.fontFamily,
     fontSize: Skin.font(16),
     lineHeight: Skin.font(22),
     maxHeight: 120,
-    // Vertically center a single line within the pill's min height.
+    // Match the 36px send/button height so a single line is vertically centered
+    // against them and the pill resolves to ~44px tall.
     minHeight: 36,
   },
   inputIconButton: {
@@ -1065,7 +1074,6 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'flex-end',
   },
   emojiPanelInner: {
     flex: 1,
