@@ -845,9 +845,12 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
 
       {/* The composer pill — one rounded container with the emoji toggle on the
           left, the growing text input, then the attach + send buttons on the
-          right. Single line: a fully-rounded stadium with controls centered.
-          Multi-line: a moderate-radius box with controls pinned to the bottom
-          (last line), like a grown text area. */}
+          right. Single line: a fully-rounded stadium, text centered. Multi-line:
+          a moderate-radius box with controls on the last line. The controls are
+          bottom-pinned in BOTH states (button containers, not the pill, own the
+          vertical align) so growing a line never moves them. No layout
+          animation here — it raced the height growth and shoved the icons out
+          of the pill for a frame before they snapped back. */}
       <View style={[styles.pill, isMultiline && styles.pillMultiline]}>
         <View style={styles.leftButtons}>
           <TouchableOpacity
@@ -880,7 +883,11 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           blurOnSubmit={false}
           multiline
           scrollEnabled
-          textAlignVertical={isMultiline ? 'top' : 'center'}
+          // Always 'center' — flipping this on the multi-line boundary was
+          // unreliable on Android (the text sometimes stayed top-aligned after
+          // shrinking back to one line). Centering the text block reads fine in
+          // both states and is deterministic.
+          textAlignVertical="center"
           onFocus={() => {
             composerPanel.onInputFocus();
             setSearchQuery('');
@@ -1051,16 +1058,16 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   // the last line; for a single line everything lands on the same baseline.
   pill: {
     flexDirection: 'row',
-    // Self-sizing: the row height is defined by its tallest child (the 36px
-    // controls), and `center` keeps the text and controls on one baseline on
-    // every device instead of relying on per-device text metrics. No fixed
-    // pill height — it adapts to the font/line-height the device renders.
-    alignItems: 'center',
+    // `stretch` (not center/flex-end) so children fill the pill's height and we
+    // NEVER flip alignItems on the 1->2 line boundary — that flip was what made
+    // the emoji icon jump. Button position is controlled inside the button
+    // containers (justifyContent: flex-end) and text position by the input's
+    // own textAlignVertical, so neither depends on the pill's vertical align.
+    alignItems: 'stretch',
     // Same shade as the emoji panel so the pill and the panel read as one
     // continuous surface.
     backgroundColor: theme.colors.surface4,
-    // Large radius => the short ends are always perfect semicircles regardless
-    // of the pill's resolved height (single line vs wrapped).
+    // Large radius => the short ends are perfect semicircles while single-line.
     borderRadius: 999,
     // Uniform inner padding on all four sides: the send circle then has the
     // same gap to the right edge as it does to the top/bottom, so it reads as
@@ -1071,19 +1078,21 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginBottom: Skin.space(8),
   },
   pillMultiline: {
-    // Grown box: pin controls to the bottom (last line) and drop the stadium
-    // radius to a moderate corner so the short ends don't bulge into big
-    // semicircles on a tall pill.
-    alignItems: 'flex-end',
+    // Grown box: only the corner radius changes (down from the stadium) so the
+    // short ends don't bulge on a tall pill. Controls stay bottom-pinned via
+    // the button containers — no alignItems flip here.
     borderRadius: Skin.radius(20),
   },
+  // Button containers fill the pill height (stretch) and bottom-pin their
+  // button. Single line: container is one row tall, so "bottom" reads centered.
+  // Multi-line: button sits on the last line. Same rule both states -> no jump.
   leftButtons: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
   },
   rightButtons: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: Skin.space(2),
   },
   input: {
