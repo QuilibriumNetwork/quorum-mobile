@@ -7,8 +7,10 @@ import type { ProcessedAttachment } from '@/services/media/imageAttachment';
 import type { Channel, Emoji, SpaceMember, Sticker } from '@quilibrium/quorum-shared';
 import { searchEmojis } from '@/data/emojiData';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, useWindowDimensions, Keyboard, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputSubmitEditingEventData, View } from 'react-native';
+import { ActivityIndicator, Image, useWindowDimensions, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputSubmitEditingEventData, View } from 'react-native';
+import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { useComposerPanel } from '@/hooks/useComposerPanel';
 import * as Skin from '@/theme/skins/geometry';
 
 
@@ -216,9 +218,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   // Keyboard/inset/rotation-driven values applied inline so the whole
   // stylesheet isn't rebuilt every time the insets or screen width change.
   const containerDynamicStyle = useMemo(() => ({
-    paddingBottom: Skin.space(8) + bottomInset,
     width: screenWidth,
-  }), [bottomInset, screenWidth]);
+  }), [screenWidth]);
   const availableWidth = screenWidth - 180;
   const maxPlaceholderNameLength = Math.max(8, Math.min(Math.floor(availableWidth / 8.5), 24));
   const inputRef = useRef<TextInput>(null);
@@ -226,9 +227,18 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   const onChangeTextRef = useRef(onChangeText);
   valueRef.current = value;
   onChangeTextRef.current = onChangeText;
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  // Keyboard <-> emoji-panel choreography. The panel opens downward,
+  // replacing the keyboard in the same footprint.
+  const composerPanel = useComposerPanel({ bottomInset: Skin.space(8) + bottomInset });
+  const showEmojiPicker = composerPanel.panelOpen;
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('smileys');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Animated spacer/panel container under the pill — follows the keyboard
+  // when the panel is closed, holds the keyboard footprint when it's open.
+  const spacerAnimatedStyle = useAnimatedStyle(() => ({
+    height: composerPanel.spacerHeight.value,
+  }));
 
   // Emoji frecency tracking
   const { recentEmojis, trackEmoji, refreshRecent } = useEmojiFrecency();
@@ -287,15 +297,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   );
 
   const handleToggleEmojiPicker = useCallback(() => {
-    if (showEmojiPicker) {
-      setShowEmojiPicker(false);
-      setSearchQuery('');
-      inputRef.current?.focus();
-    } else {
-      Keyboard.dismiss();
-      setShowEmojiPicker(true);
-    }
-  }, [showEmojiPicker]);
+    setSearchQuery('');
+    composerPanel.togglePanel(() => inputRef.current?.focus());
+  }, [composerPanel]);
 
   const handleSelectEmoji = useCallback((emoji: string) => {
     const newValue = valueRef.current + emoji;
@@ -309,10 +313,10 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   const handleSelectSticker = useCallback((stickerId: string) => {
     if (onSendSticker) {
       onSendSticker(stickerId);
-      setShowEmojiPicker(false);
+      composerPanel.closePanel();
       setSearchQuery('');
     }
-  }, [onSendSticker]);
+  }, [onSendSticker, composerPanel]);
 
   // Handle text changes and detect @mention or #channel triggers
   const handleTextChange = useCallback((newText: string) => {
@@ -468,6 +472,191 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     return stickers.filter((s) => s.name.toLowerCase().includes(lowerQuery));
   }, [searchQuery, stickers]);
 
+  // Attach (+) hides while composing so the text has more room; it reappears
+  // when the input is empty. Emoji toggle always stays.
+  const isComposing = value.trim().length > 0;
+
+  // The emoji grid markup, rendered inside the downward panel below the pill.
+  const emojiPanelContent = (
+    <View style={styles.emojiPanelInner}>
+      {/* Search bar */}
+      <View style={styles.searchContainer}>
+        <IconSymbol name="magnifyingglass" size={16} color={theme.colors.textMuted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search emoji..."
+          placeholderTextColor={theme.colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
+            <IconSymbol name="xmark.circle.fill" size={16} color={theme.colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Category tabs */}
+      {!searchQuery && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoryTabs}
+          contentContainerStyle={styles.categoryTabsContent}
+          keyboardShouldPersistTaps="always"
+        >
+          {categories.map((cat) => (
+            <TouchableOpacity
+              key={cat.key}
+              style={[
+                styles.categoryTab,
+                selectedCategory === cat.key && styles.categoryTabActive,
+              ]}
+              onPress={() => setSelectedCategory(cat.key)}
+            >
+              <Text style={styles.categoryTabEmoji}>{cat.icon}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* Emoji/Sticker grid */}
+      <ScrollView
+        style={styles.emojiGrid}
+        contentContainerStyle={styles.emojiGridContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="always"
+      >
+        {/* Show search results across all categories */}
+        {searchQuery && (
+          <>
+            {filteredCustomEmojis.length > 0 && (
+              <View style={styles.emojiSection}>
+                <Text style={styles.emojiSectionTitle}>Custom</Text>
+                <View style={styles.emojiRow}>
+                  {filteredCustomEmojis.map((emoji) => (
+                    <TouchableOpacity
+                      key={emoji.id}
+                      style={styles.emojiButton}
+                      onPress={() => handleSelectEmoji(`:${emoji.name}:`)}
+                    >
+                      <Image
+                        source={{ uri: emoji.imgUrl }}
+                        style={styles.customEmojiImage}
+                        resizeMode="contain"
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+            {filteredStickers.length > 0 && (
+              <View style={styles.emojiSection}>
+                <Text style={styles.emojiSectionTitle}>Stickers</Text>
+                <View style={styles.stickerRow}>
+                  {filteredStickers.map((sticker) => (
+                    <TouchableOpacity
+                      key={sticker.id}
+                      style={styles.stickerButton}
+                      onPress={() => handleSelectSticker(sticker.id)}
+                    >
+                      <Image
+                        source={{ uri: sticker.imgUrl }}
+                        style={styles.stickerImage}
+                        resizeMode="contain"
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+            {filteredEmojis.length > 0 && (
+              <View style={styles.emojiSection}>
+                <Text style={styles.emojiSectionTitle}>Emoji</Text>
+                <View style={styles.emojiRow}>
+                  {filteredEmojis.map((emoji, index) => (
+                    <TouchableOpacity
+                      key={`${emoji}-${index}`}
+                      style={styles.emojiButton}
+                      onPress={() => handleSelectEmoji(emoji)}
+                    >
+                      <Text style={styles.emoji}>{emoji}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+            {filteredEmojis.length === 0 && filteredCustomEmojis.length === 0 && filteredStickers.length === 0 && (
+              <Text style={styles.emptyText}>No results found</Text>
+            )}
+          </>
+        )}
+
+        {/* Show category content when not searching */}
+        {!searchQuery && selectedCategory === 'custom' && (
+          <View style={styles.emojiRow}>
+            {customEmojis.map((emoji) => (
+              <TouchableOpacity
+                key={emoji.id}
+                style={styles.emojiButton}
+                onPress={() => handleSelectEmoji(`:${emoji.name}:`)}
+              >
+                <Image
+                  source={{ uri: emoji.imgUrl }}
+                  style={styles.customEmojiImage}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            ))}
+            {customEmojis.length === 0 && (
+              <Text style={styles.emptyText}>No custom emoji</Text>
+            )}
+          </View>
+        )}
+
+        {!searchQuery && selectedCategory === 'stickers' && (
+          <View style={styles.stickerRow}>
+            {stickers.map((sticker) => (
+              <TouchableOpacity
+                key={sticker.id}
+                style={styles.stickerButton}
+                onPress={() => handleSelectSticker(sticker.id)}
+              >
+                <Image
+                  source={{ uri: sticker.imgUrl }}
+                  style={styles.stickerImage}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            ))}
+            {stickers.length === 0 && (
+              <Text style={styles.emptyText}>No stickers</Text>
+            )}
+          </View>
+        )}
+
+        {!searchQuery && selectedCategory !== 'custom' && selectedCategory !== 'stickers' && (
+          <View style={styles.emojiRow}>
+            {displayEmojis.map((emoji, index) => (
+              <TouchableOpacity
+                key={`${emoji}-${index}`}
+                style={styles.emojiButton}
+                onPress={() => handleSelectEmoji(emoji)}
+              >
+                <Text style={styles.emoji}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+            {selectedCategory === 'recent' && displayEmojis.length === 0 && (
+              <Text style={styles.emptyText}>No recent emojis</Text>
+            )}
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+
   return (
     <View style={[styles.container, containerDynamicStyle]}>
       {/* Edit mode preview */}
@@ -561,298 +750,127 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         </View>
       )}
 
-      {/* Inline emoji/sticker picker */}
-      {showEmojiPicker && (
-        <View style={styles.emojiPickerContainer}>
-          {/* Search bar */}
-          <View style={styles.searchContainer}>
-            <IconSymbol name="magnifyingglass" size={16} color={theme.colors.textMuted} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search emoji..."
-              placeholderTextColor={theme.colors.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
-                <IconSymbol name="xmark.circle.fill" size={16} color={theme.colors.textMuted} />
-              </TouchableOpacity>
-            )}
-            {/* Close the picker. The composer also dismisses it on text input,
-                but an explicit control is clearer. */}
-            <TouchableOpacity
-              onPress={handleToggleEmojiPicker}
-              hitSlop={8}
-              style={styles.emojiCloseButton}
-              accessibilityRole="button"
-              accessibilityLabel="Close emoji picker"
-            >
-              <IconSymbol name="xmark" size={18} color={theme.colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Category tabs */}
-          {!searchQuery && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.categoryTabs}
-              contentContainerStyle={styles.categoryTabsContent}
-            >
-              {categories.map((cat) => (
-                <TouchableOpacity
-                  key={cat.key}
-                  style={[
-                    styles.categoryTab,
-                    selectedCategory === cat.key && styles.categoryTabActive,
-                  ]}
-                  onPress={() => setSelectedCategory(cat.key)}
-                >
-                  <Text style={styles.categoryTabEmoji}>{cat.icon}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-
-          {/* Emoji/Sticker grid */}
+      {/* Autocomplete popup — anchored above the pill */}
+      {autocompleteType && (filteredMembers.length > 0 || filteredChannels.length > 0) && (
+        <View style={styles.autocompleteContainer}>
           <ScrollView
-            style={styles.emojiGrid}
-            contentContainerStyle={styles.emojiGridContent}
+            style={styles.autocompleteList}
+            keyboardShouldPersistTaps="always"
             showsVerticalScrollIndicator={false}
           >
-            {/* Show search results across all categories */}
-            {searchQuery && (
-              <>
-                {filteredCustomEmojis.length > 0 && (
-                  <View style={styles.emojiSection}>
-                    <Text style={styles.emojiSectionTitle}>Custom</Text>
-                    <View style={styles.emojiRow}>
-                      {filteredCustomEmojis.map((emoji) => (
-                        <TouchableOpacity
-                          key={emoji.id}
-                          style={styles.emojiButton}
-                          onPress={() => handleSelectEmoji(`:${emoji.name}:`)}
-                        >
-                          <Image
-                            source={{ uri: emoji.imgUrl }}
-                            style={styles.customEmojiImage}
-                            resizeMode="contain"
-                          />
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                )}
-                {filteredStickers.length > 0 && (
-                  <View style={styles.emojiSection}>
-                    <Text style={styles.emojiSectionTitle}>Stickers</Text>
-                    <View style={styles.stickerRow}>
-                      {filteredStickers.map((sticker) => (
-                        <TouchableOpacity
-                          key={sticker.id}
-                          style={styles.stickerButton}
-                          onPress={() => handleSelectSticker(sticker.id)}
-                        >
-                          <Image
-                            source={{ uri: sticker.imgUrl }}
-                            style={styles.stickerImage}
-                            resizeMode="contain"
-                          />
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                )}
-                {filteredEmojis.length > 0 && (
-                  <View style={styles.emojiSection}>
-                    <Text style={styles.emojiSectionTitle}>Emoji</Text>
-                    <View style={styles.emojiRow}>
-                      {filteredEmojis.map((emoji, index) => (
-                        <TouchableOpacity
-                          key={`${emoji}-${index}`}
-                          style={styles.emojiButton}
-                          onPress={() => handleSelectEmoji(emoji)}
-                        >
-                          <Text style={styles.emoji}>{emoji}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                )}
-                {filteredEmojis.length === 0 && filteredCustomEmojis.length === 0 && filteredStickers.length === 0 && (
-                  <Text style={styles.emptyText}>No results found</Text>
-                )}
-              </>
-            )}
-
-            {/* Show category content when not searching */}
-            {!searchQuery && selectedCategory === 'custom' && (
-              <View style={styles.emojiRow}>
-                {customEmojis.map((emoji) => (
-                  <TouchableOpacity
-                    key={emoji.id}
-                    style={styles.emojiButton}
-                    onPress={() => handleSelectEmoji(`:${emoji.name}:`)}
-                  >
-                    <Image
-                      source={{ uri: emoji.imgUrl }}
-                      style={styles.customEmojiImage}
-                      resizeMode="contain"
-                    />
-                  </TouchableOpacity>
-                ))}
-                {customEmojis.length === 0 && (
-                  <Text style={styles.emptyText}>No custom emoji</Text>
-                )}
-              </View>
-            )}
-
-            {!searchQuery && selectedCategory === 'stickers' && (
-              <View style={styles.stickerRow}>
-                {stickers.map((sticker) => (
-                  <TouchableOpacity
-                    key={sticker.id}
-                    style={styles.stickerButton}
-                    onPress={() => handleSelectSticker(sticker.id)}
-                  >
-                    <Image
-                      source={{ uri: sticker.imgUrl }}
-                      style={styles.stickerImage}
-                      resizeMode="contain"
-                    />
-                  </TouchableOpacity>
-                ))}
-                {stickers.length === 0 && (
-                  <Text style={styles.emptyText}>No stickers</Text>
-                )}
-              </View>
-            )}
-
-            {!searchQuery && selectedCategory !== 'custom' && selectedCategory !== 'stickers' && (
-              <View style={styles.emojiRow}>
-                {displayEmojis.map((emoji, index) => (
-                  <TouchableOpacity
-                    key={`${emoji}-${index}`}
-                    style={styles.emojiButton}
-                    onPress={() => handleSelectEmoji(emoji)}
-                  >
-                    <Text style={styles.emoji}>{emoji}</Text>
-                  </TouchableOpacity>
-                ))}
-                {selectedCategory === 'recent' && displayEmojis.length === 0 && (
-                  <Text style={styles.emptyText}>No recent emojis</Text>
-                )}
-              </View>
-            )}
+            {autocompleteType === 'mention' && filteredMembers.map((member) => (
+              <TouchableOpacity
+                key={member.address}
+                style={styles.autocompleteItem}
+                onPress={() => handleSelectMention(member)}
+              >
+                <View style={styles.autocompleteAvatar}>
+                  <Text style={styles.autocompleteAvatarText}>
+                    {(member.display_name || member.name || '?')[0].toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={styles.autocompleteText}>
+                  {member.display_name || member.name || member.address}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            {autocompleteType === 'channel' && filteredChannels.map((channel) => (
+              <TouchableOpacity
+                key={channel.channelId}
+                style={styles.autocompleteItem}
+                onPress={() => handleSelectChannel(channel)}
+              >
+                <IconSymbol name="number" size={16} color={theme.colors.textMuted} />
+                <Text style={styles.autocompleteText}>{channel.channelName}</Text>
+              </TouchableOpacity>
+            ))}
           </ScrollView>
         </View>
       )}
 
-      <View style={styles.wrapper}>
-        <TouchableOpacity
-          style={styles.inputIconButton}
-          onPress={onAttachmentPress}
-          disabled={disabled}
-        >
-          <IconSymbol
-            name="plus.circle.fill"
-            color={disabled ? theme.colors.textMuted : theme.colors.textSubtle}
-            size={24}
-          />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.inputIconButton}
-          onPress={handleToggleEmojiPicker}
-          disabled={disabled}
-        >
-          <IconSymbol
-            name="face.smiling"
-            color={showEmojiPicker ? theme.colors.primary : (disabled ? theme.colors.textMuted : theme.colors.textSubtle)}
-            size={24}
-          />
-        </TouchableOpacity>
-        <View style={styles.inputWrapper}>
-          {/* Autocomplete popup */}
-          {autocompleteType && (filteredMembers.length > 0 || filteredChannels.length > 0) && (
-            <View style={styles.autocompleteContainer}>
-              <ScrollView
-                style={styles.autocompleteList}
-                keyboardShouldPersistTaps="always"
-                showsVerticalScrollIndicator={false}
-              >
-                {autocompleteType === 'mention' && filteredMembers.map((member) => (
-                  <TouchableOpacity
-                    key={member.address}
-                    style={styles.autocompleteItem}
-                    onPress={() => handleSelectMention(member)}
-                  >
-                    <View style={styles.autocompleteAvatar}>
-                      <Text style={styles.autocompleteAvatarText}>
-                        {(member.display_name || member.name || '?')[0].toUpperCase()}
-                      </Text>
-                    </View>
-                    <Text style={styles.autocompleteText}>
-                      {member.display_name || member.name || member.address}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-                {autocompleteType === 'channel' && filteredChannels.map((channel) => (
-                  <TouchableOpacity
-                    key={channel.channelId}
-                    style={styles.autocompleteItem}
-                    onPress={() => handleSelectChannel(channel)}
-                  >
-                    <IconSymbol name="number" size={16} color={theme.colors.textMuted} />
-                    <Text style={styles.autocompleteText}>{channel.channelName}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
+      {/* The composer pill — one rounded container holding the left-side
+          buttons, the growing text input, and the circular send button. */}
+      <View style={styles.pill}>
+        <View style={styles.leftButtons}>
+          {/* Attach (+) hides while composing to give the text room. */}
+          {!isComposing && (
+            <TouchableOpacity
+              style={styles.inputIconButton}
+              onPress={onAttachmentPress}
+              disabled={disabled}
+              accessibilityRole="button"
+              accessibilityLabel="Attach image"
+            >
+              <IconSymbol
+                name="plus"
+                color={disabled ? theme.colors.textMuted : theme.colors.textSubtle}
+                size={24}
+              />
+            </TouchableOpacity>
           )}
-          <TextInput
-            ref={inputRef}
-            value={value}
-            onChangeText={handleTextChange}
-            onSelectionChange={handleSelectionChange}
-            placeholder={editingMessage ? 'Edit message...' : isDM ? `Message ${channelName.length > maxPlaceholderNameLength ? channelName.slice(0, maxPlaceholderNameLength) + '…' : channelName}` : `Message #${channelName}`}
-            placeholderTextColor={theme.colors.textMuted}
-            style={styles.input}
-            editable={!disabled}
-            returnKeyType="send"
-            onSubmitEditing={handleSubmitEditing}
-            blurOnSubmit={false}
-            multiline
-            scrollEnabled
-            textAlignVertical="top"
-            onFocus={() => {
-              setShowEmojiPicker(false);
-              setSearchQuery('');
-            }}
-          />
-        </View>
-        <View style={styles.actions}>
           <TouchableOpacity
-            style={[
-              styles.sendButton,
-              {
-                backgroundColor: canSend ? theme.colors.accent : theme.colors.surface6,
-                opacity: canSend ? 1 : 0.6,
-              },
-            ]}
-            onPress={handleSend}
-            disabled={!canSend}
+            style={styles.inputIconButton}
+            onPress={handleToggleEmojiPicker}
+            disabled={disabled}
+            accessibilityRole="button"
+            accessibilityLabel={showEmojiPicker ? 'Show keyboard' : 'Open emoji panel'}
           >
-            {isSending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <SendIcon color="#fff" size={18} />
-            )}
+            <IconSymbol
+              name={showEmojiPicker ? 'keyboard' : 'face.smiling'}
+              color={showEmojiPicker ? theme.colors.primary : (disabled ? theme.colors.textMuted : theme.colors.textSubtle)}
+              size={24}
+            />
           </TouchableOpacity>
         </View>
+
+        <TextInput
+          ref={inputRef}
+          value={value}
+          onChangeText={handleTextChange}
+          onSelectionChange={handleSelectionChange}
+          placeholder={editingMessage ? 'Edit message...' : isDM ? `Message ${channelName.length > maxPlaceholderNameLength ? channelName.slice(0, maxPlaceholderNameLength) + '…' : channelName}` : `Message #${channelName}`}
+          placeholderTextColor={theme.colors.textMuted}
+          style={styles.input}
+          editable={!disabled}
+          returnKeyType="send"
+          onSubmitEditing={handleSubmitEditing}
+          blurOnSubmit={false}
+          multiline
+          scrollEnabled
+          textAlignVertical="center"
+          onFocus={() => {
+            composerPanel.onInputFocus();
+            setSearchQuery('');
+          }}
+        />
+
+        <TouchableOpacity
+          style={[
+            styles.sendButton,
+            {
+              backgroundColor: canSend ? theme.colors.accent : theme.colors.surface6,
+              opacity: canSend ? 1 : 0.6,
+            },
+          ]}
+          onPress={handleSend}
+          disabled={!canSend}
+          accessibilityRole="button"
+          accessibilityLabel="Send message"
+        >
+          {isSending ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <SendIcon color="#fff" size={18} />
+          )}
+        </TouchableOpacity>
       </View>
+
+      {/* Animated spacer beneath the pill. Closed: it follows the keyboard so
+          the pill rides up (keyboard avoidance). Open: it holds the keyboard
+          footprint and shows the emoji panel — no layout jump on swap. */}
+      <Reanimated.View style={spacerAnimatedStyle}>
+        {showEmojiPicker && emojiPanelContent}
+      </Reanimated.View>
     </View>
   );
 });
@@ -964,43 +982,53 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: Skin.font(10),
     fontWeight: 'bold',
   },
-  wrapper: {
+  // The single pill: rounded container holding left buttons, the growing
+  // input, and the circular send button. Bottom-aligned so the send button
+  // and buttons stay anchored as the multiline input grows upward.
+  pill: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    backgroundColor: theme.colors.surface5,
+    borderRadius: Skin.radius(22),
+    paddingVertical: Skin.space(4),
+    paddingLeft: Skin.space(4),
+    paddingRight: Skin.space(4),
+    minHeight: 44,
+  },
+  leftButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // Pin to the bottom of the pill so buttons align with the last input line.
+    alignSelf: 'flex-end',
+    paddingBottom: Skin.space(2),
   },
   input: {
-    backgroundColor: theme.colors.surface5,
+    flex: 1,
     color: theme.colors.textMain,
-    borderRadius: Skin.radius(20),
-    paddingHorizontal: Skin.space(16),
-    paddingTop: Skin.space(8),
-    paddingBottom: Skin.space(10),
+    paddingHorizontal: Skin.space(8),
+    paddingTop: Platform.OS === 'ios' ? Skin.space(8) : Skin.space(4),
+    paddingBottom: Platform.OS === 'ios' ? Skin.space(8) : Skin.space(4),
     fontFamily: theme.fonts.regular.fontFamily,
     fontSize: Skin.font(16),
     lineHeight: Skin.font(22),
-    maxHeight: 100,
-    minHeight: 40,
-    textAlignVertical: 'top',
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    maxHeight: 120,
+    // Vertically center a single line within the pill's min height.
+    minHeight: 36,
   },
   inputIconButton: {
-    padding: Skin.space(4),
+    padding: Skin.space(6),
   },
   sendButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'flex-end',
   },
-  emojiPickerContainer: {
-    backgroundColor: theme.colors.surface5,
-    borderRadius: Skin.radius(12),
-    marginBottom: Skin.space(8),
-    height: 280,
+  emojiPanelInner: {
+    flex: 1,
+    backgroundColor: theme.colors.surface4,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -1021,15 +1049,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontFamily: theme.fonts.regular.fontFamily,
     padding: 0,
   },
-  emojiCloseButton: {
-    marginLeft: Skin.space(4),
-  },
   categoryTabs: {
-    // A continuous band (no top/bottom separators) one shade below the panel
-    // (panel is surface5). Tall enough that the 20px emoji + pill padding
-    // aren't clipped.
+    // A continuous band (no top/bottom separators), one shade off the panel.
+    // Tall enough that the 20px emoji + pill padding aren't clipped.
     maxHeight: 48,
-    backgroundColor: theme.colors.surface4,
+    backgroundColor: theme.colors.surface3,
   },
   categoryTabsContent: {
     paddingHorizontal: Skin.space(6),
@@ -1109,20 +1133,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginTop: Skin.space(16),
     fontSize: Skin.font(14),
   },
-  inputWrapper: {
-    flex: 1,
-    flexShrink: 1,
-    position: 'relative',
-    marginHorizontal: Skin.space(8),
-  },
   autocompleteContainer: {
-    position: 'absolute',
-    bottom: '100%',
-    left: 0,
-    right: 0,
     backgroundColor: theme.colors.surface5,
     borderRadius: Skin.radius(12),
-    marginBottom: Skin.space(4),
+    marginBottom: Skin.space(8),
     maxHeight: 200,
     overflow: 'hidden',
     shadowColor: '#000',

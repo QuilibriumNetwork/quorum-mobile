@@ -29,6 +29,7 @@ import * as SystemUI from 'expo-system-ui';
 import React from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import 'react-native-reanimated';
 
 // Prevent the splash screen from auto-hiding (guarded for Fast Refresh)
@@ -318,7 +319,9 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ErrorBoundary>{content}</ErrorBoundary>
+      <KeyboardProvider>
+        <ErrorBoundary>{content}</ErrorBoundary>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }
