@@ -19,6 +19,7 @@ import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { truncateAddress } from '@/utils/formatAddress';
 import { useTheme } from '@/theme';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
@@ -61,15 +62,20 @@ export default function DMChatScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
+  // While the composer emoji panel is open the tab bar is hidden, so reclaim
+  // its space: zero the bottom padding here and pass 0 chrome height to the
+  // chat area so the panel extends to the screen bottom with no gap.
+  const composerPanelOpen = useComposerPanelVisible();
+  const effectiveChromeHeight = composerPanelOpen ? 0 : tabBarHeight;
   const containerStyle = useMemo(
     () => [
       styles.container,
       {
-        paddingBottom: tabBarHeight,
+        paddingBottom: effectiveChromeHeight,
         backgroundColor: theme.colors.surface1,
       },
     ],
-    [tabBarHeight, theme.colors.surface1]
+    [effectiveChromeHeight, theme.colors.surface1]
   );
 
   // Grab the conversation from unified conversations first (has richest data)
@@ -329,7 +335,7 @@ export default function DMChatScreen() {
           onOpenFarcasterCast={handleOpenFarcasterCast}
           onLinkPress={handleLinkPress}
           bottomInset={0}
-          tabBarHeight={tabBarHeight}
+          tabBarHeight={effectiveChromeHeight}
         />
 
       </View>
@@ -357,7 +363,7 @@ export default function DMChatScreen() {
         isBookmarked={isBookmarked}
         addBookmark={addBookmark}
         removeBookmark={removeBookmark}
-        tabBarHeight={tabBarHeight}
+        tabBarHeight={effectiveChromeHeight}
         theme={theme}
         draftsRef={draftsRef}
       />

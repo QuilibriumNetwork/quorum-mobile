@@ -22,6 +22,13 @@ export interface ComposerPanelOptions {
    * the top of the keyboard.
    */
   bottomChromeHeight?: number;
+  /**
+   * Called synchronously whenever the panel opens (true) or closes (false).
+   * Fired inside the open/close actions (not via an effect) so dependent UI —
+   * e.g. hiding the bottom tab bar — reacts in the same tick with no extra
+   * render-cycle latency.
+   */
+  onPanelVisibilityChange?: (open: boolean) => void;
 }
 
 /**
@@ -74,7 +81,11 @@ function rememberSessionKeyboardHeight(height: number) {
 }
 
 export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPanel {
-  const { bottomInset = 0, bottomChromeHeight = 0 } = options;
+  const { bottomInset = 0, bottomChromeHeight = 0, onPanelVisibilityChange } = options;
+  // Keep the latest callback in a ref so the open/close callbacks don't need it
+  // in their dep arrays (which would re-create them every render).
+  const onVisibilityRef = useRef(onPanelVisibilityChange);
+  onVisibilityRef.current = onPanelVisibilityChange;
   const { height: keyboardHeight, progress: keyboardProgress } = useReanimatedKeyboardAnimation();
   // Last real keyboard height we've observed, kept on the UI thread for the
   // spacer worklet. Seeded from the session cache so a panel opened before this
@@ -90,6 +101,11 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   // window the spacer holds the panel footprint until the rising keyboard
   // catches up, so the pill never drops to the bottom and bounces back up.
   const closingSV = useSharedValue(0);
+  // Whether the panel was opened while the keyboard was up (input focused). If
+  // it was opened with NO keyboard (input unfocused), closing must NOT arm the
+  // keyboard hand-off — there's no keyboard coming back, so the spacer should
+  // collapse to 0 rather than hold the footprint forever (which leaves a gap).
+  const openedWithKeyboardRef = useRef(false);
 
   // Capture the keyboard height whenever it's meaningfully open so the panel
   // can match it. We latch the height on settle and, once the keyboard is fully
@@ -124,10 +140,12 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   // resting bottom inset is added when nothing is open and fades out (via
   // keyboard progress) as the keyboard/panel takes over.
   const spacerHeight = useDerivedValue(() => {
-    const panelFootprint = Math.max(lastKeyboardHeight.value - bottomChromeHeight, 0);
     if (panelOpenSV.value === 1) {
-      // Panel fully open: the keyboard footprint minus the chrome we sit above.
-      return panelFootprint;
+      // Panel fully open: the tab bar is hidden, so the panel takes the FULL
+      // keyboard height (no chrome subtraction) and reaches the screen bottom.
+      // Not subtracting bottomChromeHeight here also makes open instant — the
+      // height doesn't depend on the store round-trip that zeroes the chrome.
+      return Math.max(lastKeyboardHeight.value, 0);
     }
     // useReanimatedKeyboardAnimation().height is NEGATIVE-going (0 -> -kbHeight),
     // matching the library's own components which negate it. Flip the sign to
@@ -135,11 +153,12 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     const liveKeyboardHeight = -keyboardHeight.value;
     const kb = Math.max(liveKeyboardHeight - bottomChromeHeight, 0);
     if (closingSV.value === 1) {
-      // Closing the panel by summoning the keyboard back: hold the panel
-      // footprint and let the RISING keyboard meet it. Math.max means the pill
-      // stays put and the hand-off is seamless once the keyboard catches up —
-      // no drop-to-bottom-then-bounce.
-      return Math.max(kb, panelFootprint);
+      // Closing the panel by summoning the keyboard back. The tab bar reappears
+      // on close, so the target is the chrome-subtracted keyboard footprint.
+      // Hold it and let the RISING keyboard meet it (Math.max) so the pill stays
+      // put — seamless once the keyboard catches up.
+      const target = Math.max(lastKeyboardHeight.value - bottomChromeHeight, 0);
+      return Math.max(kb, target);
     }
     // progress goes 0 -> 1 as the keyboard appears; fade the resting inset out.
     const progress = Math.min(Math.max(keyboardProgress.value, 0), 1);
@@ -149,8 +168,11 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   const openPanel = useCallback(() => {
     // Any prior close hand-off is moot once we're opening again.
     closingSV.value = 0;
+    // Remember whether a keyboard was up at open time — drives the close path.
+    openedWithKeyboardRef.current = KeyboardController.isVisible();
     panelOpenRef.current = true;
     panelOpenSV.value = 1;
+    onVisibilityRef.current?.(true);
     setPanelOpen(true);
     // keepFocus: true hides the soft keyboard but leaves the TextInput focused,
     // so the blinking caret stays visible and emojis insert at the cursor.
@@ -167,6 +189,7 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     closingSV.value = 0;
     panelOpenRef.current = false;
     panelOpenSV.value = 0;
+    onVisibilityRef.current?.(false);
     setPanelOpen(false);
   }, [panelOpenSV, closingSV]);
 
@@ -179,10 +202,19 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   // .focus() on an already-focused input would not reliably do.
   const closePanelAndRestoreKeyboard = useCallback(() => {
     if (!panelOpenRef.current) return;
-    closingSV.value = 1;
-    KeyboardController.setFocusTo('current');
+    if (openedWithKeyboardRef.current) {
+      // Opened with the keyboard up: bring it back and hold the footprint
+      // during the hand-off so the pill doesn't drop-and-bounce.
+      closingSV.value = 1;
+      KeyboardController.setFocusTo('current');
+    } else {
+      // Opened with NO keyboard: nothing is coming back, so just collapse the
+      // spacer (don't arm the hand-off — that would leave a permanent gap).
+      closingSV.value = 0;
+    }
     panelOpenRef.current = false;
     panelOpenSV.value = 0;
+    onVisibilityRef.current?.(false);
     setPanelOpen(false);
   }, [panelOpenSV, closingSV]);
 
@@ -202,6 +234,7 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     closingSV.value = 1;
     panelOpenRef.current = false;
     panelOpenSV.value = 0;
+    onVisibilityRef.current?.(false);
     setPanelOpen(false);
   }, [panelOpenSV, closingSV]);
 

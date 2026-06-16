@@ -87,12 +87,17 @@ interface LikeIconProps {
 export function LikeIcon({ type, isLiked, color, activeColor, size }: LikeIconProps) {
   const displayColor = isLiked ? activeColor : color;
 
+  // The Quorum/Quilibrium logo glyphs read slightly larger than the heart and
+  // the other action icons at the same nominal size, so scale them to 0.9x to
+  // sit visually level with them in the action row.
+  const logoSize = Math.round(size * 0.9);
+
   switch (type) {
     case LikeIconType.Quilibrium:
-      return <QuilibriumLogoIcon size={size} opacity={isLiked ? 1 : 0.6} />;
+      return <QuilibriumLogoIcon size={logoSize} opacity={isLiked ? 1 : 0.6} />;
 
     case LikeIconType.Quorum:
-      return <QuorumLogoIcon size={size} opacity={isLiked ? 1 : 0.6} />;
+      return <QuorumLogoIcon size={logoSize} opacity={isLiked ? 1 : 0.6} />;
 
     case LikeIconType.GM:
       return <BoldText text="GM" color={displayColor} size={size} />;

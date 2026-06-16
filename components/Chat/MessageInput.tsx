@@ -11,6 +11,7 @@ import { ActivityIndicator, Image, useWindowDimensions, NativeSyntheticEvent, Pl
 import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useComposerPanel } from '@/hooks/useComposerPanel';
+import { composerPanelVisibleStore } from '@/services/ui/composerPanelVisible';
 import * as Skin from '@/theme/skins/geometry';
 
 
@@ -241,6 +242,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     // spacing matches the tighter keyboard-up spacing instead of being larger.
     bottomInset,
     bottomChromeHeight,
+    // Publish open/close synchronously (in the toggle action, not via an effect)
+    // so the tab bar hides/shows in the same tick — no extra render-cycle lag.
+    onPanelVisibilityChange: composerPanelVisibleStore.set,
   });
   const showEmojiPicker = composerPanel.panelOpen;
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('smileys');
@@ -266,6 +270,12 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
       refreshRecent();
     }
   }, [showEmojiPicker, refreshRecent]);
+
+  // The panel's open/close is published synchronously via the hook's
+  // onPanelVisibilityChange (see useComposerPanel call above). This effect only
+  // guards unmount: a composer leaving the tree must never leave the tab bar
+  // hidden.
+  useEffect(() => () => composerPanelVisibleStore.set(false), []);
 
   // Autocomplete state
   const [autocompleteType, setAutocompleteType] = useState<'mention' | 'channel' | null>(null);
