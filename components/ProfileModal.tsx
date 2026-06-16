@@ -95,13 +95,14 @@ import { logger } from '@quilibrium/quorum-shared';
 import {
   validateDisplayName,
   validateUserBio,
-  MAX_BIO_BYTES,
 } from '@quilibrium/quorum-shared';
 import {
   translateValidationResult,
   translateValidationResults,
   displayNameLiveError,
   bioLiveError,
+  capDisplayName,
+  capBio,
 } from '@/hooks/validation/errorTranslator';
 import * as Skin from '@/theme/skins/geometry';
 interface ProfileModalProps {
@@ -1558,7 +1559,11 @@ export default function ProfileModal({
               <TouchableOpacity onPress={handleCancelEdit} style={styles.cancelButton}>
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleSaveProfile} style={styles.saveButton} disabled={isSaving}>
+              <TouchableOpacity
+                onPress={handleSaveProfile}
+                style={[styles.saveButton, (isSaving || !!nameError || !!bioError) && styles.saveButtonDisabled]}
+                disabled={isSaving || !!nameError || !!bioError}
+              >
                 {isSaving ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
@@ -1602,8 +1607,8 @@ export default function ProfileModal({
             isEditing={isEditing}
             editDisplayName={editDisplayName}
             editBio={editBio}
-            onChangeDisplayName={(t) => { setEditDisplayName(t); setNameError(displayNameLiveError(t)); }}
-            onChangeBio={(t) => { setEditBio(t); setBioError(bioLiveError(t)); }}
+            onChangeDisplayName={(t) => { const v = capDisplayName(t); setEditDisplayName(v); setNameError(displayNameLiveError(v)); }}
+            onChangeBio={(t) => { const v = capBio(t); setEditBio(v); setBioError(bioLiveError(v)); }}
             onPickImage={handlePickImage}
             onCopyAddress={handleCopyAddress}
             isApexActive={apexState.isActive}
@@ -2672,6 +2677,9 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       minWidth: 60,
       alignItems: 'center',
     },
+    saveButtonDisabled: {
+      opacity: 0.5,
+    },
     saveButtonText: {
       fontSize: Skin.font(14),
       color: '#fff',
@@ -3701,11 +3709,8 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
                   placeholder="Display Name"
                   placeholderTextColor={theme.colors.textMuted}
                   autoCapitalize="words"
-                  // No tight maxLength — the byte validator is the gate (live
-                  // error); a 32-CHAR cap would silently swallow text before the
-                  // "too long" (32 BYTES) error could show. Loose ceiling only
-                  // blocks a pathological mega-paste.
-                  maxLength={200}
+                  // Hard-capped to MAX_DISPLAY_NAME_BYTES by bytes in the
+                  // onChange handler (capDisplayName). No maxLength (chars≠bytes).
                   aria-label="Display name"
                   aria-invalid={!!nameError}
                 />
@@ -3744,7 +3749,7 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
               multiline
               numberOfLines={4}
               textAlignVertical="top"
-              maxLength={MAX_BIO_BYTES}
+              // Hard-capped to MAX_BIO_BYTES by bytes in onChange (capBio).
               aria-label="Bio"
               aria-invalid={!!bioError}
             />

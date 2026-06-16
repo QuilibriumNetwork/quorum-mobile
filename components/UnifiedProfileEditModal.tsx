@@ -16,13 +16,14 @@ import * as Skin from '@/theme/skins/geometry';
 import {
   validateDisplayName,
   validateUserBio,
-  MAX_BIO_BYTES,
 } from '@quilibrium/quorum-shared';
 import {
   translateValidationResult,
   translateValidationResults,
   displayNameLiveError,
   bioLiveError,
+  capDisplayName,
+  capBio,
 } from '@/hooks/validation/errorTranslator';
 
 export type EditScope = 'quorum' | 'farcaster' | 'both';
@@ -240,16 +241,15 @@ export default function UnifiedProfileEditModal({
           <Text style={styles.fieldLabel}>Display Name</Text>
           <TextInput
             value={displayName}
-            onChangeText={(t) => { setDisplayName(t); setNameError(displayNameLiveError(t)); }}
+            onChangeText={(t) => { const v = capDisplayName(t); setDisplayName(v); setNameError(displayNameLiveError(v)); }}
             placeholder="Your name"
             placeholderTextColor={theme.colors.textMuted}
             style={styles.input}
             autoCapitalize="words"
-            // No tight maxLength — the byte validator is the gate, and a 32-char
-            // cap would silently swallow text before the "too long" error could
-            // show (the limit is 32 BYTES, not chars). A loose ceiling just stops
-            // a pathological mega-paste. Matches desktop (validator-only).
-            maxLength={200}
+            // Hard-capped to MAX_DISPLAY_NAME_BYTES by bytes in onChangeText
+            // (capDisplayName) — kinder than making the user delete on mobile.
+            // No maxLength: it counts chars, not bytes. The live error only
+            // surfaces the non-length rules (.q / impersonation / XSS / reserved).
             aria-label="Display name"
             aria-invalid={!!nameError}
           />
@@ -262,14 +262,13 @@ export default function UnifiedProfileEditModal({
           <Text style={styles.fieldLabel}>Bio</Text>
           <TextInput
             value={bio}
-            onChangeText={(t) => { setBio(t); setBioError(bioLiveError(t)); }}
+            onChangeText={(t) => { const v = capBio(t); setBio(v); setBioError(bioLiveError(v)); }}
             placeholder="Tell people about yourself..."
             placeholderTextColor={theme.colors.textMuted}
             style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
             multiline
-            // Coarse byte-count ceiling so a huge paste can't lag the field; the
-            // byte validator (live) is the real, user-visible gate.
-            maxLength={MAX_BIO_BYTES}
+            // Hard-capped to MAX_BIO_BYTES by bytes in onChangeText (capBio).
+            // No maxLength (counts chars, not bytes).
             aria-label="Bio"
             aria-invalid={!!bioError}
           />
@@ -287,9 +286,9 @@ export default function UnifiedProfileEditModal({
             <Text style={[styles.buttonLabel, { color: theme.colors.textMain }]}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.button, styles.buttonPrimary]}
+            style={[styles.button, styles.buttonPrimary, (saving || !!nameError || !!bioError) && styles.buttonDisabled]}
             onPress={handleSave}
-            disabled={saving}
+            disabled={saving || !!nameError || !!bioError}
           >
             {saving ? (
               <ActivityIndicator color="#fff" />
@@ -386,6 +385,9 @@ function createStyles(theme: AppTheme) {
     },
     buttonSecondary: {
       backgroundColor: theme.colors.surface2,
+    },
+    buttonDisabled: {
+      opacity: 0.5,
     },
     buttonLabel: {
       fontSize: Skin.font(15),

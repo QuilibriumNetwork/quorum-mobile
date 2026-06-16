@@ -19,13 +19,14 @@ import * as Skin from '@/theme/skins/geometry';
 import {
   validateDisplayName,
   validateUserBio,
-  MAX_BIO_BYTES,
 } from '@quilibrium/quorum-shared';
 import {
   translateValidationResult,
   translateValidationResults,
   displayNameLiveError,
   bioLiveError,
+  capDisplayName,
+  capBio,
 } from '@/hooks/validation/errorTranslator';
 
 export default function ProfileSetupScreen() {
@@ -173,14 +174,12 @@ export default function ProfileSetupScreen() {
               <TextInput
                 style={styles.textInput}
                 value={displayName}
-                onChangeText={(t) => { setDisplayName(t); setNameError(displayNameLiveError(t)); }}
+                onChangeText={(t) => { const v = capDisplayName(t); setDisplayName(v); setNameError(displayNameLiveError(v)); }}
                 placeholder="Your name"
                 placeholderTextColor={theme.colors.textMuted}
-                // No tight maxLength — the byte validator is the gate and shows
-                // a live error; a 32-CHAR cap would silently swallow text before
-                // the "too long" (32 BYTES) error could appear. Loose ceiling
-                // just blocks a pathological mega-paste.
-                maxLength={200}
+                // Hard-capped to MAX_DISPLAY_NAME_BYTES by bytes (capDisplayName).
+                // No maxLength (counts chars, not bytes). The live error surfaces
+                // only the non-length rules (.q / impersonation / XSS / reserved).
                 aria-label="Display name"
                 aria-invalid={!!nameError}
               />
@@ -194,12 +193,11 @@ export default function ProfileSetupScreen() {
               <TextInput
                 style={[styles.textInput, styles.bioInput]}
                 value={bio}
-                onChangeText={(t) => { setBio(t); setBioError(bioLiveError(t)); }}
+                onChangeText={(t) => { const v = capBio(t); setBio(v); setBioError(bioLiveError(v)); }}
                 placeholder="Tell us about yourself..."
                 placeholderTextColor={theme.colors.textMuted}
                 multiline
                 numberOfLines={3}
-                maxLength={MAX_BIO_BYTES}
                 textAlignVertical="top"
                 aria-label="Bio"
                 aria-invalid={!!bioError}
@@ -216,6 +214,7 @@ export default function ProfileSetupScreen() {
           onNext={handleContinue}
           onSkip={handleSkip}
           nextLabel={hasAnyInput ? 'Continue' : 'Skip'}
+          nextDisabled={!!nameError || !!bioError}
           showSkip={!!hasAnyInput}
           skipLabel="Skip for now"
           isLoading={state.isLoading}

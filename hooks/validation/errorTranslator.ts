@@ -1,6 +1,8 @@
 import {
   validateDisplayName,
   validateUserBio,
+  MAX_BIO_BYTES,
+  MAX_DISPLAY_NAME_BYTES,
   type FieldValidationResult,
 } from '@quilibrium/quorum-shared';
 
@@ -81,4 +83,46 @@ export function displayNameLiveError(value: string): string | undefined {
 export function bioLiveError(value: string): string | undefined {
   if (!value.trim()) return undefined;
   return translateValidationResults(validateUserBio(value.trim()))[0];
+}
+
+// ── Byte-accurate input caps ─────────────────────────────────────────────────
+// The display-name / bio limits are in UTF-8 BYTES (to match Farcaster's
+// USER_DATA caps so a Quorum profile merges cleanly). React Native's TextInput
+// `maxLength` counts UTF-16 code units, not bytes, so it can't enforce a byte
+// budget. We hard-cap the input by bytes in onChangeText instead — a silent
+// truncate, which is kinder on mobile than making the user hunt-and-delete to
+// get under the limit. The limit CONSTANTS come from quorum-shared (the
+// cross-platform contract); only the truncation is mobile-local (shared has no
+// byte-truncate, and trimming an input field is a UI concern, not validation).
+
+const encoder = new TextEncoder();
+
+/**
+ * Return the longest prefix of `text` that fits within `maxBytes` UTF-8 bytes,
+ * never splitting a multi-byte character. Fast path: if it already fits, return
+ * it unchanged (no allocation).
+ */
+export function truncateToBytes(text: string, maxBytes: number): string {
+  if (encoder.encode(text).length <= maxBytes) return text;
+  // Walk by code points (the spread handles surrogate pairs / emoji correctly),
+  // accumulating until the next char would overflow the byte budget.
+  let bytes = 0;
+  let out = '';
+  for (const ch of text) {
+    const chBytes = encoder.encode(ch).length;
+    if (bytes + chBytes > maxBytes) break;
+    bytes += chBytes;
+    out += ch;
+  }
+  return out;
+}
+
+/** Hard-cap a display-name input to MAX_DISPLAY_NAME_BYTES (UTF-8 bytes). */
+export function capDisplayName(text: string): string {
+  return truncateToBytes(text, MAX_DISPLAY_NAME_BYTES);
+}
+
+/** Hard-cap a bio input to MAX_BIO_BYTES (UTF-8 bytes). */
+export function capBio(text: string): string {
+  return truncateToBytes(text, MAX_BIO_BYTES);
 }

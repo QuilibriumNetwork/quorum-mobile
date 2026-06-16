@@ -81,13 +81,14 @@ import {
   validateDisplayName,
   validateUserBio,
   MAX_NAME_LENGTH,
-  MAX_BIO_BYTES,
 } from '@quilibrium/quorum-shared';
 import {
   translateValidationResult,
   translateValidationResults,
   displayNameLiveError,
   bioLiveError,
+  capDisplayName,
+  capBio,
 } from '@/hooks/validation/errorTranslator';
 import * as Skin from '@/theme/skins/geometry';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -1599,13 +1600,11 @@ export default function SpaceSettingsModal({
       <Text style={[styles.sectionDescription, { marginTop: Skin.space(16), marginBottom: Skin.space(4) }]}>Display name</Text>
       <TextInput
         value={spaceProfileDisplayName}
-        onChangeText={(t) => { setSpaceProfileDisplayName(t); setSpaceProfileNameError(displayNameLiveError(t)); }}
+        onChangeText={(t) => { const v = capDisplayName(t); setSpaceProfileDisplayName(v); setSpaceProfileNameError(displayNameLiveError(v)); }}
         placeholder={user?.displayName || user?.username || 'Your name in this space'}
         placeholderTextColor={theme.colors.textMuted}
-        // No tight maxLength — the byte validator is the gate (shows a live
-        // error); a 32-CHAR cap would silently swallow text before the "too
-        // long" (32 BYTES) error could show. Loose ceiling blocks mega-pastes.
-        maxLength={200}
+        // Hard-capped to MAX_DISPLAY_NAME_BYTES by bytes (capDisplayName). No
+        // maxLength (counts chars, not bytes). Live error = non-length rules only.
         aria-label="Display name in this space"
         aria-invalid={!!spaceProfileNameError}
         style={{
@@ -1625,12 +1624,11 @@ export default function SpaceSettingsModal({
       <Text style={[styles.sectionDescription, { marginTop: Skin.space(16), marginBottom: Skin.space(4) }]}>Bio</Text>
       <TextInput
         value={spaceProfileBio}
-        onChangeText={(t) => { setSpaceProfileBio(t); setSpaceProfileBioError(bioLiveError(t)); }}
+        onChangeText={(t) => { const v = capBio(t); setSpaceProfileBio(v); setSpaceProfileBioError(bioLiveError(v)); }}
         placeholder="Tell this space about yourself"
         placeholderTextColor={theme.colors.textMuted}
         multiline
         numberOfLines={3}
-        maxLength={MAX_BIO_BYTES}
         aria-label="Bio in this space"
         aria-invalid={!!spaceProfileBioError}
         style={{
@@ -1651,15 +1649,19 @@ export default function SpaceSettingsModal({
 
       <TouchableOpacity
         onPress={handleSaveSpaceProfile}
-        disabled={!spaceProfileDirty || spaceProfileSaving}
+        disabled={!spaceProfileDirty || spaceProfileSaving || !!spaceProfileNameError || !!spaceProfileBioError}
         style={{
           marginTop: Skin.space(12),
           alignSelf: 'flex-start',
           paddingVertical: Skin.space(10),
           paddingHorizontal: Skin.space(20),
           borderRadius: Skin.radius(10),
-          backgroundColor: spaceProfileDirty && !spaceProfileSaving ? theme.colors.primary : theme.colors.surface3,
-          opacity: spaceProfileDirty && !spaceProfileSaving ? 1 : 0.6,
+          backgroundColor:
+            spaceProfileDirty && !spaceProfileSaving && !spaceProfileNameError && !spaceProfileBioError
+              ? theme.colors.primary
+              : theme.colors.surface3,
+          opacity:
+            spaceProfileDirty && !spaceProfileSaving && !spaceProfileNameError && !spaceProfileBioError ? 1 : 0.6,
         }}
       >
         {spaceProfileSaving ? (
