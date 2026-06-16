@@ -13,6 +13,7 @@ import {
   ScrollView,
   Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { formatTime } from './types';
 import * as Skin from '@/theme/skins/geometry';
@@ -43,6 +44,7 @@ export const EditHistoryModal = React.memo(function EditHistoryModal({
   theme,
 }: EditHistoryModalProps) {
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
 
   // Build timeline: original + all edits, newest first
   const timeline = useMemo(() => {
@@ -76,7 +78,8 @@ export const EditHistoryModal = React.memo(function EditHistoryModal({
     >
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={styles.container}>
+        {/* Bottom inset so content clears the system nav bar. */}
+        <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, Skin.space(16)) }]}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Edit History</Text>
             <Pressable onPress={onClose} hitSlop={8}>
@@ -126,7 +129,7 @@ const createStyles = (theme: AppTheme) =>
       borderTopRightRadius: Skin.radius(16),
       maxHeight: '70%',
       width: SCREEN_WIDTH,
-      paddingBottom: Skin.space(34),
+      // paddingBottom applied inline from the real safe-area inset.
     },
     header: {
       flexDirection: 'row',

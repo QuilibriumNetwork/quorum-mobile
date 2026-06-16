@@ -13,6 +13,7 @@
 
 import React, { useState } from 'react';
 import { ActivityIndicator, Modal, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme } from '@/theme';
 import {
@@ -40,6 +41,7 @@ interface Props {
 
 export default function FarcasterReimportSheet({ visible, onClose, onImported }: Props) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [mnemonic, setMnemonic] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +96,13 @@ export default function FarcasterReimportSheet({ visible, onClose, onImported }:
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
-        <View style={[styles.card, { backgroundColor: theme.colors.surface1 }]}>
+        {/* Bottom inset so the Cancel/Import buttons clear the system nav bar. */}
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: theme.colors.surface1, paddingBottom: Math.max(insets.bottom, Skin.space(20)) },
+          ]}
+        >
           <Text style={[styles.title, { color: theme.colors.textStrong }]}>
             Re-import Farcaster
           </Text>
@@ -167,7 +175,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   card: {
     padding: Skin.space(20),
-    paddingBottom: Skin.space(32),
+    // paddingBottom applied inline from the real safe-area inset.
     borderTopLeftRadius: Skin.radius(16),
     borderTopRightRadius: Skin.radius(16),
     gap: Skin.space(12),

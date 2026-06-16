@@ -1102,7 +1102,8 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
       )}
 
       {/* Navigation Bar */}
-      <View style={styles.navigationBar}>
+      {/* Bottom inset so the nav buttons clear the system nav bar. */}
+      <View style={[styles.navigationBar, { paddingBottom: Skin.space(12) + insets.bottom }]}>
         <TouchableOpacity
           onPress={handleGoBack}
           disabled={!canGoBack && !backEnabled}
@@ -1573,7 +1574,8 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
       flexDirection: 'row',
       justifyContent: 'space-around',
       alignItems: 'center',
-      paddingVertical: Skin.space(12),
+      paddingTop: Skin.space(12),
+      // paddingBottom applied inline = Skin.space(12) + insets.bottom.
       borderTopWidth: Skin.border(1),
       borderTopColor: theme.colors.border,
       backgroundColor: theme.colors.background,

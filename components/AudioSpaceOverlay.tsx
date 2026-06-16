@@ -25,6 +25,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -100,6 +101,7 @@ export function AudioSpaceOverlay() {
     remoteVideoStreams,
   } = useAudioSpace();
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const localFid = user?.farcaster?.fid;
   // Build the per-FID video lookup once per render. Local participant's
@@ -537,7 +539,7 @@ export function AudioSpaceOverlay() {
               Leave. Camera sits next to Mic because they're the two
               publishing controls. */}
           {state !== 'scheduled' && (
-          <View style={[styles.controlBar, { borderTopColor: theme.colors.surface3 }]}>
+          <View style={[styles.controlBar, { borderTopColor: theme.colors.surface3, paddingBottom: Skin.space(16) + insets.bottom }]}>
             {(() => {
               const canPublishLocal =
                 role === 'host' || role === 'cohost' || role === 'speaker';

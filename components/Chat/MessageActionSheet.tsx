@@ -7,6 +7,7 @@
 import type { AppTheme } from '@/theme';
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -74,6 +75,7 @@ export function MessageActionSheet({
   theme,
 }: MessageActionSheetProps) {
   const styles = createStyles(theme);
+  const insets = useSafeAreaInsets();
   const { confirm, confirmDialog } = useConfirmDialog();
   // While a confirm dialog is open ON TOP of this sheet, swallow the sheet's own
   // back/backdrop dismissal — otherwise an Android back could close the sheet
@@ -200,7 +202,10 @@ export function MessageActionSheet({
     >
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={guardedClose} />
-        <View style={styles.container}>
+        {/* Pad the bottom by the real safe-area inset so the last row clears
+            the system nav bar (Android 3-button nav is taller than the old
+            hardcoded 34px home-indicator guess, which clipped "Report"). */}
+        <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, Skin.space(16)) }]}>
           {/* Drag handle */}
           <View style={styles.handleContainer}>
             <View style={styles.handle} />
@@ -309,7 +314,7 @@ const createStyles = (theme: AppTheme) =>
       borderTopLeftRadius: Skin.radius(16),
       borderTopRightRadius: Skin.radius(16),
       width: SCREEN_WIDTH,
-      paddingBottom: Skin.space(34), // Safe area for home indicator
+      // paddingBottom is applied inline from the real safe-area inset.
     },
     handleContainer: {
       alignItems: 'center',
