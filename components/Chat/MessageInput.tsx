@@ -887,7 +887,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
             style={[
               styles.sendButton,
               {
-                backgroundColor: canSend ? theme.colors.accent : theme.colors.surface6,
+                backgroundColor: canSend ? theme.colors.accent : theme.colors.surface7,
                 opacity: canSend ? 1 : 0.6,
               },
             ]}
