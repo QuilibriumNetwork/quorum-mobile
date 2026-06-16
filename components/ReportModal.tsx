@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import type { AppTheme } from '@/theme';
 import { useTheme } from '@/theme';
@@ -46,6 +47,7 @@ interface ReportModalProps {
 
 export function ReportModal({ visible, onClose, target, onSubmitted }: ReportModalProps) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { showToast } = useToast();
   const [reason, setReason] = useState<ReportReason | null>(null);
@@ -127,7 +129,13 @@ export function ReportModal({ visible, onClose, target, onSubmitted }: ReportMod
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.kbWrap}
         >
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          {/* Pad the bottom by the real safe-area inset so the action buttons
+              clear the system nav bar (Android 3-button nav is taller than the
+              old hardcoded inset). */}
+          <Pressable
+            style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, Skin.space(20)) }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <Text style={styles.title}>{headerLabel}</Text>
             <Text style={styles.subtitle}>
               Pick a reason and add detail if you'd like. Reports go to the
@@ -211,7 +219,7 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.surface1,
       paddingHorizontal: Skin.space(20),
       paddingTop: Skin.space(24),
-      paddingBottom: Skin.space(36),
+      // paddingBottom applied inline from the real safe-area inset.
       borderTopLeftRadius: Skin.radius(16),
       borderTopRightRadius: Skin.radius(16),
       gap: Skin.space(12),

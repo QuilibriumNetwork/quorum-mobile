@@ -22,6 +22,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAudioSpace } from '@/context/AudioSpaceContext';
 import { useToast } from '@/context/ToastContext';
@@ -110,6 +111,7 @@ export function CreateSpaceSheet({
   onClose: () => void;
 }) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const { createSpace, join } = useAudioSpace();
   const { showToast } = useToast();
   const [title, setTitle] = React.useState('');
@@ -254,7 +256,10 @@ export function CreateSpaceSheet({
           <View
             style={[
               styles.sheet,
-              { backgroundColor: theme.colors.surface1 },
+              // Real safe-area inset so the anchored submit button clears the
+              // system nav bar (Android 3-button nav is taller than the old
+              // hardcoded 24px guess).
+              { backgroundColor: theme.colors.surface1, paddingBottom: Math.max(insets.bottom, Skin.space(24)) },
             ]}
           >
             <View style={styles.header}>
@@ -508,9 +513,8 @@ const styles = createSkinnable(() => StyleSheet.create({
     borderTopRightRadius: Skin.radius(16),
     paddingHorizontal: Skin.space(16),
     paddingTop: Skin.space(16),
-    // Extra bottom padding so the anchored submit button has room
-    // above the home indicator on devices with a bottom inset.
-    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
+    // paddingBottom applied inline from the real safe-area inset so the
+    // anchored submit button clears the home indicator / nav bar.
     // Fixed slice of screen so the ScrollView always has space and
     // the anchored submit doesn't crowd the inputs. The previous
     // `maxHeight: '90%'` left the sheet content-sized when short,
