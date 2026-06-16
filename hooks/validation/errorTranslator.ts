@@ -1,4 +1,8 @@
-import type { FieldValidationResult } from '@quilibrium/quorum-shared';
+import {
+  validateDisplayName,
+  validateUserBio,
+  type FieldValidationResult,
+} from '@quilibrium/quorum-shared';
 
 /**
  * Translates shared validator `errorKey`s into mobile's English UI strings.
@@ -56,4 +60,25 @@ export function translateValidationResults(results: FieldValidationResult[]): st
   return results
     .map(translateValidationResult)
     .filter((s): s is string => s !== undefined);
+}
+
+/**
+ * Live (per-keystroke) validation for a display name. Returns a UI error string
+ * or `undefined` when valid. Empty/whitespace-only is treated as valid (an empty
+ * display name is a deliberate "use my global/QNS name" clear), so the user isn't
+ * nagged with "required" while typing. Matches desktop, which validates the
+ * display name continuously rather than only on save.
+ */
+export function displayNameLiveError(value: string): string | undefined {
+  if (!value.trim()) return undefined;
+  return translateValidationResult(validateDisplayName(value.trim()));
+}
+
+/**
+ * Live (per-keystroke) validation for a bio. Returns the first UI error string
+ * or `undefined` when valid. Empty is valid (clears the bio).
+ */
+export function bioLiveError(value: string): string | undefined {
+  if (!value.trim()) return undefined;
+  return translateValidationResults(validateUserBio(value.trim()))[0];
 }

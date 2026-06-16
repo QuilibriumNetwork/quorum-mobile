@@ -96,11 +96,12 @@ import {
   validateDisplayName,
   validateUserBio,
   MAX_BIO_BYTES,
-  MAX_DISPLAY_NAME_BYTES,
 } from '@quilibrium/quorum-shared';
 import {
   translateValidationResult,
   translateValidationResults,
+  displayNameLiveError,
+  bioLiveError,
 } from '@/hooks/validation/errorTranslator';
 import * as Skin from '@/theme/skins/geometry';
 interface ProfileModalProps {
@@ -1601,8 +1602,8 @@ export default function ProfileModal({
             isEditing={isEditing}
             editDisplayName={editDisplayName}
             editBio={editBio}
-            onChangeDisplayName={(t) => { setEditDisplayName(t); if (nameError) setNameError(undefined); }}
-            onChangeBio={(t) => { setEditBio(t); if (bioError) setBioError(undefined); }}
+            onChangeDisplayName={(t) => { setEditDisplayName(t); setNameError(displayNameLiveError(t)); }}
+            onChangeBio={(t) => { setEditBio(t); setBioError(bioLiveError(t)); }}
             onPickImage={handlePickImage}
             onCopyAddress={handleCopyAddress}
             isApexActive={apexState.isActive}
@@ -3700,9 +3701,11 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
                   placeholder="Display Name"
                   placeholderTextColor={theme.colors.textMuted}
                   autoCapitalize="words"
-                  // Coarse guard ~ MAX_DISPLAY_NAME_BYTES; the byte validator
-                  // on save catches multi-byte overflow a char cap can't.
-                  maxLength={MAX_DISPLAY_NAME_BYTES}
+                  // No tight maxLength — the byte validator is the gate (live
+                  // error); a 32-CHAR cap would silently swallow text before the
+                  // "too long" (32 BYTES) error could show. Loose ceiling only
+                  // blocks a pathological mega-paste.
+                  maxLength={200}
                   aria-label="Display name"
                   aria-invalid={!!nameError}
                 />

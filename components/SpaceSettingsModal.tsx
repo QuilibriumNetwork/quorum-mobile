@@ -82,11 +82,12 @@ import {
   validateUserBio,
   MAX_NAME_LENGTH,
   MAX_BIO_BYTES,
-  MAX_DISPLAY_NAME_BYTES,
 } from '@quilibrium/quorum-shared';
 import {
   translateValidationResult,
   translateValidationResults,
+  displayNameLiveError,
+  bioLiveError,
 } from '@/hooks/validation/errorTranslator';
 import * as Skin from '@/theme/skins/geometry';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -1598,12 +1599,13 @@ export default function SpaceSettingsModal({
       <Text style={[styles.sectionDescription, { marginTop: Skin.space(16), marginBottom: Skin.space(4) }]}>Display name</Text>
       <TextInput
         value={spaceProfileDisplayName}
-        onChangeText={(t) => { setSpaceProfileDisplayName(t); if (spaceProfileNameError) setSpaceProfileNameError(undefined); }}
+        onChangeText={(t) => { setSpaceProfileDisplayName(t); setSpaceProfileNameError(displayNameLiveError(t)); }}
         placeholder={user?.displayName || user?.username || 'Your name in this space'}
         placeholderTextColor={theme.colors.textMuted}
-        // Coarse guard ~ MAX_DISPLAY_NAME_BYTES; the byte validator on save
-        // catches multi-byte overflow a char cap can't.
-        maxLength={MAX_DISPLAY_NAME_BYTES}
+        // No tight maxLength — the byte validator is the gate (shows a live
+        // error); a 32-CHAR cap would silently swallow text before the "too
+        // long" (32 BYTES) error could show. Loose ceiling blocks mega-pastes.
+        maxLength={200}
         aria-label="Display name in this space"
         aria-invalid={!!spaceProfileNameError}
         style={{
@@ -1623,7 +1625,7 @@ export default function SpaceSettingsModal({
       <Text style={[styles.sectionDescription, { marginTop: Skin.space(16), marginBottom: Skin.space(4) }]}>Bio</Text>
       <TextInput
         value={spaceProfileBio}
-        onChangeText={(t) => { setSpaceProfileBio(t); if (spaceProfileBioError) setSpaceProfileBioError(undefined); }}
+        onChangeText={(t) => { setSpaceProfileBio(t); setSpaceProfileBioError(bioLiveError(t)); }}
         placeholder="Tell this space about yourself"
         placeholderTextColor={theme.colors.textMuted}
         multiline

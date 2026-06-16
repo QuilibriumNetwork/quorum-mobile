@@ -17,11 +17,12 @@ import {
   validateDisplayName,
   validateUserBio,
   MAX_BIO_BYTES,
-  MAX_DISPLAY_NAME_BYTES,
 } from '@quilibrium/quorum-shared';
 import {
   translateValidationResult,
   translateValidationResults,
+  displayNameLiveError,
+  bioLiveError,
 } from '@/hooks/validation/errorTranslator';
 
 export type EditScope = 'quorum' | 'farcaster' | 'both';
@@ -239,14 +240,16 @@ export default function UnifiedProfileEditModal({
           <Text style={styles.fieldLabel}>Display Name</Text>
           <TextInput
             value={displayName}
-            onChangeText={(t) => { setDisplayName(t); if (nameError) setNameError(undefined); }}
+            onChangeText={(t) => { setDisplayName(t); setNameError(displayNameLiveError(t)); }}
             placeholder="Your name"
             placeholderTextColor={theme.colors.textMuted}
             style={styles.input}
             autoCapitalize="words"
-            // Coarse guard ~ MAX_DISPLAY_NAME_BYTES; the byte validator on save
-            // catches multi-byte overflow a char cap can't.
-            maxLength={MAX_DISPLAY_NAME_BYTES}
+            // No tight maxLength — the byte validator is the gate, and a 32-char
+            // cap would silently swallow text before the "too long" error could
+            // show (the limit is 32 BYTES, not chars). A loose ceiling just stops
+            // a pathological mega-paste. Matches desktop (validator-only).
+            maxLength={200}
             aria-label="Display name"
             aria-invalid={!!nameError}
           />
@@ -259,11 +262,13 @@ export default function UnifiedProfileEditModal({
           <Text style={styles.fieldLabel}>Bio</Text>
           <TextInput
             value={bio}
-            onChangeText={(t) => { setBio(t); if (bioError) setBioError(undefined); }}
+            onChangeText={(t) => { setBio(t); setBioError(bioLiveError(t)); }}
             placeholder="Tell people about yourself..."
             placeholderTextColor={theme.colors.textMuted}
             style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
             multiline
+            // Coarse byte-count ceiling so a huge paste can't lag the field; the
+            // byte validator (live) is the real, user-visible gate.
             maxLength={MAX_BIO_BYTES}
             aria-label="Bio"
             aria-invalid={!!bioError}

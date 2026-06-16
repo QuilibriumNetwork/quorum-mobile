@@ -20,11 +20,12 @@ import {
   validateDisplayName,
   validateUserBio,
   MAX_BIO_BYTES,
-  MAX_DISPLAY_NAME_BYTES,
 } from '@quilibrium/quorum-shared';
 import {
   translateValidationResult,
   translateValidationResults,
+  displayNameLiveError,
+  bioLiveError,
 } from '@/hooks/validation/errorTranslator';
 
 export default function ProfileSetupScreen() {
@@ -172,12 +173,14 @@ export default function ProfileSetupScreen() {
               <TextInput
                 style={styles.textInput}
                 value={displayName}
-                onChangeText={(t) => { setDisplayName(t); if (nameError) setNameError(undefined); }}
+                onChangeText={(t) => { setDisplayName(t); setNameError(displayNameLiveError(t)); }}
                 placeholder="Your name"
                 placeholderTextColor={theme.colors.textMuted}
-                // Coarse guard ~ MAX_DISPLAY_NAME_BYTES; the byte validator on
-                // save catches multi-byte overflow the char cap can't.
-                maxLength={MAX_DISPLAY_NAME_BYTES}
+                // No tight maxLength — the byte validator is the gate and shows
+                // a live error; a 32-CHAR cap would silently swallow text before
+                // the "too long" (32 BYTES) error could appear. Loose ceiling
+                // just blocks a pathological mega-paste.
+                maxLength={200}
                 aria-label="Display name"
                 aria-invalid={!!nameError}
               />
@@ -191,7 +194,7 @@ export default function ProfileSetupScreen() {
               <TextInput
                 style={[styles.textInput, styles.bioInput]}
                 value={bio}
-                onChangeText={(t) => { setBio(t); if (bioError) setBioError(undefined); }}
+                onChangeText={(t) => { setBio(t); setBioError(bioLiveError(t)); }}
                 placeholder="Tell us about yourself..."
                 placeholderTextColor={theme.colors.textMuted}
                 multiline
