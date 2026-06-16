@@ -117,7 +117,11 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
       // Panel fully open: the keyboard footprint minus the chrome we sit above.
       return Math.max(lastKeyboardHeight.value - bottomChromeHeight, 0);
     }
-    const kb = Math.max(keyboardHeight.value - bottomChromeHeight, 0);
+    // useReanimatedKeyboardAnimation().height is NEGATIVE-going (0 -> -kbHeight),
+    // matching the library's own components which negate it. Flip the sign to
+    // get the positive on-screen keyboard height.
+    const liveKeyboardHeight = -keyboardHeight.value;
+    const kb = Math.max(liveKeyboardHeight - bottomChromeHeight, 0);
     // progress goes 0 -> 1 as the keyboard appears; fade the resting inset out.
     const progress = Math.min(Math.max(keyboardProgress.value, 0), 1);
     return kb + bottomInset * (1 - progress);

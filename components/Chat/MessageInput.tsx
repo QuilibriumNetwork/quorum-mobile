@@ -839,7 +839,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
               <IconSymbol
                 name="plus"
                 color={disabled ? theme.colors.textMuted : theme.colors.textSubtle}
-                size={24}
+                size={27}
               />
             </TouchableOpacity>
           )}
@@ -853,7 +853,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
             <IconSymbol
               name={showEmojiPicker ? 'keyboard' : 'face.smiling'}
               color={showEmojiPicker ? theme.colors.primary : (disabled ? theme.colors.textMuted : theme.colors.textSubtle)}
-              size={24}
+              size={27}
             />
           </TouchableOpacity>
         </View>
@@ -912,7 +912,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
 
 const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
-    backgroundColor: theme.colors.surface3,
+    // Match the messages page so the composer bar blends with the chat
+    // background; the pill sits on top as the distinct surface.
+    backgroundColor: theme.colors.surface1,
     paddingHorizontal: Skin.space(12),
     paddingTop: Skin.space(8),
     // paddingBottom and width depend on insets/screen width and are
@@ -1027,7 +1029,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderRadius: Skin.radius(22),
     paddingVertical: Skin.space(4),
     paddingLeft: Skin.space(4),
-    paddingRight: Skin.space(4),
+    // Keep the send circle hugging the pill's right edge (~1px gap).
+    paddingRight: 1,
     minHeight: 44,
     // A small breathing gap between the pill and whatever sits below it
     // (the keyboard or the emoji panel), so the pill never touches them.
