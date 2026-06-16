@@ -8,7 +8,7 @@ import type { Channel, Emoji, SpaceMember, Sticker } from '@quilibrium/quorum-sh
 import { searchEmojis } from '@/data/emojiData';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, useWindowDimensions, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputSubmitEditingEventData, View } from 'react-native';
-import Reanimated, { LinearTransition, useAnimatedStyle } from 'react-native-reanimated';
+import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useComposerPanel } from '@/hooks/useComposerPanel';
 import * as Skin from '@/theme/skins/geometry';
@@ -845,15 +845,10 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
 
       {/* The composer pill — one rounded container with the emoji toggle on the
           left, the growing text input, then the attach + send buttons on the
-          right. Controls are bottom-anchored in both states (single line is one
-          row tall, so it still reads centered) — avoiding a center<->flex-end
-          flip removes the icon jump at the 1->2 line boundary. Only the corner
-          radius changes when wrapped (stadium -> box). LinearTransition
-          animates the height change so growth/shrink is smooth, not abrupt. */}
-      <Reanimated.View
-        layout={LinearTransition.duration(140)}
-        style={[styles.pill, isMultiline && styles.pillMultiline]}
-      >
+          right. Single line: a fully-rounded stadium with controls centered.
+          Multi-line: a moderate-radius box with controls pinned to the bottom
+          (last line), like a grown text area. */}
+      <View style={[styles.pill, isMultiline && styles.pillMultiline]}>
         <View style={styles.leftButtons}>
           <TouchableOpacity
             style={styles.inputIconButton}
@@ -929,7 +924,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
             )}
           </TouchableOpacity>
         </View>
-      </Reanimated.View>
+      </View>
 
       {/* Animated spacer beneath the pill. Closed: it follows the keyboard so
           the pill rides up (keyboard avoidance). Open: it holds the keyboard
@@ -1056,15 +1051,16 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   // the last line; for a single line everything lands on the same baseline.
   pill: {
     flexDirection: 'row',
-    // Bottom-anchor the controls ALWAYS. Single line is one control-row tall so
-    // this reads identical to centered; multi-line keeps the controls on the
-    // last line. Anchoring in both states (rather than flipping center<->
-    // flex-end on wrap) is what removes the icon jump at the 1->2 line boundary.
-    alignItems: 'flex-end',
+    // Self-sizing: the row height is defined by its tallest child (the 36px
+    // controls), and `center` keeps the text and controls on one baseline on
+    // every device instead of relying on per-device text metrics. No fixed
+    // pill height — it adapts to the font/line-height the device renders.
+    alignItems: 'center',
     // Same shade as the emoji panel so the pill and the panel read as one
     // continuous surface.
     backgroundColor: theme.colors.surface4,
-    // Large radius => the short ends are perfect semicircles while single-line.
+    // Large radius => the short ends are always perfect semicircles regardless
+    // of the pill's resolved height (single line vs wrapped).
     borderRadius: 999,
     // Uniform inner padding on all four sides: the send circle then has the
     // same gap to the right edge as it does to the top/bottom, so it reads as
@@ -1075,9 +1071,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginBottom: Skin.space(8),
   },
   pillMultiline: {
-    // Grown box: drop the stadium radius to a moderate corner so the short ends
-    // don't bulge into big semicircles on a tall pill. (Controls are already
-    // bottom-anchored by the base style.)
+    // Grown box: pin controls to the bottom (last line) and drop the stadium
+    // radius to a moderate corner so the short ends don't bulge into big
+    // semicircles on a tall pill.
+    alignItems: 'flex-end',
     borderRadius: Skin.radius(20),
   },
   leftButtons: {
