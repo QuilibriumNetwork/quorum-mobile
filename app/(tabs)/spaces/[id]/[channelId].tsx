@@ -79,10 +79,16 @@ export default function SpaceChannelChat() {
     return !!getSpaceKey(spaceId, 'owner');
   }, [spaceId]);
 
-  const hasRolePin = useHasPermission(spaceId, user?.address, 'message:pin');
-  const hasRoleDelete = useHasPermission(spaceId, user?.address, 'message:delete');
-  const hasPinPermission = hasRolePin || isSpaceOwner;
-  const hasDeletePermission = hasRoleDelete || isSpaceOwner;
+  // Pin/delete are role-only, NOT owner-derived. Receivers can't verify space
+  // ownership (no ownerAddress on the wire — privacy), so the receive-side guard
+  // rejects an owner's pin/delete of others' messages unless the owner holds a
+  // role granting it (see the remove-message validation in WebSocketContext +
+  // shared canDeleteMessage). Granting it here only showed buttons whose action
+  // recipients would drop. Match desktop: hide them. Owners still delete their
+  // own messages via the author check. `isSpaceOwner` stays for owner-only UI
+  // (invite, settings entry).
+  const hasPinPermission = useHasPermission(spaceId, user?.address, 'message:pin');
+  const hasDeletePermission = useHasPermission(spaceId, user?.address, 'message:delete');
 
   // The space's roles, passed to UserProfileModal so the owner can assign /
   // remove roles from a member's profile (tapped from a message avatar).
