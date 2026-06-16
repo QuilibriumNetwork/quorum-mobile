@@ -5,6 +5,7 @@ import {
   useReanimatedKeyboardAnimation,
 } from 'react-native-keyboard-controller';
 import {
+  runOnJS,
   useDerivedValue,
   useSharedValue,
   type SharedValue,
@@ -67,6 +68,9 @@ export interface ComposerPanel {
 // the real measured height instead of this constant.
 const FALLBACK_KEYBOARD_HEIGHT = 290;
 let lastSessionKeyboardHeight = FALLBACK_KEYBOARD_HEIGHT;
+function rememberSessionKeyboardHeight(height: number) {
+  if (height > 0) lastSessionKeyboardHeight = height;
+}
 
 export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPanel {
   const { bottomInset = 0, bottomChromeHeight = 0 } = options;
@@ -75,12 +79,6 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   // spacer worklet. Seeded from the session cache so a panel opened before this
   // composer ever showed the keyboard still uses a real height when available.
   const lastKeyboardHeight = useSharedValue(lastSessionKeyboardHeight);
-  // bottomChromeHeight as a shared value so the worklet picks up changes
-  // (rotation, tab-bar show/hide) without a stale closure.
-  const chromeHeight = useSharedValue(bottomChromeHeight);
-  chromeHeight.value = bottomChromeHeight;
-  const restingInset = useSharedValue(bottomInset);
-  restingInset.value = bottomInset;
   // panelOpen as a shared value so the spacer worklet can branch without a
   // JS round-trip; mirrored to React state for conditional rendering and to a
   // ref for synchronous reads inside callbacks (avoids stale closures).
@@ -93,28 +91,20 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   // mirror it to the module-level session cache for future cold opens.
   useKeyboardHandler(
     {
-      onMove: (e) => {
-        'worklet';
-        if (e.height > 0) {
-          lastKeyboardHeight.value = e.height;
-        }
-      },
       onEnd: (e) => {
         'worklet';
         if (e.height > 0) {
           lastKeyboardHeight.value = e.height;
+          // Mirror the settled height to the JS-thread module cache so a future
+          // composer mount can seed from it. Hopping to JS only on settle (not
+          // every onMove frame) keeps this cheap, and avoids reading a shared
+          // value during render (which Reanimated strict mode warns about).
+          runOnJS(rememberSessionKeyboardHeight)(e.height);
         }
       },
     },
     []
   );
-
-  // Keep the module-level session cache in sync from JS so a future composer
-  // mount seeds from the real height. Reading a SharedValue.value from the JS
-  // thread is allowed; this runs on render, which is cheap and good enough.
-  if (lastKeyboardHeight.value > 0) {
-    lastSessionKeyboardHeight = lastKeyboardHeight.value;
-  }
 
   // The spacer height: follow the live keyboard when the panel is closed,
   // otherwise hold the last keyboard height (panel footprint). In both cases we
@@ -125,12 +115,12 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   const spacerHeight = useDerivedValue(() => {
     if (panelOpenSV.value === 1) {
       // Panel fully open: the keyboard footprint minus the chrome we sit above.
-      return Math.max(lastKeyboardHeight.value - chromeHeight.value, 0);
+      return Math.max(lastKeyboardHeight.value - bottomChromeHeight, 0);
     }
-    const kb = Math.max(keyboardHeight.value - chromeHeight.value, 0);
+    const kb = Math.max(keyboardHeight.value - bottomChromeHeight, 0);
     // progress goes 0 -> 1 as the keyboard appears; fade the resting inset out.
     const progress = Math.min(Math.max(keyboardProgress.value, 0), 1);
-    return kb + restingInset.value * (1 - progress);
+    return kb + bottomInset * (1 - progress);
   });
 
   const openPanel = useCallback(() => {
