@@ -8,7 +8,7 @@ import RegisterPaymentModal from '@/components/qns/RegisterPaymentModal';
 import { BaseModal, TypeToConfirmModal } from '@/components/shared';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { ApexAvatarRing, APEX_GOLD } from '@/components/ui/ApexAvatarRing';
+import { ApexAvatarRing, ApexIcon, APEX_GOLD } from '@/components/ui/ApexAvatarRing';
 import { useApexSubscription, type ApexSubscriptionState } from '@/hooks/useApex';
 import { SkinsModal } from '@/components/skins/SkinsModal';
 import { useAuth, useWebSocket } from '@/context';
@@ -2883,6 +2883,21 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
     },
+    // Pitch (never-subscribed) card: centered icon + title, sized to match the
+    // "Claim Your Username" banner below it.
+    apexPitchHeader: {
+      alignItems: 'center',
+    },
+    apexPitchTitle: {
+      fontSize: Skin.font(20),
+      fontFamily: theme.fonts.bold.fontFamily,
+      fontWeight: theme.fonts.bold.fontWeight,
+      color: theme.colors.textMain,
+      marginTop: Skin.space(8),
+    },
+    apexPitchCentered: {
+      textAlign: 'center',
+    },
     apexDaysLeft: {
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.medium.fontFamily,
@@ -3590,11 +3605,11 @@ const ApexSectionCard = React.memo(function ApexSectionCard({
   if (!subscription) {
     return (
       <View style={styles.apexCard}>
-        <View style={styles.apexHeaderRow}>
-          <IconSymbol name="crown.fill" size={20} color={APEX_GOLD} />
-          <Text style={styles.apexTitle}>Quorum Apex</Text>
+        <View style={styles.apexPitchHeader}>
+          <ApexIcon size={32} />
+          <Text style={styles.apexPitchTitle}>Quorum Apex</Text>
         </View>
-        <Text style={styles.apexPitch}>
+        <Text style={[styles.apexPitch, styles.apexPitchCentered]}>
           Support 4 communities of your choice and get a gold ring on your profile — $25/month
         </Text>
         <TouchableOpacity style={styles.apexButton} onPress={() => onOpenApexModal('subscribe')}>
@@ -3608,7 +3623,7 @@ const ApexSectionCard = React.memo(function ApexSectionCard({
   return (
     <View style={styles.apexCard}>
       <View style={styles.apexHeaderRow}>
-        <IconSymbol name="crown.fill" size={20} color={APEX_GOLD} />
+        <ApexIcon size={20} />
         <Text style={styles.apexTitle}>Quorum Apex</Text>
         {isActive ? (
           <Text style={styles.apexDaysLeft}>{daysLeft} days left</Text>
