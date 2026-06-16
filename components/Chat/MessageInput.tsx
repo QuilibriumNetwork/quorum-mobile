@@ -245,6 +245,11 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   const showEmojiPicker = composerPanel.panelOpen;
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('smileys');
   const [searchQuery, setSearchQuery] = useState('');
+  // When the input wraps to multiple lines the pill switches from a single-line
+  // stadium (fully rounded, controls centered) to a grown box (moderate corner
+  // radius, controls pinned to the bottom/last line). Driven by the measured
+  // content height so it adapts to the device's font metrics.
+  const [isMultiline, setIsMultiline] = useState(false);
 
   // Animated spacer/panel container under the pill — follows the keyboard
   // when the panel is closed, holds the keyboard footprint when it's open.
@@ -424,6 +429,19 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   const handleSelectionChange = useCallback((event: { nativeEvent: { selection: { start: number; end: number } } }) => {
     setCursorPosition(event.nativeEvent.selection.end);
   }, []);
+
+  // Detect single- vs multi-line from the measured content height so the pill
+  // can switch shape. A single line is ~one lineHeight tall; once the content
+  // exceeds ~1.5 lines it has wrapped. Using the measured height (not character
+  // counting) keeps this correct across fonts/devices and for pasted newlines.
+  const singleLineThreshold = Skin.font(22) * 1.5;
+  const handleContentSizeChange = useCallback(
+    (event: { nativeEvent: { contentSize: { height: number } } }) => {
+      const next = event.nativeEvent.contentSize.height > singleLineThreshold;
+      setIsMultiline((prev) => (prev === next ? prev : next));
+    },
+    [singleLineThreshold]
+  );
 
   // Build categories list including custom emojis, stickers, and recent if available
   const categories = useMemo(() => {
@@ -827,8 +845,10 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
 
       {/* The composer pill — one rounded container with the emoji toggle on the
           left, the growing text input, then the attach + send buttons on the
-          right. */}
-      <View style={styles.pill}>
+          right. Single line: a fully-rounded stadium with controls centered.
+          Multi-line: a moderate-radius box with controls pinned to the bottom
+          (last line), like a grown text area. */}
+      <View style={[styles.pill, isMultiline && styles.pillMultiline]}>
         <View style={styles.leftButtons}>
           <TouchableOpacity
             style={styles.inputIconButton}
@@ -850,6 +870,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           value={value}
           onChangeText={handleTextChange}
           onSelectionChange={handleSelectionChange}
+          onContentSizeChange={handleContentSizeChange}
           placeholder={editingMessage ? 'Edit message...' : 'Message...'}
           placeholderTextColor={theme.colors.textMuted}
           style={styles.input}
@@ -859,7 +880,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           blurOnSubmit={false}
           multiline
           scrollEnabled
-          textAlignVertical="center"
+          textAlignVertical={isMultiline ? 'top' : 'center'}
           onFocus={() => {
             composerPanel.onInputFocus();
             setSearchQuery('');
@@ -1048,6 +1069,13 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     // A small breathing gap between the pill and whatever sits below it
     // (the keyboard or the emoji panel), so the pill never touches them.
     marginBottom: Skin.space(8),
+  },
+  pillMultiline: {
+    // Grown box: pin controls to the bottom (last line) and drop the stadium
+    // radius to a moderate corner so the short ends don't bulge into big
+    // semicircles on a tall pill.
+    alignItems: 'flex-end',
+    borderRadius: Skin.radius(20),
   },
   leftButtons: {
     flexDirection: 'row',
