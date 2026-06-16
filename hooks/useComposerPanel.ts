@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
-import { Keyboard } from 'react-native';
 import {
+  KeyboardController,
   useKeyboardHandler,
   useReanimatedKeyboardAnimation,
 } from 'react-native-keyboard-controller';
@@ -54,8 +54,9 @@ export interface ComposerPanel {
   openPanel: () => void;
   /** Hide the panel (caller is responsible for refocusing the input). */
   closePanel: () => void;
-  /** Toggle the panel. When opening, dismisses the keyboard. */
-  togglePanel: (refocus: () => void) => void;
+  /** Toggle the panel. Opening hides the keyboard (keeping caret focus);
+   *  closing brings the keyboard back without moving the pill. */
+  togglePanel: () => void;
   /** Call when the input gains focus — collapses the panel without animation fight. */
   onInputFocus: () => void;
 }
@@ -151,7 +152,10 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     panelOpenRef.current = true;
     panelOpenSV.value = 1;
     setPanelOpen(true);
-    Keyboard.dismiss();
+    // keepFocus: true hides the soft keyboard but leaves the TextInput focused,
+    // so the blinking caret stays visible and emojis insert at the cursor.
+    // (RN's Keyboard.dismiss() always blurs, which hides the caret.)
+    KeyboardController.dismiss({ keepFocus: true });
   }, [panelOpenSV, closingSV]);
 
   const closePanel = useCallback(() => {
@@ -170,28 +174,25 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   // throughout (no drop-and-bounce). Order matters: arm the closing hand-off
   // and summon the keyboard BEFORE flipping panelOpen, so the spacer never
   // sees the "panel closed, keyboard still down" state with a 0 footprint.
-  const closePanelAndRestoreKeyboard = useCallback(
-    (refocus: () => void) => {
-      if (!panelOpenRef.current) return;
-      closingSV.value = 1;
-      refocus();
-      panelOpenRef.current = false;
-      panelOpenSV.value = 0;
-      setPanelOpen(false);
-    },
-    [panelOpenSV, closingSV]
-  );
+  // setFocusTo('current') re-opens the keyboard on the still-focused input
+  // (the panel kept focus via dismiss({ keepFocus: true })), which a plain
+  // .focus() on an already-focused input would not reliably do.
+  const closePanelAndRestoreKeyboard = useCallback(() => {
+    if (!panelOpenRef.current) return;
+    closingSV.value = 1;
+    KeyboardController.setFocusTo('current');
+    panelOpenRef.current = false;
+    panelOpenSV.value = 0;
+    setPanelOpen(false);
+  }, [panelOpenSV, closingSV]);
 
-  const togglePanel = useCallback(
-    (refocus: () => void) => {
-      if (panelOpenRef.current) {
-        closePanelAndRestoreKeyboard(refocus);
-      } else {
-        openPanel();
-      }
-    },
-    [openPanel, closePanelAndRestoreKeyboard]
-  );
+  const togglePanel = useCallback(() => {
+    if (panelOpenRef.current) {
+      closePanelAndRestoreKeyboard();
+    } else {
+      openPanel();
+    }
+  }, [openPanel, closePanelAndRestoreKeyboard]);
 
   // When the input gains focus (e.g. user taps the text field) while the panel
   // is open, the keyboard is on its way back — arm the same closing hand-off so

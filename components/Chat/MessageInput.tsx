@@ -306,7 +306,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
 
   const handleToggleEmojiPicker = useCallback(() => {
     setSearchQuery('');
-    composerPanel.togglePanel(() => inputRef.current?.focus());
+    composerPanel.togglePanel();
   }, [composerPanel]);
 
   const handleSelectEmoji = useCallback((emoji: string) => {
