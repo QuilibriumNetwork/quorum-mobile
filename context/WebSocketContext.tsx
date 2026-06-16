@@ -469,6 +469,53 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     }, CONVERSATION_REFRESH_DEBOUNCE_MS);
   }, [queryClient]);
 
+  // Receive side of DM profile sync. A `dm-update-profile` control message
+  // carries a partner's GLOBAL profile change (displayName / userIcon / bio)
+  // over the established DM session. It must NOT be persisted/rendered as a
+  // chat post — it updates the conversation row in place. Shared by both DM
+  // decrypt paths (handleIncomingMessage + applyDMGroupResults) so the two
+  // intercepts can't drift. Returns true when it handled the message (caller
+  // should stop processing it), false otherwise.
+  const applyDmProfileUpdate = useCallback(
+    async (decryptedMessage: Message, senderAddress: string): Promise<boolean> => {
+      const content = decryptedMessage.content as
+        | { type?: string; senderId?: string; displayName?: string; userIcon?: string; bio?: string }
+        | undefined;
+      if (content?.type !== 'dm-update-profile') return false;
+
+      // Anti-spoof: the claimed senderId must match the cryptographically
+      // authenticated envelope sender. On mismatch we still consume the
+      // message (return true → never persisted as a post), just don't apply it.
+      // Mirrors desktop's "return true even on mismatch".
+      if (content.senderId && content.senderId !== senderAddress) {
+        logger.warn('[DMProfile] dropped dm-update-profile with mismatched senderId', {
+          claimed: content.senderId?.slice(0, 8),
+          envelope: senderAddress.slice(0, 8),
+        });
+        return true;
+      }
+
+      // No DM row means no established conversation to update — drop silently.
+      const conversationId = `${senderAddress}/${senderAddress}`;
+      const existing = await storage.getConversation(conversationId);
+      if (!existing) return true;
+
+      // Merge: displayName/userIcon truthy-guarded (empty = leave), bio
+      // `!== undefined` (empty string = deliberate clear). Same convention as
+      // the space update-profile handler and desktop's handleDMProfileUpdate.
+      const merged: Conversation = {
+        ...existing,
+        ...(content.displayName ? { displayName: content.displayName } : {}),
+        ...(content.userIcon ? { icon: content.userIcon } : {}),
+        ...(content.bio !== undefined ? { bio: content.bio } : {}),
+      };
+      await storage.saveConversation(merged);
+      scheduleConversationRefresh(conversationId);
+      return true;
+    },
+    [storage, scheduleConversationRefresh],
+  );
+
   /**
    * Initialize device keys and set them in the encryption service
    */
@@ -2483,6 +2530,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // Extract sender address from conversation ID (may have been updated for self-sync)
         const senderAddress = conversationId.split('/')[0];
 
+        // Intercept dm-update-profile control messages — update the partner's
+        // conversation row in place, never persist as a chat post. Handles both
+        // parse branches above (new-session + subsequent-message) since both
+        // converge here. Best-effort: delete from server so it doesn't replay.
+        if (await applyDmProfileUpdate(decryptedMessage, senderAddress)) {
+          getDeviceKeyset().then(dk => {
+            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
+          });
+          return;
+        }
+
         // Save conversation to storage (creates new or updates existing)
         const existingConversation = await storage.getConversation(conversationId);
         // Get sender display name for preview
@@ -2622,7 +2680,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // Message processing failed — isolate so other messages continue processing
       }
     },
-    [queryClient, storage]
+    [queryClient, storage, applyDmProfileUpdate]
   );
 
   /**
@@ -3468,6 +3526,20 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           conversationId = `${actualRecipient}/${actualRecipient}`;
         }
 
+        // Intercept dm-update-profile control messages — same as the JS path.
+        // Update the partner's conversation row in place, never persist as a
+        // post. senderAddress here is the (post-self-sync) conversation owner.
+        const batchProfileSender = conversationId.split('/')[0];
+        if (await applyDmProfileUpdate(decryptedMessage, batchProfileSender)) {
+          const originalMsg = batch.find(m => m.timestamp === msgResult.timestamp);
+          if (originalMsg) {
+            getDeviceKeyset().then(dk => {
+              if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
+            });
+          }
+          continue;
+        }
+
         const resolvedSenderAddress = conversationId.split('/')[0];
 
         // Save conversation
@@ -3658,7 +3730,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         logger.debug(`[DM-fallback ${meFb}] handleIncomingMessage threw`, err);
       }
     }
-  }, [queryClient, storage, handleIncomingMessage]);
+  }, [queryClient, storage, handleIncomingMessage, applyDmProfileUpdate]);
 
   /**
    * Process message queue with throttling to prevent CPU overload
@@ -4291,7 +4363,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // running this on every connect is cheap and safe.
         runProfileBroadcastMigrations();
         const spaces = getAllSpaces();
-        if (spaces.length === 0) return;
         for (const space of spaces) {
           try {
             const res = await maybeSendUpdateProfileMessage({
@@ -4313,6 +4384,26 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // Per-space failure is non-fatal — others still get the broadcast.
           }
         }
+
+        // Rebroadcast identity to all DM partners too (a user may have DM
+        // partners but no spaces, which is why this runs unconditionally —
+        // the early "no spaces" return was removed above). The DM service
+        // has its own per-partner signature gate, so reconnects with
+        // unchanged identity are no-ops on the wire. Name/icon only — bio is
+        // gated to the public-profile path, matching the space rebroadcast.
+        try {
+          const { broadcastProfileToAllDMs } = await import('../services/dm/dmProfileService');
+          await broadcastProfileToAllDMs(
+            {
+              selfAddress: user.address,
+              displayName: displayName || undefined,
+              userIcon: userIcon || undefined,
+            },
+            { enqueueOutbound, subscribe },
+          );
+        } catch {
+          // DM rebroadcast best-effort; never affects the space rebroadcast.
+        }
       } catch {
         // Module imports / spaces lookup failed; clear the fingerprint
         // so the next dep change retries instead of treating this
@@ -4331,6 +4422,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     user?.farcaster?.fid,
     user?.farcaster?.username,
     enqueueOutbound,
+    subscribe,
   ]);
 
   const value = useMemo<WebSocketContextValue>(
