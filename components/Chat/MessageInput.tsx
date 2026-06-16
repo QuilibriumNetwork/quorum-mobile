@@ -1029,6 +1029,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     paddingLeft: Skin.space(4),
     paddingRight: Skin.space(4),
     minHeight: 44,
+    // A small breathing gap between the pill and whatever sits below it
+    // (the keyboard or the emoji panel), so the pill never touches them.
+    marginBottom: Skin.space(8),
   },
   leftButtons: {
     flexDirection: 'row',
