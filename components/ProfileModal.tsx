@@ -8,7 +8,7 @@ import RegisterPaymentModal from '@/components/qns/RegisterPaymentModal';
 import { BaseModal, TypeToConfirmModal } from '@/components/shared';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { ApexAvatarRing, APEX_GOLD } from '@/components/ui/ApexAvatarRing';
+import { ApexAvatarRing, ApexIcon, APEX_GOLD } from '@/components/ui/ApexAvatarRing';
 import { useApexSubscription, type ApexSubscriptionState } from '@/hooks/useApex';
 import { SkinsModal } from '@/components/skins/SkinsModal';
 import { useAuth, useWebSocket } from '@/context';
@@ -3591,7 +3591,7 @@ const ApexSectionCard = React.memo(function ApexSectionCard({
     return (
       <View style={styles.apexCard}>
         <View style={styles.apexHeaderRow}>
-          <IconSymbol name="crown.fill" size={20} color={APEX_GOLD} />
+          <ApexIcon size={20} />
           <Text style={styles.apexTitle}>Quorum Apex</Text>
         </View>
         <Text style={styles.apexPitch}>
@@ -3608,7 +3608,7 @@ const ApexSectionCard = React.memo(function ApexSectionCard({
   return (
     <View style={styles.apexCard}>
       <View style={styles.apexHeaderRow}>
-        <IconSymbol name="crown.fill" size={20} color={APEX_GOLD} />
+        <ApexIcon size={20} />
         <Text style={styles.apexTitle}>Quorum Apex</Text>
         {isActive ? (
           <Text style={styles.apexDaysLeft}>{daysLeft} days left</Text>

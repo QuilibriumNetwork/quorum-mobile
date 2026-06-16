@@ -47,7 +47,7 @@ import {
 import React from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
-import { APEX_GOLD } from '@/components/ui/ApexAvatarRing';
+import { ApexIcon, APEX_GOLD } from '@/components/ui/ApexAvatarRing';
 import { SpaceIcon } from '@/components/ui/SpaceIcon';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -400,7 +400,7 @@ export default function ApexSubscribeModal({ visible, onClose, mode }: ApexSubsc
     <BaseModal visible={visible} onClose={onClose} height={0.85} avoidKeyboard>
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <IconSymbol name="crown.fill" size={20} color={APEX_GOLD} />
+          <ApexIcon size={20} />
           <Text style={styles.title}>{mode === 'renew' ? 'Renew Apex' : 'Quorum Apex'}</Text>
         </View>
         <TouchableOpacity onPress={onClose}>
