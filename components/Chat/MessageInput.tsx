@@ -886,10 +886,10 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           <TouchableOpacity
             style={[
               styles.sendButton,
-              // Disabled: a clearly lighter muted-gray circle (surface8) so it
-              // stays an obvious affordance against the surface4 pill, with a
-              // dark arrow on top for contrast. Active: accent fill, white arrow.
-              { backgroundColor: canSend ? theme.colors.accent : theme.colors.surface8 },
+              {
+                backgroundColor: canSend ? theme.colors.accent : theme.colors.surface6,
+                opacity: canSend ? 1 : 0.6,
+              },
             ]}
             onPress={handleSend}
             disabled={!canSend}
@@ -899,7 +899,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
             {isSending ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <SendIcon color={canSend ? '#fff' : theme.colors.surface2} size={20} />
+              <SendIcon color="#fff" size={20} />
             )}
           </TouchableOpacity>
         </View>
