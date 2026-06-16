@@ -7,8 +7,17 @@
  *  - PATCH /v2/me  with { displayName?, bio?, pfp?, location? }
  */
 
+import { MAX_BIO_BYTES, MAX_DISPLAY_NAME_BYTES } from '@quilibrium/quorum-shared';
+
 const FARCASTER_API = 'https://client.farcaster.xyz';
 const CLOUDFLARE_CDN = 'https://imagedelivery.net/BXluQx4ige9GuW0Ia56BHw';
+
+// UTF-8 byte length. Farcaster's USER_DATA caps are in bytes, so a char count
+// would pass values the relay rejects (one emoji is up to 4 bytes, an accented
+// letter 2). Matches the shared validators' own byteLength.
+function utf8ByteLength(s: string): number {
+  return new TextEncoder().encode(s).length;
+}
 
 interface UpdateResult {
   ok: boolean;
@@ -120,6 +129,18 @@ export async function updateFarcasterProfile(
     pfp?: string;
   },
 ): Promise<{ ok: boolean; error?: string; uploadedPfpUrl?: string }> {
+  // Hard byte-limit guard at the publish chokepoint. Every Farcaster profile
+  // save passes through here regardless of caller, so blocking over-limit
+  // values here turns the relay's opaque HTTP 400 into a clear local error.
+  // Defense-in-depth: the UI editor already validates, but this protects any
+  // other/future caller too.
+  if (fields.displayName !== undefined && utf8ByteLength(fields.displayName) > MAX_DISPLAY_NAME_BYTES) {
+    return { ok: false, error: 'Display name is too long' };
+  }
+  if (fields.bio !== undefined && utf8ByteLength(fields.bio) > MAX_BIO_BYTES) {
+    return { ok: false, error: 'Bio is too long' };
+  }
+
   const body: UpdateUserBody = {};
   if (fields.displayName !== undefined) body.displayName = fields.displayName;
   if (fields.bio !== undefined) body.bio = fields.bio;

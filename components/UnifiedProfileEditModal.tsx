@@ -13,6 +13,16 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
+import {
+  validateDisplayName,
+  validateUserBio,
+  MAX_BIO_BYTES,
+  MAX_DISPLAY_NAME_BYTES,
+} from '@quilibrium/quorum-shared';
+import {
+  translateValidationResult,
+  translateValidationResults,
+} from '@/hooks/validation/errorTranslator';
 
 export type EditScope = 'quorum' | 'farcaster' | 'both';
 
@@ -36,6 +46,8 @@ export default function UnifiedProfileEditModal({
   const [bio, setBio] = useState('');
   const [avatar, setAvatar] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [nameError, setNameError] = useState<string | undefined>(undefined);
+  const [bioError, setBioError] = useState<string | undefined>(undefined);
 
   // Load the live Farcaster profile so farcaster-scoped edits seed from
   // the Farcaster-side fields rather than the Quorum-side fields.
@@ -164,6 +176,19 @@ export default function UnifiedProfileEditModal({
   };
 
   const handleSave = async () => {
+    // Validate against the shared byte limits before doing anything. Both
+    // fields are optional (empty = leave/clear), so only validate non-empty
+    // values. This also guards the Farcaster publish below — a name/bio over
+    // Farcaster's USER_DATA byte caps must be blocked locally with a clear
+    // message instead of letting /v2/me return an opaque HTTP 400.
+    const trimmedName = displayName.trim();
+    const trimmedBio = bio.trim();
+    const nameMsg = trimmedName ? translateValidationResult(validateDisplayName(trimmedName)) : undefined;
+    const bioMsg = trimmedBio ? translateValidationResults(validateUserBio(trimmedBio))[0] : undefined;
+    setNameError(nameMsg);
+    setBioError(bioMsg);
+    if (nameMsg || bioMsg) return;
+
     setSaving(true);
     try {
       const quorumTargeted = scope === 'quorum' || scope === 'both';
@@ -214,26 +239,38 @@ export default function UnifiedProfileEditModal({
           <Text style={styles.fieldLabel}>Display Name</Text>
           <TextInput
             value={displayName}
-            onChangeText={setDisplayName}
+            onChangeText={(t) => { setDisplayName(t); if (nameError) setNameError(undefined); }}
             placeholder="Your name"
             placeholderTextColor={theme.colors.textMuted}
             style={styles.input}
             autoCapitalize="words"
-            maxLength={60}
+            // Coarse guard ~ MAX_DISPLAY_NAME_BYTES; the byte validator on save
+            // catches multi-byte overflow a char cap can't.
+            maxLength={MAX_DISPLAY_NAME_BYTES}
+            aria-label="Display name"
+            aria-invalid={!!nameError}
           />
+          {nameError ? (
+            <Text style={styles.fieldError} role="alert">{nameError}</Text>
+          ) : null}
         </View>
 
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>Bio</Text>
           <TextInput
             value={bio}
-            onChangeText={setBio}
+            onChangeText={(t) => { setBio(t); if (bioError) setBioError(undefined); }}
             placeholder="Tell people about yourself..."
             placeholderTextColor={theme.colors.textMuted}
             style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
             multiline
-            maxLength={256}
+            maxLength={MAX_BIO_BYTES}
+            aria-label="Bio"
+            aria-invalid={!!bioError}
           />
+          {bioError ? (
+            <Text style={styles.fieldError} role="alert">{bioError}</Text>
+          ) : null}
         </View>
 
         <View style={styles.actions}>
@@ -311,6 +348,11 @@ function createStyles(theme: AppTheme) {
       fontSize: Skin.font(13),
       fontWeight: '600',
       color: theme.colors.textMuted,
+    },
+    fieldError: {
+      fontSize: Skin.font(12),
+      color: theme.colors.danger,
+      marginTop: Skin.space(1),
     },
     input: {
       borderWidth: Skin.border(1),

@@ -22,6 +22,19 @@ const messages: Record<string, (vars: Vars) => string> = {
 
   'spaceDescription.invalidChars': () => 'Description cannot contain special characters',
   'spaceDescription.tooLong': vars => `Description must be ${vars!.max} characters or less`,
+
+  // Display name + bio limits are in UTF-8 BYTES (Farcaster-aligned), which
+  // are meaningless to users — so the "too long" copy shows no number, matching
+  // desktop's displayName.tooLong / userBio.tooLong.
+  'displayName.required': () => 'Display name is required',
+  'displayName.tooLong': () => 'Display name is too long',
+  'displayName.invalidChars': () => 'Display name cannot contain special characters',
+  'displayName.reservedMention': () => 'That name is reserved',
+  'displayName.reservedImpersonation': () => 'That name is not allowed',
+  'displayName.reservedQnsSuffix': () => 'A name ending in ".q" is reserved for verified QNS names',
+
+  'userBio.tooLong': () => 'Bio is too long',
+  'userBio.invalidChars': () => 'Bio cannot contain special characters',
 };
 
 /**

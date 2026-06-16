@@ -78,7 +78,11 @@ import { logger } from '@quilibrium/quorum-shared';
 import {
   validateSpaceName,
   validateSpaceDescription,
+  validateDisplayName,
+  validateUserBio,
   MAX_NAME_LENGTH,
+  MAX_BIO_BYTES,
+  MAX_DISPLAY_NAME_BYTES,
 } from '@quilibrium/quorum-shared';
 import {
   translateValidationResult,
@@ -583,6 +587,8 @@ export default function SpaceSettingsModal({
   const [spaceProfileDisplayName, setSpaceProfileDisplayName] = useState<string>('');
   const [spaceProfileBio, setSpaceProfileBio] = useState<string>('');
   const [spaceProfileImage, setSpaceProfileImage] = useState<string>('');
+  const [spaceProfileNameError, setSpaceProfileNameError] = useState<string | undefined>(undefined);
+  const [spaceProfileBioError, setSpaceProfileBioError] = useState<string | undefined>(undefined);
   // Snapshot of the values that are currently on the SpaceMember
   // record — used to compute "did anything actually change" so we
   // only broadcast when the user pressed Save after editing
@@ -655,6 +661,18 @@ export default function SpaceSettingsModal({
 
   const handleSaveSpaceProfile = useCallback(async () => {
     if (!user?.address || !space || !spaceProfileDirty || spaceProfileSaving) return;
+
+    // Validate against shared byte limits before saving. The per-space display
+    // name is optional (empty = "use my global/QNS name here"), so only
+    // validate a non-empty value; bio likewise.
+    const trimmedName = spaceProfileDisplayName.trim();
+    const trimmedBio = spaceProfileBio.trim();
+    const nameMsg = trimmedName ? translateValidationResult(validateDisplayName(trimmedName)) : undefined;
+    const bioMsg = trimmedBio ? translateValidationResults(validateUserBio(trimmedBio))[0] : undefined;
+    setSpaceProfileNameError(nameMsg);
+    setSpaceProfileBioError(bioMsg);
+    if (nameMsg || bioMsg) return;
+
     setSpaceProfileSaving(true);
     try {
       // Optimistically update the local SpaceMember so the UI
@@ -1580,10 +1598,14 @@ export default function SpaceSettingsModal({
       <Text style={[styles.sectionDescription, { marginTop: Skin.space(16), marginBottom: Skin.space(4) }]}>Display name</Text>
       <TextInput
         value={spaceProfileDisplayName}
-        onChangeText={setSpaceProfileDisplayName}
+        onChangeText={(t) => { setSpaceProfileDisplayName(t); if (spaceProfileNameError) setSpaceProfileNameError(undefined); }}
         placeholder={user?.displayName || user?.username || 'Your name in this space'}
         placeholderTextColor={theme.colors.textMuted}
-        maxLength={64}
+        // Coarse guard ~ MAX_DISPLAY_NAME_BYTES; the byte validator on save
+        // catches multi-byte overflow a char cap can't.
+        maxLength={MAX_DISPLAY_NAME_BYTES}
+        aria-label="Display name in this space"
+        aria-invalid={!!spaceProfileNameError}
         style={{
           backgroundColor: theme.colors.surface2,
           color: theme.colors.textMain,
@@ -1592,16 +1614,23 @@ export default function SpaceSettingsModal({
           fontSize: Skin.font(15),
         }}
       />
+      {spaceProfileNameError ? (
+        <Text style={{ color: theme.colors.danger, fontSize: Skin.font(12), marginTop: Skin.space(4) }} role="alert">
+          {spaceProfileNameError}
+        </Text>
+      ) : null}
 
       <Text style={[styles.sectionDescription, { marginTop: Skin.space(16), marginBottom: Skin.space(4) }]}>Bio</Text>
       <TextInput
         value={spaceProfileBio}
-        onChangeText={setSpaceProfileBio}
+        onChangeText={(t) => { setSpaceProfileBio(t); if (spaceProfileBioError) setSpaceProfileBioError(undefined); }}
         placeholder="Tell this space about yourself"
         placeholderTextColor={theme.colors.textMuted}
         multiline
         numberOfLines={3}
-        maxLength={280}
+        maxLength={MAX_BIO_BYTES}
+        aria-label="Bio in this space"
+        aria-invalid={!!spaceProfileBioError}
         style={{
           backgroundColor: theme.colors.surface2,
           color: theme.colors.textMain,
@@ -1612,6 +1641,11 @@ export default function SpaceSettingsModal({
           textAlignVertical: 'top',
         }}
       />
+      {spaceProfileBioError ? (
+        <Text style={{ color: theme.colors.danger, fontSize: Skin.font(12), marginTop: Skin.space(4) }} role="alert">
+          {spaceProfileBioError}
+        </Text>
+      ) : null}
 
       <TouchableOpacity
         onPress={handleSaveSpaceProfile}

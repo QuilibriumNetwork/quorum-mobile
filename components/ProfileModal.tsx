@@ -92,6 +92,16 @@ import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Sw
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logger } from '@quilibrium/quorum-shared';
+import {
+  validateDisplayName,
+  validateUserBio,
+  MAX_BIO_BYTES,
+  MAX_DISPLAY_NAME_BYTES,
+} from '@quilibrium/quorum-shared';
+import {
+  translateValidationResult,
+  translateValidationResults,
+} from '@/hooks/validation/errorTranslator';
 import * as Skin from '@/theme/skins/geometry';
 interface ProfileModalProps {
   visible: boolean;
@@ -379,6 +389,8 @@ export default function ProfileModal({
   const [isEditing, setIsEditing] = React.useState(false);
   const [editDisplayName, setEditDisplayName] = React.useState(user?.displayName || '');
   const [editBio, setEditBio] = React.useState(user?.bio || '');
+  const [nameError, setNameError] = React.useState<string | undefined>(undefined);
+  const [bioError, setBioError] = React.useState<string | undefined>(undefined);
   const [isSaving, setIsSaving] = React.useState(false);
 
   // Recovery phrase / private key display
@@ -965,10 +977,20 @@ export default function ProfileModal({
   const handleSaveProfile = async () => {
     if (!user?.address) return;
 
+    const newDisplayName = editDisplayName.trim() || '';
+    const newBio = editBio.trim() || '';
+
+    // Validate against shared byte limits before saving/broadcasting. Both
+    // fields are optional (empty = clear / use QNS), so only validate
+    // non-empty values.
+    const nameMsg = newDisplayName ? translateValidationResult(validateDisplayName(newDisplayName)) : undefined;
+    const bioMsg = newBio ? translateValidationResults(validateUserBio(newBio))[0] : undefined;
+    setNameError(nameMsg);
+    setBioError(bioMsg);
+    if (nameMsg || bioMsg) return;
+
     setIsSaving(true);
     try {
-      const newDisplayName = editDisplayName.trim() || '';
-      const newBio = editBio.trim() || '';
 
       // Update local profile
       updateProfile({
@@ -1579,11 +1601,13 @@ export default function ProfileModal({
             isEditing={isEditing}
             editDisplayName={editDisplayName}
             editBio={editBio}
-            onChangeDisplayName={setEditDisplayName}
-            onChangeBio={setEditBio}
+            onChangeDisplayName={(t) => { setEditDisplayName(t); if (nameError) setNameError(undefined); }}
+            onChangeBio={(t) => { setEditBio(t); if (bioError) setBioError(undefined); }}
             onPickImage={handlePickImage}
             onCopyAddress={handleCopyAddress}
             isApexActive={apexState.isActive}
+            nameError={nameError}
+            bioError={bioError}
           />
         )}
 
@@ -2734,6 +2758,12 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       borderBottomColor: theme.colors.primary,
       paddingVertical: Skin.space(4),
     },
+    fieldError: {
+      fontSize: Skin.font(12),
+      color: theme.colors.danger,
+      marginTop: Skin.space(2),
+      marginBottom: Skin.space(4),
+    },
     username: {
       fontSize: Skin.font(14),
       color: theme.colors.primary,
@@ -3621,6 +3651,8 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
   onPickImage,
   onCopyAddress,
   isApexActive,
+  nameError,
+  bioError,
 }: {
   styles: ProfileStyles;
   theme: AppTheme;
@@ -3635,6 +3667,9 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
   onCopyAddress: () => void;
   /** Gold Apex ring around the user's own avatar. */
   isApexActive: boolean;
+  /** Inline validation errors (shared byte validators), shown under each field. */
+  nameError?: string;
+  bioError?: string;
 }) {
   return (
     <>
@@ -3657,14 +3692,24 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
           </TouchableOpacity>
           <View style={styles.profileInfo}>
             {isEditing ? (
-              <TextInput
-                style={styles.displayNameInput}
-                value={editDisplayName}
-                onChangeText={onChangeDisplayName}
-                placeholder="Display Name"
-                placeholderTextColor={theme.colors.textMuted}
-                autoCapitalize="words"
-              />
+              <>
+                <TextInput
+                  style={styles.displayNameInput}
+                  value={editDisplayName}
+                  onChangeText={onChangeDisplayName}
+                  placeholder="Display Name"
+                  placeholderTextColor={theme.colors.textMuted}
+                  autoCapitalize="words"
+                  // Coarse guard ~ MAX_DISPLAY_NAME_BYTES; the byte validator
+                  // on save catches multi-byte overflow a char cap can't.
+                  maxLength={MAX_DISPLAY_NAME_BYTES}
+                  aria-label="Display name"
+                  aria-invalid={!!nameError}
+                />
+                {nameError ? (
+                  <Text style={styles.fieldError} role="alert">{nameError}</Text>
+                ) : null}
+              </>
             ) : (
               <Text style={styles.displayName}>
                 {user?.displayName || 'Anonymous'}
@@ -3686,16 +3731,24 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Bio</Text>
         {isEditing ? (
-          <TextInput
-            style={styles.bioInput}
-            value={editBio}
-            onChangeText={onChangeBio}
-            placeholder="Tell us about yourself..."
-            placeholderTextColor={theme.colors.textMuted}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
+          <>
+            <TextInput
+              style={styles.bioInput}
+              value={editBio}
+              onChangeText={onChangeBio}
+              placeholder="Tell us about yourself..."
+              placeholderTextColor={theme.colors.textMuted}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              maxLength={MAX_BIO_BYTES}
+              aria-label="Bio"
+              aria-invalid={!!bioError}
+            />
+            {bioError ? (
+              <Text style={styles.fieldError} role="alert">{bioError}</Text>
+            ) : null}
+          </>
         ) : (
           <View style={styles.bioContainer}>
             <Text style={styles.bioText}>
