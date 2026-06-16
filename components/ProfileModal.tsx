@@ -302,7 +302,7 @@ export default function ProfileModal({
 }: ProfileModalProps) {
   const { theme, isDark, activeSkin } = useTheme();
   const { user, signOut, updateProfile } = useAuth();
-  const { enqueueOutbound } = useWebSocket();
+  const { enqueueOutbound, subscribe } = useWebSocket();
   const { showToast } = useToast();
   const { allowSync, setAllowSync, isLoading: isSyncLoading } = useSyncSettings();
   const queryClient = useQueryClient();
@@ -911,6 +911,16 @@ export default function ProfileModal({
         });
       }
 
+      // Broadcast the avatar change to all DM partners (identity sync over
+      // established DM sessions). Avatar-only: send userIcon, not displayName.
+      // Fire-and-forget — the service dedupes per partner and never throws.
+      void import('@/services/dm/dmProfileService').then(({ broadcastProfileToAllDMs }) =>
+        broadcastProfileToAllDMs(
+          { selfAddress: user.address, userIcon: profileImage },
+          { enqueueOutbound, subscribe },
+        ),
+      );
+
       // Mirror to the public-profile endpoint when the user is public.
       // Re-derive the Farcaster link each publish so the by-fid index
       // stays current — cheap (in-memory crypto over a 32-byte key) and
@@ -999,6 +1009,21 @@ export default function ProfileModal({
           return envelopes;
         });
       }
+
+      // Broadcast the name/bio change to all DM partners. Match the space
+      // loop's field convention: displayName always (this handler owns it),
+      // bio gated on the public-profile toggle. Fire-and-forget + per-partner
+      // dedup inside the service.
+      void import('@/services/dm/dmProfileService').then(({ broadcastProfileToAllDMs }) =>
+        broadcastProfileToAllDMs(
+          {
+            selfAddress: user.address,
+            displayName: newDisplayName || undefined,
+            bio: user.isProfilePublic ? newBio : undefined,
+          },
+          { enqueueOutbound, subscribe },
+        ),
+      );
 
       // If the user's profile is public, also re-publish to the public
       // endpoint so non-space-members who look us up see the latest.
