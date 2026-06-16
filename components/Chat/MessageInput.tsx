@@ -235,7 +235,11 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   // Keyboard <-> emoji-panel choreography. The panel opens downward,
   // replacing the keyboard in the same footprint.
   const composerPanel = useComposerPanel({
-    bottomInset: Skin.space(8) + bottomInset,
+    // Resting gap below the pill carries only a genuine safe-area inset (passed
+    // by screens with no tab bar to cover it). The small constant gap is the
+    // pill's own marginBottom, applied in BOTH states — so the no-keyboard
+    // spacing matches the tighter keyboard-up spacing instead of being larger.
+    bottomInset,
     bottomChromeHeight,
   });
   const showEmojiPicker = composerPanel.panelOpen;
