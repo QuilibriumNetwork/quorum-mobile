@@ -895,7 +895,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
             {isSending ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <SendIcon color="#fff" size={18} />
+              <SendIcon color="#fff" size={20} />
             )}
           </TouchableOpacity>
         </View>
@@ -1026,15 +1026,19 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   // the last line; for a single line everything lands on the same baseline.
   pill: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    // Self-sizing: the row height is defined by its tallest child (the 36px
+    // controls), and `center` keeps the text and controls on one baseline on
+    // every device instead of relying on per-device text metrics. No fixed
+    // pill height — it adapts to the font/line-height the device renders.
+    alignItems: 'center',
     backgroundColor: theme.colors.surface5,
     // Large radius => the short ends are always perfect semicircles regardless
-    // of the pill's current height (single line vs wrapped).
+    // of the pill's resolved height (single line vs wrapped).
     borderRadius: 999,
-    paddingVertical: Skin.space(4),
-    paddingLeft: Skin.space(4),
-    // Keep the send circle hugging the pill's right edge (~1px gap).
-    paddingRight: 1,
+    // Uniform inner padding on all four sides: the send circle then has the
+    // same gap to the right edge as it does to the top/bottom, so it reads as
+    // evenly inset (snug but balanced) rather than cramped against one side.
+    padding: Skin.space(4),
     // A small breathing gap between the pill and whatever sits below it
     // (the keyboard or the emoji panel), so the pill never touches them.
     marginBottom: Skin.space(8),
@@ -1052,26 +1056,27 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flex: 1,
     color: theme.colors.textMain,
     paddingHorizontal: Skin.space(8),
-    // Zero vertical padding: the 36px line box (minHeight) plus the pill's own
-    // 4px vertical padding gives a ~44px single-line pill. textAlignVertical
-    // centers the glyphs so they don't sit low.
-    paddingTop: 0,
-    paddingBottom: 0,
+    // No vertical padding and no minHeight: the input's height is its own
+    // line-height (single line) and grows naturally up to maxHeight when
+    // wrapped. The parent's `alignItems: center` + the 36px controls keep a
+    // single line vertically centered without device-specific magic numbers.
+    paddingVertical: 0,
     fontFamily: theme.fonts.regular.fontFamily,
     fontSize: Skin.font(16),
     lineHeight: Skin.font(22),
     maxHeight: 120,
-    // Match the 36px send/button height so a single line is vertically centered
-    // against them and the pill resolves to ~44px tall.
-    minHeight: 36,
+    // Android adds extra font padding above/below the glyphs that throws off
+    // vertical centering in a flex row; disabling it makes the text box equal
+    // its lineHeight so it centers cleanly. (No-op / ignored on iOS.)
+    includeFontPadding: false,
   },
   inputIconButton: {
     padding: Skin.space(6),
   },
   sendButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
