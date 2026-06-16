@@ -8,7 +8,7 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 
 import {
@@ -427,26 +427,12 @@ export const DMChatArea = React.memo(function DMChatArea({
     }
   }, [isBookmarked, bookmarks, addBookmark, removeBookmark, conversationId, conversationData]);
 
-  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
-      setAndroidKeyboardHeight(e.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-      setAndroidKeyboardHeight(0);
-    });
-    return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
-
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  // Keyboard avoidance is owned by the composer itself (it grows an animated
+  // spacer that follows the keyboard), so the chat area is a plain flex column.
   return (
-    <KeyboardAvoidingView
-      style={[styles.chatArea, Platform.OS === 'android' && androidKeyboardHeight > 0 && { paddingBottom: androidKeyboardHeight - tabBarHeight / 2 - 10 }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
-    >
+    <View style={styles.chatArea}>
       {dmSearch.isSearchOpen && (
         <SearchBar
           query={dmSearch.query}
@@ -498,6 +484,7 @@ export const DMChatArea = React.memo(function DMChatArea({
         pendingAttachment={pendingAttachment}
         onClearAttachment={handleClearAttachment}
         bottomInset={0}
+        bottomChromeHeight={tabBarHeight}
         replyTo={replyToMessage}
         onDismissReply={handleDismissReply}
         editingMessage={editingMessage}
@@ -522,7 +509,7 @@ export const DMChatArea = React.memo(function DMChatArea({
         onClose={() => setReportTarget(null)}
         target={reportTarget}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 });
 

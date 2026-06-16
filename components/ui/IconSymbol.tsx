@@ -135,6 +135,7 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
 
   // Add / remove
   'plus': tabler('IconPlus'),
+  'keyboard': tabler('IconKeyboard'),
   'minus': tabler('IconMinus'),
   'plus.circle': tabler('IconCirclePlus'),
   'plus.circle.fill': tabler('IconCirclePlus', 'IconCirclePlusFilled'),

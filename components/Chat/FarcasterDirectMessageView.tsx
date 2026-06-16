@@ -4,7 +4,7 @@
  */
 
 import type { AppTheme } from '@/theme';
-import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,9 +12,6 @@ import {
   Image,
   Dimensions,
   Alert,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { DMChatHeader } from './DMChatHeader';
 import { MessagesList } from './MessagesList';
@@ -250,33 +247,10 @@ export function FarcasterDirectMessageView({
   const displayName = conversation.displayName ||
     (conversation.farcasterUsername ? `@${conversation.farcasterUsername}` : 'Unknown');
 
-  // Android KeyboardAvoidingView's `padding` behavior is unreliable when the
-  // screen sits inside a parent that already has paddingBottom (the tab bar
-  // inset on the DM screen). Subscribe to the keyboard directly and pad the
-  // bottom ourselves — matching DMChatArea's tuned offset.
-  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
-      setAndroidKeyboardHeight(e.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-      setAndroidKeyboardHeight(0);
-    });
-    return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
-
+  // Keyboard avoidance is owned by the composer itself (it grows an animated
+  // spacer that follows the keyboard), so the container is a plain flex column.
   return (
-    <KeyboardAvoidingView
-      style={[
-        styles.container,
-        Platform.OS === 'android' && androidKeyboardHeight > 0 && {
-          paddingBottom: androidKeyboardHeight - tabBarHeight / 2 - 10,
-        },
-      ]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
-    >
+    <View style={styles.container}>
       {/* Security warning banner */}
       <View style={styles.warningBanner}>
         <Image source={FarcasterLogo} style={styles.warningIcon} />
@@ -316,8 +290,9 @@ export function FarcasterDirectMessageView({
         pendingAttachment={pendingAttachment}
         onClearAttachment={handleClearAttachment}
         bottomInset={bottomInset}
+        bottomChromeHeight={tabBarHeight}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

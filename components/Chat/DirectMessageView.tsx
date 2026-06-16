@@ -5,7 +5,7 @@
 import type { AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, Image, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -71,12 +71,10 @@ export function DirectMessageView({
     setMessageText('');
   }, [messageText, onSendMessage]);
 
+  // Keyboard avoidance is owned by the composer itself (it grows an animated
+  // spacer that follows the keyboard), so the container is a plain flex column.
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
-    >
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
@@ -126,9 +124,10 @@ export function DirectMessageView({
           channelName={displayName}
           theme={theme}
           isSending={isSending}
+          bottomInset={insets.bottom}
         />
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -178,7 +177,8 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       flex: 1,
     },
     inputContainer: {
-      paddingBottom: insets.bottom,
+      // The composer owns its own bottom safe-area gap (passed as bottomInset),
+      // so the wrapper adds no padding to avoid double-counting it.
     },
   });
 

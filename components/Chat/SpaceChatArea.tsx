@@ -8,7 +8,7 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Keyboard, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useHeaderHeight } from '@react-navigation/elements';
 
@@ -626,29 +626,12 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
     }
   }, [isBookmarked, bookmarks, addBookmark, removeBookmark, spaceId, channelId, selectedConversationId, isDMsSelected]);
 
-  // On Android, track keyboard height manually since adjustResize doesn't
-  // work reliably on foldables and edge-to-edge devices.
-  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
-      logger.debug(`[Keyboard] height=${e.endCoordinates.height} screenY=${e.endCoordinates.screenY} screenH=${e.endCoordinates.screenX} tabBar=${tabBarHeight}`);
-      setAndroidKeyboardHeight(e.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-      setAndroidKeyboardHeight(0);
-    });
-    return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
-
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  // Keyboard avoidance is owned by the composer itself (it grows an animated
+  // spacer that follows the keyboard), so the chat area is a plain flex column.
   return (
-    <KeyboardAvoidingView
-      style={[styles.chatArea, Platform.OS === 'android' && androidKeyboardHeight > 0 && { paddingBottom: androidKeyboardHeight - tabBarHeight / 2 - 10 }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
-    >
+    <View style={styles.chatArea}>
       <View style={styles.chatAreaInner}>
         {spaceSearch.isSearchOpen && (
           <SearchBar
@@ -745,6 +728,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             pendingAttachment={pendingAttachment}
             onClearAttachment={handleClearAttachment}
             bottomInset={0}
+            bottomChromeHeight={tabBarHeight}
             replyTo={replyToMessage}
             onDismissReply={handleDismissReply}
             castReplyAvailable={isCastReply && Boolean(farcasterAuthToken)}
@@ -796,7 +780,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         onClose={() => setReportTarget(null)}
         target={reportTarget}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 });
 
