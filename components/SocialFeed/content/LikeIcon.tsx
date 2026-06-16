@@ -6,11 +6,9 @@
 
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
-
-// Logo images
-const QuilibriumLogo = require('@/assets/images/qlogo.png');
-const QuorumLogo = require('@/assets/images/icon.png');
+import { StyleSheet, Text, View } from 'react-native';
+import { QuilibriumLogoIcon } from './QuilibriumLogoIcon';
+import { QuorumLogoIcon } from './QuorumLogoIcon';
 
 export enum LikeIconType {
   Standard = 'standard',
@@ -91,30 +89,10 @@ export function LikeIcon({ type, isLiked, color, activeColor, size }: LikeIconPr
 
   switch (type) {
     case LikeIconType.Quilibrium:
-      return (
-        <Image
-          source={QuilibriumLogo}
-          style={{
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            opacity: isLiked ? 1 : 0.6,
-          }}
-        />
-      );
+      return <QuilibriumLogoIcon size={size} opacity={isLiked ? 1 : 0.6} />;
 
     case LikeIconType.Quorum:
-      return (
-        <Image
-          source={QuorumLogo}
-          style={{
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            opacity: isLiked ? 1 : 0.6,
-          }}
-        />
-      );
+      return <QuorumLogoIcon size={size} opacity={isLiked ? 1 : 0.6} />;
 
     case LikeIconType.GM:
       return <BoldText text="GM" color={displayColor} size={size} />;
