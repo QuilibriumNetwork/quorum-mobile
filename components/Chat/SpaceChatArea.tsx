@@ -728,6 +728,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             pendingAttachment={pendingAttachment}
             onClearAttachment={handleClearAttachment}
             bottomInset={0}
+            bottomChromeHeight={tabBarHeight}
             replyTo={replyToMessage}
             onDismissReply={handleDismissReply}
             castReplyAvailable={isCastReply && Boolean(farcasterAuthToken)}

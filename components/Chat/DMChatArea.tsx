@@ -484,6 +484,7 @@ export const DMChatArea = React.memo(function DMChatArea({
         pendingAttachment={pendingAttachment}
         onClearAttachment={handleClearAttachment}
         bottomInset={0}
+        bottomChromeHeight={tabBarHeight}
         replyTo={replyToMessage}
         onDismissReply={handleDismissReply}
         editingMessage={editingMessage}

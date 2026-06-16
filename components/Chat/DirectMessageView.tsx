@@ -124,6 +124,7 @@ export function DirectMessageView({
           channelName={displayName}
           theme={theme}
           isSending={isSending}
+          bottomInset={insets.bottom}
         />
       </View>
     </View>
@@ -176,7 +177,8 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       flex: 1,
     },
     inputContainer: {
-      paddingBottom: insets.bottom,
+      // The composer owns its own bottom safe-area gap (passed as bottomInset),
+      // so the wrapper adds no padding to avoid double-counting it.
     },
   });
 

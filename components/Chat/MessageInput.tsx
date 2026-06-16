@@ -46,6 +46,12 @@ interface MessageInputProps {
   onDismissReply?: () => void;
   /** Bottom safe area inset */
   bottomInset?: number;
+  /**
+   * Height of bottom chrome (e.g. a tab bar) the composer already sits above.
+   * The keyboard/panel footprint is reduced by this so the pill lands exactly
+   * on top of the keyboard instead of overshooting it.
+   */
+  bottomChromeHeight?: number;
   /** Custom emojis for the space */
   customEmojis?: Emoji[];
   /** Stickers for the space */
@@ -201,6 +207,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   replyTo,
   onDismissReply,
   bottomInset = 0,
+  bottomChromeHeight = 0,
   customEmojis = [],
   stickers = [],
   onSendSticker,
@@ -229,7 +236,10 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   onChangeTextRef.current = onChangeText;
   // Keyboard <-> emoji-panel choreography. The panel opens downward,
   // replacing the keyboard in the same footprint.
-  const composerPanel = useComposerPanel({ bottomInset: Skin.space(8) + bottomInset });
+  const composerPanel = useComposerPanel({
+    bottomInset: Skin.space(8) + bottomInset,
+    bottomChromeHeight,
+  });
   const showEmojiPicker = composerPanel.panelOpen;
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('smileys');
   const [searchQuery, setSearchQuery] = useState('');
@@ -322,6 +332,11 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   const handleTextChange = useCallback((newText: string) => {
     onChangeText(newText);
 
+    // Typing dismisses the emoji panel. The soft-keyboard path already does
+    // this via the input's onFocus, but a hardware/Bluetooth keyboard types
+    // into an already-focused input without re-firing focus, so close here too.
+    composerPanel.closePanel();
+
     // Find the word being typed at cursor position
     const textUpToCursor = newText.slice(0, cursorPosition + (newText.length - value.length));
     const lastAtIndex = textUpToCursor.lastIndexOf('@');
@@ -355,7 +370,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     // No trigger found
     setAutocompleteType(null);
     setAutocompleteQuery('');
-  }, [onChangeText, cursorPosition, value, channels]);
+  }, [onChangeText, cursorPosition, value, channels, composerPanel]);
 
   // Filter members for mention autocomplete - search by display name, name, or address
   const filteredMembers = useMemo(() => {
@@ -477,7 +492,11 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   const isComposing = value.trim().length > 0;
 
   // The emoji grid markup, rendered inside the downward panel below the pill.
-  const emojiPanelContent = (
+  // Memoized and gated on `showEmojiPicker` so the (potentially hundreds of
+  // nodes) grid isn't rebuilt on every keystroke while the panel is closed.
+  const emojiPanelContent = useMemo(() => {
+    if (!showEmojiPicker) return null;
+    return (
     <View style={styles.emojiPanelInner}>
       {/* Search bar */}
       <View style={styles.searchContainer}>
@@ -655,7 +674,23 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         )}
       </ScrollView>
     </View>
-  );
+    );
+  }, [
+    showEmojiPicker,
+    searchQuery,
+    selectedCategory,
+    categories,
+    displayEmojis,
+    filteredEmojis,
+    filteredCustomEmojis,
+    filteredStickers,
+    customEmojis,
+    stickers,
+    handleSelectEmoji,
+    handleSelectSticker,
+    styles,
+    theme,
+  ]);
 
   return (
     <View style={[styles.container, containerDynamicStyle]}>
@@ -869,7 +904,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           the pill rides up (keyboard avoidance). Open: it holds the keyboard
           footprint and shows the emoji panel — no layout jump on swap. */}
       <Reanimated.View style={spacerAnimatedStyle}>
-        {showEmojiPicker && emojiPanelContent}
+        {emojiPanelContent}
       </Reanimated.View>
     </View>
   );

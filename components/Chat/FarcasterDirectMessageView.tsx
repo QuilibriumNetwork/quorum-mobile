@@ -290,6 +290,7 @@ export function FarcasterDirectMessageView({
         pendingAttachment={pendingAttachment}
         onClearAttachment={handleClearAttachment}
         bottomInset={bottomInset}
+        bottomChromeHeight={tabBarHeight}
       />
     </View>
   );
