@@ -311,11 +311,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
             // Config sync runs in parallel with encryption setup.
             //
             // This is the config -> user read-back bridge. Synced config fields
-            // (name, profile_image, bio, isProfilePublic) arrive from the server
-            // but only name/profile_image were previously copied into `user`, so
-            // a value set on another device (e.g. the public-profile toggle)
-            // never reached this device's `user` and showed stale. We now also
-            // bridge bio + isProfilePublic.
+            // (name, profile_image, bio, isProfilePublic, primaryUsername) arrive
+            // from the server but only name/profile_image were previously copied
+            // into `user`, so a value set on another device (e.g. the
+            // public-profile toggle or the primary QNS username) never reached
+            // this device's `user` and showed stale. We now also bridge
+            // bio + isProfilePublic + primaryUsername.
             //
             // Precedence: config sync is last-write-wins by server timestamp
             // (saveConfig stamps config.timestamp = Date.now()). Only let the
@@ -358,6 +359,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     ...(configIsNewer && {
                       bio: config.bio ?? base.bio,
                       isProfilePublic: guardPublic,
+                      primaryUsername: config.primaryUsername ?? base.primaryUsername,
                     }),
                   };
                 });
@@ -374,6 +376,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
                       neverStamped && cur.isProfilePublic === false && remotePublic
                         ? false
                         : remotePublic,
+                    primaryUsername: config.primaryUsername ?? cur.primaryUsername,
                   }),
                 };
                 mmkvStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(merged));
@@ -491,7 +494,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         try {
           const config = await getConfig(prev.address);
           if (config.allowSync) {
-            const configUpdates: { name?: string; profile_image?: string; bio?: string; isProfilePublic?: boolean } = {};
+            const configUpdates: { name?: string; profile_image?: string; bio?: string; isProfilePublic?: boolean; primaryUsername?: string } = {};
             if (updates.displayName !== undefined) {
               configUpdates.name = updates.displayName;
             }
@@ -503,6 +506,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
             }
             if (updates.isProfilePublic !== undefined) {
               configUpdates.isProfilePublic = updates.isProfilePublic;
+            }
+            if (updates.primaryUsername !== undefined) {
+              configUpdates.primaryUsername = updates.primaryUsername;
             }
 
             if (Object.keys(configUpdates).length > 0) {
