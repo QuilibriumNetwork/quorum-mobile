@@ -22,6 +22,13 @@ export interface ComposerPanelOptions {
    * the top of the keyboard.
    */
   bottomChromeHeight?: number;
+  /**
+   * Called synchronously whenever the panel opens (true) or closes (false).
+   * Fired inside the open/close actions (not via an effect) so dependent UI —
+   * e.g. hiding the bottom tab bar — reacts in the same tick with no extra
+   * render-cycle latency.
+   */
+  onPanelVisibilityChange?: (open: boolean) => void;
 }
 
 /**
@@ -74,7 +81,11 @@ function rememberSessionKeyboardHeight(height: number) {
 }
 
 export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPanel {
-  const { bottomInset = 0, bottomChromeHeight = 0 } = options;
+  const { bottomInset = 0, bottomChromeHeight = 0, onPanelVisibilityChange } = options;
+  // Keep the latest callback in a ref so the open/close callbacks don't need it
+  // in their dep arrays (which would re-create them every render).
+  const onVisibilityRef = useRef(onPanelVisibilityChange);
+  onVisibilityRef.current = onPanelVisibilityChange;
   const { height: keyboardHeight, progress: keyboardProgress } = useReanimatedKeyboardAnimation();
   // Last real keyboard height we've observed, kept on the UI thread for the
   // spacer worklet. Seeded from the session cache so a panel opened before this
@@ -161,6 +172,7 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     openedWithKeyboardRef.current = KeyboardController.isVisible();
     panelOpenRef.current = true;
     panelOpenSV.value = 1;
+    onVisibilityRef.current?.(true);
     setPanelOpen(true);
     // keepFocus: true hides the soft keyboard but leaves the TextInput focused,
     // so the blinking caret stays visible and emojis insert at the cursor.
@@ -177,6 +189,7 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     closingSV.value = 0;
     panelOpenRef.current = false;
     panelOpenSV.value = 0;
+    onVisibilityRef.current?.(false);
     setPanelOpen(false);
   }, [panelOpenSV, closingSV]);
 
@@ -201,6 +214,7 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     }
     panelOpenRef.current = false;
     panelOpenSV.value = 0;
+    onVisibilityRef.current?.(false);
     setPanelOpen(false);
   }, [panelOpenSV, closingSV]);
 
@@ -220,6 +234,7 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     closingSV.value = 1;
     panelOpenRef.current = false;
     panelOpenSV.value = 0;
+    onVisibilityRef.current?.(false);
     setPanelOpen(false);
   }, [panelOpenSV, closingSV]);
 

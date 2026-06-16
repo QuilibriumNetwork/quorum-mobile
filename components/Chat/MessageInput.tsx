@@ -242,6 +242,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     // spacing matches the tighter keyboard-up spacing instead of being larger.
     bottomInset,
     bottomChromeHeight,
+    // Publish open/close synchronously (in the toggle action, not via an effect)
+    // so the tab bar hides/shows in the same tick — no extra render-cycle lag.
+    onPanelVisibilityChange: composerPanelVisibleStore.set,
   });
   const showEmojiPicker = composerPanel.panelOpen;
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('smileys');
@@ -268,13 +271,10 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     }
   }, [showEmojiPicker, refreshRecent]);
 
-  // Publish the panel's open state so the Tabs layout can hide the bottom tab
-  // bar (more room for emojis) and the chat screen can drop its bottom-chrome
-  // height so the panel extends into the freed space. Reset to false on unmount
-  // so a composer leaving the tree never leaves the tab bar hidden.
-  useEffect(() => {
-    composerPanelVisibleStore.set(showEmojiPicker);
-  }, [showEmojiPicker]);
+  // The panel's open/close is published synchronously via the hook's
+  // onPanelVisibilityChange (see useComposerPanel call above). This effect only
+  // guards unmount: a composer leaving the tree must never leave the tab bar
+  // hidden.
   useEffect(() => () => composerPanelVisibleStore.set(false), []);
 
   // Autocomplete state
