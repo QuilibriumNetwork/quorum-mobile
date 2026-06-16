@@ -1031,7 +1031,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     // every device instead of relying on per-device text metrics. No fixed
     // pill height — it adapts to the font/line-height the device renders.
     alignItems: 'center',
-    backgroundColor: theme.colors.surface5,
+    // Same shade as the emoji panel so the pill and the panel read as one
+    // continuous surface.
+    backgroundColor: theme.colors.surface4,
     // Large radius => the short ends are always perfect semicircles regardless
     // of the pill's resolved height (single line vs wrapped).
     borderRadius: 999,
