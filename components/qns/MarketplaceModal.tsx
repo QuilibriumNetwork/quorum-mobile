@@ -11,6 +11,7 @@ import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BuyNameModal from './BuyNameModal';
 import * as Skin from '@/theme/skins/geometry';
@@ -202,19 +203,18 @@ export default function MarketplaceModal({
 
         {/* Sort Options */}
         <View style={styles.sortContainer}>
-          {(['newest', 'price_low', 'price_high'] as SortOption[]).map(option => (
-            <TouchableOpacity
-              key={option}
-              style={[styles.sortChip, sortBy === option && styles.sortChipActive]}
-              onPress={() => setSortBy(option)}
-            >
-              <Text
-                style={[styles.sortChipText, sortBy === option && styles.sortChipTextActive]}
-              >
-                {option === 'newest' ? 'Newest' : option === 'price_low' ? 'Price ↑' : 'Price ↓'}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          <SegmentedPills
+            variant="solid"
+            wrap
+            itemRole="button"
+            items={[
+              { key: 'newest', label: 'Newest' },
+              { key: 'price_low', label: 'Price ↑' },
+              { key: 'price_high', label: 'Price ↓' },
+            ]}
+            activeKey={sortBy}
+            onChange={(key) => setSortBy(key as SortOption)}
+          />
           {resaleInfo && (
             <Text style={styles.feeInfo}>{resaleInfo.platform_fee_percent}% fee</Text>
           )}
@@ -294,27 +294,6 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       paddingHorizontal: Skin.space(20),
       marginBottom: Skin.space(12),
       gap: Skin.space(8),
-    },
-    sortChip: {
-      paddingVertical: Skin.space(6),
-      paddingHorizontal: Skin.space(12),
-      borderRadius: Skin.radius(16),
-      backgroundColor: theme.colors.surface2,
-      borderWidth: Skin.border(1),
-      borderColor: theme.colors.surface3,
-    },
-    sortChipActive: {
-      backgroundColor: theme.colors.primary,
-      borderColor: theme.colors.primary,
-    },
-    sortChipText: {
-      fontSize: Skin.font(12),
-      color: theme.colors.textMain,
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-    },
-    sortChipTextActive: {
-      color: '#fff',
     },
     feeInfo: {
       fontSize: Skin.font(11),
