@@ -37,7 +37,10 @@ import {
 import {
   useAddGroup,
   useMoveChannel,
+  useReorderChannels,
 } from '@/hooks/chat';
+import { DraggableChannelGroup } from '@/components/SpaceSettings/DraggableChannelGroup';
+import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useSpaceMembers } from '@/hooks/chat/useSpaces';
 import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
 import { useUserMuting } from '@/hooks/chat/useUserMuting';
@@ -63,7 +66,7 @@ import { truncateAddress } from '@/utils/formatAddress';
 import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, type Emoji, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
 import { resolveChannelIconColor } from '@/utils/channelIcon';
 import * as Clipboard from 'expo-clipboard';
-import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { UserProfileInfo } from '@/components/UserProfileModal';
 
 const UserProfileModal = React.lazy(() => import('@/components/UserProfileModal'));
@@ -788,6 +791,8 @@ export default function SpaceSettingsModal({
   // Channels
   const addGroupMutation = useAddGroup();
   const moveChannelMutation = useMoveChannel();
+  const reorderChannelsMutation = useReorderChannels();
+  const channelsScrollRef = useRef<React.ComponentRef<typeof GHScrollView>>(null);
 
   // Members
   const { data: members = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
@@ -1243,6 +1248,19 @@ export default function SpaceSettingsModal({
       // Mutation handles its own error state
     }
   }, [space, spaceId, moveChannelMutation]);
+
+  const handleReorderChannels = useCallback(
+    async (groupIndex: number, channelOrder: string[]) => {
+      try {
+        await reorderChannelsMutation.mutateAsync({ spaceId, groupIndex, channelOrder });
+        const updated = getSpace(spaceId);
+        setSpace(updated);
+      } catch {
+        // mutation handles its own error state
+      }
+    },
+    [spaceId, reorderChannelsMutation],
+  );
 
   const handleDeleteSpace = useCallback(async () => {
     setShowDeleteSpaceConfirm(false);
@@ -1832,44 +1850,25 @@ export default function SpaceSettingsModal({
           </View>
 
           {/* Channels List */}
-          {group.channels.map((channel, channelIndex) => (
-            <View key={channel.channelId} style={styles.channelItem}>
-              <TouchableOpacity
-                style={[styles.channelIconButton, channel.icon && { backgroundColor: resolveChannelIconColor(channel.iconColor, theme.colors.textMuted) + '20' }]}
-                onPress={() => setDrawerTarget({ kind: 'channel', spaceId, groupIndex, channelId: channel.channelId })}
-              >
-                <IconSymbol
-                  name={(channel.icon || 'hashtag') as IconSymbolName}
-                  size={14}
-                  color={resolveChannelIconColor(channel.iconColor, theme.colors.textMuted)}
-                  variant={channel.iconVariant ?? 'outline'}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.channelNameContainer}
-                onPress={() => setDrawerTarget({ kind: 'channel', spaceId, groupIndex, channelId: channel.channelId })}
-              >
-                <Text style={styles.channelName}>{channel.channelName}</Text>
-              </TouchableOpacity>
-              <ChannelStatusGlyphs channel={channel} defaultChannelId={space?.defaultChannelId ?? ''} />
-              <View style={styles.channelActions}>
-                <TouchableOpacity
-                  style={[styles.channelArrowButton, channelIndex === 0 && styles.channelArrowDisabled]}
-                  onPress={() => handleMoveChannelUp(groupIndex, channelIndex)}
-                  disabled={channelIndex === 0}
-                >
-                  <IconSymbol name="chevron.up" size={14} color={channelIndex === 0 ? theme.colors.surface5 : theme.colors.textMuted} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.channelArrowButton, channelIndex === group.channels.length - 1 && styles.channelArrowDisabled]}
-                  onPress={() => handleMoveChannelDown(groupIndex, channelIndex)}
-                  disabled={channelIndex === group.channels.length - 1}
-                >
-                  <IconSymbol name="chevron.down" size={14} color={channelIndex === group.channels.length - 1 ? theme.colors.surface5 : theme.colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
+          <DraggableChannelGroup
+            groupIndex={groupIndex}
+            channels={group.channels}
+            defaultChannelId={space?.defaultChannelId ?? ''}
+            scrollRef={channelsScrollRef}
+            resolveIconColor={resolveChannelIconColor}
+            onOpenChannel={(channelId) =>
+              setDrawerTarget({ kind: 'channel', spaceId, groupIndex, channelId })
+            }
+            renderStatusGlyphs={(channel) => (
+              <ChannelStatusGlyphs
+                channel={channel}
+                defaultChannelId={space?.defaultChannelId ?? ''}
+              />
+            )}
+            onMoveUp={handleMoveChannelUp}
+            onMoveDown={handleMoveChannelDown}
+            onReorder={handleReorderChannels}
+          />
 
           {group.channels.length === 0 && (
             <Text style={styles.emptyGroupText}>No channels in this group</Text>
@@ -3240,17 +3239,6 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       paddingHorizontal: Skin.space(8),
       paddingVertical: Skin.space(4),
       flex: 1,
-    },
-    channelActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Skin.space(2),
-    },
-    channelArrowButton: {
-      padding: Skin.space(6),
-    },
-    channelArrowDisabled: {
-      opacity: 0.3,
     },
     channelDeleteButton: {
       padding: Skin.space(6),
