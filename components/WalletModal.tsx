@@ -425,74 +425,33 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
           ScrollView for explicit reloads. */}
       {hasWarpcastWallet && (
         <View style={styles.header}>
-          <View style={styles.walletSwitcher}>
-            <TouchableOpacity
-              style={[
-                styles.walletSwitcherOption,
-                activeType === 'builtin' && styles.walletSwitcherOptionActive,
-              ]}
-              onPress={() => switchWallet('builtin')}
-            >
-              <Text style={[
-                styles.walletSwitcherText,
-                activeType === 'builtin' && styles.walletSwitcherTextActive,
-              ]}>
-                Quorum
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.walletSwitcherOption,
-                activeType === 'warpcast' && styles.walletSwitcherOptionActive,
-              ]}
-              onPress={() => switchWallet('warpcast')}
-            >
-              <Text style={[
-                styles.walletSwitcherText,
-                activeType === 'warpcast' && styles.walletSwitcherTextActive,
-              ]}>
-                Warpcast
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <SegmentedPills
+            variant="segmented"
+            scrollable={false}
+            items={[
+              { key: 'builtin', label: 'Quorum' },
+              { key: 'warpcast', label: 'Warpcast' },
+            ]}
+            activeKey={activeType}
+            onChange={(key) => switchWallet(key as 'builtin' | 'warpcast')}
+          />
         </View>
       )}
 
       {/* Tab Switcher */}
-      <View style={styles.tabSwitcher}>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'assets' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('assets')}
-        >
-          <Text numberOfLines={1} style={[styles.tabButtonText, activeTab === 'assets' && styles.tabButtonTextActive]}>
-            Assets
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'collectibles' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('collectibles')}
-        >
-          <Text numberOfLines={1} style={[styles.tabButtonText, activeTab === 'collectibles' && styles.tabButtonTextActive]}>
-            Collectibles
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'addresses' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('addresses')}
-        >
-          <Text numberOfLines={1} style={[styles.tabButtonText, activeTab === 'addresses' && styles.tabButtonTextActive]}>
-            Addresses
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'history' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('history')}
-        >
-          <Text numberOfLines={1} style={[styles.tabButtonText, activeTab === 'history' && styles.tabButtonTextActive]}>
-            History
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <SegmentedPills
+        style={styles.tabSwitcher}
+        variant="segmented"
+        scrollable={false}
+        items={[
+          { key: 'assets', label: 'Assets' },
+          { key: 'collectibles', label: 'Collectibles' },
+          { key: 'addresses', label: 'Addresses' },
+          { key: 'history', label: 'History' },
+        ]}
+        activeKey={activeTab}
+        onChange={(key) => setActiveTab(key as typeof activeTab)}
+      />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -1316,62 +1275,13 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       ...theme.textStyles.title3,
       color: theme.colors.textMain,
     },
-    walletSwitcher: {
-      flexDirection: 'row',
-      backgroundColor: theme.colors.surface2,
-      borderRadius: Skin.radius(8),
-      padding: Skin.space(2),
-    },
-    walletSwitcherOption: {
-      paddingHorizontal: Skin.space(10),
-      paddingVertical: Skin.space(4),
-      borderRadius: Skin.radius(6),
-    },
-    walletSwitcherOptionActive: {
-      backgroundColor: theme.colors.background,
-    },
-    walletSwitcherText: {
-      ...theme.textStyles.caption1,
-      color: theme.colors.textMuted,
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-    },
-    walletSwitcherTextActive: {
-      color: theme.colors.textMain,
-    },
     scrollContent: {
       flex: 1,
       paddingHorizontal: Skin.space(20),
     },
     tabSwitcher: {
-      flexDirection: 'row',
       marginHorizontal: Skin.space(20),
       marginBottom: Skin.space(12),
-      backgroundColor: theme.colors.surface2,
-      borderRadius: Skin.radius(12),
-      padding: Skin.space(3),
-      justifyContent: 'space-between',
-    },
-    tabButton: {
-      paddingVertical: Skin.space(7),
-      paddingHorizontal: Skin.space(10),
-      alignItems: 'center',
-      borderRadius: Skin.radius(9),
-      flex: 1,
-    },
-    tabButtonActive: {
-      backgroundColor: theme.colors.background,
-    },
-    tabButtonText: {
-      ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-    },
-    tabButtonTextActive: {
-      color: theme.colors.textMain,
-      fontFamily: theme.fonts.bold.fontFamily,
-      fontWeight: theme.fonts.bold.fontWeight,
     },
     evmOnlyNote: {
       flexDirection: 'row',

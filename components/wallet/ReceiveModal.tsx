@@ -122,6 +122,7 @@ export default function ReceiveModal({ visible, onClose, defaultChain }: Receive
           style={styles.chainSelectorScroll}
           contentContainerStyle={styles.chainSelector}
           variant="solid"
+          pillShape="rect"
           itemRole="button"
           items={(['ethereum', 'bitcoin', 'solana', 'kaspa', 'bittensor'] as ChainOption[]).map<SegmentedPillItem>((chain) => ({
             key: chain,
