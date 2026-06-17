@@ -1842,9 +1842,6 @@ export default function SwapModal({ visible, onClose, initialBuyToken }: SwapMod
                       key: chain,
                       label: getChainName(chain),
                       accentColor: getChainColor(chain),
-                      leading: (
-                        <View style={[styles.chainChipDot, { backgroundColor: getChainColor(chain) }]} />
-                      ),
                     }))}
                     activeKey={manualChain}
                     onChange={setManualChain}
@@ -2475,10 +2472,5 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     chainSelector: {
       marginBottom: Skin.space(8),
-    },
-    chainChipDot: {
-      width: 8,
-      height: 8,
-      borderRadius: Skin.radius(4),
     },
   });

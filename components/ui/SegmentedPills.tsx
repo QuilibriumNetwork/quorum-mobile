@@ -121,6 +121,10 @@ export function SegmentedPills({
     const isActive = item.key === activeKey;
     const itemAccent = item.danger ? theme.colors.danger : item.accentColor ?? theme.colors.primary;
 
+    // Whether this pill carries its own (non-accent) tint color — chains pass a
+    // brand accentColor; danger uses the danger color.
+    const hasItemColor = Boolean(item.accentColor) || Boolean(item.danger);
+
     // Foreground (text + icon) color.
     const fg = isActive
       ? variant === 'solid'
@@ -128,14 +132,14 @@ export function SegmentedPills({
         : itemAccent
       : theme.colors.textMuted;
 
-    // Background.
+    // Background: inactive pills stay flat (surface3); only the active pill gets
+    // a brighter tinted wash. Colored pills (chains/danger) tint in their own
+    // color; plain pills follow the app accent (accentSoft).
     const activeBg =
       variant === 'solid'
         ? itemAccent
-        : // tinted: prefer the accentSoft token; if a per-item accentColor is
-          // set, derive a matching low-alpha tint from it.
-          item.accentColor || item.danger
-          ? withAlpha(itemAccent, 0.12)
+        : hasItemColor
+          ? withAlpha(itemAccent, 0.18)
           : theme.colors.accentSoft;
 
     const pillStyle = [
@@ -143,11 +147,9 @@ export function SegmentedPills({
       // In a fixed (non-scrolling) row, pills share the width equally so the row
       // reads as a segmented control, matching the existing Join/Create tabs.
       !scrollable ? styles.pillFlex : null,
-      isActive
-        ? { backgroundColor: activeBg }
-        : { backgroundColor: theme.colors.surface3 },
+      { backgroundColor: isActive ? activeBg : theme.colors.surface3 },
       // A subtle border on the active tinted pill reads better on light skins
-      // where accentSoft alone is faint.
+      // where the tint alone is faint.
       isActive && variant === 'tinted' ? { borderColor: itemAccent } : null,
     ];
 
