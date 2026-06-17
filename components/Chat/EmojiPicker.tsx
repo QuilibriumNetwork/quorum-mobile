@@ -13,6 +13,7 @@ import type { Emoji } from '@quilibrium/quorum-shared';
 import { useEmojiFrecency } from '@/hooks/useEmojiFrecency';
 import { EMOJI_KEYWORDS, searchEmojis } from '@/data/emojiData';
 import * as Skin from '@/theme/skins/geometry';
+import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 
 // Custom emoji type for the picker (includes isCustom flag for rendering)
 type PickerEmoji = {
@@ -410,25 +411,20 @@ export function EmojiPicker({
 
           {/* Category tabs */}
           {!searchQuery && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
+            <SegmentedPills
               style={styles.categoryTabs}
               contentContainerStyle={styles.categoryTabsContent}
-            >
-              {categories.map(([key, category]) => (
-                <TouchableOpacity
-                  key={key}
-                  style={[
-                    styles.categoryTab,
-                    selectedCategory === key && styles.categoryTabActive,
-                  ]}
-                  onPress={() => setSelectedCategory(key)}
-                >
-                  <Text style={styles.categoryTabEmoji}>{category.icon}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+              emojiSize={22}
+              items={categories.map<SegmentedPillItem>(([key, category]) => ({
+                key,
+                accessibilityLabel: category.name,
+                ...(typeof category.icon === 'string'
+                  ? { emoji: category.icon }
+                  : { leading: category.icon }),
+              }))}
+              activeKey={selectedCategory}
+              onChange={(key) => setSelectedCategory(key as CategoryKey)}
+            />
           )}
 
           {/* Emoji grid */}
@@ -549,18 +545,6 @@ const createStyles = (theme: AppTheme, keyboardHeight: number) => StyleSheet.cre
   },
   categoryTabsContent: {
     paddingHorizontal: Skin.space(8),
-  },
-  categoryTab: {
-    paddingHorizontal: Skin.space(12),
-    paddingVertical: Skin.space(8),
-    marginHorizontal: Skin.space(2),
-    borderRadius: Skin.radius(8),
-  },
-  categoryTabActive: {
-    backgroundColor: theme.colors.surface3 ?? theme.colors.surface2,
-  },
-  categoryTabEmoji: {
-    fontSize: Skin.font(22),
   },
   emojiGrid: {
     flex: 1,
