@@ -61,12 +61,24 @@ import { pickImage, compressAvatarImage } from '@/services/media/imageAttachment
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
-import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, type Emoji, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
+import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, getIconColorHex, type Emoji, type IconColor, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
 import * as Clipboard from 'expo-clipboard';
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import type { UserProfileInfo } from '@/components/UserProfileModal';
 
 const UserProfileModal = React.lazy(() => import('@/components/UserProfileModal'));
+
+/**
+ * Resolve a channel's stored iconColor to a render hex. New channels store a
+ * named token ('blue'); legacy channels stored a raw hex ('#3b82f6'). Pass raw
+ * hex through unchanged; resolve tokens via the shared palette; fall back to
+ * muted when unset, so legacy channels never gray out.
+ */
+function resolveChannelIconColor(iconColor: string | undefined, fallback: string): string {
+  if (!iconColor) return fallback;
+  if (iconColor.startsWith('#')) return iconColor;
+  return getIconColorHex(iconColor as IconColor);
+}
 import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -1881,13 +1893,14 @@ export default function SpaceSettingsModal({
           {group.channels.map((channel, channelIndex) => (
             <View key={channel.channelId} style={styles.channelItem}>
               <TouchableOpacity
-                style={[styles.channelIconButton, channel.icon && { backgroundColor: (channel.iconColor || theme.colors.textMuted) + '20' }]}
+                style={[styles.channelIconButton, channel.icon && { backgroundColor: resolveChannelIconColor(channel.iconColor, theme.colors.textMuted) + '20' }]}
                 onPress={() => setDrawerTarget({ kind: 'channel', spaceId, groupIndex, channelId: channel.channelId })}
               >
                 <IconSymbol
-                  name={(channel.icon || 'number') as IconSymbolName}
+                  name={(channel.icon || 'hashtag') as IconSymbolName}
                   size={14}
-                  color={channel.iconColor || theme.colors.textMuted}
+                  color={resolveChannelIconColor(channel.iconColor, theme.colors.textMuted)}
+                  variant={channel.iconVariant ?? 'outline'}
                 />
               </TouchableOpacity>
               <TouchableOpacity
