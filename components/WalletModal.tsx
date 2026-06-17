@@ -1549,7 +1549,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       marginTop: Skin.space(2),
     },
     addressRow: {
-      backgroundColor: theme.colors.surface2,
+      backgroundColor: theme.colors.bgButtonSubtle,
       paddingHorizontal: Skin.space(14),
       paddingVertical: Skin.space(10),
       borderRadius: Skin.radius(10),
@@ -1742,7 +1742,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       justifyContent: 'space-between',
       paddingVertical: Skin.space(12),
       paddingHorizontal: Skin.space(14),
-      backgroundColor: theme.colors.surface2,
+      backgroundColor: theme.colors.bgButtonSubtle,
       borderRadius: Skin.radius(12),
     },
     settingsRowLeft: {

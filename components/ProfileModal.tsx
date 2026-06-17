@@ -3018,7 +3018,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     searchContainer: {
       flexDirection: 'row',
-      backgroundColor: theme.colors.surface2,
+      backgroundColor: theme.colors.bgButtonSubtle,
       borderRadius: Skin.radius(8),
       overflow: 'hidden',
     },
@@ -3034,7 +3034,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       paddingHorizontal: Skin.space(16),
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: theme.colors.surface3,
+      backgroundColor: theme.colors.bgButtonSubtle,
     },
     usernameItem: {
       flexDirection: 'row',
@@ -3389,7 +3389,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       paddingVertical: Skin.space(8),
       paddingHorizontal: Skin.space(16),
       borderRadius: Skin.radius(8),
-      backgroundColor: theme.colors.surface3,
+      backgroundColor: theme.colors.bgButtonSubtle,
     },
     farcasterCancelText: {
       fontSize: Skin.font(14),

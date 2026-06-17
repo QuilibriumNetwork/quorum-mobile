@@ -612,7 +612,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       paddingVertical: Skin.space(14),
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: theme.colors.surface3,
+      backgroundColor: theme.colors.bgButtonSubtle,
       borderRadius: Skin.radius(12),
     },
     cancelButtonText: {

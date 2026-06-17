@@ -359,14 +359,12 @@ function createStyles(theme: AppTheme) {
       marginTop: Skin.space(1),
     },
     input: {
-      borderWidth: Skin.border(1),
-      borderColor: theme.colors.surface3,
       borderRadius: Skin.radius(10),
       paddingHorizontal: Skin.space(12),
       paddingVertical: Skin.space(10),
       fontSize: Skin.font(15),
       color: theme.colors.textMain,
-      backgroundColor: theme.colors.surface1,
+      backgroundColor: theme.colors.bgButtonSubtle,
     },
     actions: {
       flexDirection: 'row',
@@ -384,7 +382,7 @@ function createStyles(theme: AppTheme) {
       backgroundColor: theme.colors.accent,
     },
     buttonSecondary: {
-      backgroundColor: theme.colors.surface2,
+      backgroundColor: theme.colors.bgButtonSubtle,
     },
     buttonDisabled: {
       opacity: 0.5,

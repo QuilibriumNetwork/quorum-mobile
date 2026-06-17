@@ -51,6 +51,19 @@ const createTheme = (
     warning: string;
     success: string;
     info: string;
+    // Semantic tokens — named by element role, mirroring desktop's --color-* convention.
+    // Use these in components instead of raw surfaceN so a background change only
+    // requires updating the token, not hunting every call site.
+    bgModal: string;
+    bgModalSidebar: string;
+    fieldBg: string;
+    fieldBgFocus: string;
+    fieldBorder: string;
+    fieldBorderFocus: string;
+    borderSubtle: string;
+    borderDefault: string;
+    borderStrong: string;
+    bgButtonSubtle: string;
   };
   fonts: ReturnType<typeof makeFonts>;
   fontSizes: typeof fontSizes;
@@ -151,6 +164,20 @@ const createTheme = (
       warning: pick('warning', utilities.warning),
       success: pick('success', utilities.success),
       info: pick('info', utilities.info),
+
+      // Semantic tokens (mirrors desktop --color-* convention, see _colors.scss)
+      bgModal: surf('surface2', surface['2']),
+      bgModalSidebar: surf('surface1', surface['1']),
+      fieldBg: surf('surface0', surface['0']),
+      fieldBgFocus: surf('surface1', surface['1']),
+      // surface4 gives visible delineation without feeling heavy on mobile.
+      // Desktop uses surface5 but mobile fields read better with a lighter touch.
+      fieldBorder: surf('surface4', surface['4']),
+      fieldBorderFocus: pick('accent', accent[500]),
+      borderSubtle: surf('surface4', surface['4']),
+      borderDefault: surf('surface5', surface['5']),
+      borderStrong: surf('surface6', surface['6']),
+      bgButtonSubtle: surf('surface4', surface['4']),
     },
     fonts,
     fontSizes: scaleFontSizes(skin?.fontScale ?? 1),

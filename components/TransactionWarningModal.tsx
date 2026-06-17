@@ -260,7 +260,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, seve
     },
     cancelButton: {
       flex: 1,
-      backgroundColor: theme.colors.surface3,
+      backgroundColor: theme.colors.bgButtonSubtle,
       paddingVertical: Skin.space(16),
       borderRadius: Skin.radius(12),
       alignItems: 'center',

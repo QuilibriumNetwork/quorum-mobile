@@ -110,7 +110,7 @@ function createStyles(theme: AppTheme) {
       padding: Skin.space(14),
       borderRadius: Skin.radius(12),
       borderWidth: Skin.border(1),
-      borderColor: theme.colors.surface3,
+      borderColor: theme.colors.borderStrong,
       backgroundColor: theme.colors.surface1,
     },
     optionPrimary: {

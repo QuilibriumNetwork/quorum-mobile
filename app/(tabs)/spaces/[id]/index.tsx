@@ -118,8 +118,8 @@ export default function SpaceChannelsScreen() {
           <Text style={styles.description}>{spaceData.description}</Text>
         ) : null}
 
-        {(spaceData.groups ?? []).map((group: Group) => (
-          <View key={group.groupName} style={styles.groupSection}>
+        {(spaceData.groups ?? []).map((group: Group, groupIndex: number) => (
+          <View key={`group-${groupIndex}`} style={styles.groupSection}>
             <Text style={styles.groupTitle}>{group.groupName.toUpperCase()}</Text>
             {group.channels.map((channel) => {
               const unread = getReplyCount(spaceId, channel.channelId) ?? 0;

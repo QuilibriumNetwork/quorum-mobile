@@ -242,8 +242,8 @@ const createStyles = (theme: AppTheme) =>
       paddingHorizontal: Skin.space(14),
       borderRadius: Skin.radius(10),
       borderWidth: Skin.border(1),
-      borderColor: theme.colors.surface3,
-      backgroundColor: theme.colors.surface2,
+      borderColor: theme.colors.borderStrong,
+      backgroundColor: theme.colors.bgButtonSubtle,
     },
     reasonLabel: {
       fontSize: Skin.font(15),
@@ -251,13 +251,13 @@ const createStyles = (theme: AppTheme) =>
     },
     input: {
       borderWidth: Skin.border(1),
-      borderColor: theme.colors.surface3,
+      borderColor: theme.colors.borderStrong,
       borderRadius: Skin.radius(10),
       padding: Skin.space(12),
       minHeight: 80,
       maxHeight: 160,
       color: theme.colors.textMain,
-      backgroundColor: theme.colors.surface2,
+      backgroundColor: theme.colors.bgButtonSubtle,
       textAlignVertical: 'top',
     },
     actions: {
@@ -276,7 +276,7 @@ const createStyles = (theme: AppTheme) =>
     },
     primary: {},
     secondary: {
-      backgroundColor: theme.colors.surface3,
+      backgroundColor: theme.colors.bgButtonSubtle,
     },
     buttonLabel: {
       fontSize: Skin.font(15),

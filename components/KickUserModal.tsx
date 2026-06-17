@@ -177,7 +177,7 @@ const createStyles = (theme: AppTheme) =>
     userRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.colors.surface3,
+      backgroundColor: theme.colors.bgButtonSubtle,
       borderRadius: Skin.radius(12),
       padding: Skin.space(12),
       marginBottom: Skin.space(16),
@@ -223,7 +223,7 @@ const createStyles = (theme: AppTheme) =>
       justifyContent: 'center',
     },
     cancelButton: {
-      backgroundColor: theme.colors.surface4,
+      backgroundColor: theme.colors.bgButtonSubtle,
     },
     cancelButtonText: {
       color: theme.colors.textMain,
