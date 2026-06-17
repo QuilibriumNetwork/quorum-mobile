@@ -411,6 +411,7 @@ export default function OffersModal({
       <SegmentedPills
         style={styles.tabs}
         scrollable={false}
+        pillShape="rect"
         items={[
           {
             key: 'received',

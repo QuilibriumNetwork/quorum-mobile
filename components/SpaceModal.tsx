@@ -208,6 +208,7 @@ export default function SpaceModal({
     <SegmentedPills
       style={styles.tabContainer}
       scrollable={false}
+      pillShape="rect"
       items={[
         { key: 'join', label: 'Join' },
         { key: 'create', label: 'Create' },

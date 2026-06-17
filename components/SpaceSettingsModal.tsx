@@ -2403,6 +2403,7 @@ export default function SpaceSettingsModal({
         {/* Tab bar */}
         <SegmentedPills
           style={styles.tabBar}
+          pillShape="rect"
           items={tabs.map<SegmentedPillItem>((tab) => ({
             key: tab.key,
             label: tab.label,

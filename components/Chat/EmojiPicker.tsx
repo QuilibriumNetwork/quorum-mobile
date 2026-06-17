@@ -414,6 +414,7 @@ export function EmojiPicker({
             <SegmentedPills
               style={styles.categoryTabs}
               contentContainerStyle={styles.categoryTabsContent}
+              pillShape="rect"
               emojiSize={22}
               items={categories.map<SegmentedPillItem>(([key, category]) => ({
                 key,
