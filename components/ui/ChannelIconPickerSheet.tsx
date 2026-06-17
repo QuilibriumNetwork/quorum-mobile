@@ -6,7 +6,7 @@
  * via getIconColorHex(). Replaces the legacy components/ui/IconPicker.tsx (which
  * used SF-Symbol names + raw-hex colors and didn't render cross-platform).
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   ICON_OPTIONS,
@@ -54,6 +54,16 @@ export function ChannelIconPickerSheet({
   const [pickedVariant, setPickedVariant] = useState<'outline' | 'filled'>(
     selectedVariant || 'outline'
   );
+
+  // Re-sync from props each time the sheet opens, so reopening for a different
+  // channel/group (or after an edit) shows that item's current icon/color/variant
+  // rather than the last-picked values (state persists across open/close).
+  useEffect(() => {
+    if (!visible) return;
+    setPickedIcon(selectedIcon || (DEFAULT_ICON as string));
+    setPickedColor(selectedColor || 'default');
+    setPickedVariant(selectedVariant || 'outline');
+  }, [visible, selectedIcon, selectedColor, selectedVariant]);
 
   const hasFilled = FILLED_ICONS.has(pickedIcon as never);
   const effectiveVariant = hasFilled ? pickedVariant : 'outline';
