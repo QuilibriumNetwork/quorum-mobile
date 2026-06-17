@@ -84,6 +84,7 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   'chevron.down': tabler('IconChevronDown'),
   'chevron.left.forwardslash.chevron.right': tabler('IconCode'),
   'line.3.horizontal': tabler('IconMenu2'),
+  'grip.vertical': tabler('IconGripVertical'),
 
   // Arrows
   'arrow.left': tabler('IconArrowLeft'),

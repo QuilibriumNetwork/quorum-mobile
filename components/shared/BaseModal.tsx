@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Animated, Dimensions, Keyboard, KeyboardAvoidingView, Modal, Platform, StyleSheet, TouchableWithoutFeedback, View, ViewStyle } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets, EdgeInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
@@ -142,22 +143,24 @@ export function BaseModal({
       onRequestClose={onClose}
       testID={testID}
     >
-      <View style={styles.container}>
-        {/* Animated backdrop */}
-        <Animated.View
-          style={[
-            styles.backdrop,
-            { opacity: backdropAnim },
-          ]}
-        >
-          <TouchableWithoutFeedback onPress={onClose}>
-            <View style={StyleSheet.absoluteFillObject} />
-          </TouchableWithoutFeedback>
-        </Animated.View>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={styles.container}>
+          {/* Animated backdrop */}
+          <Animated.View
+            style={[
+              styles.backdrop,
+              { opacity: backdropAnim },
+            ]}
+          >
+            <TouchableWithoutFeedback onPress={onClose}>
+              <View style={StyleSheet.absoluteFillObject} />
+            </TouchableWithoutFeedback>
+          </Animated.View>
 
-        {/* Animated content */}
-        {modalContent}
-      </View>
+          {/* Animated content */}
+          {modalContent}
+        </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
