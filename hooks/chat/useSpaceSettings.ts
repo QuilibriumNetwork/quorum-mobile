@@ -34,6 +34,7 @@ interface UpdateSpaceParams {
   roles?: Space['roles'];
   emojis?: Space['emojis'];
   stickers?: Space['stickers'];
+  defaultChannelId?: string;
 }
 
 /**
@@ -72,6 +73,7 @@ export function useUpdateSpace() {
         roles: params.roles ?? space.roles,
         emojis: params.emojis ?? space.emojis,
         stickers: params.stickers ?? space.stickers,
+        defaultChannelId: params.defaultChannelId ?? space.defaultChannelId,
         modifiedDate: timestamp,
       };
 

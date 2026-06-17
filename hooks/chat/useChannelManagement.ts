@@ -146,6 +146,7 @@ interface UpdateChannelParams {
   managerRoleIds?: string[];
   icon?: string;
   iconColor?: string;
+  iconVariant?: 'outline' | 'filled';
 }
 
 /**
@@ -175,6 +176,7 @@ export function useUpdateChannel() {
               managerRoleIds: params.managerRoleIds ?? channel.managerRoleIds,
               icon: params.icon ?? channel.icon,
               iconColor: params.iconColor ?? channel.iconColor,
+              iconVariant: params.iconVariant ?? channel.iconVariant,
               modifiedDate: Date.now(),
             };
             return foundChannel;
@@ -381,6 +383,7 @@ interface UpdateGroupParams {
   groupName?: string;
   icon?: string;
   iconColor?: string;
+  iconVariant?: 'outline' | 'filled';
 }
 
 /**
@@ -407,6 +410,7 @@ export function useUpdateGroup() {
         groupName: params.groupName ?? group.groupName,
         icon: params.icon ?? group.icon,
         iconColor: params.iconColor ?? group.iconColor,
+        iconVariant: params.iconVariant ?? group.iconVariant,
       };
 
       const updatedGroups = space.groups.map((g, index) =>
