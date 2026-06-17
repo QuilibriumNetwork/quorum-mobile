@@ -1794,7 +1794,8 @@ export default function SpaceSettingsModal({
   );
 
   const renderChannelsTab = () => (
-    <ScrollView
+    <GHScrollView
+      ref={channelsScrollRef}
       style={styles.membersScrollView}
       contentContainerStyle={styles.tabContentContainer}
       showsVerticalScrollIndicator={true}
@@ -1885,7 +1886,7 @@ export default function SpaceSettingsModal({
           </Text>
         </View>
       )}
-    </ScrollView>
+    </GHScrollView>
   );
 
   const renderRolesTab = () => (
