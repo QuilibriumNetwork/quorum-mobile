@@ -6,6 +6,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   runOnJS,
+  makeMutable,
   type SharedValue,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -51,7 +52,9 @@ interface DraggableRowProps {
   styles: ReturnType<typeof createStyles>;
   theme: AppTheme;
   activeIndex: SharedValue<number>;
-  translateY: SharedValue<number>;
+  dragY: SharedValue<number>;
+  animY: SharedValue<number>;
+  scale: SharedValue<number>;
   positions: SharedValue<number[]>;
   scrollRef: React.RefObject<unknown>;
   iconColor: string;
@@ -64,17 +67,19 @@ interface DraggableRowProps {
   onLiftHaptic: () => void;
   onDropHaptic: () => void;
   onPersist: (visualOrder: number[]) => void;
+  // animY values for ALL rows — needed on the UI thread to spring idle rows on swap
+  allAnimY: SharedValue<number>[];
 }
 
 function DraggableRow({
   channel, index, count, styles, theme,
-  activeIndex, translateY, positions, scrollRef,
+  activeIndex, dragY, animY, scale, positions, scrollRef,
   iconColor, iconBg, statusGlyphs, a11yActions,
   onOpen, onAccessibilityAction,
   onSwapHaptic, onLiftHaptic, onDropHaptic, onPersist,
+  allAnimY,
 }: DraggableRowProps) {
   const ROW = CHANNEL_ROW_HEIGHT;
-  const scale = useSharedValue(1);
 
   const pan = useMemo(
     () =>
@@ -85,35 +90,45 @@ function DraggableRow({
         )
         .onStart(() => {
           activeIndex.value = index;
-          translateY.value = 0;
-          scale.value = withSpring(1.03);
+          dragY.value = 0;
+          scale.value = withSpring(1.03, { damping: 15, stiffness: 200 });
           runOnJS(onLiftHaptic)();
         })
         .onUpdate((e) => {
-          translateY.value = e.translationY;
+          dragY.value = e.translationY;
+          // Target slot = which slot the dragged row's centre is currently over,
+          // computed from the row's resting top (index * ROW) plus finger offset.
+          const absY = index * ROW + e.translationY;
+          const targetSlot = Math.max(0, Math.min(count - 1, Math.round(absY / ROW)));
           const currentSlot = positions.value.indexOf(index);
-          const targetSlot = Math.max(
-            0,
-            Math.min(count - 1, currentSlot + Math.round(e.translationY / ROW))
-          );
           if (targetSlot !== currentSlot) {
             const next = [...positions.value];
             next.splice(currentSlot, 1);
             next.splice(targetSlot, 0, index);
             positions.value = next;
+            // Spring idle rows to their new slot positions immediately
+            for (let i = 0; i < next.length; i++) {
+              const rowIndex = next[i];
+              if (rowIndex !== index) {
+                allAnimY[rowIndex].value = withSpring(i * ROW, { damping: 20, stiffness: 220 });
+              }
+            }
             runOnJS(onSwapHaptic)();
           }
         })
         .onEnd((_, success) => {
           if (!success) return;
           const finalOrder = positions.value;
+          // Snap active row to its final resting slot
+          const finalSlot = finalOrder.indexOf(index);
+          animY.value = withSpring(finalSlot * ROW, { damping: 20, stiffness: 220 });
           runOnJS(onPersist)(finalOrder);
           runOnJS(onDropHaptic)();
         })
         .onFinalize(() => {
           activeIndex.value = -1;
-          translateY.value = 0;
-          scale.value = withSpring(1);
+          dragY.value = 0;
+          scale.value = withSpring(1, { damping: 15, stiffness: 200 });
         }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [index, count, scrollRef]
@@ -121,11 +136,10 @@ function DraggableRow({
 
   const animatedStyle = useAnimatedStyle(() => {
     const isActive = activeIndex.value === index;
-    const slot = positions.value.indexOf(index);
     if (isActive) {
       return {
-        top: index * ROW,
-        transform: [{ translateY: translateY.value }, { scale: scale.value }],
+        top: 0,
+        transform: [{ translateY: animY.value + dragY.value }, { scale: scale.value }],
         zIndex: 999,
         elevation: 8,
         shadowColor: '#000',
@@ -136,11 +150,8 @@ function DraggableRow({
       };
     }
     return {
-      top: index * ROW,
-      transform: [
-        { translateY: withSpring((slot - index) * ROW, { damping: 20, stiffness: 200 }) },
-        { scale: scale.value },
-      ],
+      top: 0,
+      transform: [{ translateY: animY.value }, { scale: 1 }],
       zIndex: 0,
       elevation: 0,
       shadowOpacity: 0,
@@ -204,14 +215,43 @@ export function DraggableChannelGroup({
   const styles = createStyles(theme);
 
   const activeIndex = useSharedValue(-1);
-  const translateY = useSharedValue(0);
   const positions = useSharedValue<number[]>(channels.map((_, i) => i));
+
+  // Per-row shared values stored in a ref — created once, never recreated.
+  // `makeMutable` is Reanimated's low-level shared value factory that can be
+  // called outside the render cycle safely (unlike useSharedValue which is
+  // a hook). We store them in a ref so they survive re-renders.
+  const rowValuesRef = React.useRef<{
+    animY: SharedValue<number>[];
+    scale: SharedValue<number>[];
+    dragY: SharedValue<number>[];
+  } | null>(null);
+
+  if (!rowValuesRef.current || rowValuesRef.current.animY.length < channels.length) {
+    const prev = rowValuesRef.current;
+    const start = prev ? prev.animY.length : 0;
+    const animY = prev ? [...prev.animY] : [];
+    const scale = prev ? [...prev.scale] : [];
+    const dragY = prev ? [...prev.dragY] : [];
+    for (let i = start; i < channels.length; i++) {
+      animY.push(makeMutable(i * CHANNEL_ROW_HEIGHT));
+      scale.push(makeMutable(1));
+      dragY.push(makeMutable(0));
+    }
+    rowValuesRef.current = { animY, scale, dragY };
+  }
+
+  const { animY, scale, dragY } = rowValuesRef.current;
 
   React.useEffect(() => {
     if (activeIndex.value === -1) {
       positions.value = channels.map((_, i) => i);
+      // Reset each row's animated position to its natural slot
+      for (let i = 0; i < channels.length; i++) {
+        animY[i].value = i * CHANNEL_ROW_HEIGHT;
+      }
     }
-  }, [channels, positions, activeIndex]);
+  }, [channels, positions, activeIndex, animY]);
 
   const persistOrder = useCallback(
     (visualOrder: number[]) => {
@@ -252,7 +292,9 @@ export function DraggableChannelGroup({
             styles={styles}
             theme={theme}
             activeIndex={activeIndex}
-            translateY={translateY}
+            dragY={dragY[channelIndex]}
+            animY={animY[channelIndex]}
+            scale={scale[channelIndex]}
             positions={positions}
             scrollRef={scrollRef}
             iconColor={color}
@@ -265,6 +307,7 @@ export function DraggableChannelGroup({
             onSwapHaptic={() => haptic('select')}
             onDropHaptic={() => haptic('medium')}
             onPersist={persistOrder}
+            allAnimY={animY}
           />
         );
       })}
