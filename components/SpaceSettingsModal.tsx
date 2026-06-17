@@ -1846,7 +1846,9 @@ export default function SpaceSettingsModal({
                   variant={group.iconVariant ?? 'outline'}
                 />
               ) : null}
-              <Text style={styles.channelGroupName}>{group.groupName}</Text>
+              <Text style={styles.channelGroupName} numberOfLines={1}>
+                {group.groupName}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -3186,6 +3188,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       flex: 1,
     },
     channelGroupName: {
+      flex: 1,
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,

@@ -183,7 +183,9 @@ function DraggableRow({
         onPress={onOpen}
         accessibilityLabel={`Channel ${channel.channelName}. Double tap to open settings.`}
       >
-        <Text style={styles.name}>{channel.channelName}</Text>
+        <Text style={styles.name} numberOfLines={1}>
+          {channel.channelName}
+        </Text>
       </TouchableOpacity>
       {statusGlyphs}
       <GestureDetector gesture={pan}>
