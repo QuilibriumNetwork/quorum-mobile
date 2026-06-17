@@ -577,6 +577,7 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
             <SegmentedPills
               style={styles.filterContainer}
               contentContainerStyle={styles.filterContent}
+              variant="solid"
               itemRole="button"
               items={chainFilters.map<SegmentedPillItem>((chain) => ({
                 key: chain,

@@ -1834,6 +1834,7 @@ export default function SwapModal({ visible, onClose, initialBuyToken }: SwapMod
                   <Text style={styles.manualEntryLabel}>Chain</Text>
                   <SegmentedPills
                     style={styles.chainSelector}
+                    variant="solid"
                     itemRole="button"
                     items={(sellAsset?.chain === 'solana'
                       ? ['solana']
