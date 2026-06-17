@@ -20,6 +20,7 @@ import { useWebSocket } from '@/context/WebSocketContext';
 import { useToast } from '@/context/ToastContext';
 import { haptics } from '@/utils/haptics';
 import * as Skin from '@/theme/skins/geometry';
+import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import {
   validateSpaceName,
   validateSpaceDescription,
@@ -204,24 +205,16 @@ export default function SpaceModal({
   }, [onClose]);
 
   const renderTabs = () => (
-    <View style={styles.tabContainer}>
-      <TouchableOpacity
-        style={[styles.tab, activeTab === 'join' && styles.tabActive]}
-        onPress={() => setActiveTab('join')}
-      >
-        <Text style={[styles.tabText, activeTab === 'join' && styles.tabTextActive]}>
-          Join
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.tab, activeTab === 'create' && styles.tabActive]}
-        onPress={() => setActiveTab('create')}
-      >
-        <Text style={[styles.tabText, activeTab === 'create' && styles.tabTextActive]}>
-          Create
-        </Text>
-      </TouchableOpacity>
-    </View>
+    <SegmentedPills
+      style={styles.tabContainer}
+      scrollable={false}
+      items={[
+        { key: 'join', label: 'Join' },
+        { key: 'create', label: 'Create' },
+      ]}
+      activeKey={activeTab}
+      onChange={(key) => setActiveTab(key as TabType)}
+    />
   );
 
   const renderCreateTab = () => (
@@ -466,29 +459,10 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       color: theme.colors.textStrong,
     },
     tabContainer: {
-      flexDirection: 'row',
       backgroundColor: theme.colors.surface3,
       borderRadius: Skin.radius(12),
       padding: Skin.space(4),
       marginBottom: Skin.space(20),
-    },
-    tab: {
-      flex: 1,
-      paddingVertical: Skin.space(10),
-      alignItems: 'center',
-      borderRadius: Skin.radius(8),
-    },
-    tabActive: {
-      backgroundColor: theme.colors.surface1,
-    },
-    tabText: {
-      fontSize: Skin.font(15),
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
-    },
-    tabTextActive: {
-      color: theme.colors.textStrong,
     },
     tabContent: {
       flex: 1,
