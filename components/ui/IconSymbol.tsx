@@ -365,12 +365,14 @@ export function IconSymbol({
   size = 24,
   color,
   style,
+  variant,
 }: {
   name: IconSymbolName;
   size?: number;
   color: string | OpaqueColorValue;
   style?: StyleProp<TextStyle>;
   weight?: SymbolWeight;
+  variant?: 'outline' | 'filled';
 }) {
   // Skin icon substitution: when the active skin overrides this glyph, render
   // its (validated PNG/JPEG) image. `tint` (default true) renders it as a
@@ -391,7 +393,7 @@ export function IconSymbol({
   }
 
   const nameStr = String(name);
-  const wantFilled = nameStr.endsWith('.fill');
+  const wantFilled = variant === 'filled' || nameStr.endsWith('.fill');
   const Component = resolveTablerComponent(nameStr, wantFilled);
 
   if (!Component) {
