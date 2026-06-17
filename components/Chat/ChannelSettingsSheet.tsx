@@ -157,35 +157,38 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
 
   const handleDelete = async () => {
     setIsConfirming(true);
-    const label = isChannel ? `#${channel?.channelName ?? ''}` : `the "${resolved.group.groupName}" group`;
-    const ok = await confirm({
-      title: isChannel ? 'Delete Channel' : 'Delete Group',
-      message: isChannel
-        ? `This permanently deletes ${label} and its messages for everyone.`
-        : `This permanently deletes ${label} for everyone. The group must be empty.`,
-      confirmLabel: 'Delete',
-    });
-    setIsConfirming(false);
-    if (!ok) return;
     try {
-      if (isChannel) {
-        await deleteChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId });
-      } else {
-        await deleteGroup.mutateAsync({ spaceId: target.spaceId, groupIndex: target.groupIndex });
-      }
-      onChanged?.(); // refresh parent; the drawer is closing so no bumpReload needed
-      onClose();
-    } catch (e) {
-      await confirm({
-        title: 'Could not delete',
-        message:
-          isChannel && target.channelId === space.defaultChannelId
-            ? 'This is the default channel. Set another channel as default first.'
-            : 'Delete failed. ' + (e instanceof Error ? e.message : ''),
-        confirmLabel: 'OK',
-        cancelLabel: 'Dismiss',
-        variant: 'primary',
+      const label = isChannel ? `#${channel?.channelName ?? ''}` : `the "${resolved.group.groupName}" group`;
+      const ok = await confirm({
+        title: isChannel ? 'Delete Channel' : 'Delete Group',
+        message: isChannel
+          ? `This permanently deletes ${label} and its messages for everyone.`
+          : `This permanently deletes ${label} for everyone. The group must be empty.`,
+        confirmLabel: 'Delete',
       });
+      if (!ok) return;
+      try {
+        if (isChannel) {
+          await deleteChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId });
+        } else {
+          await deleteGroup.mutateAsync({ spaceId: target.spaceId, groupIndex: target.groupIndex });
+        }
+        onChanged?.(); // refresh parent; the drawer is closing so no bumpReload needed
+        onClose();
+      } catch (e) {
+        await confirm({
+          title: 'Could not delete',
+          message:
+            isChannel && target.channelId === space.defaultChannelId
+              ? 'This is the default channel. Set another channel as default first.'
+              : 'Delete failed. ' + (e instanceof Error ? e.message : ''),
+          confirmLabel: 'OK',
+          cancelLabel: 'Dismiss',
+          variant: 'primary',
+        });
+      }
+    } finally {
+      setIsConfirming(false);
     }
   };
 
