@@ -151,7 +151,7 @@ function DraggableRow({
   return (
     <Animated.View
       style={[styles.row, animatedStyle]}
-      accessibilityRole="none"
+      accessibilityRole="adjustable"
       accessibilityLabel={`Channel ${channel.channelName}`}
       accessibilityActions={a11yActions}
       onAccessibilityAction={onAccessibilityAction}
@@ -208,8 +208,10 @@ export function DraggableChannelGroup({
   const positions = useSharedValue<number[]>(channels.map((_, i) => i));
 
   React.useEffect(() => {
-    positions.value = channels.map((_, i) => i);
-  }, [channels, positions]);
+    if (activeIndex.value === -1) {
+      positions.value = channels.map((_, i) => i);
+    }
+  }, [channels, positions, activeIndex]);
 
   const persistOrder = useCallback(
     (visualOrder: number[]) => {
