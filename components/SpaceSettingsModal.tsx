@@ -1819,14 +1819,15 @@ export default function SpaceSettingsModal({
               style={styles.channelGroupNameContainer}
               onPress={() => setDrawerTarget({ kind: 'group', spaceId, groupIndex })}
             >
-              <IconSymbol
-                name={(group.icon || 'folder') as IconSymbolName}
-                size={14}
-                color={resolveChannelIconColor(group.icon ? group.iconColor : undefined, theme.colors.textMuted)}
-                variant={group.iconVariant ?? 'outline'}
-              />
+              {group.icon ? (
+                <IconSymbol
+                  name={group.icon as IconSymbolName}
+                  size={14}
+                  color={resolveChannelIconColor(group.iconColor, theme.colors.textMuted)}
+                  variant={group.iconVariant ?? 'outline'}
+                />
+              ) : null}
               <Text style={styles.channelGroupName}>{group.groupName}</Text>
-              <IconSymbol name="pencil" size={12} color={theme.colors.textMuted} />
             </TouchableOpacity>
           </View>
 
