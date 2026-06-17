@@ -1801,7 +1801,7 @@ export default function SpaceSettingsModal({
       keyboardShouldPersistTaps="handled"
     >
       <Text style={styles.sectionDescription}>
-        Manage channel groups and channels. Use the arrows to reorder channels.
+        Manage channel groups and channels. Drag the handle to reorder channels.
       </Text>
 
       <View style={styles.addButtonRow}>
