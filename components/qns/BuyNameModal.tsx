@@ -20,6 +20,7 @@ import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -253,29 +254,19 @@ export default function BuyNameModal({
             {/* Chain Selector */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Payment Network</Text>
-              <View style={styles.chainSelector}>
-                {availableChains.map(chain => (
-                  <TouchableOpacity
-                    key={chain.name}
-                    style={[
-                      styles.chainOption,
-                      selectedChain === chain.name && styles.chainOptionSelected,
-                      selectedChain === chain.name && { borderColor: getChainColor(chain.name) },
-                    ]}
-                    onPress={() => setSelectedChain(chain.name)}
-                  >
-                    <View style={[styles.chainDot, { backgroundColor: getChainColor(chain.name) }]} />
-                    <Text
-                      style={[
-                        styles.chainOptionText,
-                        selectedChain === chain.name && styles.chainOptionTextSelected,
-                      ]}
-                    >
-                      {chain.name.charAt(0).toUpperCase() + chain.name.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <SegmentedPills
+                style={styles.chainSelector}
+                variant="solid"
+                wrap
+                itemRole="button"
+                items={availableChains.map<SegmentedPillItem>(chain => ({
+                  key: chain.name,
+                  label: chain.name.charAt(0).toUpperCase() + chain.name.slice(1),
+                  accentColor: getChainColor(chain.name),
+                }))}
+                activeKey={selectedChain}
+                onChange={setSelectedChain}
+              />
             </View>
 
             {/* Fee Breakdown */}
@@ -408,37 +399,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       letterSpacing: 0.5,
     },
     chainSelector: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
       gap: Skin.space(8),
-    },
-    chainOption: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: Skin.space(8),
-      paddingHorizontal: Skin.space(12),
-      borderRadius: Skin.radius(8),
-      backgroundColor: theme.colors.surface2,
-      borderWidth: Skin.border(2),
-      borderColor: 'transparent',
-      gap: Skin.space(6),
-    },
-    chainOptionSelected: {
-      backgroundColor: isDark ? 'theme.colors.accentSoft' : 'theme.colors.accentSubtle',
-    },
-    chainDot: {
-      width: 8,
-      height: 8,
-      borderRadius: Skin.radius(4),
-    },
-    chainOptionText: {
-      fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
-    },
-    chainOptionTextSelected: {
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMain,
     },
     priceBreakdown: {
       backgroundColor: theme.colors.surface2,
