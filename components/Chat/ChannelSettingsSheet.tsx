@@ -7,7 +7,7 @@
  * SpaceSettingsModal (editingChannelId / iconPicker* state + handlers).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity as RNTouchableOpacity, View } from 'react-native';
 import { type IconColor } from '@quilibrium/quorum-shared';
 import { resolveChannelIconColor } from '@/utils/channelIcon';
 import {
@@ -15,6 +15,7 @@ import {
   useDeleteChannel,
   useUpdateGroup,
   useDeleteGroup,
+  useAddChannel,
 } from '@/hooks/chat';
 import { useUpdateSpace } from '@/hooks/chat/useSpaceSettings';
 import { useRoles } from '@/hooks/chat/useRoleManagement';
@@ -30,7 +31,8 @@ import * as Skin from '@/theme/skins/geometry';
 
 export type ChannelSettingsTarget =
   | { kind: 'channel'; spaceId: string; groupIndex: number; channelId: string }
-  | { kind: 'group'; spaceId: string; groupIndex: number };
+  | { kind: 'group'; spaceId: string; groupIndex: number }
+  | { kind: 'create-channel'; spaceId: string; groupIndex: number };
 
 interface ChannelSettingsSheetProps {
   visible: boolean;
@@ -50,7 +52,10 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
   const updateGroup = useUpdateGroup();
   const deleteGroup = useDeleteGroup();
   const updateSpace = useUpdateSpace();
+  const addChannel = useAddChannel();
   const { data: roles = [] } = useRoles(target?.spaceId);
+
+  const isCreate = target?.kind === 'create-channel';
 
   // Nested-sheet visibility + back-guard
   const [iconPickerVisible, setIconPickerVisible] = useState(false);
@@ -62,19 +67,19 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
     onClose();
   }, [childOpen, onClose]);
 
-  // Bump this after every local mutation so `resolved` re-reads storage. Using a
-  // counter (not mutation.isSuccess) because isSuccess latches true after the
-  // first mutation and would never re-trigger the memo on the 2nd+ edit.
+  // Bump this after every local mutation so `resolved` re-reads storage.
   const [reloadTick, setReloadTick] = useState(0);
   const bumpReload = () => setReloadTick((t) => t + 1);
 
-  // Resolve the live target object fresh from storage (cheap). Returns the
-  // space + the channel/group. Re-reads whenever the target, visibility, or
-  // reloadTick changes.
+  // Resolve the live target object fresh from storage.
+  // For create-channel: resolves { space, group: null, channel: null } — no channel yet.
   const resolved = useMemo(() => {
     if (!target) return null;
     const space = getSpace(target.spaceId);
     if (!space) return null;
+    if (target.kind === 'create-channel') {
+      return { space, group: null, channel: null };
+    }
     const group = space.groups[target.groupIndex];
     if (!group) return null;
     if (target.kind === 'group') return { space, group, channel: null };
@@ -86,10 +91,36 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
   const [nameDraft, setNameDraft] = useState('');
   useEffect(() => {
     if (!resolved) return;
+    if (isCreate) {
+      setNameDraft('');
+      return;
+    }
     setNameDraft(
-      target?.kind === 'group' ? resolved.group.groupName : resolved.channel?.channelName ?? ''
+      target?.kind === 'group' ? resolved.group?.groupName ?? '' : resolved.channel?.channelName ?? ''
     );
-  }, [resolved, target?.kind]);
+  }, [resolved, target?.kind, isCreate]);
+
+  // Create-mode draft state
+  const [draftGroupIndex, setDraftGroupIndex] = useState(0);
+  const [draftIcon, setDraftIcon] = useState<string | undefined>(undefined);
+  const [draftIconColor, setDraftIconColor] = useState<IconColor>('default');
+  const [draftIconVariant, setDraftIconVariant] = useState<'outline' | 'filled'>('outline');
+  const [draftReadOnly, setDraftReadOnly] = useState(false);
+  const [draftManagerRoleIds, setDraftManagerRoleIds] = useState<string[]>([]);
+  const [draftSetDefault, setDraftSetDefault] = useState(false);
+
+  // Reset draft state when the drawer opens in create mode
+  useEffect(() => {
+    if (!visible || !isCreate || !target) return;
+    setDraftGroupIndex(target.kind === 'create-channel' ? (target.groupIndex ?? 0) : 0);
+    setDraftIcon(undefined);
+    setDraftIconColor('default');
+    setDraftIconVariant('outline');
+    setDraftReadOnly(false);
+    setDraftManagerRoleIds([]);
+    setDraftSetDefault(false);
+    setNameDraft('');
+  }, [visible, isCreate, target]);
 
   if (!visible || !target || !resolved) {
     return null;
@@ -98,7 +129,11 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
   const { space, channel } = resolved;
   const isChannel = target.kind === 'channel';
 
-  const anyPending = updateChannel.isPending || updateGroup.isPending || updateSpace.isPending;
+  const anyPending =
+    updateChannel.isPending ||
+    updateGroup.isPending ||
+    updateSpace.isPending ||
+    addChannel.isPending;
 
   const afterMutation = () => {
     bumpReload();
@@ -124,17 +159,23 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
         if (trimmed === channel?.channelName) return;
         await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId, channelName: trimmed });
       } else {
-        if (trimmed === resolved.group.groupName) return;
+        if (trimmed === resolved.group?.groupName) return;
         await updateGroup.mutateAsync({ spaceId: target.spaceId, groupIndex: target.groupIndex, groupName: trimmed });
       }
       afterMutation();
     } catch (e) {
-      setNameDraft(isChannel ? channel?.channelName ?? '' : resolved.group.groupName);
+      setNameDraft(isChannel ? channel?.channelName ?? '' : resolved.group?.groupName ?? '');
       await reportMutationError('rename', e);
     }
   };
 
   const handleIconSelect = async (icon: string, color: IconColor, variant: 'outline' | 'filled') => {
+    if (isCreate) {
+      setDraftIcon(icon);
+      setDraftIconColor(color);
+      setDraftIconVariant(variant);
+      return;
+    }
     if (anyPending) return;
     try {
       if (isChannel) {
@@ -149,6 +190,12 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
   };
 
   const handleIconClear = async () => {
+    if (isCreate) {
+      setDraftIcon(undefined);
+      setDraftIconColor('default');
+      setDraftIconVariant('outline');
+      return;
+    }
     if (anyPending) return;
     try {
       if (isChannel) {
@@ -174,6 +221,10 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
   };
 
   const handleManagerRolesConfirm = async (roleIds: string[]) => {
+    if (isCreate) {
+      setDraftManagerRoleIds(roleIds);
+      return;
+    }
     if (!isChannel) return;
     if (anyPending) return;
     try {
@@ -185,7 +236,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
   };
 
   const handleSetDefault = async (value: boolean) => {
-    if (!isChannel || !value) return; // only set; can't un-set without choosing another
+    if (!isChannel || !value) return;
     if (anyPending) return;
     try {
       await updateSpace.mutateAsync({ spaceId: target.spaceId, defaultChannelId: target.channelId });
@@ -198,7 +249,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
   const handleDelete = async () => {
     setIsConfirming(true);
     try {
-      const label = isChannel ? `#${channel?.channelName ?? ''}` : `the "${resolved.group.groupName}" group`;
+      const label = isChannel ? `#${channel?.channelName ?? ''}` : `the "${resolved.group?.groupName ?? ''}" group`;
       const ok = await confirm({
         title: isChannel ? 'Delete Channel' : 'Delete Group',
         message: isChannel
@@ -213,13 +264,13 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
         } else {
           await deleteGroup.mutateAsync({ spaceId: target.spaceId, groupIndex: target.groupIndex });
         }
-        onChanged?.(); // refresh parent; the drawer is closing so no bumpReload needed
+        onChanged?.();
         onClose();
       } catch (e) {
         await confirm({
           title: 'Could not delete',
           message:
-            isChannel && target.channelId === space.defaultChannelId
+            isChannel && target.channelId === space?.defaultChannelId
               ? 'This is the default channel. Set another channel as default first.'
               : 'Delete failed. ' + (e instanceof Error ? e.message : ''),
           confirmLabel: 'OK',
@@ -232,40 +283,99 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
     }
   };
 
+  const handleCreate = async () => {
+    if (anyPending) return;
+    const trimmed = nameDraft.trim();
+    if (!trimmed) return;
+    try {
+      const created = await addChannel.mutateAsync({
+        spaceId: target.spaceId,
+        groupIndex: draftGroupIndex,
+        channelName: trimmed,
+        isReadOnly: draftReadOnly || undefined,
+        managerRoleIds: draftReadOnly && draftManagerRoleIds.length ? draftManagerRoleIds : undefined,
+        icon: draftIcon,
+        iconColor: draftIcon ? draftIconColor : undefined,
+      });
+      // useAddChannel does NOT persist iconVariant or set default — apply as follow-ups
+      if (draftIcon && draftIconVariant === 'filled') {
+        await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: created.channelId, iconVariant: 'filled' });
+      }
+      if (draftSetDefault) {
+        await updateSpace.mutateAsync({ spaceId: target.spaceId, defaultChannelId: created.channelId });
+      }
+      onChanged?.();
+      onClose();
+    } catch (e) {
+      await reportMutationError('create the channel', e);
+    }
+  };
+
+  // Derived display values for edit mode
   const managerNames = (channel?.managerRoleIds ?? [])
     .map((id) => roles.find((r) => r.roleId === id)?.displayName)
     .filter(Boolean)
     .join(', ');
-  const rawIconColor = isChannel ? channel?.iconColor : resolved.group.iconColor;
+  const rawIconColor = isChannel ? channel?.iconColor : resolved.group?.iconColor;
   const iconHex = resolveChannelIconColor(rawIconColor, theme.colors.textMuted);
+
+  // Icon values: in create mode use draft, in edit mode use stored
+  const activeIcon = isCreate ? draftIcon : (isChannel ? channel?.icon : resolved.group?.icon);
+  const activeIconColor = isCreate ? draftIconColor : ((rawIconColor && !rawIconColor.startsWith('#') ? rawIconColor : 'default') as IconColor);
+  const activeIconVariant = isCreate ? draftIconVariant : (isChannel ? channel?.iconVariant : resolved.group?.iconVariant) ?? 'outline';
+  const activeIconHex = isCreate
+    ? resolveChannelIconColor(draftIcon ? draftIconColor : undefined, theme.colors.textMuted)
+    : iconHex;
 
   return (
     <BaseModal visible={visible} onClose={guardedClose} showHandle height={0.8} avoidKeyboard>
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>{isChannel ? 'Channel settings' : 'Group settings'}</Text>
+        <Text style={styles.title}>
+          {isCreate ? 'New channel' : isChannel ? 'Channel settings' : 'Group settings'}
+        </Text>
+
+        {/* Create mode: group selector */}
+        {isCreate && space && (
+          <View style={styles.createSection}>
+            <Text style={styles.createSectionLabel}>Group</Text>
+            <View style={styles.groupChipRow}>
+              {space.groups.map((g, i) => (
+                <RNTouchableOpacity
+                  key={i}
+                  style={[styles.groupChip, draftGroupIndex === i && styles.groupChipSelected]}
+                  onPress={() => setDraftGroupIndex(i)}
+                >
+                  <Text style={[styles.groupChipText, draftGroupIndex === i && styles.groupChipTextSelected]}>
+                    {g.groupName}
+                  </Text>
+                </RNTouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Rename + icon */}
         <View style={styles.renameRow}>
           <TouchableOpacity
-            style={[styles.iconPreview, { backgroundColor: iconHex + '20' }]}
+            style={[styles.iconPreview, { backgroundColor: activeIconHex + '20' }]}
             onPress={() => setIconPickerVisible(true)}
             accessibilityLabel="Change icon"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <IconSymbol
-              name={((isChannel ? channel?.icon : resolved.group.icon) || 'hashtag') as IconSymbolName}
+              name={((activeIcon) || (isCreate || isChannel ? 'hashtag' : 'hashtag')) as IconSymbolName}
               size={20}
-              color={iconHex}
-              variant={(isChannel ? channel?.iconVariant : resolved.group.iconVariant) ?? 'outline'}
+              color={activeIconHex}
+              variant={activeIconVariant}
             />
           </TouchableOpacity>
           <TextInput
             style={styles.renameInput}
             value={nameDraft}
             onChangeText={setNameDraft}
-            onBlur={commitName}
-            onSubmitEditing={commitName}
-            placeholder={isChannel ? 'Channel name' : 'Group name'}
+            onBlur={isCreate ? undefined : commitName}
+            onSubmitEditing={isCreate ? undefined : commitName}
+            placeholder={isCreate || isChannel ? 'Channel name' : 'Group name'}
             placeholderTextColor={theme.colors.textMuted}
             returnKeyType="done"
             autoCapitalize="none"
@@ -273,7 +383,8 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
           />
         </View>
 
-        {isChannel && (
+        {/* Edit mode: channel-specific settings */}
+        {isChannel && !isCreate && (
           <>
             <ActionRowGroup style={styles.group}>
               <ActionRow
@@ -292,7 +403,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
               />
               {channel?.isReadOnly && (
                 <ActionRow
-                  icon="person.2.fill"
+                  icon="shield.fill"
                   label="Managers"
                   sublabel={managerNames || 'No roles selected'}
                   trailing="chevron"
@@ -306,15 +417,15 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
                 icon="star.fill"
                 label="Set as default channel"
                 sublabel={
-                  channel?.channelId === space.defaultChannelId
+                  channel?.channelId === space?.defaultChannelId
                     ? 'This is the default channel'
                     : 'New members land here first'
                 }
                 trailing={
                   <Switch
-                    value={channel?.channelId === space.defaultChannelId}
+                    value={channel?.channelId === space?.defaultChannelId}
                     onValueChange={handleSetDefault}
-                    disabled={channel?.channelId === space.defaultChannelId || anyPending}
+                    disabled={channel?.channelId === space?.defaultChannelId || anyPending}
                     trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
                     accessibilityLabel="Set as default channel"
                   />
@@ -324,15 +435,84 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
           </>
         )}
 
-        <ActionRowGroup style={styles.group}>
-          <ActionRow
-            icon="trash"
-            label={isChannel ? 'Delete channel' : 'Delete group'}
-            destructive
-            disabled={anyPending}
-            onPress={handleDelete}
-          />
-        </ActionRowGroup>
+        {/* Create mode: channel-specific settings (draft-only) */}
+        {isCreate && (
+          <>
+            <ActionRowGroup style={styles.group}>
+              <ActionRow
+                icon="lock.fill"
+                label="Read-only"
+                sublabel="Only managers can post, pin & delete"
+                trailing={
+                  <Switch
+                    value={draftReadOnly}
+                    onValueChange={setDraftReadOnly}
+                    disabled={anyPending}
+                    trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                    accessibilityLabel="Read-only"
+                  />
+                }
+              />
+              {draftReadOnly && (
+                <ActionRow
+                  icon="shield.fill"
+                  label="Managers"
+                  sublabel={
+                    draftManagerRoleIds.length > 0
+                      ? draftManagerRoleIds
+                          .map((id) => roles.find((r) => r.roleId === id)?.displayName)
+                          .filter(Boolean)
+                          .join(', ')
+                      : 'No roles selected'
+                  }
+                  trailing="chevron"
+                  onPress={() => setRolePickerVisible(true)}
+                />
+              )}
+            </ActionRowGroup>
+
+            <ActionRowGroup style={styles.group}>
+              <ActionRow
+                icon="star.fill"
+                label="Set as default channel"
+                sublabel="New members land here first"
+                trailing={
+                  <Switch
+                    value={draftSetDefault}
+                    onValueChange={setDraftSetDefault}
+                    disabled={anyPending}
+                    trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                    accessibilityLabel="Set as default channel"
+                  />
+                }
+              />
+            </ActionRowGroup>
+
+            {/* Create button */}
+            <TouchableOpacity
+              style={[styles.createButton, anyPending && styles.createButtonDisabled]}
+              onPress={handleCreate}
+              disabled={anyPending || !nameDraft.trim()}
+            >
+              <Text style={styles.createButtonText}>
+                {anyPending ? 'Creating…' : 'Create channel'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Edit mode: delete */}
+        {!isCreate && (
+          <ActionRowGroup style={styles.group}>
+            <ActionRow
+              icon="trash"
+              label={isChannel ? 'Delete channel' : 'Delete group'}
+              destructive
+              disabled={anyPending}
+              onPress={handleDelete}
+            />
+          </ActionRowGroup>
+        )}
 
         {confirmDialog}
       </ScrollView>
@@ -340,18 +520,18 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
       <ChannelIconPickerSheet
         visible={iconPickerVisible}
         onClose={() => setIconPickerVisible(false)}
-        selectedIcon={(isChannel ? channel?.icon : resolved.group.icon) || undefined}
-        selectedColor={(rawIconColor && !rawIconColor.startsWith('#') ? rawIconColor : 'default') as IconColor}
+        selectedIcon={activeIcon || undefined}
+        selectedColor={activeIconColor}
         onSelect={handleIconSelect}
         onClear={handleIconClear}
       />
 
-      {isChannel && (
+      {(isChannel || isCreate) && (
         <ChannelManagerRolePickerSheet
           visible={rolePickerVisible}
           onClose={() => setRolePickerVisible(false)}
           roles={roles}
-          selectedRoleIds={channel?.managerRoleIds ?? []}
+          selectedRoleIds={isCreate ? draftManagerRoleIds : (channel?.managerRoleIds ?? [])}
           onConfirm={handleManagerRolesConfirm}
         />
       )}
@@ -388,4 +568,52 @@ const createStyles = (theme: AppTheme) =>
     },
     /** Vertical gap between consecutive ActionRowGroup blocks in the drawer. */
     group: { marginBottom: Skin.space(14) },
+    /** Create mode: section label + group chips */
+    createSection: {
+      marginBottom: Skin.space(14),
+    },
+    createSectionLabel: {
+      ...theme.textStyles.caption1,
+      color: theme.colors.textMuted,
+      marginBottom: Skin.space(8),
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    groupChipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: Skin.space(8),
+    },
+    groupChip: {
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(20),
+      backgroundColor: theme.colors.surface3,
+    },
+    groupChipSelected: {
+      backgroundColor: theme.colors.primary,
+    },
+    groupChipText: {
+      ...theme.textStyles.caption1,
+      color: theme.colors.textMuted,
+    },
+    groupChipTextSelected: {
+      color: theme.colors.textStrong,
+    },
+    createButton: {
+      backgroundColor: theme.colors.primary,
+      borderRadius: Skin.radius(12),
+      paddingVertical: Skin.space(14),
+      alignItems: 'center',
+      marginBottom: Skin.space(24),
+    },
+    createButtonDisabled: {
+      opacity: 0.5,
+    },
+    createButtonText: {
+      ...theme.textStyles.body,
+      color: theme.colors.textStrong,
+      fontFamily: theme.fonts.medium.fontFamily,
+      fontWeight: theme.fonts.medium.fontWeight,
+    },
   });

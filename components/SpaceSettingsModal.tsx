@@ -35,7 +35,6 @@ import {
   useUpdateRole,
 } from '@/hooks/chat/useRoleManagement';
 import {
-  useAddChannel,
   useAddGroup,
   useMoveChannel,
 } from '@/hooks/chat';
@@ -787,7 +786,6 @@ export default function SpaceSettingsModal({
   const deleteRoleMutation = useDeleteRole();
 
   // Channels
-  const addChannelMutation = useAddChannel();
   const addGroupMutation = useAddGroup();
   const moveChannelMutation = useMoveChannel();
 
@@ -860,9 +858,7 @@ export default function SpaceSettingsModal({
   const [editingEmojiName, setEditingEmojiName] = useState('');
   const [editingStickerNameValue, setEditingStickerNameValue] = useState('');
 
-  // Channel/Group editing state
-  const [newChannelGroupIndex, setNewChannelGroupIndex] = useState<number | null>(null);
-  const [newChannelName, setNewChannelName] = useState('');
+  // Channel/Group editing state (inline input removed; creation now uses the drawer)
 
   // Channel settings drawer state
   const [drawerTarget, setDrawerTarget] = useState<ChannelSettingsTarget | null>(null);
@@ -1205,27 +1201,6 @@ export default function SpaceSettingsModal({
       Alert.alert('Error', 'Failed to add group');
     }
   }, [spaceId, addGroupMutation]);
-
-
-  const handleAddChannel = useCallback(async (groupIndex: number) => {
-    if (!newChannelName.trim()) {
-      setNewChannelGroupIndex(null);
-      return;
-    }
-    try {
-      await addChannelMutation.mutateAsync({
-        spaceId,
-        groupIndex,
-        channelName: newChannelName.trim(),
-      });
-      const updated = getSpace(spaceId);
-      setSpace(updated);
-      setNewChannelName('');
-      setNewChannelGroupIndex(null);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to add channel');
-    }
-  }, [spaceId, newChannelName, addChannelMutation]);
 
 
   const handleMoveChannelUp = useCallback(async (groupIndex: number, channelIndex: number) => {
@@ -1811,20 +1786,30 @@ export default function SpaceSettingsModal({
         Manage channel groups and channels. Use the arrows to reorder channels.
       </Text>
 
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={handleAddGroup}
-        disabled={addGroupMutation.isPending}
-      >
-        {addGroupMutation.isPending ? (
-          <ActivityIndicator size="small" color={theme.colors.primary} />
-        ) : (
-          <>
-            <IconSymbol name="plus" size={16} color={theme.colors.primary} />
-            <Text style={styles.addButtonText}>Add Group</Text>
-          </>
-        )}
-      </TouchableOpacity>
+      <View style={styles.addButtonRow}>
+        <TouchableOpacity
+          style={[styles.addButton, { flex: 1 }, (space?.groups?.length ?? 0) === 0 && { opacity: 0.5 }]}
+          onPress={() => setDrawerTarget({ kind: 'create-channel', spaceId, groupIndex: 0 })}
+          disabled={(space?.groups?.length ?? 0) === 0}
+        >
+          <IconSymbol name="plus" size={16} color={theme.colors.primary} />
+          <Text style={styles.addButtonText}>Add Channel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.addButton, { flex: 1 }]}
+          onPress={handleAddGroup}
+          disabled={addGroupMutation.isPending}
+        >
+          {addGroupMutation.isPending ? (
+            <ActivityIndicator size="small" color={theme.colors.primary} />
+          ) : (
+            <>
+              <IconSymbol name="plus" size={16} color={theme.colors.primary} />
+              <Text style={styles.addButtonText}>Add Group</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
 
       {(space?.groups ?? []).map((group, groupIndex) => (
         <View key={`group-${groupIndex}`} style={styles.channelGroupContainer}>
@@ -1834,50 +1819,16 @@ export default function SpaceSettingsModal({
               style={styles.channelGroupNameContainer}
               onPress={() => setDrawerTarget({ kind: 'group', spaceId, groupIndex })}
             >
+              <IconSymbol
+                name={(group.icon || 'folder') as IconSymbolName}
+                size={14}
+                color={resolveChannelIconColor(group.icon ? group.iconColor : undefined, theme.colors.textMuted)}
+                variant={group.iconVariant ?? 'outline'}
+              />
               <Text style={styles.channelGroupName}>{group.groupName}</Text>
               <IconSymbol name="pencil" size={12} color={theme.colors.textMuted} />
             </TouchableOpacity>
-            <View style={styles.channelGroupActions}>
-              <TouchableOpacity
-                style={styles.channelGroupActionButton}
-                onPress={() => {
-                  setNewChannelGroupIndex(groupIndex);
-                  setNewChannelName('');
-                }}
-              >
-                <IconSymbol name="plus" size={16} color={theme.colors.primary} />
-              </TouchableOpacity>
-            </View>
           </View>
-
-          {/* New Channel Input */}
-          {newChannelGroupIndex === groupIndex && (
-            <View style={styles.newChannelRow}>
-              <Text style={styles.channelHashSymbol}>#</Text>
-              <TextInput
-                style={styles.newChannelInput}
-                value={newChannelName}
-                onChangeText={setNewChannelName}
-                placeholder="channel-name"
-                placeholderTextColor={theme.colors.textMuted}
-                autoFocus
-                autoCapitalize="none"
-                onSubmitEditing={() => handleAddChannel(groupIndex)}
-              />
-              <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={() => handleAddChannel(groupIndex)}
-              >
-                <IconSymbol name="checkmark" size={16} color={theme.colors.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setNewChannelGroupIndex(null)}
-              >
-                <IconSymbol name="xmark" size={16} color={theme.colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-          )}
 
           {/* Channels List */}
           {group.channels.map((channel, channelIndex) => (
@@ -2745,6 +2696,10 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       backgroundColor: theme.colors.surface4,
       marginVertical: Skin.space(24),
     },
+    addButtonRow: {
+      flexDirection: 'row',
+      gap: Skin.space(10),
+    },
     addButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -3248,13 +3203,6 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       paddingVertical: Skin.space(4),
       flex: 1,
     },
-    channelGroupActions: {
-      flexDirection: 'row',
-      gap: Skin.space(4),
-    },
-    channelGroupActionButton: {
-      padding: Skin.space(6),
-    },
     channelItem: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -3262,13 +3210,6 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       paddingVertical: Skin.space(8),
       borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface4,
-    },
-    channelHashSymbol: {
-      fontSize: Skin.font(16),
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
-      marginRight: Skin.space(4),
     },
     channelIconButton: {
       width: 28,
@@ -3328,24 +3269,6 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       color: theme.colors.primary,
       textTransform: 'uppercase',
     },
-    newChannelRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: Skin.space(12),
-      paddingVertical: Skin.space(8),
-      backgroundColor: theme.colors.surface4,
-    },
-    newChannelInput: {
-      flex: 1,
-      fontSize: Skin.font(15),
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMain,
-      paddingVertical: Skin.space(4),
-    },
-    newChannelCancel: {
-      padding: Skin.space(6),
-    },
     emptyGroupText: {
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
@@ -3358,13 +3281,5 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       alignItems: 'center',
       flex: 1,
       gap: Skin.space(4),
-    },
-    confirmButton: {
-      padding: Skin.space(6),
-      backgroundColor: theme.colors.primary + '20',
-      borderRadius: Skin.radius(6),
-    },
-    cancelButton: {
-      padding: Skin.space(6),
     },
   });
