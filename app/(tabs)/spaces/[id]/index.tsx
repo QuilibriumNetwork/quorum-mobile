@@ -6,6 +6,7 @@
  */
 
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
+import { ChannelStatusGlyphs } from '@/components/Chat/ChannelStatusGlyphs';
 import { useChannels } from '@/hooks/chat/useChannels';
 import { useReplyTracking } from '@/hooks/chat/useReplyTracking';
 import { useSpace } from '@/hooks/chat/useSpaces';
@@ -13,6 +14,7 @@ import { textStyles, useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { haptics } from '@/utils/haptics';
 import type { Group } from '@quilibrium/quorum-shared';
+import { resolveChannelIconColor } from '@/utils/channelIcon';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -129,13 +131,18 @@ export default function SpaceChannelsScreen() {
                   activeOpacity={0.6}
                 >
                   <IconSymbol
-                    name={(channel.icon || 'number') as IconSymbolName}
+                    name={(channel.icon || 'hashtag') as IconSymbolName}
                     size={18}
-                    color={channel.iconColor || theme.colors.textMuted}
+                    color={resolveChannelIconColor(channel.iconColor, theme.colors.textMuted)}
+                    variant={channel.iconVariant ?? 'outline'}
                   />
                   <Text style={styles.channelName} numberOfLines={1}>
                     {channel.channelName}
                   </Text>
+                  <ChannelStatusGlyphs
+                    channel={channel}
+                    defaultChannelId={spaceData.defaultChannelId}
+                  />
                   {unread > 0 && (
                     <View style={styles.unreadBadge}>
                       <Text style={styles.unreadText}>

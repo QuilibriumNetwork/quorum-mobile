@@ -79,16 +79,17 @@ export default function SpaceChannelChat() {
     return !!getSpaceKey(spaceId, 'owner');
   }, [spaceId]);
 
-  // Pin/delete are role-only, NOT owner-derived. Receivers can't verify space
-  // ownership (no ownerAddress on the wire — privacy), so the receive-side guard
-  // rejects an owner's pin/delete of others' messages unless the owner holds a
-  // role granting it (see the remove-message validation in WebSocketContext +
-  // shared canDeleteMessage). Granting it here only showed buttons whose action
-  // recipients would drop. Match desktop: hide them. Owners still delete their
-  // own messages via the author check. `isSpaceOwner` stays for owner-only UI
-  // (invite, settings entry).
-  const hasPinPermission = useHasPermission(spaceId, user?.address, 'message:pin');
-  const hasDeletePermission = useHasPermission(spaceId, user?.address, 'message:delete');
+  // Pin/delete permissions: regular channels use the role permission; read-only
+  // channels ALSO grant pin/delete to managers (a role in managerRoleIds) —
+  // matching desktop + the shared checker + the receive-side guard in
+  // WebSocketContext. Previously mobile only checked the role permission and
+  // wrongly hid pin/delete from read-only-channel managers.
+  // NOTE: `isSpaceOwner` is NOT used here — receivers can't verify ownership
+  // (no ownerAddress on the wire), so the receive-side guard would drop an
+  // owner's pin/delete unless they hold a role granting it. `isSpaceOwner`
+  // stays for owner-only UI (invite, settings entry) only.
+  const roleCanPin = useHasPermission(spaceId, user?.address, 'message:pin');
+  const roleCanDelete = useHasPermission(spaceId, user?.address, 'message:delete');
 
   // The space's roles, passed to UserProfileModal so the owner can assign /
   // remove roles from a member's profile (tapped from a message avatar).
@@ -101,6 +102,18 @@ export default function SpaceChannelChat() {
     if (!channelsData || !channelId) return undefined;
     return channelsData.find((c) => c.channelId === channelId);
   }, [channelsData, channelId]);
+
+  // Read-only channel manager status: true iff the channel is read-only AND
+  // the user holds a role in managerRoleIds. Used to extend pin/delete to
+  // managers in read-only channels (matching desktop + the shared checker).
+  const isReadOnlyManager = useMemo(() => {
+    if (!currentChannel?.isReadOnly || !user?.address) return false;
+    return canManageReadOnlyChannel(user.address, false, spaceData ?? undefined, currentChannel);
+  }, [currentChannel, spaceData, user?.address]);
+
+  // Read-only channels: managers get pin/delete. Regular channels: role permission.
+  const hasPinPermission = currentChannel?.isReadOnly ? isReadOnlyManager : roleCanPin;
+  const hasDeletePermission = currentChannel?.isReadOnly ? isReadOnlyManager : roleCanDelete;
 
   // Can the current user post here? Regular channels: always. Read-only
   // channels: only managers (a role in managerRoleIds). No owner bypass —
