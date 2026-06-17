@@ -6,7 +6,7 @@
  * Replaces the inline channel/group editing previously scattered across
  * SpaceSettingsModal (editingChannelId / iconPicker* state + handlers).
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { getIconColorHex, type IconColor } from '@quilibrium/quorum-shared';
 import {
@@ -56,10 +56,10 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
   const [rolePickerVisible, setRolePickerVisible] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const childOpen = iconPickerVisible || rolePickerVisible || isConfirming;
-  const guardedClose = () => {
+  const guardedClose = useCallback(() => {
     if (childOpen) return;
     onClose();
-  };
+  }, [childOpen, onClose]);
 
   // Bump this after every local mutation so `resolved` re-reads storage. Using a
   // counter (not mutation.isSuccess) because isSuccess latches true after the
@@ -90,69 +90,108 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
     );
   }, [resolved, target?.kind]);
 
-  if (!target || !resolved) {
-    return (
-      <BaseModal visible={visible} onClose={guardedClose} showHandle height={0.5}>
-        <View style={styles.container} />
-      </BaseModal>
-    );
+  if (!visible || !target || !resolved) {
+    return null;
   }
 
   const { space, channel } = resolved;
   const isChannel = target.kind === 'channel';
+
+  const anyPending = updateChannel.isPending || updateGroup.isPending || updateSpace.isPending;
 
   const afterMutation = () => {
     bumpReload();
     onChanged?.();
   };
 
+  const reportMutationError = async (action: string, e: unknown) => {
+    await confirm({
+      title: 'Could not save',
+      message: `Failed to ${action}. ${e instanceof Error ? e.message : 'Please try again.'}`,
+      confirmLabel: 'OK',
+      cancelLabel: 'Dismiss',
+      variant: 'primary',
+    });
+  };
+
   const commitName = async () => {
+    if (anyPending) return;
     const trimmed = nameDraft.trim();
     if (!trimmed) return;
-    if (isChannel) {
-      if (trimmed === channel?.channelName) return;
-      await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId, channelName: trimmed });
-    } else {
-      if (trimmed === resolved.group.groupName) return;
-      await updateGroup.mutateAsync({ spaceId: target.spaceId, groupIndex: target.groupIndex, groupName: trimmed });
+    try {
+      if (isChannel) {
+        if (trimmed === channel?.channelName) return;
+        await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId, channelName: trimmed });
+      } else {
+        if (trimmed === resolved.group.groupName) return;
+        await updateGroup.mutateAsync({ spaceId: target.spaceId, groupIndex: target.groupIndex, groupName: trimmed });
+      }
+      afterMutation();
+    } catch (e) {
+      setNameDraft(isChannel ? channel?.channelName ?? '' : resolved.group.groupName);
+      await reportMutationError('rename', e);
     }
-    afterMutation();
   };
 
   const handleIconSelect = async (icon: string, color: IconColor, variant: 'outline' | 'filled') => {
-    if (isChannel) {
-      await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId, icon, iconColor: color, iconVariant: variant });
-    } else {
-      await updateGroup.mutateAsync({ spaceId: target.spaceId, groupIndex: target.groupIndex, icon, iconColor: color, iconVariant: variant });
+    if (anyPending) return;
+    try {
+      if (isChannel) {
+        await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId, icon, iconColor: color, iconVariant: variant });
+      } else {
+        await updateGroup.mutateAsync({ spaceId: target.spaceId, groupIndex: target.groupIndex, icon, iconColor: color, iconVariant: variant });
+      }
+      afterMutation();
+    } catch (e) {
+      await reportMutationError('update the icon', e);
     }
-    afterMutation();
   };
 
   const handleIconClear = async () => {
-    if (isChannel) {
-      await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId, icon: '', iconColor: 'default' as IconColor, iconVariant: 'outline' });
-    } else {
-      await updateGroup.mutateAsync({ spaceId: target.spaceId, groupIndex: target.groupIndex, icon: '', iconColor: 'default' as IconColor, iconVariant: 'outline' });
+    if (anyPending) return;
+    try {
+      if (isChannel) {
+        await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId, icon: '', iconColor: 'default' as IconColor, iconVariant: 'outline' });
+      } else {
+        await updateGroup.mutateAsync({ spaceId: target.spaceId, groupIndex: target.groupIndex, icon: '', iconColor: 'default' as IconColor, iconVariant: 'outline' });
+      }
+      afterMutation();
+    } catch (e) {
+      await reportMutationError('clear the icon', e);
     }
-    afterMutation();
   };
 
   const handleToggleReadOnly = async (value: boolean) => {
     if (!isChannel) return;
-    await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId, isReadOnly: value });
-    afterMutation();
+    if (anyPending) return;
+    try {
+      await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId, isReadOnly: value });
+      afterMutation();
+    } catch (e) {
+      await reportMutationError('change read-only', e);
+    }
   };
 
   const handleManagerRolesConfirm = async (roleIds: string[]) => {
     if (!isChannel) return;
-    await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId, managerRoleIds: roleIds });
-    afterMutation();
+    if (anyPending) return;
+    try {
+      await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId, managerRoleIds: roleIds });
+      afterMutation();
+    } catch (e) {
+      await reportMutationError('update managers', e);
+    }
   };
 
   const handleSetDefault = async (value: boolean) => {
     if (!isChannel || !value) return; // only set; can't un-set without choosing another
-    await updateSpace.mutateAsync({ spaceId: target.spaceId, defaultChannelId: target.channelId });
-    afterMutation();
+    if (anyPending) return;
+    try {
+      await updateSpace.mutateAsync({ spaceId: target.spaceId, defaultChannelId: target.channelId });
+      afterMutation();
+    } catch (e) {
+      await reportMutationError('set the default channel', e);
+    }
   };
 
   const handleDelete = async () => {
@@ -210,6 +249,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
             style={[styles.iconPreview, { backgroundColor: iconHex + '20' }]}
             onPress={() => setIconPickerVisible(true)}
             accessibilityLabel="Change icon"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <IconSymbol
               name={((isChannel ? channel?.icon : resolved.group.icon) || 'hashtag') as IconSymbolName}
@@ -240,7 +280,9 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
                   <Switch
                     value={!!channel?.isReadOnly}
                     onValueChange={handleToggleReadOnly}
+                    disabled={anyPending}
                     trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                    accessibilityLabel="Read-only"
                   />
                 }
               />
@@ -266,8 +308,9 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
                   <Switch
                     value={channel?.channelId === space.defaultChannelId}
                     onValueChange={handleSetDefault}
-                    disabled={channel?.channelId === space.defaultChannelId}
+                    disabled={channel?.channelId === space.defaultChannelId || anyPending}
                     trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                    accessibilityLabel="Set as default channel"
                   />
                 }
               />

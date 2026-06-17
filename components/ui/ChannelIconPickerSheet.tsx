@@ -69,6 +69,17 @@ export function ChannelIconPickerSheet({
   const effectiveVariant = hasFilled ? pickedVariant : 'outline';
   const previewHex = getIconColorHex(pickedColor);
 
+  // Pick black/white text for contrast against the chosen swatch color.
+  const applyTextColor = (() => {
+    const h = previewHex.replace('#', '');
+    if (h.length < 6) return '#fff';
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return lum > 0.6 ? '#1a1a1a' : '#fff';
+  })();
+
   const handleConfirm = () => {
     onSelect(pickedIcon, pickedColor, effectiveVariant);
     onClose();
@@ -120,7 +131,7 @@ export function ChannelIconPickerSheet({
 
         {/* Icon grid */}
         <Text style={styles.sectionLabel}>Icon</Text>
-        <ScrollView style={styles.iconGrid} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.iconGrid} showsVerticalScrollIndicator={false} nestedScrollEnabled>
           <View style={styles.gridRow}>
             {ICON_OPTIONS.map((opt) => {
               const active = pickedIcon === opt.name;
@@ -163,6 +174,7 @@ export function ChannelIconPickerSheet({
                 ]}
                 onPress={() => setPickedColor(token)}
                 accessibilityLabel={token}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
               />
             );
           })}
@@ -177,7 +189,7 @@ export function ChannelIconPickerSheet({
             style={[styles.confirmButton, { backgroundColor: previewHex }]}
             onPress={handleConfirm}
           >
-            <Text style={styles.confirmButtonText}>Apply</Text>
+            <Text style={[styles.confirmButtonText, { color: applyTextColor }]}>Apply</Text>
           </TouchableOpacity>
         </View>
       </View>

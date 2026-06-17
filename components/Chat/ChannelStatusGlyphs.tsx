@@ -23,7 +23,7 @@ export function ChannelStatusGlyphs({ channel, defaultChannelId, size = 13 }: Ch
   if (!isDefault && !isReadOnly) return null;
 
   return (
-    <View style={styles.row}>
+    <View style={styles.row} accessibilityLabel={[isDefault && 'Default channel', isReadOnly && 'Read-only'].filter(Boolean).join(', ')}>
       {isDefault && <IconSymbol name="star.fill" size={size} color={theme.colors.textMuted} />}
       {isReadOnly && <IconSymbol name="lock.fill" size={size} color={theme.colors.textMuted} />}
     </View>
