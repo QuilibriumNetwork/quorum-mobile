@@ -74,6 +74,7 @@ function DraggableRow({
   onSwapHaptic, onLiftHaptic, onDropHaptic, onPersist,
 }: DraggableRowProps) {
   const ROW = CHANNEL_ROW_HEIGHT;
+  const scale = useSharedValue(1);
 
   const pan = useMemo(
     () =>
@@ -85,6 +86,7 @@ function DraggableRow({
         .onStart(() => {
           activeIndex.value = index;
           translateY.value = 0;
+          scale.value = withSpring(1.03);
           runOnJS(onLiftHaptic)();
         })
         .onUpdate((e) => {
@@ -102,7 +104,8 @@ function DraggableRow({
             runOnJS(onSwapHaptic)();
           }
         })
-        .onEnd(() => {
+        .onEnd((_, success) => {
+          if (!success) return;
           const finalOrder = positions.value;
           runOnJS(onPersist)(finalOrder);
           runOnJS(onDropHaptic)();
@@ -110,6 +113,7 @@ function DraggableRow({
         .onFinalize(() => {
           activeIndex.value = -1;
           translateY.value = 0;
+          scale.value = withSpring(1);
         }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [index, count, scrollRef]
@@ -121,10 +125,7 @@ function DraggableRow({
     if (isActive) {
       return {
         top: index * ROW,
-        transform: [
-          { translateY: translateY.value },
-          { scale: withSpring(1.03) },
-        ],
+        transform: [{ translateY: translateY.value }, { scale: scale.value }],
         zIndex: 999,
         elevation: 8,
         shadowColor: '#000',
@@ -137,8 +138,8 @@ function DraggableRow({
     return {
       top: index * ROW,
       transform: [
-        { translateY: withSpring((slot - index) * ROW, { damping: 20 }) },
-        { scale: 1 },
+        { translateY: withSpring((slot - index) * ROW, { damping: 20, stiffness: 200 }) },
+        { scale: scale.value },
       ],
       zIndex: 0,
       elevation: 0,
