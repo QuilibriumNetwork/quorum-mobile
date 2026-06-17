@@ -38,6 +38,8 @@ export interface SegmentedPillItem {
   key: string;
   /** Text label (omit for icon-only / emoji-only chips). */
   label?: string;
+  /** Optional second line under the label (e.g. "KAS only" on a chain pill). */
+  subtitle?: string;
   /** Icon glyph rendered left of the label (or alone if no label). */
   icon?: IconSymbolName;
   /** Emoji glyph rendered left of the label/count (for reaction pills). */
@@ -125,32 +127,65 @@ export function SegmentedPills({
     // brand accentColor; danger uses the danger color.
     const hasItemColor = Boolean(item.accentColor) || Boolean(item.danger);
 
-    // Foreground (text + icon) color.
-    const fg = isActive
-      ? variant === 'solid'
-        ? theme.colors.surface0
-        : itemAccent
-      : theme.colors.textMuted;
-
-    // Background: inactive pills stay flat (surface3); only the active pill gets
-    // a brighter tinted wash. Colored pills (chains/danger) tint in their own
-    // color; plain pills follow the app accent (accentSoft).
-    const activeBg =
+    // 'solid' variant: the active pill is a loud solid fill with white text; the
+    // rest sit as a dimmed wash of their own color (chain identity at rest). The
+    // strong difference in *kind* (solid vs dim) makes the selection unmistakable.
+    // 'tinted' variant: the gentler accentSoft look used by tab bars.
+    const fg =
       variant === 'solid'
-        ? itemAccent
+        ? isActive
+          ? theme.colors.surface0 // white text on the solid fill
+          : hasItemColor
+            ? itemAccent
+            : theme.colors.textMuted
         : hasItemColor
-          ? withAlpha(itemAccent, 0.18)
-          : theme.colors.accentSoft;
+          ? itemAccent
+          : isActive
+            ? itemAccent
+            : theme.colors.textMuted;
+
+    const bg =
+      variant === 'solid'
+        ? isActive
+          ? itemAccent // full solid color
+          : hasItemColor
+            ? withAlpha(itemAccent, 0.12) // dimmed own-color wash at rest
+            : theme.colors.surface3
+        : hasItemColor
+          ? isActive
+            ? withAlpha(itemAccent, 0.15)
+            : 'transparent'
+          : isActive
+            ? theme.colors.accentSoft
+            : theme.colors.surface3;
+
+    const borderColor =
+      variant === 'solid'
+        ? isActive
+          ? itemAccent
+          : undefined
+        : !hasItemColor
+          ? isActive
+            ? itemAccent
+            : undefined
+          : isActive
+            ? itemAccent
+            : withAlpha(itemAccent, 0.5);
+
+    // Subtitle sits one step quieter than the main label: a translucent white on
+    // the active solid fill, otherwise the muted text color.
+    const subtitleColor =
+      variant === 'solid' && isActive
+        ? withAlpha(theme.colors.surface0, 0.8)
+        : theme.colors.textMuted;
 
     const pillStyle = [
       styles.pill,
       // In a fixed (non-scrolling) row, pills share the width equally so the row
       // reads as a segmented control, matching the existing Join/Create tabs.
       !scrollable ? styles.pillFlex : null,
-      { backgroundColor: isActive ? activeBg : theme.colors.surface3 },
-      // A subtle border on the active tinted pill reads better on light skins
-      // where the tint alone is faint.
-      isActive && variant === 'tinted' ? { borderColor: itemAccent } : null,
+      { backgroundColor: bg },
+      borderColor ? { borderColor } : null,
     ];
 
     return (
@@ -171,7 +206,16 @@ export function SegmentedPills({
         ) : item.emoji ? (
           <Text style={[styles.emoji, { fontSize: Skin.font(emojiSize) }]}>{item.emoji}</Text>
         ) : null}
-        {item.label ? (
+        {item.label && item.subtitle ? (
+          <View style={styles.labelColumn}>
+            <Text style={[styles.label, { color: fg }]} numberOfLines={1}>
+              {item.label}
+            </Text>
+            <Text style={[styles.subtitle, { color: subtitleColor }]} numberOfLines={1}>
+              {item.subtitle}
+            </Text>
+          </View>
+        ) : item.label ? (
           <Text style={[styles.label, { color: fg }]} numberOfLines={1}>
             {item.label}
           </Text>
@@ -253,10 +297,18 @@ const makeStyles = (theme: ReturnType<typeof useTheme>['theme']) =>
     pressed: {
       opacity: 0.7,
     },
+    labelColumn: {
+      alignItems: 'center',
+    },
     label: {
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
+    },
+    subtitle: {
+      fontSize: Skin.font(10),
+      marginTop: Skin.space(2),
+      fontFamily: theme.fonts.regular.fontFamily,
     },
     count: {
       fontSize: Skin.font(13),
