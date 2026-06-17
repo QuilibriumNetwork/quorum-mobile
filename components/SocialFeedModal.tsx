@@ -11,6 +11,7 @@ import { SnapIcon } from '@/components/SocialFeed/content/SnapIcon';
 import TipModal, { type TipTarget } from '@/components/wallet/TipModal';
 import { ActionSheet, type ActionRowItem } from '@/components/shared/ActionSheet';
 import { ActionRow, ActionRowGroup } from '@/components/shared/ActionRow';
+import { useCenteredPillScroll } from '@/hooks/useCenteredPillScroll';
 import { useMiniappManifest } from '@/hooks/useMiniappManifest';
 import { useOgMetadata } from '@/hooks/useOgMetadata';
 import { SnapEmbed, useSnapDetection } from '@/components/SocialFeed/content/SnapEmbed';
@@ -5230,6 +5231,10 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   const { regularCastByteLimit, longCastByteLimit, isPro } = useFarcasterCastLimits();
   const maxCastLength = isPro ? longCastByteLimit : regularCastByteLimit;
   const [activeFilter, setActiveFilter] = useState<FeedFilter>('all');
+  // Centre the tapped filter chip in each of the two filter rows (full + mini).
+  // The chips keep their bespoke circular/solid look; only scrolling is shared.
+  const fullFilterScroll = useCenteredPillScroll();
+  const miniFilterScroll = useCenteredPillScroll();
   const [rendered, setRendered] = useState(visible);
   const [castText, setCastText] = useState('');
   const [castCursorPosition, setCastCursorPosition] = useState(0);
@@ -6366,15 +6371,16 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
 
                 {/* Filters Row with Channel Tabs - only show when not searching */}
                 {!searchActive && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersRow}>
+                  <ScrollView {...fullFilterScroll.scrollViewProps} style={styles.filtersRow}>
                     <View style={{width:16}}/>
                     {filters.map((filter) => {
                       const isActive = activeFilter === filter.id;
                       return (
                         <TouchableOpacity
                           key={filter.id}
+                          onLayout={fullFilterScroll.onItemLayout(filter.id)}
                           style={[styles.filterChip, isActive && styles.filterChipActive]}
-                          onPress={() => setActiveFilter(filter.id)}
+                          onPress={() => { setActiveFilter(filter.id); fullFilterScroll.center(filter.id); }}
                         >
                           <IconSymbol
                             name={filter.icon}
@@ -6555,7 +6561,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                       The icon alone carries the meaning ("All" =
                       rectangle stack, "Media" = play.rectangle, etc.),
                       and the active state is shown by filled background. */}
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersRow}>
+                  <ScrollView {...miniFilterScroll.scrollViewProps} style={styles.filtersRow}>
                     <View style={{width:16}}/>
                     {filters.map((filter) => {
                       const isActive = activeFilter === filter.id;
@@ -6563,8 +6569,9 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                         <TouchableOpacity
                           key={filter.id}
                           accessibilityLabel={filter.label}
+                          onLayout={miniFilterScroll.onItemLayout(filter.id)}
                           style={[styles.filterChip, isActive && styles.filterChipActive]}
-                          onPress={() => setActiveFilter(filter.id)}
+                          onPress={() => { setActiveFilter(filter.id); miniFilterScroll.center(filter.id); }}
                         >
                           <IconSymbol
                             name={filter.icon}
