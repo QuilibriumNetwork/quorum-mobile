@@ -31,6 +31,7 @@ import HistoryTab from '@/components/wallet/HistoryTab';
 import AssetDetailModal from '@/components/wallet/AssetDetailModal';
 import NFTDetailModal from '@/components/wallet/NFTDetailModal';
 import * as Skin from '@/theme/skins/geometry';
+import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 
 // Storage for wallet display preferences
 const walletDisplayStorage = createMMKV({ id: 'quorum-wallet-display' });
@@ -573,34 +574,20 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
             )}
 
             {/* Chain Filter Pills */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
+            <SegmentedPills
               style={styles.filterContainer}
               contentContainerStyle={styles.filterContent}
-            >
-              {chainFilters.map((chain) => (
-                <TouchableOpacity
-                  key={chain}
-                  style={[
-                    styles.filterPill,
-                    chainFilter === chain && styles.filterPillActive,
-                    chainFilter === chain && chain !== 'all' && { backgroundColor: getChainColor(chain) + '20' },
-                  ]}
-                  onPress={() => setChainFilter(chain)}
-                >
-                  <Text
-                    style={[
-                      styles.filterPillText,
-                      chainFilter === chain && styles.filterPillTextActive,
-                      chainFilter === chain && chain !== 'all' && { color: getChainColor(chain) },
-                    ]}
-                  >
-                    {chain === 'all' ? 'All Networks' : getChainName(chain)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+              itemRole="button"
+              items={chainFilters.map<SegmentedPillItem>((chain) => ({
+                key: chain,
+                label: chain === 'all' ? 'All Networks' : getChainName(chain),
+                // Per-chain brand color drives the active tint (the 'all' pill
+                // falls back to the theme accent).
+                accentColor: chain === 'all' ? undefined : getChainColor(chain),
+              }))}
+              activeKey={chainFilter}
+              onChange={setChainFilter}
+            />
 
             {/* Loading State - hide after 5 seconds */}
             {showLoadingSpinner && ((activeType === 'builtin' && isLoading && !balances) ||
@@ -1407,25 +1394,6 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     filterContent: {
       paddingHorizontal: Skin.space(20),
-      gap: Skin.space(8),
-    },
-    filterPill: {
-      paddingHorizontal: Skin.space(14),
-      paddingVertical: Skin.space(8),
-      borderRadius: Skin.radius(20),
-      backgroundColor: theme.colors.surface2,
-    },
-    filterPillActive: {
-      backgroundColor: theme.colors.primary + '20',
-    },
-    filterPillText: {
-      fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-    },
-    filterPillTextActive: {
-      color: theme.colors.primary,
     },
     loadingContainer: {
       alignItems: 'center',
