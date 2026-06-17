@@ -55,7 +55,7 @@ export function ChannelManagerRolePickerSheet({
     <BaseModal visible={visible} onClose={onClose} height={0.6} showHandle>
       <View style={styles.container}>
         <Text style={styles.title}>Channel Managers</Text>
-        <Text style={styles.subtitle}>Roles that can post in this read-only channel</Text>
+        <Text style={styles.subtitle}>Roles allowed to post in this read-only channel</Text>
 
         <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
           <ActionRowGroup>

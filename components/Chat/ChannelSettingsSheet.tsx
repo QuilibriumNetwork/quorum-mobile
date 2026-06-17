@@ -8,7 +8,8 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { getIconColorHex, type IconColor } from '@quilibrium/quorum-shared';
+import { type IconColor } from '@quilibrium/quorum-shared';
+import { resolveChannelIconColor } from '@/utils/channelIcon';
 import {
   useUpdateChannel,
   useDeleteChannel,
@@ -235,8 +236,8 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
     .map((id) => roles.find((r) => r.roleId === id)?.displayName)
     .filter(Boolean)
     .join(', ');
-  const activeIconColor = (isChannel ? channel?.iconColor : resolved.group.iconColor) ?? 'default';
-  const iconHex = getIconColorHex(activeIconColor as IconColor);
+  const rawIconColor = isChannel ? channel?.iconColor : resolved.group.iconColor;
+  const iconHex = resolveChannelIconColor(rawIconColor, theme.colors.textMuted);
 
   return (
     <BaseModal visible={visible} onClose={guardedClose} showHandle height={0.8} avoidKeyboard>
@@ -267,6 +268,8 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
             placeholder={isChannel ? 'Channel name' : 'Group name'}
             placeholderTextColor={theme.colors.textMuted}
             returnKeyType="done"
+            autoCapitalize="none"
+            autoCorrect={false}
           />
         </View>
 
@@ -274,6 +277,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
           <>
             <ActionRowGroup>
               <ActionRow
+                icon="lock.fill"
                 label="Read-only"
                 sublabel="Only managers can post"
                 trailing={
@@ -288,6 +292,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
               />
               {channel?.isReadOnly && (
                 <ActionRow
+                  icon="person.2.fill"
                   label="Managers"
                   sublabel={managerNames || 'No roles selected'}
                   trailing="chevron"
@@ -298,6 +303,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
 
             <ActionRowGroup>
               <ActionRow
+                icon="star.fill"
                 label="Set as default channel"
                 sublabel={
                   channel?.channelId === space.defaultChannelId
@@ -323,6 +329,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
             icon="trash"
             label={isChannel ? 'Delete channel' : 'Delete group'}
             destructive
+            disabled={anyPending}
             onPress={handleDelete}
           />
         </ActionRowGroup>
@@ -334,8 +341,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
         visible={iconPickerVisible}
         onClose={() => setIconPickerVisible(false)}
         selectedIcon={(isChannel ? channel?.icon : resolved.group.icon) || undefined}
-        selectedColor={activeIconColor as IconColor}
-        selectedVariant={(isChannel ? channel?.iconVariant : resolved.group.iconVariant) ?? 'outline'}
+        selectedColor={(rawIconColor && !rawIconColor.startsWith('#') ? rawIconColor : 'default') as IconColor}
         onSelect={handleIconSelect}
         onClear={handleIconClear}
       />

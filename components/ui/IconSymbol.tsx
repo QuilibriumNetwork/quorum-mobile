@@ -308,6 +308,26 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   // Window controls
   'arrow.down.right.and.arrow.up.left': tabler('IconMinimize'),
   'arrow.up.left.and.arrow.down.right': tabler('IconMaximize'),
+
+  // Shared icon-picker vocabulary (semantic Tabler names whose PascalCase form
+  // doesn't match Tabler's actual export, so they need explicit mapping).
+  'bullhorn': tabler('IconSpeakerphone'),
+  'hashtag': tabler('IconHash'),
+  'hand-peace': tabler('IconHandTwoFingers'),
+  'smile': tabler('IconMoodSmile', 'IconMoodSmileFilled'),
+  'party': tabler('IconConfetti', 'IconConfettiFilled'),
+  'envelope': tabler('IconMail', 'IconMailFilled'),
+  'image': tabler('IconPhoto', 'IconPhotoFilled'),
+  'dollar-sign': tabler('IconCurrencyDollar'),
+  'utensils': tabler('IconToolsKitchen2'),
+  'fire': tabler('IconFlame', 'IconFlameFilled'),
+  'gamepad': tabler('IconDeviceGamepad'),
+  'question-circle': tabler('IconHelpCircle', 'IconHelpCircleFilled'),
+  'check-circle': tabler('IconCircleCheck', 'IconCircleCheckFilled'),
+  'warning': tabler('IconAlertTriangle', 'IconAlertTriangleFilled'),
+  'support': tabler('IconLifebuoy'),
+  'calendar-alt': tabler('IconCalendar', 'IconCalendarFilled'),
+  'desktop': tabler('IconDeviceDesktop', 'IconDeviceDesktopFilled'),
 };
 
 /**
