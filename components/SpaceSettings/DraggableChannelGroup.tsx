@@ -101,7 +101,11 @@ export function DraggableChannelGroup({
               <Text style={styles.name}>{channel.channelName}</Text>
             </TouchableOpacity>
             {renderStatusGlyphs(channel)}
-            <View style={styles.handle} importantForAccessibility="no-hide-descendants">
+            <View
+              style={styles.handle}
+              importantForAccessibility="no-hide-descendants"
+              accessibilityElementsHidden={true}
+            >
               <IconSymbol name={'grip.vertical' as IconSymbolName} size={16} color={theme.colors.textMuted} />
             </View>
           </View>
