@@ -82,6 +82,7 @@ import React from 'react';
 import { ActivityIndicator, Alert, InteractionManager, Keyboard, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
+import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 
 interface SwapModalProps {
   visible: boolean;
@@ -1831,24 +1832,23 @@ export default function SwapModal({ visible, onClose, initialBuyToken }: SwapMod
                 <View style={styles.manualEntryContainer}>
                   {/* Chain Selector */}
                   <Text style={styles.manualEntryLabel}>Chain</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chainSelector}>
-                    {(sellAsset?.chain === 'solana' ? ['solana'] : ['ethereum', 'base', 'arbitrum', 'optimism', 'polygon', 'hyperevm']).map((chain) => (
-                      <TouchableOpacity
-                        key={chain}
-                        style={[
-                          styles.chainChip,
-                          manualChain === chain && styles.chainChipActive,
-                          { borderColor: getChainColor(chain) }
-                        ]}
-                        onPress={() => setManualChain(chain)}
-                      >
+                  <SegmentedPills
+                    style={styles.chainSelector}
+                    itemRole="button"
+                    items={(sellAsset?.chain === 'solana'
+                      ? ['solana']
+                      : ['ethereum', 'base', 'arbitrum', 'optimism', 'polygon', 'hyperevm']
+                    ).map<SegmentedPillItem>((chain) => ({
+                      key: chain,
+                      label: getChainName(chain),
+                      accentColor: getChainColor(chain),
+                      leading: (
                         <View style={[styles.chainChipDot, { backgroundColor: getChainColor(chain) }]} />
-                        <Text style={[styles.chainChipText, manualChain === chain && styles.chainChipTextActive]}>
-                          {getChainName(chain)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                      ),
+                    }))}
+                    activeKey={manualChain}
+                    onChange={setManualChain}
+                  />
 
                   {/* Contract Address */}
                   <Text style={styles.manualEntryLabel}>Contract Address</Text>
@@ -2474,35 +2474,11 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       color: '#fff',
     },
     chainSelector: {
-      flexDirection: 'row',
       marginBottom: Skin.space(8),
-    },
-    chainChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: theme.colors.surface1,
-      borderWidth: Skin.border(1),
-      borderRadius: Skin.radius(16),
-      paddingHorizontal: Skin.space(12),
-      paddingVertical: Skin.space(6),
-      marginRight: Skin.space(8),
-      gap: Skin.space(6),
-    },
-    chainChipActive: {
-      backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
     },
     chainChipDot: {
       width: 8,
       height: 8,
       borderRadius: Skin.radius(4),
-    },
-    chainChipText: {
-      fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-    },
-    chainChipTextActive: {
-      color: theme.colors.textMain,
     },
   });
