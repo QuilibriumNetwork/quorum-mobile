@@ -12,8 +12,9 @@ import type { DirectoryEntry } from '@/services/api/quorumClient';
 import { haptics } from '@/utils/haptics';
 import { router, Stack } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 import { useHeaderHeight } from '@react-navigation/elements';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -146,27 +147,19 @@ export default function DiscoverSpacesScreen() {
         )}
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ flexGrow: 0, flexShrink: 0 }}
+      <SegmentedPills
         contentContainerStyle={styles.categoryRow}
-      >
-        {SPACE_CATEGORIES.map((cat) => (
-          <TouchableOpacity
-            key={cat.label}
-            style={[styles.categoryChip, category === cat.value && styles.categoryChipActive]}
-            onPress={() => setCategory(cat.value)}
-          >
-            <Text
-              style={[styles.categoryChipText, category === cat.value && styles.categoryChipTextActive]}
-              numberOfLines={1}
-            >
-              {cat.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+        variant="solid"
+        itemRole="button"
+        items={SPACE_CATEGORIES.map<SegmentedPillItem>((cat) => ({
+          // value is `SpaceCategory | null`; the "All" pill uses a string
+          // sentinel since pill keys must be strings.
+          key: cat.value ?? 'all',
+          label: cat.label,
+        }))}
+        activeKey={category ?? 'all'}
+        onChange={(key) => setCategory(key === 'all' ? null : (key as typeof category))}
+      />
 
       {isLoading && entries.length === 0 ? (
         <View style={styles.center}>
@@ -218,24 +211,6 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     categoryRow: {
       paddingHorizontal: Skin.space(16),
       paddingBottom: Skin.space(8),
-    },
-    categoryChip: {
-      paddingHorizontal: Skin.space(14),
-      paddingVertical: Skin.space(6),
-      borderRadius: Skin.radius(16),
-      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-      marginRight: Skin.space(8),
-    },
-    categoryChipActive: {
-      backgroundColor: theme.colors.primary,
-    },
-    categoryChipText: {
-      fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
-    },
-    categoryChipTextActive: {
-      color: '#fff',
-      fontWeight: '600',
     },
     center: {
       flex: 1,
