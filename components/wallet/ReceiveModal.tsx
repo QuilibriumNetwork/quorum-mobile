@@ -4,6 +4,7 @@
 
 import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 import { useWalletAddresses } from '@/hooks/useWallet';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
 import { getChainName } from '@/services/wallet/balanceService';
@@ -117,34 +118,21 @@ export default function ReceiveModal({ visible, onClose, defaultChain }: Receive
         {selectedChain === 'ethereum' && <WalletSelector />}
 
         {/* Chain Selector */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
+        <SegmentedPills
           style={styles.chainSelectorScroll}
           contentContainerStyle={styles.chainSelector}
-        >
-          {(['ethereum', 'bitcoin', 'solana', 'kaspa', 'bittensor'] as ChainOption[]).map((chain) => (
-            <TouchableOpacity
-              key={chain}
-              style={[
-                styles.chainOption,
-                selectedChain === chain && styles.chainOptionActive,
-                selectedChain === chain && { borderColor: getChainColor(chain) },
-              ]}
-              onPress={() => setSelectedChain(chain)}
-            >
-              <Text
-                style={[
-                  styles.chainOptionText,
-                  selectedChain === chain && { color: getChainColor(chain) },
-                ]}
-              >
-                {chain === 'ethereum' ? 'EVM' : chain.charAt(0).toUpperCase() + chain.slice(1)}
-              </Text>
-              <Text style={styles.chainOptionSubtext}>{getChainDescription(chain)}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+          variant="solid"
+          pillShape="rect"
+          itemRole="button"
+          items={(['ethereum', 'bitcoin', 'solana', 'kaspa', 'bittensor'] as ChainOption[]).map<SegmentedPillItem>((chain) => ({
+            key: chain,
+            label: chain === 'ethereum' ? 'EVM' : chain.charAt(0).toUpperCase() + chain.slice(1),
+            subtitle: getChainDescription(chain),
+            accentColor: getChainColor(chain),
+          }))}
+          activeKey={selectedChain}
+          onChange={(key) => setSelectedChain(key as ChainOption)}
+        />
 
         {/* QR Code */}
         {address && (
@@ -224,32 +212,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       marginBottom: Skin.space(24),
     },
     chainSelector: {
-      flexDirection: 'row',
-      gap: Skin.space(8),
       paddingHorizontal: Skin.space(20),
-    },
-    chainOption: {
-      paddingVertical: Skin.space(12),
-      paddingHorizontal: Skin.space(16),
-      borderRadius: Skin.radius(12),
-      borderWidth: Skin.border(2),
-      borderColor: theme.colors.border,
-      alignItems: 'center',
-      minWidth: 80,
-    },
-    chainOptionActive: {
-      backgroundColor: theme.colors.surface2,
-    },
-    chainOptionText: {
-      fontSize: Skin.font(14),
-      fontFamily: theme.fonts.bold.fontFamily,
-      fontWeight: theme.fonts.bold.fontWeight,
-      color: theme.colors.textMuted,
-    },
-    chainOptionSubtext: {
-      fontSize: Skin.font(10),
-      color: theme.colors.textMuted,
-      marginTop: Skin.space(2),
     },
     qrContainer: {
       alignItems: 'center',

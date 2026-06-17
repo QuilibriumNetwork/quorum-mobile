@@ -29,6 +29,7 @@ import { ActivityIndicator, Alert, FlatList, RefreshControl, StyleSheet, Text, V
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
+import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 
 interface OffersModalProps {
   visible: boolean;
@@ -393,6 +394,10 @@ export default function OffersModal({
     </View>
   );
 
+  const pendingReceivedCount = receivedOffers
+    ? receivedOffers.filter((o) => o.state === 'pending').length
+    : 0;
+
   return (
     <BaseModal visible={visible} onClose={onClose} height={0.85} fillHeight>
       <View style={styles.header}>
@@ -403,31 +408,26 @@ export default function OffersModal({
       </View>
 
       {/* Tabs */}
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'received' && styles.tabActive]}
-          onPress={() => setActiveTab('received')}
-        >
-          <Text style={[styles.tabText, activeTab === 'received' && styles.tabTextActive]}>
-            Received
-          </Text>
-          {receivedOffers && receivedOffers.filter(o => o.state === 'pending').length > 0 && (
-            <View style={styles.tabBadge}>
-              <Text style={styles.tabBadgeText}>
-                {receivedOffers.filter(o => o.state === 'pending').length}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'sent' && styles.tabActive]}
-          onPress={() => setActiveTab('sent')}
-        >
-          <Text style={[styles.tabText, activeTab === 'sent' && styles.tabTextActive]}>
-            Sent
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <SegmentedPills
+        style={styles.tabs}
+        scrollable={false}
+        pillShape="rect"
+        items={[
+          {
+            key: 'received',
+            label: 'Received',
+            trailing:
+              pendingReceivedCount > 0 ? (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>{pendingReceivedCount}</Text>
+                </View>
+              ) : undefined,
+          },
+          { key: 'sent', label: 'Sent' } as SegmentedPillItem,
+        ]}
+        activeKey={activeTab}
+        onChange={(key) => setActiveTab(key as TabType)}
+      />
 
       <FlatList
         data={currentOffers ?? []}
@@ -464,38 +464,11 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       color: theme.colors.textMain,
     },
     tabs: {
-      flexDirection: 'row',
       paddingHorizontal: Skin.space(20),
       marginBottom: Skin.space(12),
-      gap: Skin.space(8),
-    },
-    tab: {
-      flex: 1,
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingVertical: Skin.space(10),
-      borderRadius: Skin.radius(10),
-      backgroundColor: theme.colors.surface2,
-      borderWidth: Skin.border(1),
-      borderColor: theme.colors.surface3,
-      gap: Skin.space(6),
-    },
-    tabActive: {
-      backgroundColor: theme.colors.primary,
-      borderColor: theme.colors.primary,
-    },
-    tabText: {
-      fontSize: Skin.font(14),
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMain,
-    },
-    tabTextActive: {
-      color: '#fff',
     },
     tabBadge: {
-      backgroundColor: '#fff',
+      backgroundColor: theme.colors.accent,
       borderRadius: Skin.radius(10),
       minWidth: 18,
       height: 18,
@@ -507,7 +480,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       fontSize: Skin.font(11),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
-      color: theme.colors.primary,
+      color: theme.colors.surface0,
     },
     listContent: {
       paddingHorizontal: Skin.space(20),

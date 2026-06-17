@@ -20,6 +20,7 @@ import ShareInviteSheet from '@/components/ShareInviteSheet';
 import { BaseModal, TypeToConfirmModal } from '@/components/shared';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
+import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 import { ChannelSettingsSheet, type ChannelSettingsTarget } from '@/components/Chat/ChannelSettingsSheet';
 import { ChannelStatusGlyphs } from '@/components/Chat/ChannelStatusGlyphs';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
@@ -2400,41 +2401,18 @@ export default function SpaceSettingsModal({
         </View>
 
         {/* Tab bar */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
+        <SegmentedPills
           style={styles.tabBar}
-          contentContainerStyle={styles.tabBarContent}
-        >
-          {tabs.map((tab) => (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tab, activeTab === tab.key && styles.tabActive]}
-              onPress={() => setActiveTab(tab.key)}
-            >
-              <IconSymbol
-                name={tab.icon as IconSymbolName}
-                size={18}
-                color={
-                  activeTab === tab.key
-                    ? tab.key === 'danger'
-                      ? theme.colors.danger
-                      : theme.colors.primary
-                    : theme.colors.textMuted
-                }
-              />
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab.key && styles.tabTextActive,
-                  tab.key === 'danger' && activeTab === tab.key && { color: theme.colors.danger },
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+          pillShape="rect"
+          items={tabs.map<SegmentedPillItem>((tab) => ({
+            key: tab.key,
+            label: tab.label,
+            icon: tab.icon as IconSymbolName,
+            danger: tab.key === 'danger',
+          }))}
+          activeKey={activeTab}
+          onChange={(key) => setActiveTab(key as TabType)}
+        />
 
         {/* Tab content */}
         {renderTabContent()}
@@ -2509,33 +2487,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       marginTop: Skin.space(4),
     },
     tabBar: {
-      flexGrow: 0,
       marginBottom: Skin.space(16),
-    },
-    tabBarContent: {
-      gap: Skin.space(8),
-      paddingHorizontal: Skin.space(4),
-    },
-    tab: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: Skin.space(8),
-      paddingHorizontal: Skin.space(12),
-      borderRadius: Skin.radius(8),
-      backgroundColor: theme.colors.surface3,
-      gap: Skin.space(6),
-    },
-    tabActive: {
-      backgroundColor: theme.colors.surface1,
-    },
-    tabText: {
-      fontSize: Skin.font(13),
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
-    },
-    tabTextActive: {
-      color: theme.colors.primary,
     },
     tabContent: {
       flex: 1,

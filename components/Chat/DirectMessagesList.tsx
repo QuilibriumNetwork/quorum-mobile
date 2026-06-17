@@ -10,6 +10,7 @@ import type { Conversation } from '@/hooks/chat';
 import React, { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Alert, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { FlashList } from '@shopify/flash-list';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -327,27 +328,20 @@ export function DirectMessagesList({
 
       {/* Filter chips */}
       {(isFavorite || isMuted) && (
-        <View style={styles.filterContainer}>
-          {(['all', 'favorites', 'unknown', 'muted'] as DMFilter[]).map((filter) => (
-            <TouchableOpacity
-              key={filter}
-              style={[
-                styles.filterChip,
-                activeFilter === filter && styles.filterChipActive,
-              ]}
-              onPress={() => setActiveFilter(filter)}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  activeFilter === filter && styles.filterChipTextActive,
-                ]}
-              >
-                {filter === 'all' ? 'All' : filter === 'favorites' ? 'Favorites' : filter === 'unknown' ? 'Unknown' : 'Muted'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <SegmentedPills
+          style={styles.filterContainer}
+          variant="solid"
+          scrollable={false}
+          itemRole="button"
+          items={[
+            { key: 'all', label: 'All' },
+            { key: 'favorites', label: 'Favorites' },
+            { key: 'unknown', label: 'Unknown' },
+            { key: 'muted', label: 'Muted' },
+          ]}
+          activeKey={activeFilter}
+          onChange={(key) => setActiveFilter(key as DMFilter)}
+        />
       )}
 
       <FlashList
@@ -422,24 +416,6 @@ const createStyles = (theme: AppTheme) =>
       gap: Skin.space(8),
       borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface3,
-    },
-    filterChip: {
-      paddingHorizontal: Skin.space(12),
-      paddingVertical: Skin.space(6),
-      borderRadius: Skin.radius(16),
-      backgroundColor: theme.colors.surface3 ?? theme.colors.surface2,
-    },
-    filterChipActive: {
-      backgroundColor: theme.colors.primary,
-    },
-    filterChipText: {
-      fontSize: Skin.font(13),
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
-    },
-    filterChipTextActive: {
-      color: '#fff',
     },
     conversationItem: {
       flexDirection: 'row',

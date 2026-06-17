@@ -17,6 +17,7 @@ import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 
 import { BaseModal } from '@/components/shared';
+import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
@@ -122,28 +123,20 @@ export function ReactionDetailsModal({
       <View style={styles.container}>
         <Text style={styles.title}>Reactions</Text>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
+        <SegmentedPills
           contentContainerStyle={styles.pillsRow}
-        >
-          {reactions.map((r) => {
-            const active = selectedEmoji === r.emoji;
-            return (
-              <TouchableOpacity
-                key={r.emoji}
-                style={[styles.pill, active && styles.pillActive]}
-                onPress={() => setSelectedEmoji(active ? null : r.emoji)}
-                activeOpacity={0.7}
-              >
-                {renderEmoji(r.emoji, 'pill')}
-                <Text style={[styles.pillCount, active && styles.pillCountActive]}>
-                  {r.count}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+          itemRole="button"
+          allowReselect
+          items={reactions.map<SegmentedPillItem>((r) => ({
+            key: r.emoji,
+            leading: renderEmoji(r.emoji, 'pill'),
+            count: r.count,
+            accessibilityLabel: `${r.emoji} ${r.count}`,
+          }))}
+          activeKey={selectedEmoji}
+          // allowReselect surfaces a tap on the active pill; toggle it off.
+          onChange={(key) => setSelectedEmoji((prev) => (prev === key ? null : key))}
+        />
 
         <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
           {filteredRows.length === 0 ? (
@@ -207,35 +200,12 @@ function createStyles(theme: AppTheme) {
       paddingVertical: Skin.space(4),
       paddingHorizontal: Skin.space(4),
     },
-    pill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Skin.space(6),
-      paddingHorizontal: Skin.space(12),
-      paddingVertical: Skin.space(8),
-      borderRadius: Skin.radius(16),
-      borderWidth: Skin.border(1),
-      borderColor: theme.colors.surface3,
-      backgroundColor: theme.colors.surface2,
-    },
-    pillActive: {
-      borderColor: theme.colors.accent,
-      backgroundColor: theme.colors.accent + '22',
-    },
     pillEmojiText: {
       fontSize: Skin.font(18),
     },
     pillCustomEmoji: {
       width: 20,
       height: 20,
-    },
-    pillCount: {
-      fontSize: Skin.font(14),
-      fontWeight: '600',
-      color: theme.colors.textMain,
-    },
-    pillCountActive: {
-      color: theme.colors.accent,
     },
     list: {
       flex: 1,

@@ -7,8 +7,9 @@ import type {
   ProposalScope,
 } from '@/hooks/useGovernance';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
@@ -113,49 +114,32 @@ export default function CreateProposalSheet({
         </Text>
 
         {/* Scope toggle */}
-        <View style={styles.segmentedControl}>
-          {(['protocol', 'client'] as const).map((s) => (
-            <TouchableOpacity
-              key={s}
-              style={[
-                styles.segment,
-                { backgroundColor: scope === s ? theme.colors.accent : theme.colors.surface3 },
-              ]}
-              onPress={() => setScope(s)}
-            >
-              <Text style={[
-                styles.segmentText,
-                { color: scope === s ? theme.colors.surface0 : theme.colors.textMuted },
-              ]}>
-                {s === 'protocol' ? 'Protocol' : 'Client'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <SegmentedPills
+          style={styles.segmentedControl}
+          variant="solid"
+          pillShape="rect"
+          scrollable={false}
+          items={[
+            { key: 'protocol', label: 'Protocol' },
+            { key: 'client', label: 'Client' },
+          ]}
+          activeKey={scope}
+          onChange={(key) => setScope(key as ProposalScope)}
+        />
 
         {/* Scope-specific fields */}
         {scope === 'protocol' ? (
           <>
             <Text style={[styles.label, { color: theme.colors.textMuted }]}>Category</Text>
-            <View style={styles.pillRow}>
-              {PROTOCOL_CATEGORIES.map((c) => (
-                <TouchableOpacity
-                  key={c.value}
-                  style={[
-                    styles.pill,
-                    { backgroundColor: category === c.value ? theme.colors.accent : theme.colors.surface3 },
-                  ]}
-                  onPress={() => setCategory(c.value)}
-                >
-                  <Text style={[
-                    styles.pillText,
-                    { color: category === c.value ? theme.colors.surface0 : theme.colors.textMuted },
-                  ]}>
-                    {c.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <SegmentedPills
+              style={styles.pillRow}
+              variant="solid"
+              wrap
+              itemRole="button"
+              items={PROTOCOL_CATEGORIES.map<SegmentedPillItem>((c) => ({ key: c.value, label: c.label }))}
+              activeKey={category}
+              onChange={(key) => setCategory(key as ProtocolCategory)}
+            />
 
             <Text style={[styles.label, { color: theme.colors.textMuted }]}>Title</Text>
             <TextInput
@@ -205,25 +189,15 @@ export default function CreateProposalSheet({
         ) : (
           <>
             <Text style={[styles.label, { color: theme.colors.textMuted }]}>Client Area</Text>
-            <View style={styles.pillRow}>
-              {CLIENT_AREAS.map((a) => (
-                <TouchableOpacity
-                  key={a.value}
-                  style={[
-                    styles.pill,
-                    { backgroundColor: clientArea === a.value ? theme.colors.accent : theme.colors.surface3 },
-                  ]}
-                  onPress={() => setClientArea(a.value)}
-                >
-                  <Text style={[
-                    styles.pillText,
-                    { color: clientArea === a.value ? theme.colors.surface0 : theme.colors.textMuted },
-                  ]}>
-                    {a.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <SegmentedPills
+              style={styles.pillRow}
+              variant="solid"
+              wrap
+              itemRole="button"
+              items={CLIENT_AREAS.map<SegmentedPillItem>((a) => ({ key: a.value, label: a.label }))}
+              activeKey={clientArea}
+              onChange={(key) => setClientArea(key as ClientArea)}
+            />
 
             <Text style={[styles.label, { color: theme.colors.textMuted }]}>Title</Text>
             <TextInput
@@ -295,19 +269,7 @@ const styles = createSkinnable(() => StyleSheet.create({
     marginBottom: Skin.space(16),
   },
   segmentedControl: {
-    flexDirection: 'row',
-    gap: Skin.space(8),
     marginBottom: Skin.space(20),
-  },
-  segment: {
-    flex: 1,
-    paddingVertical: Skin.space(8),
-    borderRadius: Skin.radius(10),
-    alignItems: 'center',
-  },
-  segmentText: {
-    fontSize: Skin.font(14),
-    fontWeight: '600',
   },
   label: {
     fontSize: Skin.font(13),
@@ -316,18 +278,7 @@ const styles = createSkinnable(() => StyleSheet.create({
     marginTop: Skin.space(12),
   },
   pillRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Skin.space(8),
-  },
-  pill: {
-    paddingHorizontal: Skin.space(12),
-    paddingVertical: Skin.space(6),
-    borderRadius: Skin.radius(14),
-  },
-  pillText: {
-    fontSize: Skin.font(13),
-    fontWeight: '500',
+    marginBottom: Skin.space(4),
   },
   textInput: {
     borderRadius: Skin.radius(10),
