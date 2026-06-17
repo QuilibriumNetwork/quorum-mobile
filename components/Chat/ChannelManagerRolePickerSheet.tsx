@@ -9,7 +9,6 @@ import React, { useState, useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Role } from '@quilibrium/quorum-shared';
 import { BaseModal, ActionRow, ActionRowGroup } from '@/components/shared';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useTheme, type AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
@@ -38,18 +37,15 @@ export function ChannelManagerRolePickerSheet({
     if (visible) setPicked(new Set(selectedRoleIds));
   }, [visible, selectedRoleIds]);
 
+  // Auto-save on each tap (consistent with the rest of the drawer — no Done
+  // button). Compute the next set, update local state for the checkmarks, and
+  // commit it immediately via onConfirm.
   const toggle = (roleId: string) => {
-    setPicked((prev) => {
-      const next = new Set(prev);
-      if (next.has(roleId)) next.delete(roleId);
-      else next.add(roleId);
-      return next;
-    });
-  };
-
-  const handleDone = () => {
-    onConfirm(Array.from(picked));
-    onClose();
+    const next = new Set(picked);
+    if (next.has(roleId)) next.delete(roleId);
+    else next.add(roleId);
+    setPicked(next);
+    onConfirm(Array.from(next));
   };
 
   return (
@@ -84,10 +80,6 @@ export function ChannelManagerRolePickerSheet({
             )}
           </ActionRowGroup>
         </ScrollView>
-
-        <TouchableOpacity style={styles.doneButton} onPress={handleDone}>
-          <Text style={styles.doneText}>Done</Text>
-        </TouchableOpacity>
       </View>
     </BaseModal>
   );
@@ -110,12 +102,4 @@ const createStyles = (theme: AppTheme) =>
     },
     list: { flex: 1, marginBottom: Skin.space(12) },
     dot: { width: 12, height: 12, borderRadius: Skin.radius(6) },
-    doneButton: {
-      paddingVertical: Skin.space(14),
-      borderRadius: Skin.radius(10),
-      backgroundColor: theme.colors.primary,
-      alignItems: 'center',
-      marginBottom: Skin.space(8),
-    },
-    doneText: { ...theme.textStyles.body, color: '#fff' },
   });

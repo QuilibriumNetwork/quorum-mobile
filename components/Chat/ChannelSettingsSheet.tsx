@@ -226,7 +226,9 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
       return;
     }
     if (!isChannel) return;
-    if (anyPending) return;
+    // NOTE: no `anyPending` guard here. The role picker auto-saves on each tap and
+    // always sends the COMPLETE intended set, so overlapping writes are self-
+    // correcting (last one wins). Guarding would silently drop rapid taps.
     try {
       await updateChannel.mutateAsync({ spaceId: target.spaceId, channelId: target.channelId, managerRoleIds: roleIds });
       afterMutation();
