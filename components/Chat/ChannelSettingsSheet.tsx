@@ -414,6 +414,12 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
               )}
             </ActionRowGroup>
 
+            {channel?.isReadOnly && (channel?.managerRoleIds?.length ?? 0) === 0 && (
+              <Text style={styles.warningText}>
+                No managers selected — nobody will be able to post in this channel.
+              </Text>
+            )}
+
             <ActionRowGroup style={styles.group}>
               <ActionRow
                 icon="star.fill"
@@ -472,6 +478,12 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
                 />
               )}
             </ActionRowGroup>
+
+            {draftReadOnly && draftManagerRoleIds.length === 0 && (
+              <Text style={styles.warningText}>
+                No managers selected — nobody will be able to post in this channel.
+              </Text>
+            )}
 
             <ActionRowGroup style={styles.group}>
               <ActionRow
@@ -571,6 +583,13 @@ const createStyles = (theme: AppTheme) =>
     },
     /** Vertical gap between consecutive ActionRowGroup blocks in the drawer. */
     group: { marginBottom: Skin.space(14) },
+    warningText: {
+      ...theme.textStyles.footnote,
+      color: theme.colors.warning,
+      marginTop: Skin.space(-6),
+      marginBottom: Skin.space(14),
+      paddingHorizontal: Skin.space(4),
+    },
     /** Create mode: section label + group chips */
     createSection: {
       marginBottom: Skin.space(14),
