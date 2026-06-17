@@ -31,7 +31,7 @@ import { useTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 import { useCenteredPillScroll } from '@/hooks/useCenteredPillScroll';
 
-export type SegmentedPillsVariant = 'tinted' | 'solid';
+export type SegmentedPillsVariant = 'tinted' | 'solid' | 'segmented';
 
 export interface SegmentedPillItem {
   /** Stable identifier; also the value passed to onChange. */
@@ -68,6 +68,9 @@ interface BaseSegmentedPillsProps {
   variant?: SegmentedPillsVariant;
   /** Horizontal scroll (default) vs a fixed flex row that fits the width. */
   scrollable?: boolean;
+  /** Wrap pills onto multiple lines instead of equal-width fitting. Implies a
+   *  fixed (non-scrolling) row; pills size to content and wrap. */
+  wrap?: boolean;
   /** Auto-scroll the tapped pill toward centre (scrollable rows only). */
   centerOnSelect?: boolean;
   /** Tapping the active pill calls onChange with the same key (caller may
@@ -75,6 +78,10 @@ interface BaseSegmentedPillsProps {
   allowReselect?: boolean;
   /** Accessibility role for each pill: 'tab' for tab bars, 'button' for filters. */
   itemRole?: 'tab' | 'button';
+  /** Pill outline: 'rounded' = fully-rounded pill (default), 'rect' = squarer
+   *  rounded rectangle for tab-bar-style rows. The 'segmented' variant is always
+   *  rect (lifted card). */
+  pillShape?: 'rounded' | 'rect';
   /** Font size for `item.emoji` glyphs (default 16; emoji-tab rows use ~22). */
   emojiSize?: number;
   /** Icon size for `item.icon` glyphs (default 16). */
@@ -97,9 +104,11 @@ export function SegmentedPills({
   onChange,
   variant = 'tinted',
   scrollable = true,
+  wrap = false,
   centerOnSelect = true,
   allowReselect = false,
   itemRole = 'tab',
+  pillShape = 'rounded',
   emojiSize = 16,
   iconSize = 16,
   hapticFeedback = true,
@@ -111,12 +120,16 @@ export function SegmentedPills({
   const styles = makeStyles(theme);
   const pills = useCenteredPillScroll();
 
+  // `wrap` is a fixed (non-scrolling) layout where pills size to content and
+  // wrap onto multiple lines, so it overrides `scrollable`.
+  const isScrollable = scrollable && !wrap;
+
   const handlePress = (item: SegmentedPillItem) => {
     const isActive = item.key === activeKey;
     if (isActive && !allowReselect) return;
     if (hapticFeedback) Haptics.selectionAsync();
     onChange(item.key);
-    if (scrollable && centerOnSelect) pills.center(item.key);
+    if (isScrollable && centerOnSelect) pills.center(item.key);
   };
 
   const renderPill = (item: SegmentedPillItem) => {
@@ -127,63 +140,58 @@ export function SegmentedPills({
     // brand accentColor; danger uses the danger color.
     const hasItemColor = Boolean(item.accentColor) || Boolean(item.danger);
 
-    // 'solid' variant: the active pill is a loud solid fill with white text; the
-    // rest sit as a dimmed wash of their own color (chain identity at rest). The
-    // strong difference in *kind* (solid vs dim) makes the selection unmistakable.
-    // 'tinted' variant: the gentler accentSoft look used by tab bars.
-    const fg =
-      variant === 'solid'
-        ? isActive
-          ? theme.colors.surface0 // white text on the solid fill
-          : hasItemColor
-            ? itemAccent
-            : theme.colors.textMuted
-        : hasItemColor
-          ? itemAccent
-          : isActive
-            ? itemAccent
-            : theme.colors.textMuted;
+    // Per-variant foreground / background / border. Three looks:
+    //  - 'solid': active = loud solid fill (item/chain color) + white text; rest
+    //    = neutral grey + muted text. The color appears ONLY on the active pill.
+    //  - 'tinted': active = accentSoft (or low-alpha own color) + accent text +
+    //    border; rest = flat grey (or transparent for colored pills).
+    //  - 'segmented': iOS lifted-card on a grey track. Active = raised card
+    //    (`background`) + strong text; rest = transparent on the track + muted
+    //    text. No accent color; the track lives on the row container.
+    let fg: string;
+    let bg: string;
+    let borderColor: string | undefined;
+    let subtitleColor: string = theme.colors.textMuted;
 
-    const bg =
-      variant === 'solid'
+    if (variant === 'solid') {
+      fg = isActive ? theme.colors.surface0 : theme.colors.textMuted;
+      bg = isActive ? itemAccent : theme.colors.surface3;
+      borderColor = isActive ? itemAccent : undefined;
+      if (isActive) subtitleColor = withAlpha(theme.colors.surface0, 0.8);
+    } else if (variant === 'segmented') {
+      fg = isActive ? theme.colors.textStrong : theme.colors.textMuted;
+      bg = isActive ? theme.colors.background : 'transparent';
+      borderColor = undefined;
+    } else {
+      // tinted
+      fg = hasItemColor ? itemAccent : isActive ? itemAccent : theme.colors.textMuted;
+      bg = hasItemColor
         ? isActive
-          ? itemAccent // full solid color
-          : hasItemColor
-            ? withAlpha(itemAccent, 0.12) // dimmed own-color wash at rest
-            : theme.colors.surface3
-        : hasItemColor
-          ? isActive
-            ? withAlpha(itemAccent, 0.15)
-            : 'transparent'
-          : isActive
-            ? theme.colors.accentSoft
-            : theme.colors.surface3;
-
-    const borderColor =
-      variant === 'solid'
+          ? withAlpha(itemAccent, 0.15)
+          : 'transparent'
+        : isActive
+          ? theme.colors.accentSoft
+          : theme.colors.surface3;
+      borderColor = !hasItemColor
         ? isActive
           ? itemAccent
           : undefined
-        : !hasItemColor
-          ? isActive
-            ? itemAccent
-            : undefined
-          : isActive
-            ? itemAccent
-            : withAlpha(itemAccent, 0.5);
-
-    // Subtitle sits one step quieter than the main label: a translucent white on
-    // the active solid fill, otherwise the muted text color.
-    const subtitleColor =
-      variant === 'solid' && isActive
-        ? withAlpha(theme.colors.surface0, 0.8)
-        : theme.colors.textMuted;
+        : isActive
+          ? itemAccent
+          : withAlpha(itemAccent, 0.5);
+    }
 
     const pillStyle = [
       styles.pill,
-      // In a fixed (non-scrolling) row, pills share the width equally so the row
-      // reads as a segmented control, matching the existing Join/Create tabs.
-      !scrollable ? styles.pillFlex : null,
+      // Squarer corners for tab-bar-style rows; the segmented variant is always
+      // a rounded rectangle (lifted card).
+      pillShape === 'rect' || variant === 'segmented' ? styles.roundedRect : null,
+      // In a fixed (non-scrolling, non-wrapping) row, pills share the width
+      // equally so the row reads as a segmented control (e.g. Join/Create). In a
+      // wrapping row they size to content instead.
+      !isScrollable && !wrap ? styles.pillFlex : null,
+      // Segmented cards sit flush in the track with a slightly tighter radius.
+      variant === 'segmented' ? styles.segmentedPill : null,
       { backgroundColor: bg },
       borderColor ? { borderColor } : null,
     ];
@@ -216,7 +224,10 @@ export function SegmentedPills({
             </Text>
           </View>
         ) : item.label ? (
-          <Text style={[styles.label, { color: fg }]} numberOfLines={1}>
+          <Text
+            style={[styles.label, variant === 'segmented' && isActive && styles.labelBold, { color: fg }]}
+            numberOfLines={1}
+          >
             {item.label}
           </Text>
         ) : null}
@@ -228,9 +239,18 @@ export function SegmentedPills({
     );
   };
 
-  if (!scrollable) {
+  if (!isScrollable) {
     return (
-      <View style={[styles.fixedRow, style, contentContainerStyle]} testID={testID}>
+      <View
+        style={[
+          styles.fixedRow,
+          wrap && styles.wrapRow,
+          variant === 'segmented' && styles.track,
+          style,
+          contentContainerStyle,
+        ]}
+        testID={testID}
+      >
         {items.map(renderPill)}
       </View>
     );
@@ -280,6 +300,20 @@ const makeStyles = (theme: ReturnType<typeof useTheme>['theme']) =>
       flexDirection: 'row',
       gap: Skin.space(8),
     },
+    wrapRow: {
+      flexWrap: 'wrap',
+    },
+    // 'segmented' variant: a grey rounded track that holds the cards flush
+    // (no gap), iOS-segmented-control style.
+    track: {
+      gap: 0,
+      backgroundColor: theme.colors.surface2,
+      borderRadius: Skin.radius(12),
+      // 1px inset so the card's own padding + this = the standard pill height
+      // (8 padding + 1 border per side), keeping segmented rows the same height
+      // as pill rows that sit near them.
+      padding: Skin.space(1),
+    },
     pill: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -287,12 +321,27 @@ const makeStyles = (theme: ReturnType<typeof useTheme>['theme']) =>
       gap: Skin.space(6),
       paddingVertical: Skin.space(8),
       paddingHorizontal: Skin.space(12),
-      borderRadius: Skin.radius(8),
+      // Fully-rounded pill shape by default (it's a "pill" component). Tab-bar /
+      // segmented use cases opt into a squarer radius via the `pillShape` prop.
+      borderRadius: theme.radii.pill,
       borderWidth: Skin.border(1),
       borderColor: 'transparent',
     },
+    // Squarer rounded-rectangle radius for tab-bar-style rows.
+    roundedRect: {
+      borderRadius: Skin.radius(8),
+    },
     pillFlex: {
       flex: 1,
+    },
+    // Card inside the segmented track: no border, same vertical padding as a
+    // standard pill so (track inset 1 + padding 8) matches the pill's (padding 8
+    // + border 1) and the two row types line up in height.
+    segmentedPill: {
+      borderRadius: Skin.radius(9),
+      borderWidth: 0,
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(10),
     },
     pressed: {
       opacity: 0.7,
@@ -304,6 +353,10 @@ const makeStyles = (theme: ReturnType<typeof useTheme>['theme']) =>
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
+    },
+    labelBold: {
+      fontFamily: theme.fonts.bold.fontFamily,
+      fontWeight: theme.fonts.bold.fontWeight,
     },
     subtitle: {
       fontSize: Skin.font(10),
