@@ -126,7 +126,7 @@ export default function FarcasterReimportSheet({ visible, onClose, onImported }:
               styles.input,
               {
                 color: theme.colors.textMain,
-                backgroundColor: theme.colors.surface2,
+                backgroundColor: theme.colors.bgButtonSubtle,
                 borderColor: theme.colors.border,
               },
             ]}

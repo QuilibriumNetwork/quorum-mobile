@@ -181,7 +181,7 @@ function createStyles(theme: AppTheme) {
       paddingVertical: Skin.space(8),
       borderRadius: Skin.radius(10),
       borderWidth: Skin.border(1),
-      borderColor: theme.colors.surface3,
+      borderColor: theme.colors.borderStrong,
       backgroundColor: theme.colors.surface1,
     },
     searchInput: {

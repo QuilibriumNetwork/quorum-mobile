@@ -289,8 +289,8 @@ export function CreateSpaceSheet({
                   styles.input,
                   {
                     color: theme.colors.textMain,
-                    backgroundColor: theme.colors.surface2,
-                    borderColor: theme.colors.surface3,
+                    backgroundColor: theme.colors.bgButtonSubtle,
+                    borderColor: theme.colors.fieldBorder,
                   },
                 ]}
                 maxLength={140}
@@ -315,8 +315,8 @@ export function CreateSpaceSheet({
                   styles.inputMultiline,
                   {
                     color: theme.colors.textMain,
-                    backgroundColor: theme.colors.surface2,
-                    borderColor: theme.colors.surface3,
+                    backgroundColor: theme.colors.bgButtonSubtle,
+                    borderColor: theme.colors.fieldBorder,
                   },
                 ]}
                 maxLength={500}
@@ -341,8 +341,8 @@ export function CreateSpaceSheet({
                       style={({ pressed }) => [
                         styles.presetChip,
                         {
-                          backgroundColor: active ? theme.colors.accent : theme.colors.surface2,
-                          borderColor: active ? theme.colors.accent : theme.colors.surface3,
+                          backgroundColor: active ? theme.colors.accent : theme.colors.bgButtonSubtle,
+                          borderColor: active ? theme.colors.accent : theme.colors.fieldBorder,
                           opacity: pressed ? 0.85 : 1,
                         },
                       ]}
@@ -379,8 +379,8 @@ export function CreateSpaceSheet({
                           styles.input,
                           {
                             color: theme.colors.textMain,
-                            backgroundColor: theme.colors.surface2,
-                            borderColor: theme.colors.surface3,
+                            backgroundColor: theme.colors.bgButtonSubtle,
+                            borderColor: theme.colors.fieldBorder,
                           },
                         ]}
                       />
@@ -402,8 +402,8 @@ export function CreateSpaceSheet({
                             {
                               flex: 1,
                               color: theme.colors.textMain,
-                              backgroundColor: theme.colors.surface2,
-                              borderColor: theme.colors.surface3,
+                              backgroundColor: theme.colors.bgButtonSubtle,
+                              borderColor: theme.colors.fieldBorder,
                             },
                           ]}
                         />
@@ -412,7 +412,7 @@ export function CreateSpaceSheet({
                             flexDirection: 'row',
                             borderRadius: Skin.radius(10),
                             borderWidth: Skin.border(1),
-                            borderColor: theme.colors.surface3,
+                            borderColor: theme.colors.fieldBorder,
                             overflow: 'hidden',
                           }}
                         >

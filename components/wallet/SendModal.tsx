@@ -849,7 +849,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: theme.colors.surface2,
+      backgroundColor: theme.colors.bgButtonSubtle,
       borderRadius: Skin.radius(12),
       padding: Skin.space(14),
     },
@@ -905,7 +905,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       gap: Skin.space(12),
     },
     textInput: {
-      backgroundColor: theme.colors.surface2,
+      backgroundColor: theme.colors.bgButtonSubtle,
       borderRadius: Skin.radius(12),
       paddingHorizontal: Skin.space(14),
       paddingVertical: Skin.space(12),
@@ -966,7 +966,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     amountInputContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.colors.surface2,
+      backgroundColor: theme.colors.bgButtonSubtle,
       borderRadius: Skin.radius(12),
     },
     amountInput: {

@@ -150,7 +150,7 @@ const createStyles = (theme: ThemeType) =>
       marginBottom: Skin.space(16),
     },
     statsBlock: {
-      backgroundColor: theme.colors.surface3,
+      backgroundColor: theme.colors.bgButtonSubtle,
       borderRadius: Skin.radius(10),
       padding: Skin.space(12),
       marginBottom: Skin.space(16),
@@ -205,7 +205,7 @@ const createStyles = (theme: ThemeType) =>
       justifyContent: 'center',
     },
     cancelButton: {
-      backgroundColor: theme.colors.surface3,
+      backgroundColor: theme.colors.bgButtonSubtle,
     },
     cancelLabel: {
       fontSize: Skin.font(15),

@@ -104,7 +104,7 @@ const createStyles = (theme: ThemeType) =>
       justifyContent: 'center',
     },
     cancelButton: {
-      backgroundColor: theme.colors.surface3,
+      backgroundColor: theme.colors.bgButtonSubtle,
     },
     cancelLabel: {
       fontSize: Skin.font(15),

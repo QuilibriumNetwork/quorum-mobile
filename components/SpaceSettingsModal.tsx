@@ -1509,7 +1509,7 @@ export default function SpaceSettingsModal({
         aria-label="Display name in this space"
         aria-invalid={!!spaceProfileNameError}
         style={{
-          backgroundColor: theme.colors.surface2,
+          backgroundColor: theme.colors.bgButtonSubtle,
           color: theme.colors.textMain,
           borderRadius: Skin.radius(10),
           padding: Skin.space(12),
@@ -1533,7 +1533,7 @@ export default function SpaceSettingsModal({
         aria-label="Bio in this space"
         aria-invalid={!!spaceProfileBioError}
         style={{
-          backgroundColor: theme.colors.surface2,
+          backgroundColor: theme.colors.bgButtonSubtle,
           color: theme.colors.textMain,
           borderRadius: Skin.radius(10),
           padding: Skin.space(12),
@@ -2512,7 +2512,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       marginBottom: Skin.space(8),
     },
     inputContainer: {
-      backgroundColor: theme.colors.surface3,
+      backgroundColor: theme.colors.bgButtonSubtle,
       borderRadius: Skin.radius(12),
       paddingHorizontal: Skin.space(16),
     },
@@ -2648,7 +2648,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     },
     divider: {
       height: 1,
-      backgroundColor: theme.colors.surface4,
+      backgroundColor: theme.colors.borderDefault,
       marginVertical: Skin.space(24),
     },
     addButtonRow: {
@@ -2741,7 +2741,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       marginTop: Skin.space(8),
       paddingTop: Skin.space(8),
       borderTopWidth: Skin.border(1),
-      borderTopColor: theme.colors.surface4,
+      borderTopColor: theme.colors.borderDefault,
     },
     rolePermissionsLabel: {
       fontSize: Skin.font(12),
@@ -2769,7 +2769,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       height: 20,
       borderRadius: Skin.radius(4),
       borderWidth: Skin.border(2),
-      borderColor: theme.colors.surface5,
+      borderColor: theme.colors.borderStrong,
       alignItems: 'center',
       justifyContent: 'center',
     },
