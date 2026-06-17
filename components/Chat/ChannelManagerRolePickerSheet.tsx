@@ -1,8 +1,9 @@
 /**
- * ChannelManagerRolePickerSheet — multi-select roles that may manage/post in a
+ * ChannelManagerRolePickerSheet — multi-select roles that may manage a
  * read-only channel. Writes channel.managerRoleIds (roleId values). Mirrors how
  * the shared canManageReadOnlyChannel enforcement READS managerRoleIds: a user
- * may post iff one of these roles lists them as a member. Do NOT widen this.
+ * may post, delete, and pin messages iff one of these roles lists them as a
+ * member. Do NOT widen this.
  */
 import React, { useState, useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -55,7 +56,7 @@ export function ChannelManagerRolePickerSheet({
     <BaseModal visible={visible} onClose={onClose} height={0.6} showHandle>
       <View style={styles.container}>
         <Text style={styles.title}>Channel Managers</Text>
-        <Text style={styles.subtitle}>Roles allowed to post in this read-only channel</Text>
+        <Text style={styles.subtitle}>Members of selected roles can post, delete, and pin messages in this read-only channel.</Text>
 
         <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
           <ActionRowGroup>

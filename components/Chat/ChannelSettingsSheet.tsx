@@ -275,11 +275,11 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
 
         {isChannel && (
           <>
-            <ActionRowGroup>
+            <ActionRowGroup style={styles.group}>
               <ActionRow
                 icon="lock.fill"
                 label="Read-only"
-                sublabel="Only managers can post"
+                sublabel="Only managers can post, pin & delete"
                 trailing={
                   <Switch
                     value={!!channel?.isReadOnly}
@@ -301,7 +301,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
               )}
             </ActionRowGroup>
 
-            <ActionRowGroup>
+            <ActionRowGroup style={styles.group}>
               <ActionRow
                 icon="star.fill"
                 label="Set as default channel"
@@ -324,7 +324,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
           </>
         )}
 
-        <ActionRowGroup>
+        <ActionRowGroup style={styles.group}>
           <ActionRow
             icon="trash"
             label={isChannel ? 'Delete channel' : 'Delete group'}
@@ -386,4 +386,6 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
+    /** Vertical gap between consecutive ActionRowGroup blocks in the drawer. */
+    group: { marginBottom: Skin.space(14) },
   });
