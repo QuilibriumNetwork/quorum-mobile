@@ -67,7 +67,7 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   'doc.text.fill': tabler('IconFileText', 'IconFileTextFilled'),
 
   // Geometry
-  'circle': tabler('IconCircle'),
+  'circle': tabler('IconCircle', 'IconCircleFilled'),
   'paintbrush': tabler('IconBrush'),
   'square.grid.2x2': tabler('IconLayoutGrid'),
   'square.grid.2x2.fill': tabler('IconLayoutGrid'),
@@ -125,7 +125,7 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   // Security
   'lock.fill': tabler('IconLock', 'IconLockFilled'),
   'lock.shield.fill': tabler('IconShieldLock', 'IconShieldLockFilled'),
-  'shield': tabler('IconShield'),
+  'shield': tabler('IconShield', 'IconShieldFilled'),
   'shield.fill': tabler('IconShield', 'IconShieldFilled'),
   'shield.checkered': tabler('IconShieldCheck'),
   'exclamationmark.shield.fill': tabler('IconShieldX', 'IconShieldXFilled'),
@@ -166,7 +166,7 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   'hand.thumbsdown.fill': tabler('IconThumbDown', 'IconThumbDownFilled'),
 
   // Eye
-  'eye': tabler('IconEye'),
+  'eye': tabler('IconEye', 'IconEyeFilled'),
   'eye.fill': tabler('IconEye', 'IconEyeFilled'),
   'eye.slash': tabler('IconEyeOff'),
   'eye.slash.fill': tabler('IconEyeOff'),
@@ -187,7 +187,7 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   'questionmark': tabler('IconQuestionMark'),
 
   // Camera / image
-  'camera': tabler('IconCamera'),
+  'camera': tabler('IconCamera', 'IconCameraFilled'),
   'camera.fill': tabler('IconCamera', 'IconCameraFilled'),
   'camera.rotate': tabler('IconCameraRotate'),
   'photo': tabler('IconPhoto'),
@@ -223,7 +223,7 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   'face.smiling': tabler('IconMoodSmile'),
   'quote.bubble': tabler('IconQuote'),
   'text.bubble': tabler('IconMessage'),
-  'message': tabler('IconMessage'),
+  'message': tabler('IconMessage', 'IconMessageFilled'),
   'message.fill': tabler('IconMessage', 'IconMessageFilled'),
   'magnifyingglass': tabler('IconSearch'),
   'paperclip': tabler('IconPaperclip'),
@@ -232,11 +232,11 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   'envelope.open': tabler('IconMailOpened'),
 
   // Calls
-  'phone': tabler('IconPhone'),
+  'phone': tabler('IconPhone', 'IconPhoneFilled'),
   'phone.fill': tabler('IconPhone', 'IconPhoneFilled'),
   'phone.down': tabler('IconPhoneOff'),
   'phone.down.fill': tabler('IconPhoneOff'),
-  'video': tabler('IconVideo'),
+  'video': tabler('IconVideo', 'IconVideoFilled'),
   'video.fill': tabler('IconVideo', 'IconVideoFilled'),
   'video.slash.fill': tabler('IconVideoOff'),
 
@@ -247,7 +247,7 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   'hammer.fill': tabler('IconHammer'),
 
   // Hearts / likes
-  'heart': tabler('IconHeart'),
+  'heart': tabler('IconHeart', 'IconHeartFilled'),
   'heart.fill': tabler('IconHeart', 'IconHeartFilled'),
 
   // Player
@@ -259,10 +259,10 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   // Markers / locations
   'mappin': tabler('IconMapPin', 'IconMapPinFilled'),
   'crown.fill': tabler('IconCrown', 'IconCrownFilled'),
-  'star': tabler('IconStar'),
+  'star': tabler('IconStar', 'IconStarFilled'),
   'star.fill': tabler('IconStar', 'IconStarFilled'),
   'star.square': tabler('IconStar'),
-  'sparkles': tabler('IconSparkles'),
+  'sparkles': tabler('IconSparkles', 'IconSparklesFilled'),
   'trash': tabler('IconTrash'),
   'trash.fill': tabler('IconTrash', 'IconTrashFilled'),
 
@@ -271,24 +271,24 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   'link.badge.plus': tabler('IconLinkPlus'),
 
   // Pins
-  'pin': tabler('IconPin'),
+  'pin': tabler('IconPin', 'IconPinFilled'),
   'pin.fill': tabler('IconPin', 'IconPinFilled'),
   'pin.slash': tabler('IconPinnedOff'),
 
   // Bookmarks
-  'bookmark': tabler('IconBookmark'),
+  'bookmark': tabler('IconBookmark', 'IconBookmarkFilled'),
   'bookmark.fill': tabler('IconBookmark', 'IconBookmarkFilled'),
   'bookmark.slash': tabler('IconBookmarkOff'),
   'bookmark.slash.fill': tabler('IconBookmarkOff'),
 
   // Notifications
-  'bell': tabler('IconBell'),
+  'bell': tabler('IconBell', 'IconBellFilled'),
   'bell.fill': tabler('IconBell', 'IconBellFilled'),
   'bell.slash': tabler('IconBellOff'),
   'bell.slash.fill': tabler('IconBellOff'),
 
   // History / time
-  'clock': tabler('IconClock'),
+  'clock': tabler('IconClock', 'IconClockFilled'),
   'clock.arrow.circlepath': tabler('IconHistory'),
 
   // Tags
@@ -328,6 +328,8 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   'support': tabler('IconLifebuoy'),
   'calendar-alt': tabler('IconCalendar', 'IconCalendarFilled'),
   'desktop': tabler('IconDeviceDesktop', 'IconDeviceDesktopFilled'),
+  // 'certificate' maps to Rosette (matches shared iconMapping); IconCertificate has no filled form.
+  'certificate': tabler('IconRosetteDiscountCheck', 'IconRosetteDiscountCheckFilled'),
 };
 
 /**

@@ -6,7 +6,7 @@
  * via getIconColorHex(). Replaces the legacy components/ui/IconPicker.tsx (which
  * used SF-Symbol names + raw-hex colors and didn't render cross-platform).
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   ICON_OPTIONS,
@@ -28,12 +28,15 @@ const PICKER_COLORS: IconColor[] = [
 
 const DEFAULT_ICON: IconSymbolName = 'hashtag' as IconSymbolName;
 
+type IconVariant = 'outline' | 'filled';
+
 interface ChannelIconPickerSheetProps {
   visible: boolean;
   onClose: () => void;
   selectedIcon?: string;
   selectedColor?: IconColor;
-  onSelect: (icon: string, color: IconColor, variant: 'outline' | 'filled') => void;
+  selectedVariant?: IconVariant;
+  onSelect: (icon: string, color: IconColor, variant: IconVariant) => void;
   onClear: () => void;
 }
 
@@ -42,6 +45,7 @@ export function ChannelIconPickerSheet({
   onClose,
   selectedIcon,
   selectedColor,
+  selectedVariant,
   onSelect,
   onClear,
 }: ChannelIconPickerSheetProps) {
@@ -50,20 +54,28 @@ export function ChannelIconPickerSheet({
 
   const [pickedIcon, setPickedIcon] = useState<string>(selectedIcon || (DEFAULT_ICON as string));
   const [pickedColor, setPickedColor] = useState<IconColor>(selectedColor || 'default');
+  const [pickedVariant, setPickedVariant] = useState<IconVariant>(selectedVariant || 'outline');
 
   // Re-sync from props each time the sheet opens, so reopening for a different
-  // channel/group (or after an edit) shows that item's current icon/color
+  // channel/group (or after an edit) shows that item's current icon/color/variant
   // rather than the last-picked values (state persists across open/close).
   useEffect(() => {
     if (!visible) return;
     setPickedIcon(selectedIcon || (DEFAULT_ICON as string));
     setPickedColor(selectedColor || 'default');
-  }, [visible, selectedIcon, selectedColor]);
+    setPickedVariant(selectedVariant || 'outline');
+  }, [visible, selectedIcon, selectedColor, selectedVariant]);
 
-  // Derive the natural variant from the shared vocabulary: filled when the icon
-  // has a filled form, outline otherwise. No user toggle needed.
-  const variantFor = (name: string): 'outline' | 'filled' =>
-    FILLED_ICONS.has(name as never) ? 'filled' : 'outline';
+  // The whole grid renders in the selected variant, and the FILLED tab shows
+  // only icons that actually have a filled form (matches desktop's picker — a
+  // clean single-style list, never a mixed outline/filled jumble).
+  const filteredIcons = useMemo(
+    () =>
+      pickedVariant === 'filled'
+        ? ICON_OPTIONS.filter((opt) => FILLED_ICONS.has(opt.name as never))
+        : ICON_OPTIONS,
+    [pickedVariant]
+  );
 
   const previewHex = getIconColorHex(pickedColor);
 
@@ -79,11 +91,12 @@ export function ChannelIconPickerSheet({
   })();
 
   const handleConfirm = () => {
-    onSelect(pickedIcon, pickedColor, variantFor(pickedIcon));
+    onSelect(pickedIcon, pickedColor, pickedVariant);
     onClose();
   };
 
   const handleClear = () => {
+    setPickedVariant('outline');
     onClear();
     onClose();
   };
@@ -100,16 +113,43 @@ export function ChannelIconPickerSheet({
               name={pickedIcon as IconSymbolName}
               size={28}
               color={previewHex}
-              variant={variantFor(pickedIcon)}
+              variant={pickedVariant}
             />
           </View>
+        </View>
+
+        {/* Variant toggle — switches the whole grid between outline and filled
+            (filled shows only icons that have a filled form). */}
+        <View style={styles.variantRow}>
+          {(['outline', 'filled'] as const).map((v) => {
+            const active = pickedVariant === v;
+            return (
+              <TouchableOpacity
+                key={v}
+                style={[styles.variantChip, active && styles.variantChipActive]}
+                onPress={() => setPickedVariant(v)}
+                accessibilityLabel={v === 'outline' ? 'Outline icons' : 'Filled icons'}
+                accessibilityState={{ selected: active }}
+              >
+                <IconSymbol
+                  name="circle"
+                  size={16}
+                  color={active ? theme.colors.primary : theme.colors.textMuted}
+                  variant={v}
+                />
+                <Text style={[styles.variantChipText, active && styles.variantChipTextActive]}>
+                  {v === 'outline' ? 'Outline' : 'Filled'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Icon grid */}
         <Text style={styles.sectionLabel}>Icon</Text>
         <ScrollView style={styles.iconGrid} showsVerticalScrollIndicator={false} nestedScrollEnabled>
           <View style={styles.gridRow}>
-            {ICON_OPTIONS.map((opt) => {
+            {filteredIcons.map((opt) => {
               const active = pickedIcon === opt.name;
               return (
                 <TouchableOpacity
@@ -125,7 +165,7 @@ export function ChannelIconPickerSheet({
                     name={opt.name as IconSymbolName}
                     size={20}
                     color={active ? previewHex : theme.colors.textMuted}
-                    variant={variantFor(opt.name)}
+                    variant={pickedVariant}
                   />
                 </TouchableOpacity>
               );
@@ -188,6 +228,28 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
+    variantRow: {
+      flexDirection: 'row',
+      gap: Skin.space(8),
+      justifyContent: 'center',
+      marginBottom: Skin.space(14),
+    },
+    variantChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(6),
+      paddingHorizontal: Skin.space(14),
+      paddingVertical: Skin.space(8),
+      borderRadius: Skin.radius(16),
+      backgroundColor: theme.colors.surface3,
+    },
+    variantChipActive: {
+      backgroundColor: theme.colors.surface5,
+      borderWidth: Skin.border(1),
+      borderColor: theme.colors.primary,
+    },
+    variantChipText: { ...theme.textStyles.footnote, color: theme.colors.textMuted },
+    variantChipTextActive: { color: theme.colors.textStrong },
     sectionLabel: {
       ...theme.textStyles.footnote,
       color: theme.colors.textMuted,

@@ -522,6 +522,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
         onClose={() => setIconPickerVisible(false)}
         selectedIcon={activeIcon || undefined}
         selectedColor={activeIconColor}
+        selectedVariant={activeIconVariant}
         onSelect={handleIconSelect}
         onClear={handleIconClear}
       />
