@@ -20,7 +20,8 @@ import ShareInviteSheet from '@/components/ShareInviteSheet';
 import { BaseModal, TypeToConfirmModal } from '@/components/shared';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
-import { IconPicker } from '@/components/ui/IconPicker';
+import { ChannelSettingsSheet, type ChannelSettingsTarget } from '@/components/Chat/ChannelSettingsSheet';
+import { ChannelStatusGlyphs } from '@/components/Chat/ChannelStatusGlyphs';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useAuth, useWebSocket } from '@/context';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
@@ -35,13 +36,8 @@ import {
 } from '@/hooks/chat/useRoleManagement';
 import {
   useAddChannel,
-  useUpdateChannel,
-  useDeleteChannel,
   useAddGroup,
-  useUpdateGroup,
-  useDeleteGroup,
   useMoveChannel,
-  useReorderChannels,
 } from '@/hooks/chat';
 import { useSpaceMembers } from '@/hooks/chat/useSpaces';
 import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
@@ -532,12 +528,13 @@ export default function SpaceSettingsModal({
 
   // Load space data
   const [space, setSpace] = useState<Space | null>(null);
+  const loadSpace = useCallback(() => {
+    if (spaceId) setSpace(getSpace(spaceId));
+  }, [spaceId]);
+
   useEffect(() => {
-    if (visible && spaceId) {
-      const loadedSpace = getSpace(spaceId);
-      setSpace(loadedSpace);
-    }
-  }, [visible, spaceId]);
+    if (visible) loadSpace();
+  }, [visible, loadSpace]);
 
   // Per-space notification preference. Anyone can mute/unmute their
   // own copy of a space — this is a local user setting, not a
@@ -789,13 +786,8 @@ export default function SpaceSettingsModal({
 
   // Channels
   const addChannelMutation = useAddChannel();
-  const updateChannelMutation = useUpdateChannel();
-  const deleteChannelMutation = useDeleteChannel();
   const addGroupMutation = useAddGroup();
-  const updateGroupMutation = useUpdateGroup();
-  const deleteGroupMutation = useDeleteGroup();
   const moveChannelMutation = useMoveChannel();
-  const reorderChannelsMutation = useReorderChannels();
 
   // Members
   const { data: members = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
@@ -867,16 +859,11 @@ export default function SpaceSettingsModal({
   const [editingStickerNameValue, setEditingStickerNameValue] = useState('');
 
   // Channel/Group editing state
-  const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
-  const [editingChannelName, setEditingChannelName] = useState('');
-  const [editingGroupIndex, setEditingGroupIndex] = useState<number | null>(null);
-  const [editingGroupName, setEditingGroupName] = useState('');
   const [newChannelGroupIndex, setNewChannelGroupIndex] = useState<number | null>(null);
   const [newChannelName, setNewChannelName] = useState('');
 
-  // Icon picker state
-  const [iconPickerVisible, setIconPickerVisible] = useState(false);
-  const [iconPickerChannelId, setIconPickerChannelId] = useState<string | null>(null);
+  // Channel settings drawer state
+  const [drawerTarget, setDrawerTarget] = useState<ChannelSettingsTarget | null>(null);
 
   // Validation
   const nameError = useMemo(
@@ -1217,49 +1204,6 @@ export default function SpaceSettingsModal({
     }
   }, [spaceId, addGroupMutation]);
 
-  const handleSaveGroupName = useCallback(async (groupIndex: number) => {
-    if (!editingGroupName.trim()) {
-      setEditingGroupIndex(null);
-      return;
-    }
-    try {
-      await updateGroupMutation.mutateAsync({
-        spaceId,
-        groupIndex,
-        groupName: editingGroupName.trim(),
-      });
-      const updated = getSpace(spaceId);
-      setSpace(updated);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update group');
-    } finally {
-      setEditingGroupIndex(null);
-    }
-  }, [spaceId, editingGroupName, updateGroupMutation]);
-
-  const handleDeleteGroup = useCallback(async (groupIndex: number) => {
-    const group = space?.groups[groupIndex];
-    if (!group) return;
-
-    if (group.channels.length > 0) {
-      Alert.alert('Cannot Delete', 'Please delete or move all channels first');
-      return;
-    }
-
-    const ok = await confirm({
-      title: 'Delete Group',
-      message: `Are you sure you want to delete "${group.groupName}"? This removes the group for everyone in the space.`,
-      confirmLabel: 'Delete',
-    });
-    if (!ok) return;
-    try {
-      await deleteGroupMutation.mutateAsync({ spaceId, groupIndex });
-      const updated = getSpace(spaceId);
-      setSpace(updated);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to delete group');
-    }
-  }, [space, spaceId, deleteGroupMutation, confirm]);
 
   const handleAddChannel = useCallback(async (groupIndex: number) => {
     if (!newChannelName.trim()) {
@@ -1281,45 +1225,6 @@ export default function SpaceSettingsModal({
     }
   }, [spaceId, newChannelName, addChannelMutation]);
 
-  const handleSaveChannelName = useCallback(async (channelId: string) => {
-    if (!editingChannelName.trim()) {
-      setEditingChannelId(null);
-      return;
-    }
-    try {
-      await updateChannelMutation.mutateAsync({
-        spaceId,
-        channelId,
-        channelName: editingChannelName.trim(),
-      });
-      const updated = getSpace(spaceId);
-      setSpace(updated);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update channel');
-    } finally {
-      setEditingChannelId(null);
-    }
-  }, [spaceId, editingChannelName, updateChannelMutation]);
-
-  const handleDeleteChannel = useCallback(async (channelId: string, channelName: string) => {
-    const ok = await confirm({
-      title: 'Delete Channel',
-      message: `Are you sure you want to delete #${channelName}? This removes the channel and its messages for everyone. This cannot be undone.`,
-      confirmLabel: 'Delete',
-    });
-    if (!ok) return;
-    try {
-      await deleteChannelMutation.mutateAsync({ spaceId, channelId });
-      const updated = getSpace(spaceId);
-      setSpace(updated);
-    } catch (error: unknown) {
-      if (error instanceof Error && error.message?.includes('default channel')) {
-        Alert.alert('Cannot Delete', 'You cannot delete the default channel');
-      } else {
-        Alert.alert('Error', 'Failed to delete channel');
-      }
-    }
-  }, [spaceId, deleteChannelMutation, confirm]);
 
   const handleMoveChannelUp = useCallback(async (groupIndex: number, channelIndex: number) => {
     if (channelIndex === 0) return;
@@ -1923,40 +1828,13 @@ export default function SpaceSettingsModal({
         <View key={`group-${groupIndex}`} style={styles.channelGroupContainer}>
           {/* Group Header */}
           <View style={styles.channelGroupHeader}>
-            {editingGroupIndex === groupIndex ? (
-              <View style={styles.editingInputRow}>
-                <TextInput
-                  style={styles.channelGroupNameInput}
-                  value={editingGroupName}
-                  onChangeText={setEditingGroupName}
-                  autoFocus
-                  onSubmitEditing={() => handleSaveGroupName(groupIndex)}
-                />
-                <TouchableOpacity
-                  style={styles.confirmButton}
-                  onPress={() => handleSaveGroupName(groupIndex)}
-                >
-                  <IconSymbol name="checkmark" size={16} color={theme.colors.primary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => setEditingGroupIndex(null)}
-                >
-                  <IconSymbol name="xmark" size={16} color={theme.colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.channelGroupNameContainer}
-                onPress={() => {
-                  setEditingGroupIndex(groupIndex);
-                  setEditingGroupName(group.groupName);
-                }}
-              >
-                <Text style={styles.channelGroupName}>{group.groupName}</Text>
-                <IconSymbol name="pencil" size={12} color={theme.colors.textMuted} />
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.channelGroupNameContainer}
+              onPress={() => setDrawerTarget({ kind: 'group', spaceId, groupIndex })}
+            >
+              <Text style={styles.channelGroupName}>{group.groupName}</Text>
+              <IconSymbol name="pencil" size={12} color={theme.colors.textMuted} />
+            </TouchableOpacity>
             <View style={styles.channelGroupActions}>
               <TouchableOpacity
                 style={styles.channelGroupActionButton}
@@ -1966,12 +1844,6 @@ export default function SpaceSettingsModal({
                 }}
               >
                 <IconSymbol name="plus" size={16} color={theme.colors.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.channelGroupActionButton}
-                onPress={() => handleDeleteGroup(groupIndex)}
-              >
-                <IconSymbol name="trash" size={16} color={theme.colors.danger} />
               </TouchableOpacity>
             </View>
           </View>
@@ -2010,10 +1882,7 @@ export default function SpaceSettingsModal({
             <View key={channel.channelId} style={styles.channelItem}>
               <TouchableOpacity
                 style={[styles.channelIconButton, channel.icon && { backgroundColor: (channel.iconColor || theme.colors.textMuted) + '20' }]}
-                onPress={() => {
-                  setIconPickerChannelId(channel.channelId);
-                  setIconPickerVisible(true);
-                }}
+                onPress={() => setDrawerTarget({ kind: 'channel', spaceId, groupIndex, channelId: channel.channelId })}
               >
                 <IconSymbol
                   name={(channel.icon || 'number') as IconSymbolName}
@@ -2021,45 +1890,13 @@ export default function SpaceSettingsModal({
                   color={channel.iconColor || theme.colors.textMuted}
                 />
               </TouchableOpacity>
-              {editingChannelId === channel.channelId ? (
-                <View style={styles.editingInputRow}>
-                  <TextInput
-                    style={styles.channelNameInput}
-                    value={editingChannelName}
-                    onChangeText={setEditingChannelName}
-                    autoFocus
-                    autoCapitalize="none"
-                    onSubmitEditing={() => handleSaveChannelName(channel.channelId)}
-                  />
-                  <TouchableOpacity
-                    style={styles.confirmButton}
-                    onPress={() => handleSaveChannelName(channel.channelId)}
-                  >
-                    <IconSymbol name="checkmark" size={16} color={theme.colors.primary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={() => setEditingChannelId(null)}
-                  >
-                    <IconSymbol name="xmark" size={16} color={theme.colors.textMuted} />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.channelNameContainer}
-                  onPress={() => {
-                    setEditingChannelId(channel.channelId);
-                    setEditingChannelName(channel.channelName);
-                  }}
-                >
-                  <Text style={styles.channelName}>{channel.channelName}</Text>
-                </TouchableOpacity>
-              )}
-              {channel.channelId === space?.defaultChannelId && (
-                <View style={styles.defaultChannelBadge}>
-                  <Text style={styles.defaultChannelText}>default</Text>
-                </View>
-              )}
+              <TouchableOpacity
+                style={styles.channelNameContainer}
+                onPress={() => setDrawerTarget({ kind: 'channel', spaceId, groupIndex, channelId: channel.channelId })}
+              >
+                <Text style={styles.channelName}>{channel.channelName}</Text>
+              </TouchableOpacity>
+              <ChannelStatusGlyphs channel={channel} defaultChannelId={space?.defaultChannelId ?? ''} />
               <View style={styles.channelActions}>
                 <TouchableOpacity
                   style={[styles.channelArrowButton, channelIndex === 0 && styles.channelArrowDisabled]}
@@ -2074,12 +1911,6 @@ export default function SpaceSettingsModal({
                   disabled={channelIndex === group.channels.length - 1}
                 >
                   <IconSymbol name="chevron.down" size={14} color={channelIndex === group.channels.length - 1 ? theme.colors.surface5 : theme.colors.textMuted} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.channelDeleteButton}
-                  onPress={() => handleDeleteChannel(channel.channelId, channel.channelName)}
-                >
-                  <IconSymbol name="trash" size={14} color={theme.colors.danger} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -2664,36 +2495,11 @@ export default function SpaceSettingsModal({
         />
       )}
 
-      {/* Icon Picker Modal */}
-      <IconPicker
-        visible={iconPickerVisible}
-        onClose={() => {
-          setIconPickerVisible(false);
-          setIconPickerChannelId(null);
-        }}
-        selectedIcon={iconPickerChannelId ? (space?.groups ?? []).flatMap(g => g.channels).find(c => c.channelId === iconPickerChannelId)?.icon : undefined}
-        selectedColor={iconPickerChannelId ? (space?.groups ?? []).flatMap(g => g.channels).find(c => c.channelId === iconPickerChannelId)?.iconColor : undefined}
-        onSelect={(icon, color) => {
-          if (iconPickerChannelId) {
-            updateChannelMutation.mutate({
-              spaceId,
-              channelId: iconPickerChannelId,
-              icon,
-              iconColor: color,
-            });
-          }
-        }}
-        onClear={() => {
-          if (iconPickerChannelId) {
-            updateChannelMutation.mutate({
-              spaceId,
-              channelId: iconPickerChannelId,
-              icon: '',
-              iconColor: '',
-            });
-          }
-        }}
-        theme={theme}
+      <ChannelSettingsSheet
+        visible={!!drawerTarget}
+        target={drawerTarget}
+        onClose={() => setDrawerTarget(null)}
+        onChanged={loadSpace}
       />
       {generatedInviteLink && space && (
         <ShareInviteSheet
