@@ -1,4 +1,5 @@
 import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
+import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
 import { SpaceIcon } from '@/components/ui/SpaceIcon';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useSpaces } from '@/hooks/chat/useSpaces';
@@ -174,7 +175,7 @@ export default function SpacesIndex() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <FloatingTabScreen surfaceColor={theme.colors.surface1} style={{ paddingTop: insets.top }}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>
@@ -256,7 +257,7 @@ export default function SpacesIndex() {
           />
         </Suspense>
       )}
-    </View>
+    </FloatingTabScreen>
   );
 }
 

@@ -11,6 +11,7 @@ import TipModal, { type TipTarget } from '@/components/wallet/TipModal';
 import { ActionSheet, type ActionRowItem } from '@/components/shared/ActionSheet';
 import { ActionRow, ActionRowGroup } from '@/components/shared/ActionRow';
 import { useCenteredPillScroll } from '@/hooks/useCenteredPillScroll';
+import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { useMiniappManifest } from '@/hooks/useMiniappManifest';
 import { useOgMetadata } from '@/hooks/useOgMetadata';
 import { SnapEmbed, useSnapDetection } from '@/components/SocialFeed/content/SnapEmbed';
@@ -5695,6 +5696,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   }, [backdropAnim, slideAnim, visible, isRouteMode]);
 
   const styles = useMemo(() => createStyles(theme, isDark, insets), [theme, isDark, insets]);
+  const floatingTabBarPadding = useFloatingTabBarPadding();
 
   const posts = useMemo<FeedPost[]>(() => {
     return farcasterItems.map((item) => {
@@ -6301,7 +6303,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               data={searchResultItems}
               keyExtractor={(item) => item.key}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.contentContainer}
+              contentContainerStyle={
+                isRouteMode
+                  ? { ...styles.contentContainer, paddingBottom: floatingTabBarPadding }
+                  : styles.contentContainer
+              }
               onEndReached={() => {
                 if (searchTab === 'users') onUsersEndReached();
                 else if (searchTab === 'channels') onChannelsEndReached();
@@ -6495,7 +6501,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               // text input's keyboard is open, instead of being swallowed to
               // dismiss it.
               keyboardShouldPersistTaps="handled"
-              contentContainerStyle={styles.contentContainer}
+              contentContainerStyle={
+                isRouteMode
+                  ? { ...styles.contentContainer, paddingBottom: floatingTabBarPadding }
+                  : styles.contentContainer
+              }
               onEndReached={() => {
                 // Governance is a single non-paginated fetch.
                 if (activeFilter !== 'governance' && hasNextPage && !isFetchingNextPage) {
@@ -7330,8 +7340,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
           />
 
         </Animated.View>
-        {/* Bottom spacer to align with userPanel - uses layout constraint instead of padding */}
-        <View style={{ height: userPanelHeight }} />
+        {/* Bottom spacer to align with the userPanel — modal mode only. In route
+            mode the feed scrolls full-height behind the floating tab bar, and the
+            FlashList's own contentContainerStyle.paddingBottom handles clearance,
+            so this spacer would otherwise leave a dead gap above the tab bar. */}
+        {!isRouteMode && <View style={{ height: userPanelHeight }} />}
       </View>
     </View>
   );

@@ -1,11 +1,14 @@
 import MiniAppsModal from '@/components/MiniAppsModal';
+import { ListBottomFade } from '@/components/ui/ListBottomFade';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
+import { useTheme } from '@/theme';
 import { router } from 'expo-router';
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 
 export default function AppsScreen() {
   const { openMiniapp } = useMiniappOverlay();
+  const { theme } = useTheme();
 
   return (
     <View style={styles.container}>
@@ -15,6 +18,7 @@ export default function AppsScreen() {
         onOpenMiniApp={(url, isQNative) => openMiniapp({ url, isQNative })}
         isRouteMode={true}
       />
+      <ListBottomFade surfaceColor={theme.colors.surface1} />
     </View>
   );
 }

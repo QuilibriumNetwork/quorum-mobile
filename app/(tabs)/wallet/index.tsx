@@ -7,6 +7,7 @@
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { ListBottomFade } from '@/components/ui/ListBottomFade';
 import { SurfaceBackground } from '@/theme/skins/surfaces';
 import WalletModal from '@/components/WalletModal';
 import MiniAppsModal from '@/components/MiniAppsModal';
@@ -86,6 +87,8 @@ export default function WalletTab() {
           />
         )}
       </View>
+
+      <ListBottomFade surfaceColor={theme.colors.surface1} />
     </SurfaceBackground>
   );
 }

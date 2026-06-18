@@ -1,6 +1,7 @@
 import FarcasterReimportSheet from '@/components/FarcasterReimportSheet';
 import HypersnapSignerPromptModal from '@/components/HypersnapSignerPromptModal';
 import SocialFeedModal, { type SocialFeedModalHandle } from '@/components/SocialFeedModal';
+import { ListBottomFade } from '@/components/ui/ListBottomFade';
 import { useAuth } from '@/context/AuthContext';
 import { useHypersnapSignerLifecycle } from '@/hooks/useHypersnapSignerLifecycle';
 import { getFarcasterCustodyKey, getFarcasterFid } from '@/services/onboarding/secureStorage';
@@ -201,6 +202,7 @@ export default function FeedScreen() {
         visible={hypersnap.promptVisible}
         onClose={hypersnap.dismissPrompt}
       />
+      <ListBottomFade surfaceColor={theme.colors.surface1} />
     </View>
   );
 }

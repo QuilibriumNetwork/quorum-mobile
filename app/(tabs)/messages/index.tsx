@@ -6,6 +6,7 @@
  */
 
 import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
+import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context/AuthContext';
@@ -218,7 +219,7 @@ export default function MessagesInbox() {
   const loading = dmsLoading;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <FloatingTabScreen surfaceColor={theme.colors.surface1} style={{ paddingTop: insets.top }}>
       <Stack.Screen
         options={{
           headerShown: false,
@@ -308,7 +309,7 @@ export default function MessagesInbox() {
           />
         </Suspense>
       )}
-    </View>
+    </FloatingTabScreen>
   );
 }
 

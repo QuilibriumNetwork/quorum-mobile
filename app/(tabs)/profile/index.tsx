@@ -15,6 +15,7 @@ import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
+import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -189,7 +190,7 @@ export default function NotificationsScreen() {
   const hasChat = items.some(i => i.source === 'chat');
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <FloatingTabScreen surfaceColor={theme.colors.surface1} style={{ paddingTop: insets.top }}>
       {/* Use an in-screen header to match spaces + messages exactly —
           the native Stack header was visually heavier and broke the
           design system across tabs. */}
@@ -268,7 +269,7 @@ export default function NotificationsScreen() {
           }
         />
       )}
-    </View>
+    </FloatingTabScreen>
   );
 }
 
