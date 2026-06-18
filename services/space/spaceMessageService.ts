@@ -20,6 +20,7 @@ import {
   extractMentionsFromText,
   type EditMessage,
   type EmbedMessage,
+  type Mentions,
   type Message,
   type MessageContent,
   type PostMessage,
@@ -586,6 +587,10 @@ export interface SendGenericMessageParams {
   channelId: string;
   senderAddress: string;
   content: MessageContent;
+  /** Mentions extracted from the message text, when the content carries text
+   *  (edit, embed caption). Defaults to empty for text-less content (reactions,
+   *  deletes, calls, profile updates). */
+  mentions?: Mentions;
 }
 
 export interface SendGenericMessageResult {
@@ -597,7 +602,7 @@ export interface SendGenericMessageResult {
 async function sendGenericMessage(
   params: SendGenericMessageParams
 ): Promise<SendGenericMessageResult> {
-  const { spaceId, channelId, senderAddress, content } = params;
+  const { spaceId, channelId, senderAddress, content, mentions } = params;
 
   const cryptoProvider = new NativeCryptoProvider();
   const timestamp = Date.now();
@@ -633,7 +638,7 @@ async function sendGenericMessage(
     lastModifiedHash: '',
     content,
     reactions: [],
-    mentions: { memberIds: [], roleIds: [], channelIds: [] },
+    mentions: mentions ?? { memberIds: [], roleIds: [], channelIds: [] },
     publicKey: inboxKey.publicKey,
   };
 
@@ -740,6 +745,10 @@ export interface SendEditMessageParams {
   originalMessageId: string;
   editedText: string;
   senderAddress: string;
+  /** Space roles/channels for resolving @role and #channel mentions in the
+   *  edited text (so an edit that adds/changes a mention still notifies). */
+  spaceRoles?: Array<{ roleId: string; roleTag: string }>;
+  spaceChannels?: Array<{ channelId: string; channelName: string }>;
 }
 
 /**
@@ -748,7 +757,7 @@ export interface SendEditMessageParams {
 export async function sendEditMessage(
   params: SendEditMessageParams
 ): Promise<SendGenericMessageResult> {
-  const { spaceId, channelId, originalMessageId, editedText, senderAddress } = params;
+  const { spaceId, channelId, originalMessageId, editedText, senderAddress, spaceRoles, spaceChannels } = params;
 
   const editedAt = Date.now();
   const editNonce = generateNonce();
@@ -762,7 +771,13 @@ export async function sendEditMessage(
     editNonce,
   };
 
-  return sendGenericMessage({ spaceId, channelId, senderAddress, content });
+  return sendGenericMessage({
+    spaceId,
+    channelId,
+    senderAddress,
+    content,
+    mentions: extractMentionsFromText(editedText, { spaceRoles, spaceChannels }),
+  });
 }
 
 // Delete Messages
@@ -964,6 +979,10 @@ export interface SendEmbedMessageParams {
   repliesToMessageId?: string;
   /** Optional text to accompany the image */
   text?: string;
+  /** Space roles/channels for resolving @role and #channel mentions in the
+   *  caption (so an image caption that mentions someone still notifies). */
+  spaceRoles?: Array<{ roleId: string; roleTag: string }>;
+  spaceChannels?: Array<{ channelId: string; channelName: string }>;
 }
 
 /**
@@ -1000,10 +1019,18 @@ export async function sendEmbedMessage(
     thumbnailUrl,
     repliesToMessageId,
     text,
+    spaceRoles,
+    spaceChannels,
   } = params;
 
   const content = buildPostWithEmbeddedMedia(senderAddress, imageUrl, thumbnailUrl, text, repliesToMessageId);
-  return sendGenericMessage({ spaceId, channelId, senderAddress, content });
+  return sendGenericMessage({
+    spaceId,
+    channelId,
+    senderAddress,
+    content,
+    mentions: text ? extractMentionsFromText(text, { spaceRoles, spaceChannels }) : undefined,
+  });
 }
 
 /**
