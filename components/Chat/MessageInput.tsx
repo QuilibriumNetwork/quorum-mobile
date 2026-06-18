@@ -1066,9 +1066,11 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
 
 const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
-    // Match the messages page so the composer bar blends with the chat
-    // background; the pill sits on top as the distinct surface.
-    backgroundColor: theme.colors.surface1,
+    // Transparent so chat messages scroll visibly behind the composer; only
+    // the pill itself carries a surface. (The keyboard/emoji-panel spacer below
+    // the pill is covered by the keyboard or the panel's own background, so the
+    // transparency only reveals messages in the resting state.)
+    backgroundColor: 'transparent',
     paddingHorizontal: Skin.space(12),
     paddingTop: Skin.space(8),
     // paddingBottom and width depend on insets/screen width and are
