@@ -298,16 +298,16 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
             <AvatarButton />
 
             <PrimaryTabButton
-              icon={<IconSymbol size={24} name="person.3" color={getTabColor('spaces')} />}
-              isFocused={state.routes[state.index]?.name === 'spaces'}
-              onPress={() => handleTabPress('spaces')}
-              accessibilityLabel="Spaces"
-            />
-            <PrimaryTabButton
               icon={<IconSymbol size={24} name="message" color={getTabColor('messages')} />}
               isFocused={state.routes[state.index]?.name === 'messages'}
               onPress={() => handleTabPress('messages')}
               accessibilityLabel="Messages"
+            />
+            <PrimaryTabButton
+              icon={<IconSymbol size={24} name="person.3" color={getTabColor('spaces')} />}
+              isFocused={state.routes[state.index]?.name === 'spaces'}
+              onPress={() => handleTabPress('spaces')}
+              accessibilityLabel="Spaces"
             />
             <PrimaryTabButton
               icon={<IconSymbol size={24} name="globe" color={getTabColor('feed')} />}

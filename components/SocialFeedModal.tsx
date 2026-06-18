@@ -6787,10 +6787,12 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             </View>
           )}
 
-          {/* Floating Action Button */}
+          {/* Floating Action Button — in route mode it must float ABOVE the
+              floating tab bar (not the hardcoded bottom:16, which now overlaps
+              the tab bar / device buttons). Modal mode keeps bottom:16. */}
           {token && (
             <TouchableOpacity
-              style={styles.fab}
+              style={[styles.fab, isRouteMode && { bottom: floatingTabBarPadding }]}
               onPress={() => {
                 if (activeFilter === 'governance') {
                   // New proposal: blank /hegemony cast; `PROPOSAL:` is prepended
