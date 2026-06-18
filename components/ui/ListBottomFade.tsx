@@ -20,22 +20,27 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Matches PRIMARY_ROW_HEIGHT in AppTabBar.tsx.
 const TAB_BAR_HEIGHT = 54;
-// How opaque the scrim gets at the very bottom. Kept below 1 so content stays
-// faintly visible (dimmed, not hidden) behind the device buttons.
-const MAX_OPACITY = 0.85;
+// How opaque the scrim gets at the very bottom. Per scheme: a white scrim on a
+// light skin reads MUCH stronger than a dark scrim on dark, so light needs a
+// lower ceiling or content vanishes under it. Kept below 1 either way so
+// content stays faintly visible behind the device buttons.
+const MAX_OPACITY_DARK = 0.85;
+const MAX_OPACITY_LIGHT = 0.55;
 
 interface ListBottomFadeProps {
   /** Chat/screen background the scrim resolves toward (theme.colors.surface1). */
   surfaceColor: string;
+  /** Current scheme — drives the per-scheme opacity ceiling. */
+  isDark: boolean;
 }
 
-export function ListBottomFade({ surfaceColor }: ListBottomFadeProps) {
+export function ListBottomFade({ surfaceColor, isDark }: ListBottomFadeProps) {
   const insets = useSafeAreaInsets();
   const height = TAB_BAR_HEIGHT + insets.bottom;
 
   // withAlpha is format-agnostic (hex or rgba); falls back to the input color
   // unchanged if it can't parse, which is harmless here.
-  const solid = withAlpha(surfaceColor, MAX_OPACITY);
+  const solid = withAlpha(surfaceColor, isDark ? MAX_OPACITY_DARK : MAX_OPACITY_LIGHT);
 
   return (
     <LinearGradient

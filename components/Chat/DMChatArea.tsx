@@ -479,7 +479,7 @@ export const DMChatArea = React.memo(function DMChatArea({
         onReport={handleReportMessage}
       />
 
-      <ChatBottomChrome tabBarHeight={tabBarHeight} surfaceColor={theme.colors.surface1}>
+      <ChatBottomChrome tabBarHeight={tabBarHeight} surfaceColor={theme.colors.surface1} isDark={theme.dark}>
         <MessageInput
           ref={dmMessageInputRef}
           value={messageText}

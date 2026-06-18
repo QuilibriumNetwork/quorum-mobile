@@ -23,7 +23,7 @@ import * as Skin from '@/theme/skins/geometry';
 type Section = 'wallet' | 'apps';
 
 export default function WalletTab() {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [section, setSection] = useState<Section>('wallet');
   const { openMiniapp } = useMiniappOverlay();
@@ -88,7 +88,7 @@ export default function WalletTab() {
         )}
       </View>
 
-      <ListBottomFade surfaceColor={theme.colors.surface1} />
+      <ListBottomFade surfaceColor={theme.colors.surface1} isDark={isDark} />
     </SurfaceBackground>
   );
 }

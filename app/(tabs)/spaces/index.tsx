@@ -175,7 +175,7 @@ export default function SpacesIndex() {
   );
 
   return (
-    <FloatingTabScreen surfaceColor={theme.colors.surface1} style={{ paddingTop: insets.top }}>
+    <FloatingTabScreen surfaceColor={theme.colors.surface1} isDark={isDark} style={{ paddingTop: insets.top }}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>

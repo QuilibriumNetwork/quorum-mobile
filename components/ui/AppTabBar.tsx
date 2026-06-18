@@ -173,7 +173,7 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
   const anim = useRef(new Animated.Value(0)).current;
 
   const activeColor = theme.colors.primary;
-  const inactiveColor = theme.colors.textMuted;
+  const inactiveColor = theme.colors.tabBarIconInactive;
 
   const animate = useCallback(
     (toValue: number, onDone?: () => void) => {

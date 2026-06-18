@@ -16,7 +16,7 @@ import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 export default function FeedScreen() {
   const { farcasterAuthToken, refreshFarcasterToken, user } = useAuth();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const params = useLocalSearchParams<{
     username?: string;
     castHashPrefix?: string;
@@ -202,7 +202,7 @@ export default function FeedScreen() {
         visible={hypersnap.promptVisible}
         onClose={hypersnap.dismissPrompt}
       />
-      <ListBottomFade surfaceColor={theme.colors.surface1} />
+      <ListBottomFade surfaceColor={theme.colors.surface1} isDark={isDark} />
     </View>
   );
 }

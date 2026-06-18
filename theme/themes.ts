@@ -64,6 +64,12 @@ const createTheme = (
     borderDefault: string;
     borderStrong: string;
     bgButtonSubtle: string;
+    // Chat composer + floating tab bar — semantic, per-scheme so the dark and
+    // light treatments are tuned independently instead of one value eyeballed
+    // on dark and wrong on light.
+    composerPillBg: string;
+    composerPillBorder: string;
+    tabBarIconInactive: string;
   };
   fonts: ReturnType<typeof makeFonts>;
   fontSizes: typeof fontSizes;
@@ -178,6 +184,16 @@ const createTheme = (
       borderDefault: surf('surface5', surface['5']),
       borderStrong: surf('surface6', surface['6']),
       bgButtonSubtle: surf('surface4', surface['4']),
+      // Composer pill: a touch lighter than the chat background so it reads as a
+      // distinct, raised surface in BOTH schemes (dark uses a raised surface4;
+      // light uses pure white lifted off the off-white chat bg).
+      composerPillBg: isDark ? surf('surface4', surface['4']) : surf('surface0', surface['0']),
+      // Pill rim: a faint white top-light on dark; a subtle grey hairline on
+      // light (white-on-white is invisible, so light needs a darker edge).
+      composerPillBorder: isDark ? 'rgba(255,255,255,0.10)' : surf('surface4', surface['4']),
+      // Inactive tab-bar icon: textMuted is too faint on a white bar, so light
+      // uses a stronger subtle tone; dark keeps the muted tone (reads fine on black).
+      tabBarIconInactive: isDark ? pick('textMuted', textColors.muted) : pick('textSubtle', textColors.subtle),
     },
     fonts,
     fontSizes: scaleFontSizes(skin?.fontScale ?? 1),

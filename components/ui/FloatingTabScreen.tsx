@@ -42,6 +42,8 @@ interface FloatingTabScreenRenderArgs {
 interface FloatingTabScreenProps {
   /** Screen background the fade resolves toward (theme.colors.surface1). */
   surfaceColor: string;
+  /** Current scheme — forwarded to the fade so its opacity is per-scheme. */
+  isDark: boolean;
   /** Extra styles for the outer container (e.g. paddingTop: insets.top). */
   style?: StyleProp<ViewStyle>;
   /** Render-prop receiving the bottom padding the screen's list should use,
@@ -49,13 +51,13 @@ interface FloatingTabScreenProps {
   children: React.ReactNode | ((args: FloatingTabScreenRenderArgs) => React.ReactNode);
 }
 
-export function FloatingTabScreen({ surfaceColor, style, children }: FloatingTabScreenProps) {
+export function FloatingTabScreen({ surfaceColor, isDark, style, children }: FloatingTabScreenProps) {
   const listBottomPadding = useFloatingTabBarPadding();
 
   return (
     <View style={[styles.container, { backgroundColor: surfaceColor }, style]}>
       {typeof children === 'function' ? children({ listBottomPadding }) : children}
-      <ListBottomFade surfaceColor={surfaceColor} />
+      <ListBottomFade surfaceColor={surfaceColor} isDark={isDark} />
     </View>
   );
 }

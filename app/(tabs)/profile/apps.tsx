@@ -8,7 +8,7 @@ import { View, StyleSheet } from 'react-native';
 
 export default function AppsScreen() {
   const { openMiniapp } = useMiniappOverlay();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
 
   return (
     <View style={styles.container}>
@@ -18,7 +18,7 @@ export default function AppsScreen() {
         onOpenMiniApp={(url, isQNative) => openMiniapp({ url, isQNative })}
         isRouteMode={true}
       />
-      <ListBottomFade surfaceColor={theme.colors.surface1} />
+      <ListBottomFade surfaceColor={theme.colors.surface1} isDark={isDark} />
     </View>
   );
 }

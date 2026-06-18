@@ -1187,27 +1187,21 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     // containers (justifyContent: flex-end) and text position by the input's
     // own textAlignVertical, so neither depends on the pill's vertical align.
     alignItems: 'stretch',
-    // Same shade as the emoji panel so the pill and the panel read as one
-    // continuous surface.
-    backgroundColor: theme.colors.surface4,
+    // Per-scheme semantic token: distinct raised surface on dark, white on light.
+    backgroundColor: theme.colors.composerPillBg,
     // Large radius => the short ends are perfect semicircles while single-line.
     borderRadius: 999,
-    // "Raised" cue, skin-agnostic (works on light/dark/custom skins because
-    // both are alpha-on-anything, not tied to theme tokens):
-    //   - a faint white rim reads as a top-light highlight on dark skins
-    //     (and is near-invisible on light skins, which is correct);
-    //   - a soft elevation/shadow provides the lift on light skins where the
-    //     rim won't show, and adds depth everywhere.
+    // "Raised" cue via a per-scheme rim token (faint white top-light on dark,
+    // subtle grey hairline on light where white-on-white would be invisible)
+    // plus a soft shadow for lift. Both tuned per scheme by the token, not
+    // eyeballed once on dark.
     borderWidth: StyleSheet.hairlineWidth,
-    // Subtle rim on the sides/bottom; brighter on the TOP edge so it reads as a
-    // top-light highlight (light coming from above) rather than a flat outline.
-    borderColor: 'rgba(255,255,255,0.10)',
-    borderTopColor: 'rgba(255,255,255,0.20)',
+    borderColor: theme.colors.composerPillBorder,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 5,
+    shadowOpacity: 0.10,
+    shadowRadius: 5,
+    elevation: 3,
     // Uniform inner padding on all four sides: the send circle then has the
     // same gap to the right edge as it does to the top/bottom, so it reads as
     // evenly inset (snug but balanced) rather than cramped against one side.

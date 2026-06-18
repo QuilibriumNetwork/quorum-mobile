@@ -43,7 +43,7 @@ function formatTime(ts: number): string {
 }
 
 export default function NotificationsScreen() {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const listPadding = useFloatingTabBarPadding();
   const { farcasterAuthToken } = useAuth();
   const {
@@ -190,7 +190,7 @@ export default function NotificationsScreen() {
   const hasChat = items.some(i => i.source === 'chat');
 
   return (
-    <FloatingTabScreen surfaceColor={theme.colors.surface1} style={{ paddingTop: insets.top }}>
+    <FloatingTabScreen surfaceColor={theme.colors.surface1} isDark={isDark} style={{ paddingTop: insets.top }}>
       {/* Use an in-screen header to match spaces + messages exactly —
           the native Stack header was visually heavier and broke the
           design system across tabs. */}

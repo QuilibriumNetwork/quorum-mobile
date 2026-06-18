@@ -41,9 +41,13 @@ const FADE_LEAD = 56;
 //            so the gap reads as mostly solid / not see-through.
 //   BOTTOM — at the screen bottom (device-button zone). Kept lowish so content
 //            stays clearly visible there, matching the lighter ListBottomFade.
-const TOP_OPACITY = 0;
-const GAP_OPACITY = 0.92;
-const BOTTOM_OPACITY = 0.55;
+// Per scheme: a white (light-skin) scrim reads much stronger than a dark one,
+// so the light profile uses lower opacities or content vanishes under it.
+const TOP_OPACITY = 0; // always fully transparent (don't dim messages above the composer)
+const GAP_OPACITY_DARK = 0.92;
+const GAP_OPACITY_LIGHT = 0.70;
+const BOTTOM_OPACITY_DARK = 0.55;
+const BOTTOM_OPACITY_LIGHT = 0.30;
 
 /**
  * Bottom content padding a chat MessagesList needs so the newest message rests
@@ -61,15 +65,19 @@ interface ChatBottomChromeProps {
   tabBarHeight: number;
   /** Chat background color the fade resolves to (theme.colors.surface1). */
   surfaceColor: string;
+  /** Current scheme — drives the per-scheme fade opacity. */
+  isDark: boolean;
   /** The composer (MessageInput) or the read-only banner. */
   children: React.ReactNode;
 }
 
-export function ChatBottomChrome({ tabBarHeight, surfaceColor, children }: ChatBottomChromeProps) {
+export function ChatBottomChrome({ tabBarHeight, surfaceColor, isDark, children }: ChatBottomChromeProps) {
   const fadeHeight = tabBarHeight + COMPOSER_RESTING_HEIGHT + FADE_LEAD;
   // The composer top sits FADE_LEAD px down from the top of the fade zone; we
   // want peak opacity there so the composer→tab-bar gap reads solid.
   const gapStop = Math.min(0.95, FADE_LEAD / fadeHeight);
+  const gapOpacity = isDark ? GAP_OPACITY_DARK : GAP_OPACITY_LIGHT;
+  const bottomOpacity = isDark ? BOTTOM_OPACITY_DARK : BOTTOM_OPACITY_LIGHT;
 
   return (
     <>
@@ -83,8 +91,8 @@ export function ChatBottomChrome({ tabBarHeight, surfaceColor, children }: ChatB
       <LinearGradient
         colors={[
           withAlpha(surfaceColor, TOP_OPACITY),
-          withAlpha(surfaceColor, GAP_OPACITY),
-          withAlpha(surfaceColor, BOTTOM_OPACITY),
+          withAlpha(surfaceColor, gapOpacity),
+          withAlpha(surfaceColor, bottomOpacity),
         ]}
         locations={[0, gapStop, 1]}
         start={{ x: 0, y: 0 }}

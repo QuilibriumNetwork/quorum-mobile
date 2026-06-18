@@ -727,7 +727,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
 
       </View>
 
-      <ChatBottomChrome tabBarHeight={tabBarHeight} surfaceColor={theme.colors.surface1}>
+      <ChatBottomChrome tabBarHeight={tabBarHeight} surfaceColor={theme.colors.surface1} isDark={theme.dark}>
         {!canPost && isReadOnlyChannel ? (
           <View style={styles.readOnlyBanner}>
             <IconSymbol name="lock.fill" size={16} color={theme.colors.textMuted} />
