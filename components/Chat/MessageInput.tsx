@@ -1192,6 +1192,19 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     backgroundColor: theme.colors.surface4,
     // Large radius => the short ends are perfect semicircles while single-line.
     borderRadius: 999,
+    // "Raised" cue, skin-agnostic (works on light/dark/custom skins because
+    // both are alpha-on-anything, not tied to theme tokens):
+    //   - a faint white rim reads as a top-light highlight on dark skins
+    //     (and is near-invisible on light skins, which is correct);
+    //   - a soft elevation/shadow provides the lift on light skins where the
+    //     rim won't show, and adds depth everywhere.
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.10)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 5,
     // Uniform inner padding on all four sides: the send circle then has the
     // same gap to the right edge as it does to the top/bottom, so it reads as
     // evenly inset (snug but balanced) rather than cramped against one side.
