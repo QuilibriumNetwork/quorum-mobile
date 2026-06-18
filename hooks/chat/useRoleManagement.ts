@@ -20,7 +20,14 @@ import { getSpace, saveSpace } from '@/services/config/spaceStorage';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import { broadcastSpaceUpdate } from '@/services/space/broadcastSpaceUpdate';
 import type { Space, Role, Permission } from '@quilibrium/quorum-shared';
-import { toggleRolePermission, getRoleColorHex, getDefaultRoleColor } from '@quilibrium/quorum-shared';
+import {
+  toggleRolePermission,
+  getRoleColorHex,
+  getDefaultRoleColor,
+  hasPermission,
+  getUserPermissions,
+  getUserRoles,
+} from '@quilibrium/quorum-shared';
 
 /**
  * Resolve a role's stored `color` (a palette token, or a legacy raw hex /
@@ -76,14 +83,7 @@ export function useHasPermission(
 
   if (!roles || !userAddress) return false;
 
-  // Check if user is in any role that has the permission
-  for (const role of roles) {
-    if (role.members.includes(userAddress) && role.permissions.includes(permission)) {
-      return true;
-    }
-  }
-
-  return false;
+  return hasPermission(userAddress, permission, { roles } as Space);
 }
 
 /**
@@ -97,17 +97,7 @@ export function useUserPermissions(
 
   if (!roles || !userAddress) return [];
 
-  const permissions = new Set<Permission>();
-
-  for (const role of roles) {
-    if (role.members.includes(userAddress)) {
-      for (const perm of role.permissions) {
-        permissions.add(perm);
-      }
-    }
-  }
-
-  return Array.from(permissions);
+  return getUserPermissions(userAddress, { roles } as Space);
 }
 
 /**
@@ -121,7 +111,7 @@ export function useUserRoles(
 
   if (!roles || !userAddress) return [];
 
-  return roles.filter(role => role.members.includes(userAddress));
+  return getUserRoles(userAddress, { roles } as Space);
 }
 
 interface AddRoleParams {
