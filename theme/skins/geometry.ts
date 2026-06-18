@@ -83,3 +83,14 @@ export function border(n: number): number {
 export function font(n: number): number {
   return Math.round(n * current.fontScale);
 }
+
+/**
+ * Canonical horizontal padding for list-content rows that hold a stream of
+ * messages/casts (chat message rows, chat cast cards, Farcaster feed cards).
+ * Centralised so these surfaces share one width instead of each hardcoding its
+ * own (the feed used to be 12 while chat messages were 16, making the feed look
+ * wider). Skin-scaled like every other spacing value.
+ */
+export function contentRowPaddingH(): number {
+  return space(16);
+}

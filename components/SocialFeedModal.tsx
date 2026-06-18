@@ -7519,7 +7519,8 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       borderBottomColor: theme.colors.surface3,
       paddingTop: Skin.space(12),
       paddingBottom: Skin.space(14),
-      paddingHorizontal: Skin.space(12),
+      // Shared content-row width so the feed matches the chat message stream.
+      paddingHorizontal: Skin.contentRowPaddingH(),
       gap: Skin.space(10),
     },
     postHeader: {

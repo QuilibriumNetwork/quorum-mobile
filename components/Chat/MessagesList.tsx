@@ -1043,7 +1043,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         setActionSheetMessageId(item.id);
       };
       return (
-        <View style={{ paddingHorizontal: Skin.space(12), paddingVertical: Skin.space(4) }}>
+        <View style={{ paddingHorizontal: Skin.contentRowPaddingH(), paddingVertical: Skin.space(4) }}>
           <FarcasterCastCard
             cast={item.cast}
             channelKey={item.castChannelKey}
@@ -1261,7 +1261,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   message: {
     flexDirection: 'row',
-    padding: Skin.space(16),
+    paddingVertical: Skin.space(16),
+    // Shared content-row width (matches the Farcaster feed cards).
+    paddingHorizontal: Skin.contentRowPaddingH(),
     width: '100%',
   },
   messageAvatar: {
