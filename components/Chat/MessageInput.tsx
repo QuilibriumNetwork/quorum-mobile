@@ -416,8 +416,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     const lastAtIndex = textUpToCursor.lastIndexOf('@');
     const textAfterCursor = value.slice(cursorPosition);
 
-    // Use address for the mention (MentionableText will render it as display name)
-    const newText = value.slice(0, lastAtIndex) + `@${member.address} ` + textAfterCursor;
+    // Use canonical @<address> format (matches desktop wire format)
+    const newText = value.slice(0, lastAtIndex) + `@<${member.address}> ` + textAfterCursor;
     onChangeText(newText);
     setAutocompleteType(null);
     setAutocompleteQuery('');

@@ -437,6 +437,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         text,
         repliesToMessageId: replyToMessage?.messageId,
         replyToAuthorAddress: replyToMessage?.authorId,
+        spaceChannels: channelsData?.map((c) => ({ channelId: c.channelId, channelName: c.channelName })),
       }, {
         onSettled: refocusInput,
       });
