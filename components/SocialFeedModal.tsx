@@ -1,6 +1,5 @@
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import ComposeChannelPickerModal from '@/components/ComposeChannelPickerModal';
-import { HeaderAvatar } from '@/components/HeaderAvatar';
 import { InviteLinkCard, containsInviteLink } from '@/components/Chat/InviteLinkCard';
 import type { ComposeCastOptions, ComposeCastResult } from '@/services/miniapp';
 import { AudioSpaceEmbed } from '@/components/SocialFeed/content/AudioSpaceEmbed';
@@ -6315,9 +6314,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                 {/* Search Input */}
                 <View style={styles.searchContainer}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(12) }}>
-                    {/* Avatar (top-left) — only in route mode, the modal
-                        presentation has its own dismiss affordance. */}
-                    {isRouteMode && <HeaderAvatar />}
                     <View style={[styles.searchInputContainer, { flex: 1 }]}>
                       <IconSymbol name="magnifyingglass" size={18} color={theme.colors.textMuted} />
                       <TextInput
@@ -6533,10 +6529,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                     }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(12) }}>
-                      {/* Avatar (top-left) — only in route mode. The
-                          modal presentation has its own dismiss
-                          affordance and doesn't need a header avatar. */}
-                      {isRouteMode && <HeaderAvatar />}
                       <View style={[styles.searchInputContainer, { flex: 1 }]}>
                         <IconSymbol name="magnifyingglass" size={18} color={theme.colors.textMuted} />
                         <TextInput

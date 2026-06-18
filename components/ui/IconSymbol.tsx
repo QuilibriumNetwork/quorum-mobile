@@ -55,6 +55,7 @@ const SF_TO_TABLER = {
   'flag.fill': tabler('IconFlag', 'IconFlagFilled'),
   'nosign': tabler('IconBan'),
   'ellipsis': tabler('IconDots'),
+  'ellipsis.vertical': tabler('IconDotsVertical'),
   'exclamationmark.circle': tabler('IconAlertCircle'),
   'exclamationmark.circle.fill': tabler('IconAlertCircle', 'IconAlertCircleFilled'),
   'exclamationmark.triangle': tabler('IconAlertTriangle'),

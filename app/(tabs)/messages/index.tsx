@@ -5,8 +5,8 @@
  * Tap a space → navigate to channels list. Tap a DM → navigate to chat.
  */
 
+import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
-import { HeaderAvatar } from '@/components/HeaderAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context/AuthContext';
 import type { Conversation } from '@/hooks/chat';
@@ -137,7 +137,8 @@ export default function MessagesInbox() {
   const [newConversationVisible, setNewConversationVisible] = useState(false);
   const [manualRefresh, setManualRefresh] = useState(false);
 
-  const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
+  const listPadding = useFloatingTabBarPadding();
+  const styles = useMemo(() => createStyles(theme, isDark, listPadding), [theme, isDark, listPadding]);
 
   // DMs list
   const items = useMemo<InboxItem[]>(() => {
@@ -226,12 +227,7 @@ export default function MessagesInbox() {
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerSlotLeft}>
-          <HeaderAvatar />
-        </View>
-        <View style={styles.headerSlotCenter}>
-          <Text style={styles.heading}>Messages</Text>
-        </View>
+        <Text style={styles.heading}>Messages</Text>
         <View style={styles.headerSlotRight}>
           <TouchableOpacity
             onPress={handleOpenNewConversation}
@@ -316,7 +312,7 @@ export default function MessagesInbox() {
   );
 }
 
-const createStyles = (theme: AppTheme, isDark: boolean) =>
+const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -332,19 +328,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     heading: {
       ...theme.textStyles.title3,
       color: theme.colors.textStrong,
-      textAlign: 'center' as const,
-    },
-    // Side slots natural width, center flex-fills. Same pattern across
-    // spaces / wallet / notifications.
-    headerSlotLeft: {
-      alignItems: 'flex-start' as const,
-      flexDirection: 'row' as const,
-    },
-    headerSlotCenter: {
       flex: 1,
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-      paddingHorizontal: Skin.space(8),
     },
     headerSlotRight: {
       flexDirection: 'row' as const,
@@ -377,7 +361,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       color: theme.colors.textMain,
     },
     listContent: {
-      paddingBottom: Skin.space(120),
+      paddingBottom: listPadding,
     },
     row: {
       flexDirection: 'row',

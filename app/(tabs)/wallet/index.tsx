@@ -6,7 +6,6 @@
  */
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { HeaderAvatar } from '@/components/HeaderAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SurfaceBackground } from '@/theme/skins/surfaces';
 import WalletModal from '@/components/WalletModal';
@@ -54,12 +53,7 @@ export default function WalletTab() {
   return (
     <SurfaceBackground slot="wallet" fallbackColor={theme.colors.surface1} style={styles.container}>
       <View style={[styles.headerBar, { paddingTop: insets.top + 8 }]}>
-        <View style={styles.headerSlotLeft}>
-          <HeaderAvatar />
-        </View>
-        <View style={styles.headerSlotCenter}>
-          <Text style={styles.heading}>{headingLabel}</Text>
-        </View>
+        <Text style={styles.heading}>{headingLabel}</Text>
         <View style={styles.headerSlotRight}>
           <TouchableOpacity
             onPress={() => setSection((s) => (s === 'wallet' ? 'apps' : 'wallet'))}
@@ -109,16 +103,6 @@ const createStyles = (theme: AppTheme) =>
       paddingBottom: Skin.space(4),
       backgroundColor: theme.colors.surface1,
     },
-    headerSlotLeft: {
-      alignItems: 'flex-start' as const,
-      flexDirection: 'row' as const,
-    },
-    headerSlotCenter: {
-      flex: 1,
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-      paddingHorizontal: Skin.space(8),
-    },
     headerSlotRight: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
@@ -127,7 +111,7 @@ const createStyles = (theme: AppTheme) =>
     heading: {
       ...theme.textStyles.title3,
       color: theme.colors.textMain,
-      textAlign: 'center' as const,
+      flex: 1,
     },
     headerIconButton: { padding: Skin.space(8) },
     body: {
