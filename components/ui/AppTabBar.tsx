@@ -1,5 +1,6 @@
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { QnsIcon } from '@/components/ui/QnsIcon';
 import { useAuth } from '@/context';
 import { useUnifiedNotifications } from '@/hooks/useUnifiedNotifications';
 import { feedActiveTabBus } from '@/services/ui/feedActiveTab';
@@ -118,12 +119,15 @@ function PrimaryTabButton({
 
 function SecondaryItem({
   icon,
+  renderIcon,
   label,
   disabled,
   color,
   onPress,
 }: {
-  icon: string;
+  // Either a legacy IconSymbol name OR a custom-rendered node (renderIcon).
+  icon?: string;
+  renderIcon?: (color: string) => React.ReactNode;
   label: string;
   disabled?: boolean;
   color: string;
@@ -147,7 +151,7 @@ function SecondaryItem({
       accessibilityState={{ disabled }}
       style={[styles.secondarySlot, disabled && styles.disabledSlot]}
     >
-      <IconSymbol size={22} name={icon as any} color={color} />
+      {renderIcon ? renderIcon(color) : <IconSymbol size={22} name={icon as any} color={color} />}
       <Text style={[styles.secondaryLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
         {label}
       </Text>
@@ -364,7 +368,7 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
               onPress={() => { closeExtra(); setTimeout(() => router.push('/profile/apps'), 0); }}
             />
             <SecondaryItem
-              icon="at"
+              renderIcon={(c) => <QnsIcon size={22} color={c} />}
               label="QNS"
               color={inactiveColor}
               disabled
