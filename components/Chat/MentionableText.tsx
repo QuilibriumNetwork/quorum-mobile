@@ -403,21 +403,21 @@ function MentionableTextBase({
     ? { ...style, fontSize: (style?.fontSize || 16) * 2 }
     : style;
 
-  // Default styles for mentions and channels
+  // Mention/channel styling — color-only (no highlighted background). The bg
+  // pill read too heavy on mobile, so mentions render as a colored, medium-
+  // weight run. Keep in sync with MessageMarkdownRenderer's pill style.
   const defaultMentionStyle: TextStyle = {
     color: theme?.colors?.primary || '#5865F2',
-    backgroundColor: (theme?.colors?.primary || '#5865F2') + '20',
-    borderRadius: Skin.radius(3),
-    paddingHorizontal: Skin.space(2),
+    fontWeight: '600',
   };
 
-  const selfMentionStyle: TextStyle = {
-    ...defaultMentionStyle,
-    backgroundColor: (theme?.colors?.warning || '#FAA61A') + '30',
-  };
+  // All mentions use the same accent color (no special self-mention hue) for a
+  // consistent look.
+  const selfMentionStyle: TextStyle = defaultMentionStyle;
 
   const defaultChannelStyle: TextStyle = {
     color: theme?.colors?.primary || '#5865F2',
+    fontWeight: '600',
   };
 
   const linkStyle: TextStyle = {

@@ -1356,7 +1356,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: Skin.font(14),
   },
   autocompleteContainer: {
-    backgroundColor: theme.colors.surface5,
+    // Match the composer pill's surface so the menu reads as one surface with it.
+    backgroundColor: theme.colors.surface4,
     borderRadius: Skin.radius(12),
     marginBottom: Skin.space(8),
     maxHeight: 200,
