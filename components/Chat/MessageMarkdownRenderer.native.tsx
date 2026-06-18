@@ -657,9 +657,9 @@ const createStyles = (theme: AppTheme) =>
       borderRadius: Skin.radius(3),
     },
     spoilerRevealed: {
-      backgroundColor: (theme.colors.textMuted ?? '#888') + '30',
+      // Once revealed, render as normal text (no background) — matches desktop,
+      // which sets the revealed spoiler's background to transparent.
       color: theme.colors.textMain,
-      borderRadius: Skin.radius(3),
     },
     customEmoji: {
       width: 20,
