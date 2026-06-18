@@ -1399,7 +1399,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flex: 1,
   },
   autocompleteHint: {
-    color: theme.colors.textMuted,
+    // textSubtle, not textMuted — the muted token is too low-contrast on the
+    // surface4 menu background to read comfortably.
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(12),
     fontFamily: theme.fonts.regular.fontFamily,
   },
