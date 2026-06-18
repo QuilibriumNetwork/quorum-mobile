@@ -65,9 +65,6 @@
       "statusBar": {
         "translucent": true
       },
-      "navigationBar": {
-        "backgroundColor": "#0a0a0b"
-      },
       "package": "com.quilibrium.quorummobile",
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",

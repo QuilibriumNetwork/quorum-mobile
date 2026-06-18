@@ -16,6 +16,7 @@ import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TextInput, View }
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
 
 
@@ -28,6 +29,7 @@ function formatMemberCount(count: number): string {
 export default function DiscoverSpacesScreen() {
   const { theme, isDark } = useTheme();
   const headerHeight = useHeaderHeight();
+  const insets = useSafeAreaInsets();
   const { isConnected } = useWebSocket();
   const { showToast } = useToast();
   const { data: joinedSpaces } = useSpaces();
@@ -178,7 +180,7 @@ export default function DiscoverSpacesScreen() {
           data={entries}
           keyExtractor={(item) => item.space_address}
           renderItem={renderEntry}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: Skin.space(100) + insets.bottom }]}
           onEndReached={hasMore ? loadMore : undefined}
           onEndReachedThreshold={0.5}
         />
@@ -221,7 +223,9 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     emptyTitle: { ...theme.textStyles.headline, color: theme.colors.textMain, marginTop: Skin.space(12) },
     emptySubtitle: { ...theme.textStyles.subheadline, color: theme.colors.textMuted, textAlign: 'center', paddingHorizontal: Skin.space(40) },
-    listContent: { paddingHorizontal: Skin.space(16), paddingBottom: Skin.space(100) },
+    // paddingBottom is applied inline (Skin.space(100) + insets.bottom) so the
+    // last card clears the system nav bar in edge-to-edge mode.
+    listContent: { paddingHorizontal: Skin.space(16) },
     card: {
       backgroundColor: theme.colors.surface2,
       borderRadius: Skin.radius(12),

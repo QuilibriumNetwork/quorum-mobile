@@ -17,6 +17,7 @@ import { saveMediaToLibrary } from '@/services/media/saveToLibrary';
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from '../utils';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const ReanimatedView = Reanimated.View;
 
@@ -64,6 +65,7 @@ interface VideoViewerProps {
  */
 export function VideoViewer({ visible, url, downloadUrl, onClose }: VideoViewerProps) {
   const [saving, setSaving] = useState(false);
+  const insets = useSafeAreaInsets();
 
   // Prefer the original source for saving; `url` is usually an HLS manifest
   // (can't be saved). Only fall back to `url` if there's no better option.
@@ -162,7 +164,7 @@ export function VideoViewer({ visible, url, downloadUrl, onClose }: VideoViewerP
       <GestureHandlerRootView style={styles.gestureRoot}>
         <ReanimatedView style={[styles.container, containerAnimatedStyle]}>
           {/* Header: save + close (mirrors ImageViewer) */}
-          <View style={styles.header}>
+          <View style={[styles.header, { top: insets.top + 8 }]}>
             <View />
             <View style={styles.headerActions}>
               <TouchableOpacity
@@ -212,7 +214,8 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   header: {
     position: 'absolute',
-    top: 50,
+    // `top` is applied inline (insets.top + 8) so the buttons clear the status
+    // bar / camera cutout in edge-to-edge mode.
     left: 0,
     right: 0,
     zIndex: 10,

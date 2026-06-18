@@ -251,8 +251,8 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
   // Audio-only layout
   return (
     <View style={[styles.container, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
-      {/* Top bar */}
-      <View style={[styles.audioTopBar, { paddingTop: insets.top + 8 }]}>
+      {/* Top bar — container already applies insets.top, so only add spacing. */}
+      <View style={[styles.audioTopBar, { paddingTop: Skin.space(8) }]}>
         <View style={styles.topBarLeft}>
           <View style={styles.topBarInfo}>
             <Text style={[styles.audioTopBarTitle, { color: theme.colors.textMain }]} numberOfLines={1}>
