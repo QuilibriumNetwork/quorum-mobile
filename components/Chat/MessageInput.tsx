@@ -1,10 +1,12 @@
 import type { AppTheme } from '@/theme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SendIcon } from '@/components/Chat/SendIcon';
+import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { useEmojiFrecency } from '@/hooks/useEmojiFrecency';
 import { useDebouncedValue } from '@/hooks/useFarcasterSearch';
 import type { ProcessedAttachment } from '@/services/media/imageAttachment';
-import type { Channel, Emoji, SpaceMember, Sticker } from '@quilibrium/quorum-shared';
+import type { Channel, Emoji, SpaceMember, Sticker, Role, Space } from '@quilibrium/quorum-shared';
+import { hasPermission, getRoleColorHex } from '@quilibrium/quorum-shared';
 import { searchEmojis } from '@/data/emojiData';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, useWindowDimensions, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputSubmitEditingEventData, View } from 'react-native';
@@ -63,6 +65,12 @@ interface MessageInputProps {
   members?: SpaceMember[];
   /** Channels for #channel autocomplete */
   channels?: Channel[];
+  /** Roles for @role autocomplete */
+  roles?: Role[];
+  /** Current user's address — gates the @everyone autocomplete option. */
+  currentUserId?: string;
+  /** Space context — used to check the mention:everyone permission. */
+  space?: Space | null;
   /** Message being edited */
   editingMessage?: EditingMessage | null;
   /** Cancel editing */
@@ -214,6 +222,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   onSendSticker,
   members = [],
   channels = [],
+  roles = [],
+  currentUserId,
+  space,
   editingMessage,
   onCancelEdit,
   isDM = false,
@@ -389,18 +400,54 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     setAutocompleteQuery('');
   }, [onChangeText, cursorPosition, value, channels, composerPanel]);
 
-  // Filter members for mention autocomplete - search by display name, name, or address
-  const filteredMembers = useMemo(() => {
+  // Whether the current user may mention @everyone in this space. Gates the
+  // @everyone autocomplete option (mirrors desktop — silently omit when the
+  // user lacks the permission rather than showing it disabled).
+  const canMentionEveryone = useMemo(() => {
+    if (!currentUserId || !space) return false;
+    return hasPermission(currentUserId, 'mention:everyone', space);
+  }, [currentUserId, space]);
+
+  // Combined @mention suggestions: @everyone first (when permitted and it
+  // matches the query), then matching roles, then matching members. Capped at
+  // 8 total. A discriminated union keeps the render + insert logic per-kind.
+  type MentionSuggestion =
+    | { kind: 'everyone' }
+    | { kind: 'role'; role: Role }
+    | { kind: 'member'; member: SpaceMember };
+
+  const mentionSuggestions = useMemo((): MentionSuggestion[] => {
     if (autocompleteType !== 'mention') return [];
-    return members.filter((m) => {
+    const q = debouncedAutocompleteQuery;
+    const out: MentionSuggestion[] = [];
+
+    // @everyone — show when permitted and the query is a prefix of "everyone"
+    // (empty query counts, so "@" alone surfaces it first).
+    if (canMentionEveryone && 'everyone'.startsWith(q)) {
+      out.push({ kind: 'everyone' });
+    }
+
+    // Roles — match by tag or display name.
+    for (const role of roles) {
+      const tag = (role.roleTag || '').toLowerCase();
+      const name = (role.displayName || '').toLowerCase();
+      if (tag.includes(q) || name.includes(q)) {
+        out.push({ kind: 'role', role });
+      }
+    }
+
+    // Members — match by display name, name, or address.
+    for (const m of members) {
       const displayName = (m.display_name || '').toLowerCase();
       const name = (m.name || '').toLowerCase();
       const address = (m.address || '').toLowerCase();
-      return displayName.includes(debouncedAutocompleteQuery) ||
-             name.includes(debouncedAutocompleteQuery) ||
-             address.includes(debouncedAutocompleteQuery);
-    }).slice(0, 6);
-  }, [autocompleteType, debouncedAutocompleteQuery, members]);
+      if (displayName.includes(q) || name.includes(q) || address.includes(q)) {
+        out.push({ kind: 'member', member: m });
+      }
+    }
+
+    return out.slice(0, 8);
+  }, [autocompleteType, debouncedAutocompleteQuery, canMentionEveryone, roles, members]);
 
   // Filter channels for channel autocomplete - match from start of name
   const filteredChannels = useMemo(() => {
@@ -423,13 +470,42 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     setAutocompleteQuery('');
   }, [value, cursorPosition, onChangeText]);
 
-  // Insert selected channel
+  // Insert @everyone — stored as the literal token (no angle brackets), matching
+  // desktop's wire format.
+  const handleSelectEveryone = useCallback(() => {
+    const textUpToCursor = value.slice(0, cursorPosition);
+    const lastAtIndex = textUpToCursor.lastIndexOf('@');
+    const textAfterCursor = value.slice(cursorPosition);
+
+    const newText = value.slice(0, lastAtIndex) + `@everyone ` + textAfterCursor;
+    onChangeText(newText);
+    setAutocompleteType(null);
+    setAutocompleteQuery('');
+  }, [value, cursorPosition, onChangeText]);
+
+  // Insert a role mention — stored as @<roleId> (angle-bracket wrapped UUID),
+  // matching desktop's processRoleMentions wire format. Resolves to the role
+  // name pill on render via the roles prop.
+  const handleSelectRole = useCallback((role: Role) => {
+    const textUpToCursor = value.slice(0, cursorPosition);
+    const lastAtIndex = textUpToCursor.lastIndexOf('@');
+    const textAfterCursor = value.slice(cursorPosition);
+
+    const newText = value.slice(0, lastAtIndex) + `@<${role.roleId}> ` + textAfterCursor;
+    onChangeText(newText);
+    setAutocompleteType(null);
+    setAutocompleteQuery('');
+  }, [value, cursorPosition, onChangeText]);
+
+  // Insert selected channel — uses the canonical #<channelId> wire format
+  // (matches desktop). Renders as #channelName via the channels prop, and is
+  // tappable in both the plain and markdown render paths.
   const handleSelectChannel = useCallback((channel: Channel) => {
     const textUpToCursor = value.slice(0, cursorPosition);
     const lastHashIndex = textUpToCursor.lastIndexOf('#');
     const textAfterCursor = value.slice(cursorPosition);
 
-    const newText = value.slice(0, lastHashIndex) + `#${channel.channelName} ` + textAfterCursor;
+    const newText = value.slice(0, lastHashIndex) + `#<${channel.channelId}> ` + textAfterCursor;
     onChangeText(newText);
     setAutocompleteType(null);
     setAutocompleteQuery('');
@@ -816,29 +892,64 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
       )}
 
       {/* Autocomplete popup — anchored above the pill */}
-      {autocompleteType && (filteredMembers.length > 0 || filteredChannels.length > 0) && (
+      {autocompleteType && (mentionSuggestions.length > 0 || filteredChannels.length > 0) && (
         <View style={styles.autocompleteContainer}>
           <ScrollView
             style={styles.autocompleteList}
             keyboardShouldPersistTaps="always"
             showsVerticalScrollIndicator={false}
           >
-            {autocompleteType === 'mention' && filteredMembers.map((member) => (
-              <TouchableOpacity
-                key={member.address}
-                style={styles.autocompleteItem}
-                onPress={() => handleSelectMention(member)}
-              >
-                <View style={styles.autocompleteAvatar}>
-                  <Text style={styles.autocompleteAvatarText}>
-                    {(member.display_name || member.name || '?')[0].toUpperCase()}
+            {autocompleteType === 'mention' && mentionSuggestions.map((s) => {
+              if (s.kind === 'everyone') {
+                return (
+                  <TouchableOpacity
+                    key="mention-everyone"
+                    style={styles.autocompleteItem}
+                    onPress={handleSelectEveryone}
+                  >
+                    <View style={styles.autocompleteAvatar}>
+                      <IconSymbol name="bullhorn" size={14} color={theme.colors.primary} />
+                    </View>
+                    <Text style={styles.autocompleteText}>everyone</Text>
+                    <Text style={styles.autocompleteHint}>Notify everyone</Text>
+                  </TouchableOpacity>
+                );
+              }
+              if (s.kind === 'role') {
+                const color = getRoleColorHex(s.role.color);
+                return (
+                  <TouchableOpacity
+                    key={`role-${s.role.roleId}`}
+                    style={styles.autocompleteItem}
+                    onPress={() => handleSelectRole(s.role)}
+                  >
+                    <View style={[styles.autocompleteAvatar, { backgroundColor: color + '30' }]}>
+                      <IconSymbol name="at" size={14} color={color} />
+                    </View>
+                    <Text style={[styles.autocompleteText, { color }]}>{s.role.displayName}</Text>
+                    <Text style={styles.autocompleteHint}>Role</Text>
+                  </TouchableOpacity>
+                );
+              }
+              const member = s.member;
+              const avatarUri = member.profile_image || member.user_icon;
+              return (
+                <TouchableOpacity
+                  key={`member-${member.address}`}
+                  style={styles.autocompleteItem}
+                  onPress={() => handleSelectMention(member)}
+                >
+                  <CachedAvatar
+                    source={avatarUri ? { uri: avatarUri } : null}
+                    style={styles.autocompleteAvatar}
+                    fallbackName={member.display_name || member.name || member.address}
+                  />
+                  <Text style={styles.autocompleteText}>
+                    {member.display_name || member.name || member.address}
                   </Text>
-                </View>
-                <Text style={styles.autocompleteText}>
-                  {member.display_name || member.name || member.address}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
             {autocompleteType === 'channel' && filteredChannels.map((channel) => (
               <TouchableOpacity
                 key={channel.channelId}
@@ -1245,7 +1356,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: Skin.font(14),
   },
   autocompleteContainer: {
-    backgroundColor: theme.colors.surface5,
+    // Match the composer pill's surface so the menu reads as one surface with it.
+    backgroundColor: theme.colors.surface4,
     borderRadius: Skin.radius(12),
     marginBottom: Skin.space(8),
     maxHeight: 200,
@@ -1285,6 +1397,13 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
     flex: 1,
+  },
+  autocompleteHint: {
+    // textSubtle, not textMuted — the muted token is too low-contrast on the
+    // surface4 menu background to read comfortably.
+    color: theme.colors.textSubtle,
+    fontSize: Skin.font(12),
+    fontFamily: theme.fonts.regular.fontFamily,
   },
 });
 

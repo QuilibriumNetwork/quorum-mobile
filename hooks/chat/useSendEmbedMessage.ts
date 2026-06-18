@@ -18,6 +18,10 @@ export interface UseSendEmbedMessageParams {
   isLargeGif?: boolean;
   /** Optional text to accompany the image */
   text?: string;
+  /** Space roles/channels so a caption mention populates message.mentions
+   *  (and therefore notifies the mentioned user). */
+  spaceRoles?: Array<{ roleId: string; roleTag: string }>;
+  spaceChannels?: Array<{ channelId: string; channelName: string }>;
 }
 
 export function useSendEmbedMessage() {
@@ -44,6 +48,8 @@ export function useSendEmbedMessage() {
         width: params.width?.toString(),
         height: params.height?.toString(),
         text: params.text,
+        spaceRoles: params.spaceRoles,
+        spaceChannels: params.spaceChannels,
       });
 
       // Send via WebSocket

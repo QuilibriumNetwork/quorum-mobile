@@ -394,6 +394,8 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         messageId: editingMessage.messageId,
         newText: messageText.trim(),
         originalCreatedDate: originalMessage?.timestamp ?? Date.now(),
+        spaceRoles: spaceData?.roles?.map((r) => ({ roleId: r.roleId, roleTag: r.roleTag })),
+        spaceChannels: channelsData?.map((c) => ({ channelId: c.channelId, channelName: c.channelName })),
       });
       setMessageText('');
       setEditingMessage(null);
@@ -423,6 +425,8 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         height: pendingAttachment.height,
         isLargeGif: pendingAttachment.isLargeGif,
         text: messageText.trim() || undefined,
+        spaceRoles: spaceData?.roles?.map((r) => ({ roleId: r.roleId, roleTag: r.roleTag })),
+        spaceChannels: channelsData?.map((c) => ({ channelId: c.channelId, channelName: c.channelName })),
       }, {
         onSettled: refocusInput,
       });
@@ -437,6 +441,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         text,
         repliesToMessageId: replyToMessage?.messageId,
         replyToAuthorAddress: replyToMessage?.authorId,
+        spaceRoles: spaceData?.roles?.map((r) => ({ roleId: r.roleId, roleTag: r.roleTag })),
         spaceChannels: channelsData?.map((c) => ({ channelId: c.channelId, channelName: c.channelName })),
       }, {
         onSettled: refocusInput,
@@ -468,7 +473,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
       setAlsoReplyOnFarcaster(false);
       replyCastHashRef.current = null;
     }
-  }, [messageText, spaceId, channelId, sendMessageMutation, sendEmbedMutation, pendingAttachment, replyToMessage, editingMessage, editSpaceMessageMutation, draftsRef, alsoReplyOnFarcaster, isCastReply, farcasterAuthToken]);
+  }, [messageText, spaceId, channelId, sendMessageMutation, sendEmbedMutation, pendingAttachment, replyToMessage, editingMessage, editSpaceMessageMutation, draftsRef, alsoReplyOnFarcaster, isCastReply, farcasterAuthToken, spaceData, channelsData]);
 
   const handleAttachmentPress = useCallback(async () => {
     const result = await pickImage('library');
@@ -698,6 +703,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
           canDeleteMessage={canDeleteMessage}
           members={membersData}
           channels={channelsData}
+          roles={spaceData?.roles}
           currentUserId={user?.address}
           onChannelLinkPress={onChannelLinkPress}
           onLinkPress={onLinkPress}
@@ -740,6 +746,9 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             onSendSticker={handleSendSticker}
             members={membersData}
             channels={channelsData}
+            roles={spaceData?.roles}
+            currentUserId={user?.address}
+            space={spaceData}
             editingMessage={editingMessage}
             onCancelEdit={handleCancelEdit}
             disabled={!canPost}

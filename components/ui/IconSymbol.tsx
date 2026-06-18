@@ -24,7 +24,11 @@ import {
 } from 'react-native';
 import { useThemeOptional } from '@/theme';
 
-export type IconSymbolName = SymbolViewProps['name'];
+// Accepts legacy SF Symbol names AND every semantic name in the SF_TO_TABLER
+// map (Tabler-only names like 'bullhorn'/'hashtag' that aren't SF Symbols but
+// are valid here because the resolver maps them at runtime). Deriving the union
+// from the map's keys keeps the type and the runtime map from drifting.
+export type IconSymbolName = SymbolViewProps['name'] | keyof typeof SF_TO_TABLER;
 
 interface TablerComponentName {
   base: string;
@@ -45,7 +49,7 @@ const tabler = (base: string, filled?: string): TablerComponentName => ({
  * (raw Tabler semantic names) don't need to be listed — they fall through to
  * the dynamic lookup at the bottom of the resolver.
  */
-const SF_TO_TABLER: Record<string, TablerComponentName> = {
+const SF_TO_TABLER = {
   // Status & flags
   'flag': tabler('IconFlag', 'IconFlagFilled'),
   'flag.fill': tabler('IconFlag', 'IconFlagFilled'),
@@ -331,7 +335,7 @@ const SF_TO_TABLER: Record<string, TablerComponentName> = {
   'desktop': tabler('IconDeviceDesktop', 'IconDeviceDesktopFilled'),
   // 'certificate' maps to Rosette (matches shared iconMapping); IconCertificate has no filled form.
   'certificate': tabler('IconRosetteDiscountCheck', 'IconRosetteDiscountCheckFilled'),
-};
+} satisfies Record<string, TablerComponentName>;
 
 /**
  * Resolve a name to a Tabler component. Tries (in order):
@@ -355,8 +359,9 @@ const warnedNames = new Set<string>();
 function resolveTablerComponent(name: string, wantFilled: boolean): ComponentType<any> | null {
   const lib = TablerIcons as unknown as Record<string, ComponentType<any>>;
 
-  // 1. Legacy SF Symbol lookup
-  const entry = SF_TO_TABLER[name];
+  // 1. Legacy SF Symbol lookup. The map's value type is uniform, so a keyed
+  //    cast is safe — a miss returns undefined and falls through to step 2.
+  const entry = (SF_TO_TABLER as Record<string, TablerComponentName>)[name];
   if (entry) {
     if (wantFilled && entry.filled && lib[entry.filled]) {
       return lib[entry.filled];

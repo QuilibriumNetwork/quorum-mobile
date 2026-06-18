@@ -19,6 +19,10 @@ export interface UseEditSpaceMessageParams {
   messageId: string;
   newText: string;
   originalCreatedDate: number;
+  /** Space roles/channels so an edit that adds/changes a mention still
+   *  populates message.mentions (and therefore notifies the mentioned user). */
+  spaceRoles?: Array<{ roleId: string; roleTag: string }>;
+  spaceChannels?: Array<{ channelId: string; channelName: string }>;
 }
 
 export function canEditMessage(message: { userId: string; timestamp: number }, currentUserId?: string): boolean {
@@ -55,6 +59,8 @@ export function useEditSpaceMessage() {
         originalMessageId: params.messageId,
         editedText: params.newText,
         senderAddress: user.address,
+        spaceRoles: params.spaceRoles,
+        spaceChannels: params.spaceChannels,
       });
 
       // Send via WebSocket

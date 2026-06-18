@@ -9,6 +9,7 @@ import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { ChannelStatusGlyphs } from '@/components/Chat/ChannelStatusGlyphs';
 import { useChannels } from '@/hooks/chat/useChannels';
 import { useReplyTracking } from '@/hooks/chat/useReplyTracking';
+import { useMentionTracking } from '@/hooks/chat/useMentionTracking';
 import { useSpace } from '@/hooks/chat/useSpaces';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
@@ -47,6 +48,7 @@ export default function SpaceChannelsScreen() {
   const { data: spaceData, isLoading } = useSpace(spaceId, { enabled: !!spaceId });
   useChannels(spaceId, { enabled: !!spaceId });
   const { getReplyCount } = useReplyTracking();
+  const { getMentionCount } = useMentionTracking();
 
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [inviteVisible, setInviteVisible] = useState(false);
@@ -122,7 +124,17 @@ export default function SpaceChannelsScreen() {
           <View key={`group-${groupIndex}`} style={styles.groupSection}>
             <Text style={styles.groupTitle}>{group.groupName.toUpperCase()}</Text>
             {group.channels.map((channel) => {
-              const unread = getReplyCount(spaceId, channel.channelId) ?? 0;
+              // One badge = mentions + replies combined (desktop sums them into
+              // a single "channel-mentions-bubble"). The dot is a separate
+              // "has something for you" signal.
+              // NOTE: desktop's unread dot is driven by lastReadTimestamp (any
+              // unread message, even without a mention). That timestamp isn't
+              // plumbed to this screen yet, so the dot here proxies "has a
+              // mention/reply count". Full unread-dot parity is a follow-up that
+              // needs lastReadTimestamp wired in.
+              const replies = getReplyCount(spaceId, channel.channelId) ?? 0;
+              const mentions = getMentionCount(spaceId, channel.channelId) ?? 0;
+              const badgeCount = mentions + replies;
               return (
                 <TouchableOpacity
                   key={channel.channelId}
@@ -130,6 +142,7 @@ export default function SpaceChannelsScreen() {
                   onPress={() => handleSelectChannel(channel.channelId)}
                   activeOpacity={0.6}
                 >
+                  {badgeCount > 0 && <View style={styles.unreadDot} />}
                   <IconSymbol
                     name={(channel.icon || 'hashtag') as IconSymbolName}
                     size={18}
@@ -143,10 +156,10 @@ export default function SpaceChannelsScreen() {
                     channel={channel}
                     defaultChannelId={spaceData.defaultChannelId}
                   />
-                  {unread > 0 && (
+                  {badgeCount > 0 && (
                     <View style={styles.unreadBadge}>
                       <Text style={styles.unreadText}>
-                        {unread > 99 ? '99+' : unread}
+                        {badgeCount > 99 ? '99+' : badgeCount}
                       </Text>
                     </View>
                   )}
@@ -246,6 +259,13 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
+    },
+    // 4px accent dot — desktop's .channel-unread-dot spec.
+    unreadDot: {
+      width: 6,
+      height: 6,
+      borderRadius: Skin.radius(3),
+      backgroundColor: theme.colors.primary,
     },
     unreadBadge: {
       minWidth: 20,

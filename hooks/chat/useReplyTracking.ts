@@ -54,6 +54,15 @@ export function clearActiveChannel(spaceId: string, channelId: string): void {
 }
 
 /**
+ * Read the currently-viewed channel key. Exposed so other trackers (e.g.
+ * mention tracking) share the SAME active-channel singleton instead of keeping
+ * a second one that could drift.
+ */
+export function getActiveChannelKey(): string | null {
+  return activeChannelKey;
+}
+
+/**
  * Standalone function to increment reply count — callable outside React (from WebSocket).
  * Skips the bump if the user is already viewing the channel.
  */
