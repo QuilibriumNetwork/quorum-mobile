@@ -35,6 +35,8 @@ export function SpaceBannerHeader({
   const hasIcon = !!space.iconUrl;
 
   const buttonBg = isDark ? 'rgba(15,15,18,0.65)' : 'rgba(255,255,255,0.65)';
+  const iconColor = isDark ? '#fff' : theme.colors.textMain;
+  const nameColor = isDark ? '#fff' : theme.colors.textMain;
 
   // surface1 at 0.92 opacity for the gradient
   const gradientStart = isDark
@@ -69,14 +71,14 @@ export function SpaceBannerHeader({
       {/* ── Button row ── */}
       <View style={[styles.buttonRow, { paddingTop: insetTop + 8 }]}>
         <FrostedPill style={{ backgroundColor: buttonBg }} onPress={onBack}>
-          <IconSymbol name="chevron.left" size={20} color="#fff" />
+          <IconSymbol name="chevron.left" size={20} color={iconColor} />
         </FrostedPill>
         <View style={styles.rightButtons}>
           <FrostedPill style={{ backgroundColor: buttonBg }} onPress={onInvite}>
-            <IconSymbol name="person.badge.plus" size={20} color="#fff" />
+            <IconSymbol name="person.badge.plus" size={20} color={iconColor} />
           </FrostedPill>
           <FrostedPill style={{ backgroundColor: buttonBg }} onPress={onSettings}>
-            <IconSymbol name="gearshape" size={20} color="#fff" />
+            <IconSymbol name="gearshape" size={20} color={iconColor} />
           </FrostedPill>
         </View>
       </View>
@@ -88,7 +90,7 @@ export function SpaceBannerHeader({
         activeOpacity={0.7}
         hitSlop={8}
       >
-        <Text style={styles.spaceName} numberOfLines={1}>
+        <Text style={[styles.spaceName, { color: nameColor }]} numberOfLines={1}>
           {space.spaceName}
         </Text>
       </TouchableOpacity>
@@ -216,7 +218,6 @@ const styles = StyleSheet.create({
   spaceName: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#fff',
     flexShrink: 1,
   },
 });

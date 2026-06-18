@@ -205,7 +205,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     },
     groupTitle: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       paddingHorizontal: Skin.space(16),
       marginBottom: Skin.space(4),
       letterSpacing: 0.6,
