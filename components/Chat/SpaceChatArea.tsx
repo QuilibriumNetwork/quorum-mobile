@@ -698,6 +698,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
           canDeleteMessage={canDeleteMessage}
           members={membersData}
           channels={channelsData}
+          roles={spaceData?.roles}
           currentUserId={user?.address}
           onChannelLinkPress={onChannelLinkPress}
           onLinkPress={onLinkPress}

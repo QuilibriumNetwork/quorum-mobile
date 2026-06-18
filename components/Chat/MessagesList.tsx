@@ -17,12 +17,12 @@ import { InviteLinkCard, containsInviteLink, extractInviteLink, stripInviteLink 
 import { FarcasterCastCard, containsFarcasterLink, extractFarcasterLink, stripFarcasterLink } from './FarcasterCastCard';
 import { EmojiPicker } from './EmojiPicker';
 import { MessageActionSheet } from './MessageActionSheet';
-import { MentionableText } from './MentionableText';
+import { MessageRenderer } from './MessageRenderer';
 import { EditHistoryModal } from './EditHistoryModal';
 import { ReactionDetailsModal } from './ReactionDetailsModal';
 import { SpaceCallBubble } from './SpaceCallBubble';
 import type { DisplayMessage, DisplayReaction } from './types';
-import { logger, type Emoji, type Sticker, type SpaceMember, type Channel } from '@quilibrium/quorum-shared';
+import { logger, type Emoji, type Sticker, type SpaceMember, type Channel, type Role } from '@quilibrium/quorum-shared';
 import * as Skin from '@/theme/skins/geometry';
 // MESSAGE_IMAGE_MAX_WIDTH computed inside the component via useWindowDimensions
 
@@ -66,6 +66,8 @@ interface MessagesListProps {
   members?: SpaceMember[];
   /** Channels for #channel links */
   channels?: Channel[];
+  /** Space roles, for resolving @role mention pills in the markdown renderer */
+  roles?: Role[];
   /** Current user ID for highlighting self-mentions */
   currentUserId?: string;
   /** Callback when user taps a #channel link */
@@ -296,6 +298,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   canDeleteMessage,
   members = [],
   channels = [],
+  roles = [],
   currentUserId,
   onChannelLinkPress,
   onLinkPress,
@@ -805,12 +808,13 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   Rendered after the media so the visual order is the same
                   as desktop. */}
               {item.content ? (
-                <MentionableText
+                <MessageRenderer
                   text={item.content}
                   enableTranslate
                   customEmojis={customEmojis}
                   members={members}
                   channels={channels}
+                  roles={roles}
                   currentUserId={currentUserId}
                   style={styles.messageText}
                   theme={theme}
@@ -825,7 +829,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, renderAvatar, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle]
+    [styles, renderReactions, renderAvatar, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress]
   );
 
   // Render sticker message
@@ -951,12 +955,13 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               )}
               {item.hasLink && item.link ? (
                 <View style={styles.messageWithLink}>
-                  <MentionableText
+                  <MessageRenderer
                     text={item.content}
                     enableTranslate
                     customEmojis={customEmojis}
                     members={members}
                     channels={channels}
+                    roles={roles}
                     currentUserId={currentUserId}
                     style={styles.messageText}
                     theme={theme}
@@ -969,12 +974,13 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   </BrowserLink>
                 </View>
               ) : messageTextWithoutLink ? (
-                <MentionableText
+                <MessageRenderer
                   text={messageTextWithoutLink}
                   enableTranslate
                   customEmojis={customEmojis}
                   members={members}
                   channels={channels}
+                  roles={roles}
                   currentUserId={currentUserId}
                   style={styles.messageText}
                   theme={theme}
@@ -1021,7 +1027,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, scrollToMessageWithHighlight, customEmojis, members, channels, currentUserId, onUserPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress]
+    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, scrollToMessageWithHighlight, customEmojis, members, channels, roles, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress]
   );
 
   const renderCast = useCallback(
