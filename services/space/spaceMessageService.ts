@@ -17,6 +17,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import {
   bytesToHex,
   hexToBytes,
+  extractMentionsFromText,
   type EditMessage,
   type EmbedMessage,
   type Message,
@@ -93,6 +94,10 @@ export interface SendSpaceMessageParams {
   senderAddress: string;
   repliesToMessageId?: string;
   replyToAuthorAddress?: string;
+  /** Space roles, used to extract role mentions from the message text */
+  spaceRoles?: Array<{ roleId: string; roleTag: string }>;
+  /** Space channels, used to extract channel mentions from the message text */
+  spaceChannels?: Array<{ channelId: string; channelName: string }>;
 }
 
 export interface SendSpaceMessageResult {
@@ -234,7 +239,7 @@ function hexToNumberArray(hex: string): number[] {
 export async function sendSpaceMessage(
   params: SendSpaceMessageParams
 ): Promise<SendSpaceMessageResult> {
-  const { spaceId, channelId, text, senderAddress, repliesToMessageId, replyToAuthorAddress } = params;
+  const { spaceId, channelId, text, senderAddress, repliesToMessageId, replyToAuthorAddress, spaceRoles, spaceChannels } = params;
 
   const cryptoProvider = new NativeCryptoProvider();
   const timestamp = Date.now();
@@ -282,7 +287,7 @@ export async function sendSpaceMessage(
     lastModifiedHash: '',
     content: messageContent,
     reactions: [],
-    mentions: { memberIds: [], roleIds: [], channelIds: [] },
+    mentions: extractMentionsFromText(text, { spaceRoles, spaceChannels }),
     publicKey: inboxKey.publicKey,
     // Add reply metadata if this is a reply (used for display and notifications)
     ...(repliesToMessageId && replyToAuthorAddress
@@ -541,7 +546,7 @@ export function createOptimisticMessage(
   params: SendSpaceMessageParams,
   tempMessageId: string
 ): Message {
-  const { spaceId, channelId, text, senderAddress, repliesToMessageId, replyToAuthorAddress } = params;
+  const { spaceId, channelId, text, senderAddress, repliesToMessageId, replyToAuthorAddress, spaceRoles, spaceChannels } = params;
   const timestamp = Date.now();
 
   return {
@@ -560,7 +565,7 @@ export function createOptimisticMessage(
       repliesToMessageId,
     },
     reactions: [],
-    mentions: { memberIds: [], roleIds: [], channelIds: [] },
+    mentions: extractMentionsFromText(text, { spaceRoles, spaceChannels }),
     sendStatus: 'sending',
     // Add reply metadata if this is a reply (for display purposes)
     ...(repliesToMessageId && replyToAuthorAddress

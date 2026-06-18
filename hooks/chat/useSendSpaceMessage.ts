@@ -23,6 +23,8 @@ export interface UseSendSpaceMessageParams {
   text: string;
   repliesToMessageId?: string;
   replyToAuthorAddress?: string;
+  spaceRoles?: Array<{ roleId: string; roleTag: string }>;
+  spaceChannels?: Array<{ channelId: string; channelName: string }>;
 }
 
 export function useSendSpaceMessage() {
@@ -47,6 +49,8 @@ export function useSendSpaceMessage() {
         senderAddress: user.address,
         repliesToMessageId: params.repliesToMessageId,
         replyToAuthorAddress: params.replyToAuthorAddress,
+        spaceRoles: params.spaceRoles,
+        spaceChannels: params.spaceChannels,
       });
 
       // Send via WebSocket
@@ -78,6 +82,8 @@ export function useSendSpaceMessage() {
           senderAddress: user.address,
           repliesToMessageId: params.repliesToMessageId,
           replyToAuthorAddress: params.replyToAuthorAddress,
+          spaceRoles: params.spaceRoles,
+          spaceChannels: params.spaceChannels,
         },
         tempId
       );

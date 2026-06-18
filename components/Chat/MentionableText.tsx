@@ -40,7 +40,8 @@ interface MentionableTextProps {
 
 // Regex patterns for @mentions, URLs, and :emoji:
 // Channel matching is done by looking up actual channel names, not regex
-const MENTION_REGEX = /@([a-zA-Z0-9_.\-]+)/g;
+// Group 1: bracketed canonical format @<address>, group 2: legacy bare @address
+const MENTION_REGEX = /@<([^>]+)>|@(everyone)|@([a-zA-Z0-9_.\-]+)/g;
 const EMOJI_REGEX = /:([a-zA-Z0-9_-]+):/g;
 // URL regex - matches http(s) URLs
 const URL_REGEX = /https?:\/\/[^\s<>"\])}]+/gi;
@@ -163,11 +164,22 @@ function MentionableTextBase({
 
     const matches: Match[] = [];
 
-    // Find @mentions
+    // Find @mentions and @everyone
+    // Group 1: @<address> (canonical), group 2: @everyone, group 3: @address (legacy)
     MENTION_REGEX.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = MENTION_REGEX.exec(text)) !== null) {
-      const name = match[1].toLowerCase();
+      if (match[2] === 'everyone') {
+        matches.push({
+          type: 'mention',
+          start: match.index,
+          end: match.index + match[0].length,
+          content: match[0],
+          data: { userId: 'everyone', displayName: 'everyone', isSelf: false },
+        });
+        continue;
+      }
+      const name = (match[1] || match[3] || '').toLowerCase();
       const member = memberMap[name];
       if (member) {
         matches.push({
@@ -399,8 +411,13 @@ function MentionableTextBase({
     <Text style={effectiveStyle}>
       {parts.map((part, index) => {
         if (part.type === 'mention') {
-          const mStyle = part.isSelf ? selfMentionStyle : defaultMentionStyle;
-          if (onMentionPress && part.userId) {
+          const isEveryone = part.userId === 'everyone';
+          const mStyle = isEveryone
+            ? defaultMentionStyle
+            : part.isSelf
+            ? selfMentionStyle
+            : defaultMentionStyle;
+          if (!isEveryone && onMentionPress && part.userId) {
             return (
               <Text
                 key={`mention-${index}`}
