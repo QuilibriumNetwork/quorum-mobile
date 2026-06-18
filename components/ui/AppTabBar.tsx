@@ -9,7 +9,7 @@ import * as Skin from '@/theme/skins/geometry';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Platform,
@@ -25,6 +25,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const PRIMARY_ROW_HEIGHT = 54;
 // Height of the secondary row (icon + label).
 const SECONDARY_ROW_HEIGHT = 62;
+// Extra vertical breathing room (top + bottom) added ONLY when the bar is
+// expanded to show both rows, so the two-row state feels roomier.
+const EXPANDED_V_PADDING = 12;
 // Horizontal margin from screen edges.
 const H_MARGIN = 0;
 // Bottom margin above the home indicator / edge.
@@ -197,12 +200,37 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
     animate(0);
   }, [extraOpen, animate]);
 
+  // The focused leaf route name within the active tab's nested stack. Used to
+  // tell apart a tab's ROOT screen from a nested sub-screen that's reached via
+  // a SECONDARY-row item (e.g. spaces/discover, profile/apps). Without this the
+  // primary icon for the parent tab lights up when you open a secondary screen.
+  const focusedLeafName = useMemo(() => {
+    let route: any = state.routes[state.index];
+    while (route?.state && typeof route.state.index === 'number') {
+      route = route.state.routes[route.state.index];
+    }
+    return route?.name as string | undefined;
+  }, [state]);
+
+  // Nested leaf routes that belong to SECONDARY-row items, not to a primary tab.
+  // When one of these is focused, no primary icon should be accented.
+  const SECONDARY_LEAF_ROUTES = useMemo(
+    () => new Set(['discover', 'apps']),
+    [],
+  );
+
   const getTabColor = useCallback(
-    (routeName: string) =>
-      state.routes.findIndex((r) => r.name === routeName) === state.index
-        ? activeColor
-        : inactiveColor,
-    [state, activeColor, inactiveColor],
+    (routeName: string) => {
+      const isTabFocused =
+        state.routes.findIndex((r) => r.name === routeName) === state.index;
+      // Don't accent the primary icon when the focused screen is actually a
+      // secondary-row destination nested under this tab.
+      if (isTabFocused && focusedLeafName && SECONDARY_LEAF_ROUTES.has(focusedLeafName)) {
+        return inactiveColor;
+      }
+      return isTabFocused ? activeColor : inactiveColor;
+    },
+    [state, activeColor, inactiveColor, focusedLeafName, SECONDARY_LEAF_ROUTES],
   );
 
   const handleTabPress = useCallback(
@@ -257,7 +285,17 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
 
   const pillHeight = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [PRIMARY_ROW_HEIGHT, PRIMARY_ROW_HEIGHT + SECONDARY_ROW_HEIGHT],
+    outputRange: [
+      PRIMARY_ROW_HEIGHT,
+      // Expanded: both rows + top & bottom breathing room.
+      PRIMARY_ROW_HEIGHT + SECONDARY_ROW_HEIGHT + EXPANDED_V_PADDING * 2,
+    ],
+  });
+
+  // Top/bottom padding grows in only when expanded, matching the pill growth.
+  const expandedPadding = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, EXPANDED_V_PADDING],
   });
 
   // Secondary row fades in only in the second half of the animation
@@ -291,8 +329,14 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
           ]}
         />
 
-        {/* Inner container — always full expanded height, clipped by pill */}
-        <View style={styles.innerContainer}>
+        {/* Inner container — always full expanded height, clipped by pill.
+            Vertical padding animates in only when expanded (roomier two-row state). */}
+        <Animated.View
+          style={[
+            styles.innerContainer,
+            { paddingTop: expandedPadding, paddingBottom: expandedPadding },
+          ]}
+        >
           {/* Primary row — always at top of inner container */}
           <View style={[styles.primaryRow, { height: PRIMARY_ROW_HEIGHT }]}>
             <AvatarButton />
@@ -375,7 +419,7 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
               onPress={() => {}}
             />
           </Animated.View>
-        </View>
+        </Animated.View>
       </Animated.View>
     </View>
   );
@@ -392,9 +436,10 @@ const styles = StyleSheet.create({
   pill: {
     overflow: 'hidden',
   },
-  // Always-expanded inner container; the pill clips it.
+  // Always-expanded inner container; the pill clips it. minHeight (not height)
+  // so the animated paddingVertical ADDS to it rather than compressing the rows.
   innerContainer: {
-    height: PRIMARY_ROW_HEIGHT + SECONDARY_ROW_HEIGHT,
+    minHeight: PRIMARY_ROW_HEIGHT + SECONDARY_ROW_HEIGHT,
     flexDirection: 'column',
   },
   primaryRow: {
