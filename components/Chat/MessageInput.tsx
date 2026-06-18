@@ -1199,7 +1199,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     //   - a soft elevation/shadow provides the lift on light skins where the
     //     rim won't show, and adds depth everywhere.
     borderWidth: StyleSheet.hairlineWidth,
+    // Subtle rim on the sides/bottom; brighter on the TOP edge so it reads as a
+    // top-light highlight (light coming from above) rather than a flat outline.
     borderColor: 'rgba(255,255,255,0.10)',
+    borderTopColor: 'rgba(255,255,255,0.20)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.18,
