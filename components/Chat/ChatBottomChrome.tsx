@@ -17,6 +17,7 @@
  *   </ChatBottomChrome>
  */
 
+import { withAlpha } from '@/theme/skins/mergeSkin';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -26,9 +27,23 @@ import { StyleSheet, View } from 'react-native';
 const COMPOSER_RESTING_HEIGHT = 60;
 
 // Extra fade distance ABOVE the composer top so the gradient is already mostly
-// solid by the time it reaches the composer — the composer→tab-bar gap reads as
+// opaque by the time it reaches the composer — the composer→tab-bar gap reads as
 // dissolved rather than showing crisp messages.
 const FADE_LEAD = 56;
+
+// The gradient is a SINGLE colour (the chat background) ramping in OPACITY from
+// top to bottom — never a different hue, so it can't shift the colour, it just
+// makes the background progressively more solid. Three alpha stops:
+//   TOP    — at the very top of the fade zone (ABOVE the composer). MUST stay
+//            fully transparent so messages there are crisp — any tint here
+//            dims content above the composer (a regression).
+//   GAP    — by the composer top (upper end of the composer→tab-bar gap). High
+//            so the gap reads as mostly solid / not see-through.
+//   BOTTOM — at the screen bottom (device-button zone). Kept lowish so content
+//            stays clearly visible there, matching the lighter ListBottomFade.
+const TOP_OPACITY = 0;
+const GAP_OPACITY = 0.92;
+const BOTTOM_OPACITY = 0.55;
 
 /**
  * Bottom content padding a chat MessagesList needs so the newest message rests
@@ -51,17 +66,30 @@ interface ChatBottomChromeProps {
 }
 
 export function ChatBottomChrome({ tabBarHeight, surfaceColor, children }: ChatBottomChromeProps) {
+  const fadeHeight = tabBarHeight + COMPOSER_RESTING_HEIGHT + FADE_LEAD;
+  // The composer top sits FADE_LEAD px down from the top of the fade zone; we
+  // want peak opacity there so the composer→tab-bar gap reads solid.
+  const gapStop = Math.min(0.95, FADE_LEAD / fadeHeight);
+
   return (
     <>
-      {/* Bottom fade: continuous transparent→solid gradient. Solid at the very
-          bottom of the screen, fading up to transparent FADE_LEAD px above the
-          composer top, so the composer→tab-bar gap reads as dissolved. Sits
-          behind the composer overlay (rendered first) and ignores touches. */}
+      {/* Bottom fade: a single colour (the chat background) ramping in opacity.
+          Low alpha at the top (a gentle hint, same colour as the background so
+          it's barely visible), PEAKING by the composer top so the composer→
+          tab-bar gap reads solid, then easing back slightly at the screen
+          bottom so content stays faintly visible behind the device buttons
+          (matching ListBottomFade). Sits behind the composer overlay and
+          ignores touches. */}
       <LinearGradient
-        colors={['transparent', surfaceColor]}
+        colors={[
+          withAlpha(surfaceColor, TOP_OPACITY),
+          withAlpha(surfaceColor, GAP_OPACITY),
+          withAlpha(surfaceColor, BOTTOM_OPACITY),
+        ]}
+        locations={[0, gapStop, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
-        style={[styles.bottomFade, { height: tabBarHeight + COMPOSER_RESTING_HEIGHT + FADE_LEAD }]}
+        style={[styles.bottomFade, { height: fadeHeight }]}
         pointerEvents="none"
       />
 
