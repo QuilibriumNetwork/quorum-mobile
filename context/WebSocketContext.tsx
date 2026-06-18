@@ -13,7 +13,9 @@ import {
   canManageReadOnlyChannel,
   createChannelPermissionChecker,
   createRNWebSocketClient,
+  getUserRoles,
   int64ToBytes,
+  isMentionedWithSettings,
   logger,
   queryKeys,
 } from '@quilibrium/quorum-shared';
@@ -32,6 +34,7 @@ import { Alert, AppState, AppStateStatus, InteractionManager } from 'react-nativ
 
 import type { Conversation } from '@/hooks/chat/useConversations';
 import { incrementReplyCount } from '@/hooks/chat/useReplyTracking';
+import { incrementMentionCount } from '@/hooks/chat/useMentionTracking';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { messagePreview as getSpaceMessagePreview, messageSenderName } from '@/utils/messagePreview';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -2168,6 +2171,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               incrementReplyCount(fullUserAddrRef.current, `${spaceId}:${channelId}`);
             }
 
+            // Track @mentions of the current user (feeds the same channel-row
+            // badge as replies — desktop sums them into one count). Skip own
+            // messages. @everyone is gated on the sender's mention:everyone
+            // permission inside isMentionedWithSettings.
+            if (
+              fullUserAddrRef.current &&
+              ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
+              isMentionedWithSettings(spaceMessage, {
+                userAddress: fullUserAddrRef.current,
+                enabledTypes: ['mention-you', 'mention-everyone', 'mention-roles'],
+                userRoles: getUserRoles(fullUserAddrRef.current, space ?? undefined).map((r) => r.roleId),
+                space: space ?? undefined,
+              })
+            ) {
+              incrementMentionCount(fullUserAddrRef.current, `${spaceId}:${channelId}`);
+            }
+
             // Track last space activity for inbox sorting + preview
             {
               const preview = getSpaceMessagePreview(spaceMessage);
@@ -3391,6 +3411,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             fullUserAddrRef.current
           ) {
             incrementReplyCount(fullUserAddrRef.current, `${spaceId}:${channelId}`);
+          }
+
+          // Track @mentions of the current user (same channel-row badge as
+          // replies — see the live path for rationale).
+          if (
+            fullUserAddrRef.current &&
+            ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
+            isMentionedWithSettings(spaceMessage, {
+              userAddress: fullUserAddrRef.current,
+              enabledTypes: ['mention-you', 'mention-everyone', 'mention-roles'],
+              userRoles: getUserRoles(fullUserAddrRef.current, space ?? undefined).map((r) => r.roleId),
+              space: space ?? undefined,
+            })
+          ) {
+            incrementMentionCount(fullUserAddrRef.current, `${spaceId}:${channelId}`);
           }
 
           // Track last space activity for inbox sorting + preview

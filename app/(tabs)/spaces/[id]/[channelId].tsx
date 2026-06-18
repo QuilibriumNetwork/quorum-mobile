@@ -8,6 +8,7 @@ import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { useChannels } from '@/hooks/chat/useChannels';
 import { useHasPermission, useRoles } from '@/hooks/chat/useRoleManagement';
 import { useReplyTracking, setActiveChannel, clearActiveChannel } from '@/hooks/chat/useReplyTracking';
+import { useMentionTracking } from '@/hooks/chat/useMentionTracking';
 import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
 import { useUserMuting } from '@/hooks/chat/useUserMuting';
 import { useSpace, useSpaceMembers } from '@/hooks/chat/useSpaces';
@@ -141,12 +142,14 @@ export default function SpaceChannelChat() {
   // necessary — without the active marker the WebSocket increment
   // would race the clear and leave the count stuck at 1.
   const { clearReplyCount } = useReplyTracking();
+  const { clearMentionCount } = useMentionTracking();
   React.useEffect(() => {
     if (!spaceId || !channelId) return;
     clearReplyCount(spaceId, channelId);
+    clearMentionCount(spaceId, channelId);
     setActiveChannel(spaceId, channelId);
     return () => clearActiveChannel(spaceId, channelId);
-  }, [spaceId, channelId, clearReplyCount]);
+  }, [spaceId, channelId, clearReplyCount, clearMentionCount]);
 
   // Self-heal: kick off a hub-log catch-up whenever the user opens this
   // channel. The on-connect orchestrator only sees spaces that existed

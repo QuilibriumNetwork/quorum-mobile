@@ -102,6 +102,7 @@ export { useUserMuting } from './useUserMuting';
 
 // Reply tracking
 export { useReplyTracking } from './useReplyTracking';
+export { useMentionTracking } from './useMentionTracking';
 
 // Encryption hooks
 export {

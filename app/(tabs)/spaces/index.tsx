@@ -4,6 +4,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useSpaces } from '@/hooks/chat/useSpaces';
 import { isValidAvatarUri } from '@/utils/validation';
 import { useReplyTracking } from '@/hooks/chat/useReplyTracking';
+import { useMentionTracking } from '@/hooks/chat/useMentionTracking';
 import { useSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { haptics } from '@/utils/haptics';
@@ -95,6 +96,7 @@ export default function SpacesIndex() {
   const insets = useSafeAreaInsets();
   const { data: spaces, isLoading, refetch } = useSpaces();
   const { getReplyCount } = useReplyTracking();
+  const { getMentionCount } = useMentionTracking();
   const { getActivity } = useSpaceActivity();
 
   const [search, setSearch] = useState('');
@@ -116,7 +118,8 @@ export default function SpacesIndex() {
       for (const group of space.groups ?? []) {
         for (const ch of group.channels ?? []) {
           channelCount++;
-          unread += getReplyCount(space.spaceId, ch.channelId) ?? 0;
+          unread += (getReplyCount(space.spaceId, ch.channelId) ?? 0)
+            + (getMentionCount(space.spaceId, ch.channelId) ?? 0);
         }
       }
       const activity = getActivity(space.spaceId);
@@ -135,7 +138,7 @@ export default function SpacesIndex() {
     const filtered = q ? rows.filter(r => r.name.toLowerCase().includes(q)) : rows;
     filtered.sort((a, b) => b.timestamp - a.timestamp);
     return filtered;
-  }, [spaces, search, getReplyCount, getActivity]);
+  }, [spaces, search, getReplyCount, getMentionCount, getActivity]);
 
   const handlePress = useCallback((spaceId: string) => {
     haptics.light();
