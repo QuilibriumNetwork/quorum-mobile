@@ -257,7 +257,7 @@ export default function DMChatScreen() {
             <IconSymbol name="phone" color={theme.colors.primary} size={20} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setSettingsVisible(true)} hitSlop={8}>
-            <IconSymbol name="info.circle" color={theme.colors.primary} size={20} />
+            <IconSymbol name="gearshape" color={theme.colors.textMain} size={20} />
           </TouchableOpacity>
         </>
       )}
