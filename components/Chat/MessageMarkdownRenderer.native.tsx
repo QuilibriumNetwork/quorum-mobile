@@ -22,7 +22,7 @@ import type { AppTheme } from '@/theme';
 import React, { useMemo, useState, useCallback } from 'react';
 import { Text, View, Image, ScrollView, StyleSheet, TextStyle } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import type { Emoji, SpaceMember, Channel } from '@quilibrium/quorum-shared';
+import type { Emoji, SpaceMember, Channel, Role } from '@quilibrium/quorum-shared';
 import {
   extractCodeContent,
   shouldUseScrollContainer,
@@ -38,6 +38,8 @@ export interface MessageMarkdownRendererProps {
   content: string;
   customEmojis: Emoji[];
   members?: SpaceMember[];
+  /** Space roles, for resolving the color of @role pills. */
+  roles?: Role[];
   theme: AppTheme;
   style?: TextStyle;
   onMentionPress?: (userId: string) => void;
@@ -280,6 +282,7 @@ function MessageMarkdownRendererBase({
   content,
   customEmojis,
   members = [],
+  roles = [],
   theme,
   style,
   onMentionPress,
@@ -304,18 +307,29 @@ function MessageMarkdownRendererBase({
     return map;
   }, [members]);
 
+  const roleByTag = useMemo(() => {
+    const map: Record<string, Role> = {};
+    roles.forEach((r) => {
+      if (r.roleTag) map[r.roleTag] = r;
+    });
+    return map;
+  }, [roles]);
+
   const blocks = useMemo(() => parseBlocks(content), [content]);
 
   const baseTextStyle: TextStyle = { ...styles.text, ...style };
 
-  // Inline-pill styles (reuse MentionableText's color story).
+  // Inline mention/channel styling. Color-only (no highlighted background):
+  // the bg pill reads heavy on mobile, so we use a colored, medium-weight run
+  // instead — same approach desktop takes for inline density.
   const mentionStyle: TextStyle = {
     color: theme.colors.primary,
-    backgroundColor: theme.colors.primary + '20',
-    borderRadius: Skin.radius(3),
-    paddingHorizontal: Skin.space(2),
+    fontWeight: '600',
   };
-  const channelStyle: TextStyle = { color: theme.colors.primary };
+  const channelStyle: TextStyle = {
+    color: theme.colors.primary,
+    fontWeight: '600',
+  };
   const linkStyle: TextStyle = {
     color: theme.colors.primary,
     textDecorationLine: 'underline',
@@ -372,15 +386,14 @@ function MessageMarkdownRendererBase({
                 @everyone
               </Text>
             );
-          case 'mention_role':
+          case 'mention_role': {
+            const roleColor = getRoleColorHex(roleByTag[node.roleTag]?.color);
             return (
-              <Text
-                key={key}
-                style={[mentionStyle, { color: theme.colors.textStrong }]}
-              >
+              <Text key={key} style={[mentionStyle, { color: roleColor }]}>
                 @{node.displayName}
               </Text>
             );
+          }
           case 'mention_channel':
             if (onChannelPress) {
               return (
@@ -409,22 +422,30 @@ function MessageMarkdownRendererBase({
             );
           case 'standard_emoji':
             return <Text key={key}>{node.char}</Text>;
-          case 'link':
+          case 'link': {
+            // Truncate bare auto-links (label === url) to 50 chars, matching
+            // desktop, so a long pasted URL doesn't dominate the bubble.
+            const isAutoLink = node.label === node.url;
+            const label =
+              isAutoLink && node.label.length > 50
+                ? node.label.slice(0, 50) + '…'
+                : node.label;
             return (
               <Text
                 key={key}
                 style={linkStyle}
                 onPress={onLinkPress ? () => onLinkPress(node.url) : undefined}
               >
-                {node.label}
+                {label}
               </Text>
             );
+          }
           default:
             return null;
         }
       });
     },
-    [emojiMap, memberByAddress, onMentionPress, onChannelPress, onLinkPress, styles, theme, mentionStyle, channelStyle, linkStyle]
+    [emojiMap, memberByAddress, roleByTag, onMentionPress, onChannelPress, onLinkPress, styles, theme, mentionStyle, channelStyle, linkStyle]
   );
 
   return (
@@ -496,11 +517,19 @@ const Spoiler = React.memo(function Spoiler({
   styles: MdStyles;
 }) {
   const [revealed, setRevealed] = useState(false);
+  // When hidden, replace the text with block glyphs over a solid background
+  // rather than relying on `color: 'transparent'` (unreliable on nested RN
+  // <Text> — the parent color can win). This guarantees the content is
+  // unreadable until tapped.
+  if (!revealed) {
+    return (
+      <Text style={styles.spoilerHidden} onPress={() => setRevealed(true)} suppressHighlighting>
+        {'█'.repeat(content.length)}
+      </Text>
+    );
+  }
   return (
-    <Text
-      style={revealed ? styles.spoilerRevealed : styles.spoilerHidden}
-      onPress={() => setRevealed((r) => !r)}
-    >
+    <Text style={styles.spoilerRevealed} onPress={() => setRevealed(false)} suppressHighlighting>
       {content}
     </Text>
   );
@@ -624,7 +653,7 @@ const createStyles = (theme: AppTheme) =>
     },
     spoilerHidden: {
       backgroundColor: theme.colors.textMuted,
-      color: 'transparent',
+      color: theme.colors.textMuted,
       borderRadius: Skin.radius(3),
     },
     spoilerRevealed: {

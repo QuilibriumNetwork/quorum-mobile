@@ -305,7 +305,11 @@ export function fixUnclosedCodeBlocks(text: string): string {
  * and code fences balanced — ready for the markdown renderer.
  */
 export function prepareMessageContent(text: string, opts: PreprocessOptions = {}): string {
-  let processed = text;
+  // Normalize newlines first. Text pasted from Windows/other sources can carry
+  // `\r\n` or bare `\r`; the block parser splits on `\n` and matches `^…$`
+  // per line, so a stray `\r` left on a line breaks block detection (only the
+  // last line of a blockquote/list survives). Collapse everything to `\n`.
+  let processed = text.replace(/\r\n?/g, '\n');
   processed = processMentions(processed, opts.members);
   processed = processRoleMentions(processed, opts.roles);
   processed = processChannelMentions(processed, opts.channels);

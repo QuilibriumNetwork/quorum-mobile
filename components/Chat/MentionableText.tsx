@@ -204,14 +204,32 @@ function MentionableTextBase({
       if (hashIndex === -1) break;
 
       // Get the text after the #
-      const afterHash = text.slice(hashIndex + 1).toLowerCase();
+      const afterHash = text.slice(hashIndex + 1);
+      const afterHashLower = afterHash.toLowerCase();
 
-      // Find first match from sorted channels (already sorted longest first)
+      // Canonical wire format first: #<channelId>. Match by id, render the name.
       let foundChannel: Channel | null = null;
-      for (const channel of sortedChannels) {
-        if (afterHash.startsWith(channel.channelName.toLowerCase())) {
-          foundChannel = channel;
-          break; // Early exit - first match is longest due to pre-sorting
+      let matchLen = 0; // chars consumed after the '#'
+      if (afterHash.startsWith('<')) {
+        const close = afterHash.indexOf('>');
+        if (close > 0) {
+          const id = afterHash.slice(1, close);
+          const byId = channels.find((c) => c.channelId === id);
+          if (byId) {
+            foundChannel = byId;
+            matchLen = close + 1; // include the closing '>'
+          }
+        }
+      }
+
+      // Legacy / human-typed: #channelName (matched by name, longest first).
+      if (!foundChannel) {
+        for (const channel of sortedChannels) {
+          if (afterHashLower.startsWith(channel.channelName.toLowerCase())) {
+            foundChannel = channel;
+            matchLen = channel.channelName.length;
+            break; // Early exit - first match is longest due to pre-sorting
+          }
         }
       }
 
@@ -219,14 +237,14 @@ function MentionableTextBase({
         matches.push({
           type: 'channel',
           start: hashIndex,
-          end: hashIndex + 1 + foundChannel.channelName.length,
+          end: hashIndex + 1 + matchLen,
           content: '#' + foundChannel.channelName,
           data: {
             channelId: foundChannel.channelId,
             channelName: foundChannel.channelName,
           },
         });
-        searchStart = hashIndex + 1 + foundChannel.channelName.length;
+        searchStart = hashIndex + 1 + matchLen;
       } else {
         searchStart = hashIndex + 1;
       }

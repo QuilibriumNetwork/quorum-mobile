@@ -1,6 +1,7 @@
 import type { AppTheme } from '@/theme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SendIcon } from '@/components/Chat/SendIcon';
+import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { useEmojiFrecency } from '@/hooks/useEmojiFrecency';
 import { useDebouncedValue } from '@/hooks/useFarcasterSearch';
 import type { ProcessedAttachment } from '@/services/media/imageAttachment';
@@ -496,13 +497,15 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     setAutocompleteQuery('');
   }, [value, cursorPosition, onChangeText]);
 
-  // Insert selected channel
+  // Insert selected channel — uses the canonical #<channelId> wire format
+  // (matches desktop). Renders as #channelName via the channels prop, and is
+  // tappable in both the plain and markdown render paths.
   const handleSelectChannel = useCallback((channel: Channel) => {
     const textUpToCursor = value.slice(0, cursorPosition);
     const lastHashIndex = textUpToCursor.lastIndexOf('#');
     const textAfterCursor = value.slice(cursorPosition);
 
-    const newText = value.slice(0, lastHashIndex) + `#${channel.channelName} ` + textAfterCursor;
+    const newText = value.slice(0, lastHashIndex) + `#<${channel.channelId}> ` + textAfterCursor;
     onChangeText(newText);
     setAutocompleteType(null);
     setAutocompleteQuery('');
@@ -929,17 +932,18 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
                 );
               }
               const member = s.member;
+              const avatarUri = member.profile_image || member.user_icon;
               return (
                 <TouchableOpacity
                   key={`member-${member.address}`}
                   style={styles.autocompleteItem}
                   onPress={() => handleSelectMention(member)}
                 >
-                  <View style={styles.autocompleteAvatar}>
-                    <Text style={styles.autocompleteAvatarText}>
-                      {(member.display_name || member.name || '?')[0].toUpperCase()}
-                    </Text>
-                  </View>
+                  <CachedAvatar
+                    source={avatarUri ? { uri: avatarUri } : null}
+                    style={styles.autocompleteAvatar}
+                    fallbackName={member.display_name || member.name || member.address}
+                  />
                   <Text style={styles.autocompleteText}>
                     {member.display_name || member.name || member.address}
                   </Text>
