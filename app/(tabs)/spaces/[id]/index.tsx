@@ -122,7 +122,7 @@ export default function SpaceChannelsScreen() {
 
         {(spaceData.groups ?? []).map((group: Group, groupIndex: number) => (
           <View key={`group-${groupIndex}`} style={styles.groupSection}>
-            <Text style={styles.groupTitle}>{group.groupName.toUpperCase()}</Text>
+            <Text style={styles.groupTitle} numberOfLines={1}>{group.groupName.toUpperCase()}</Text>
             {group.channels.map((channel) => {
               // One badge = mentions + replies combined (desktop sums them into
               // a single "channel-mentions-bubble"). The dot is a separate
@@ -142,20 +142,19 @@ export default function SpaceChannelsScreen() {
                   onPress={() => handleSelectChannel(channel.channelId)}
                   activeOpacity={0.6}
                 >
-                  {badgeCount > 0 && <View style={styles.unreadDot} />}
+                  {/* Fixed-width slot so the icon never shifts when the dot appears */}
+                  <View style={styles.unreadDotSlot}>
+                    {badgeCount > 0 && <View style={styles.unreadDot} />}
+                  </View>
                   <IconSymbol
                     name={(channel.icon || 'hashtag') as IconSymbolName}
                     size={18}
                     color={resolveChannelIconColor(channel.iconColor, theme.colors.textMuted)}
                     variant={channel.iconVariant ?? 'outline'}
                   />
-                  <Text style={styles.channelName} numberOfLines={1}>
+                  <Text style={[styles.channelName, badgeCount > 0 && styles.channelNameUnread]} numberOfLines={1}>
                     {channel.channelName}
                   </Text>
-                  <ChannelStatusGlyphs
-                    channel={channel}
-                    defaultChannelId={spaceData.defaultChannelId}
-                  />
                   {badgeCount > 0 && (
                     <View style={styles.unreadBadge}>
                       <Text style={styles.unreadText}>
@@ -163,10 +162,10 @@ export default function SpaceChannelsScreen() {
                       </Text>
                     </View>
                   )}
-                  <IconSymbol
-                    name="chevron.right"
-                    size={14}
-                    color={theme.colors.textMuted}
+                  <ChannelStatusGlyphs
+                    channel={channel}
+                    defaultChannelId={spaceData.defaultChannelId}
+                    size={15}
                   />
                 </TouchableOpacity>
               );
@@ -240,27 +239,40 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       marginBottom: Skin.space(16),
     },
     groupTitle: {
-      ...theme.textStyles.caption2,
+      ...theme.textStyles.footnote,
       color: theme.colors.textMuted,
       paddingHorizontal: Skin.space(16),
       marginBottom: Skin.space(4),
-      letterSpacing: 0.8,
+      letterSpacing: 0.6,
     },
     channelRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: Skin.space(16),
-      paddingVertical: Skin.space(12),
+      // Left edge aligns the dot slot with the group title's left padding.
+      // The dot slot (16px) + gap (10px) = 26px before the icon, giving
+      // visible indentation relative to the group title text at x=16.
+      paddingLeft: Skin.space(16),
+      paddingRight: Skin.space(16),
+      paddingVertical: Skin.space(8),
       gap: Skin.space(10),
     },
     channelName: {
       flex: 1,
       ...theme.textStyles.body,
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.textMain,
     },
-    // 4px accent dot — desktop's .channel-unread-dot spec.
+    channelNameUnread: {
+      fontFamily: theme.fonts.bold.fontFamily,
+      fontWeight: theme.fonts.bold.fontWeight,
+    },
+    // Fixed slot so the icon never shifts whether or not the dot is shown.
+    // Width = dot (6px) + breathing room to 16px slot total.
+    unreadDotSlot: {
+      width: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    // Accent dot — desktop's .channel-unread-dot spec.
     unreadDot: {
       width: 6,
       height: 6,

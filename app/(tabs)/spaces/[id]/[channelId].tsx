@@ -265,11 +265,11 @@ export default function SpaceChannelChat() {
       </TouchableOpacity>
       {isSpaceOwner && (
         <TouchableOpacity onPress={handleOpenInviteModal} hitSlop={8}>
-          <IconSymbol name="person.badge.plus" color={theme.colors.primary} size={20} />
+          <IconSymbol name="person.badge.plus" color={theme.colors.textMain} size={20} />
         </TouchableOpacity>
       )}
       <TouchableOpacity onPress={handleOpenSpaceSettings} hitSlop={8}>
-        <IconSymbol name="gearshape" color={theme.colors.primary} size={20} />
+        <IconSymbol name="gearshape" color={theme.colors.textMain} size={20} />
       </TouchableOpacity>
     </View>
   ), [theme, isSpaceOwner, startSpaceCall, handleOpenInviteModal, handleOpenSpaceSettings]);
