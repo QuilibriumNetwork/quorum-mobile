@@ -22,11 +22,10 @@ import type { AppTheme } from '@/theme';
 import React, { useMemo, useState, useCallback } from 'react';
 import { Text, View, Image, ScrollView, StyleSheet, TextStyle } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import type { Emoji, SpaceMember, Channel, Role } from '@quilibrium/quorum-shared';
+import type { Emoji, SpaceMember, Channel } from '@quilibrium/quorum-shared';
 import {
   extractCodeContent,
   shouldUseScrollContainer,
-  getRoleColorHex,
 } from '@quilibrium/quorum-shared';
 import { getEmojiByName } from '@/data/emojiNames';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -38,8 +37,6 @@ export interface MessageMarkdownRendererProps {
   content: string;
   customEmojis: Emoji[];
   members?: SpaceMember[];
-  /** Space roles, for resolving the color of @role pills. */
-  roles?: Role[];
   theme: AppTheme;
   style?: TextStyle;
   onMentionPress?: (userId: string) => void;
@@ -282,7 +279,6 @@ function MessageMarkdownRendererBase({
   content,
   customEmojis,
   members = [],
-  roles = [],
   theme,
   style,
   onMentionPress,
@@ -306,14 +302,6 @@ function MessageMarkdownRendererBase({
     });
     return map;
   }, [members]);
-
-  const roleByTag = useMemo(() => {
-    const map: Record<string, Role> = {};
-    roles.forEach((r) => {
-      if (r.roleTag) map[r.roleTag] = r;
-    });
-    return map;
-  }, [roles]);
 
   const blocks = useMemo(() => parseBlocks(content), [content]);
 
@@ -386,14 +374,15 @@ function MessageMarkdownRendererBase({
                 @everyone
               </Text>
             );
-          case 'mention_role': {
-            const roleColor = getRoleColorHex(roleByTag[node.roleTag]?.color);
+          case 'mention_role':
+            // Same accent color as every other mention type — desktop renders
+            // all mention pills (user/role/everyone/channel) in one link color,
+            // not the role's own color.
             return (
-              <Text key={key} style={[mentionStyle, { color: roleColor }]}>
+              <Text key={key} style={mentionStyle}>
                 @{node.displayName}
               </Text>
             );
-          }
           case 'mention_channel':
             if (onChannelPress) {
               return (
@@ -445,7 +434,7 @@ function MessageMarkdownRendererBase({
         }
       });
     },
-    [emojiMap, memberByAddress, roleByTag, onMentionPress, onChannelPress, onLinkPress, styles, theme, mentionStyle, channelStyle, linkStyle]
+    [emojiMap, memberByAddress, onMentionPress, onChannelPress, onLinkPress, styles, theme, mentionStyle, channelStyle, linkStyle]
   );
 
   return (

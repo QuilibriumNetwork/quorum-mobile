@@ -105,7 +105,6 @@ function MessageRendererBase({
       content={prepared}
       customEmojis={customEmojis}
       members={members}
-      roles={roles}
       theme={theme}
       style={style}
       onMentionPress={onMentionPress}
