@@ -9,8 +9,8 @@ import type { Channel, Emoji, SpaceMember, Sticker, Role, Space } from '@quilibr
 import { hasPermission, getRoleColorHex } from '@quilibrium/quorum-shared';
 import { searchEmojis } from '@/data/emojiData';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, useWindowDimensions, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputSubmitEditingEventData, View } from 'react-native';
-import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
+import { ActivityIndicator, Image, useWindowDimensions, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputSubmitEditingEventData, TouchableOpacity as RNTouchableOpacity, View } from 'react-native';
+import Reanimated, { useAnimatedStyle, useDerivedValue, withTiming, interpolate, interpolateColor, Easing } from 'react-native-reanimated';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useComposerPanel } from '@/hooks/useComposerPanel';
 import { composerPanelVisibleStore } from '@/services/ui/composerPanelVisible';
@@ -199,6 +199,32 @@ const EMOJI_CATEGORIES = {
 };
 
 type CategoryKey = keyof typeof EMOJI_CATEGORIES | 'custom' | 'stickers' | 'recent';
+
+// Lightweight unicode-emoji cell. The grid mounts ~120 of these on first open,
+// so each one skips the SkinTouchable machinery (theme context read +
+// StyleSheet.flatten + action-color match per node — pure overhead here, since
+// an emoji button is always transparent and never a "filled" button). Memoized
+// so switching category or re-rendering the panel doesn't re-evaluate every
+// cell. Passes the emoji back to a stable onSelect so the closure isn't
+// re-created per cell.
+const EmojiCell = React.memo(function EmojiCell({
+  emoji,
+  onSelect,
+  buttonStyle,
+  textStyle,
+}: {
+  emoji: string;
+  onSelect: (emoji: string) => void;
+  buttonStyle: object;
+  textStyle: object;
+}) {
+  const handlePress = useCallback(() => onSelect(emoji), [emoji, onSelect]);
+  return (
+    <RNTouchableOpacity style={buttonStyle} onPress={handlePress}>
+      <Text style={textStyle}>{emoji}</Text>
+    </RNTouchableOpacity>
+  );
+});
 
 export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(function MessageInput({
   value,
@@ -597,6 +623,41 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   // when the input is empty. Emoji toggle always stays.
   const isComposing = value.trim().length > 0;
 
+  // --- Composer focus/compose micro-animations ---------------------------
+  // Two driven progress values so the transitions are smooth instead of
+  // snapping:
+  //   composeProgress — 0 idle, 1 composing. Slides the paperclip to the
+  //     right, fades it out, and collapses its width so the input reclaims
+  //     the space. Reverses when the input is cleared.
+  //   sendProgress    — 0 can't-send, 1 can-send. Cross-fades the send
+  //     button from the muted grey surface to the accent color.
+  const TIMING = { duration: 180, easing: Easing.out(Easing.quad) };
+  const composeProgress = useDerivedValue(
+    () => withTiming(isComposing ? 1 : 0, TIMING),
+    [isComposing],
+  );
+  const sendProgress = useDerivedValue(
+    () => withTiming(canSend ? 1 : 0, TIMING),
+    [canSend],
+  );
+
+  // Width the paperclip occupies when shown: icon (27) + button padding
+  // (6 each side). Collapsing it to 0 lets the input grow without a jump.
+  const ATTACH_WIDTH = 27 + Skin.space(6) * 2;
+  const attachAnimatedStyle = useAnimatedStyle(() => ({
+    width: interpolate(composeProgress.value, [0, 1], [ATTACH_WIDTH, 0]),
+    opacity: interpolate(composeProgress.value, [0, 1], [1, 0]),
+    transform: [{ translateX: interpolate(composeProgress.value, [0, 1], [0, ATTACH_WIDTH]) }],
+  }));
+  const sendAnimatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      sendProgress.value,
+      [0, 1],
+      [theme.colors.surface7, theme.colors.accent],
+    ),
+    opacity: interpolate(sendProgress.value, [0, 1], [0.6, 1]),
+  }));
+
   // The emoji grid markup, rendered inside the downward panel below the pill.
   // Memoized and gated on `showEmojiPicker` so the (potentially hundreds of
   // nodes) grid isn't rebuilt on every keystroke while the panel is closed.
@@ -702,13 +763,13 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
                 <Text style={styles.emojiSectionTitle}>Emoji</Text>
                 <View style={styles.emojiRow}>
                   {filteredEmojis.map((emoji, index) => (
-                    <TouchableOpacity
+                    <EmojiCell
                       key={`${emoji}-${index}`}
-                      style={styles.emojiButton}
-                      onPress={() => handleSelectEmoji(emoji)}
-                    >
-                      <Text style={styles.emoji}>{emoji}</Text>
-                    </TouchableOpacity>
+                      emoji={emoji}
+                      onSelect={handleSelectEmoji}
+                      buttonStyle={styles.emojiButton}
+                      textStyle={styles.emoji}
+                    />
                   ))}
                 </View>
               </View>
@@ -765,13 +826,13 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         {!searchQuery && selectedCategory !== 'custom' && selectedCategory !== 'stickers' && (
           <View style={styles.emojiRow}>
             {displayEmojis.map((emoji, index) => (
-              <TouchableOpacity
+              <EmojiCell
                 key={`${emoji}-${index}`}
-                style={styles.emojiButton}
-                onPress={() => handleSelectEmoji(emoji)}
-              >
-                <Text style={styles.emoji}>{emoji}</Text>
-              </TouchableOpacity>
+                emoji={emoji}
+                onSelect={handleSelectEmoji}
+                buttonStyle={styles.emojiButton}
+                textStyle={styles.emoji}
+              />
             ))}
             {selectedCategory === 'recent' && displayEmojis.length === 0 && (
               <Text style={styles.emptyText}>No recent emojis</Text>
@@ -1017,12 +1078,15 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         />
 
         <View style={styles.rightButtons}>
-          {/* Attach hides while composing to give the text room. */}
-          {!isComposing && (
+          {/* Attach slides right + fades out while composing to give the text
+              room; it slides back when the input is cleared. Kept mounted (not
+              conditionally unmounted) so it can animate in both directions, with
+              its width collapsing to 0 so the input reclaims the space. */}
+          <Reanimated.View style={[styles.attachContainer, attachAnimatedStyle]}>
             <TouchableOpacity
               style={styles.inputIconButton}
               onPress={onAttachmentPress}
-              disabled={disabled}
+              disabled={disabled || isComposing}
               accessibilityRole="button"
               accessibilityLabel="Attach image"
             >
@@ -1033,26 +1097,22 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
                 strokeWidth={1.5}
               />
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              {
-                backgroundColor: canSend ? theme.colors.accent : theme.colors.surface7,
-                opacity: canSend ? 1 : 0.6,
-              },
-            ]}
-            onPress={handleSend}
-            disabled={!canSend}
-            accessibilityRole="button"
-            accessibilityLabel="Send message"
-          >
-            {isSending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <SendIcon color="#fff" size={20} />
-            )}
-          </TouchableOpacity>
+          </Reanimated.View>
+          <Reanimated.View style={[styles.sendButton, sendAnimatedStyle]}>
+            <TouchableOpacity
+              style={styles.sendButtonTouch}
+              onPress={handleSend}
+              disabled={!canSend}
+              accessibilityRole="button"
+              accessibilityLabel="Send message"
+            >
+              {isSending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <SendIcon color="#fff" size={20} />
+              )}
+            </TouchableOpacity>
+          </Reanimated.View>
         </View>
       </View>
 
@@ -1256,10 +1316,21 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   inputIconButton: {
     padding: Skin.space(6),
   },
+  // Clips the paperclip as its width animates to 0 while composing, so the
+  // icon slides out cleanly instead of overflowing the collapsing container.
+  attachContainer: {
+    overflow: 'hidden',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
   sendButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
+  },
+  sendButtonTouch: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
