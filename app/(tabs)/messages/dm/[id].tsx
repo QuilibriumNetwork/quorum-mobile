@@ -338,6 +338,7 @@ export default function DMChatScreen() {
           onOpenFarcasterCast={handleOpenFarcasterCast}
           onLinkPress={handleLinkPress}
           bottomInset={0}
+          tabBarHeight={effectiveChromeHeight}
           restingChromeHeight={tabBarHeight}
         />
 

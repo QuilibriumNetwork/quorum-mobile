@@ -459,6 +459,7 @@ export const DMChatArea = React.memo(function DMChatArea({
       <MessagesList
         ref={dmMessagesListRef}
         messages={dmSearch.isSearchOpen && dmSearch.query.trim().length > 0 ? dmSearch.results.map(r => r.message) : dmMessages}
+        currentUserId={user?.address}
         topInset={Platform.OS === 'ios' ? headerHeight : 0}
         bottomInset={listBottomInset}
         theme={theme}

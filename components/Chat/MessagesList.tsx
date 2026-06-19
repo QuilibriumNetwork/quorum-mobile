@@ -351,14 +351,21 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   const lastMessageIdRef = useRef<string | null>(null);
   const distanceFromBottomRef = useRef<number>(0);
   useEffect(() => {
-    const newLast = orderedMessages.length > 0 ? orderedMessages[orderedMessages.length - 1].id : null;
+    const newLastMsg = orderedMessages.length > 0 ? orderedMessages[orderedMessages.length - 1] : null;
+    const newLast = newLastMsg?.id ?? null;
     const prevLast = lastMessageIdRef.current;
     lastMessageIdRef.current = newLast;
     if (prevLast === null || newLast === prevLast) return;
-    if (distanceFromBottomRef.current <= 80) {
+    // When the NEW bottom message is the current user's own (they just hit
+    // send), always scroll to it — sending is an explicit action and the user
+    // expects to see their message regardless of where they were scrolled. For
+    // messages from OTHERS, keep the near-bottom gate so an incoming message
+    // never yanks the user away from history they're reading.
+    const isOwnMessage = !!currentUserId && newLastMsg?.userId === currentUserId;
+    if (isOwnMessage || distanceFromBottomRef.current <= 80) {
       flatListRef.current?.scrollToEnd({ animated: true });
     }
-  }, [orderedMessages]);
+  }, [orderedMessages, currentUserId]);
 
   // Animate highlight when message is highlighted (runs on UI thread via Reanimated)
   useEffect(() => {

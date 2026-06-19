@@ -8,7 +8,7 @@ import { useTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Animated,
@@ -157,7 +157,13 @@ function SecondaryItem({
       style={[styles.secondarySlot, disabled && styles.disabledSlot]}
     >
       {renderIcon ? renderIcon(color) : <IconSymbol size={22} name={icon as any} color={color} />}
-      <Text style={[styles.secondaryLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
+      <Text
+        style={[
+          styles.secondaryLabel,
+          { color: color === theme.colors.primary ? color : theme.colors.textMuted },
+        ]}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </TouchableOpacity>
@@ -210,37 +216,47 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
     animate(0);
   }, [extraOpen, animate]);
 
-  // The focused leaf route name within the active tab's nested stack. Used to
-  // tell apart a tab's ROOT screen from a nested sub-screen that's reached via
-  // a SECONDARY-row item (e.g. spaces/discover, profile/apps). Without this the
-  // primary icon for the parent tab lights up when you open a secondary screen.
-  const focusedLeafName = useMemo(() => {
-    let route: any = state.routes[state.index];
-    while (route?.state && typeof route.state.index === 'number') {
-      route = route.state.routes[route.state.index];
-    }
-    return route?.name as string | undefined;
-  }, [state]);
+  // Full current route path (e.g. "/spaces/discover", "/profile/apps"). We use
+  // this rather than walking the navigator's nested state: when a SECONDARY-row
+  // item switches to a not-yet-hydrated tab, the nested stack's leaf isn't known
+  // on first render, so the walk reports the TAB name (e.g. "spaces") and the
+  // parent's primary icon wrongly lights up. usePathname() is deterministic and
+  // updates reliably, so the suppression below never misfires.
+  const pathname = usePathname();
 
-  // Nested leaf routes that belong to SECONDARY-row items, not to a primary tab.
-  // When one of these is focused, no primary icon should be accented.
-  const SECONDARY_LEAF_ROUTES = useMemo(
-    () => new Set(['discover', 'apps']),
+  // Paths that belong to SECONDARY-row items, not to a primary tab. When one of
+  // these is active, no primary icon should be accented even though the path is
+  // nested under a primary tab's stack.
+  const SECONDARY_ROW_PATHS = useMemo(
+    () => ['/spaces/discover', '/profile/apps'],
     [],
+  );
+
+  const onSecondaryRowScreen = useMemo(
+    () => SECONDARY_ROW_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`)),
+    [pathname, SECONDARY_ROW_PATHS],
+  );
+
+  // Active color for a secondary-row item: accent it when its own path is the
+  // current screen, otherwise leave it inactive.
+  const secondaryColor = useCallback(
+    (path: string) =>
+      pathname === path || pathname.startsWith(`${path}/`) ? activeColor : inactiveColor,
+    [pathname, activeColor, inactiveColor],
   );
 
   const getTabColor = useCallback(
     (routeName: string) => {
       const isTabFocused =
         state.routes.findIndex((r) => r.name === routeName) === state.index;
-      // Don't accent the primary icon when the focused screen is actually a
+      // Don't accent the primary icon when the active screen is actually a
       // secondary-row destination nested under this tab.
-      if (isTabFocused && focusedLeafName && SECONDARY_LEAF_ROUTES.has(focusedLeafName)) {
+      if (isTabFocused && onSecondaryRowScreen) {
         return inactiveColor;
       }
       return isTabFocused ? activeColor : inactiveColor;
     },
-    [state, activeColor, inactiveColor, focusedLeafName, SECONDARY_LEAF_ROUTES],
+    [state, activeColor, inactiveColor, onSecondaryRowScreen],
   );
 
   const handleTabPress = useCallback(
@@ -417,7 +433,7 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
             <SecondaryItem
               icon="wallet.pass"
               label="Wallet"
-              color={inactiveColor}
+              color={secondaryColor('/wallet')}
               onPress={() => { closeExtra(); setTimeout(() => router.push('/wallet'), 0); }}
             />
             <SecondaryItem
@@ -430,13 +446,13 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
             <SecondaryItem
               icon="safari"
               label="Discover"
-              color={inactiveColor}
+              color={secondaryColor('/spaces/discover')}
               onPress={() => { closeExtra(); setTimeout(() => router.push('/spaces/discover'), 0); }}
             />
             <SecondaryItem
               icon="square.grid.2x2"
               label="MiniApps"
-              color={inactiveColor}
+              color={secondaryColor('/profile/apps')}
               onPress={() => { closeExtra(); setTimeout(() => router.push('/profile/apps'), 0); }}
             />
             <SecondaryItem
