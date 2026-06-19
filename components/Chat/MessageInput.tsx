@@ -1197,13 +1197,16 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     // eyeballed once on dark.
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: theme.colors.composerPillBorder,
-    // Shadow is lighter on light skins (a black drop shadow reads much stronger
-    // against a white background than against a dark one).
+    // Per-scheme "raised" cue:
+    //   DARK  — a soft drop shadow (shadows read well on dark).
+    //   LIGHT — a visible hairline `borderColor` (above) plus a TIGHT elevation 1.
+    //           elevation 1 on Android casts a low-diffusion shadow right under
+    //           the pill — a crisp lift, not the heavy diffuse drop of 2+.
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: theme.dark ? 0.10 : 0.05,
-    shadowRadius: 5,
-    elevation: theme.dark ? 3 : 2,
+    shadowOpacity: theme.dark ? 0.10 : 0.06,
+    shadowRadius: theme.dark ? 5 : 3,
+    elevation: theme.dark ? 5 : 1,
     // Uniform inner padding on all four sides: the send circle then has the
     // same gap to the right edge as it does to the top/bottom, so it reads as
     // evenly inset (snug but balanced) rather than cramped against one side.
@@ -1264,6 +1267,13 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     // as one continuous surface in BOTH schemes (near-white on light, raised
     // surface on dark). The sub-bands below stay one step off this base.
     backgroundColor: theme.colors.composerPillBg,
+    // Rim so the panel has a defined edge — on light it's near-white and would
+    // otherwise blend into the page. Same token as the pill's rim (grey hairline
+    // on light, faint white on dark). Top + sides; the bottom runs off-screen.
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.composerPillBorder,
     borderTopLeftRadius: Skin.radius(16),
     borderTopRightRadius: Skin.radius(16),
     // Clip the search bar / category band to the rounded top corners.
@@ -1289,10 +1299,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     padding: 0,
   },
   categoryTabs: {
-    // A continuous band (no top/bottom separators), one shade off the panel.
+    // A continuous band (no top/bottom separators), a subtle step off the panel
+    // (semantic token so it tracks the panel surface in both schemes).
     // Tall enough that the 20px emoji + pill padding aren't clipped.
     maxHeight: 48,
-    backgroundColor: theme.colors.surface3,
+    backgroundColor: theme.colors.composerPanelBand,
   },
   categoryTabsContent: {
     paddingHorizontal: Skin.space(6),
@@ -1309,8 +1320,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   categoryTabActive: {
     // Floating pill one step above the band so it reads as raised, inset by the
-    // content padding so it never touches the band edges.
-    backgroundColor: theme.colors.surface6,
+    // content padding so it never touches the band edges. Semantic token,
+    // derived from the panel surface so it tracks it in both schemes.
+    backgroundColor: theme.colors.composerPanelBandActive,
   },
   categoryTabEmoji: {
     fontSize: Skin.font(20),

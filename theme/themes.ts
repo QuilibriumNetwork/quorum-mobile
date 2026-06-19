@@ -69,6 +69,11 @@ const createTheme = (
     // on dark and wrong on light.
     composerPillBg: string;
     composerPillBorder: string;
+    // Emoji-panel bands, derived to sit a subtle step off the panel surface
+    // (= composerPillBg) so they track it in both schemes instead of a fixed
+    // surfaceN that drifts when the panel base changes.
+    composerPanelBand: string;
+    composerPanelBandActive: string;
     tabBarIconInactive: string;
   };
   fonts: ReturnType<typeof makeFonts>;
@@ -188,9 +193,16 @@ const createTheme = (
       // distinct, raised surface in BOTH schemes (dark uses a raised surface4;
       // light uses pure white lifted off the off-white chat bg).
       composerPillBg: isDark ? surf('surface4', surface['4']) : surf('surface0', surface['0']),
-      // Pill rim: a faint white top-light on dark; a subtle grey hairline on
-      // light (white-on-white is invisible, so light needs a darker edge).
-      composerPillBorder: isDark ? 'rgba(255,255,255,0.10)' : surf('surface4', surface['4']),
+      // Pill rim: a faint white top-light on dark; a clear grey edge on light
+      // (white-on-white is invisible, and on light the border — not a shadow —
+      // is what makes the pill read as raised, so it needs to be visible).
+      composerPillBorder: isDark ? 'rgba(255,255,255,0.10)' : surf('surface6', surface['6']),
+      // Emoji-panel category band: a SUBTLE step off the panel base
+      // (composerPillBg = surface4 dark / surface0 light). Dark goes one shade
+      // darker (surface3), light one shade off white (surface1) — gentle, not
+      // the heavy surface3 that stood out against the new near-white panel.
+      composerPanelBand: isDark ? surf('surface3', surface['3']) : surf('surface1', surface['1']),
+      composerPanelBandActive: isDark ? surf('surface6', surface['6']) : surf('surface3', surface['3']),
       // Inactive tab-bar icon: textMuted is too faint on a white bar, so light
       // uses a stronger subtle tone; dark keeps the muted tone (reads fine on black).
       tabBarIconInactive: isDark ? pick('textMuted', textColors.muted) : pick('textSubtle', textColors.subtle),
