@@ -1,9 +1,10 @@
 import type { AppTheme } from '@/theme';
 import React, { useCallback, useState, useRef, useMemo, forwardRef, useImperativeHandle, useEffect } from 'react';
-import { Image, Text, View, StyleSheet, ImageSourcePropType, ActivityIndicator, Pressable, useWindowDimensions, type ImageStyle, type StyleProp } from 'react-native';
+import { Image, Text, View, StyleSheet, ImageSourcePropType, ActivityIndicator, Pressable, useWindowDimensions, type ImageStyle, type StyleProp, type ScrollViewProps } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, withSequence } from 'react-native-reanimated';
+import { ChatKeyboardScrollView } from './ChatKeyboardScrollView';
 import BrowserLink from '@/components/BrowserLink';
 import { haptics } from '@/utils/haptics';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -334,6 +335,33 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const highlightOpacity = useSharedValue(0);
   const flatListRef = useRef<FlashListRef<DisplayMessage>>(null);
+
+  // Resting bottom clearance (composer + tab bar) as a shared value, fed to
+  // ChatKeyboardScrollView's `blankSpace`. The keyboard "absorbs into" this
+  // floor (total inset = max(blankSpace, keyboard + extra)), so opening the
+  // keyboard lifts the list by only the EXCESS over the resting clearance — no
+  // over-lift, and at rest the newest message still clears the composer. Kept on
+  // the UI thread (a SharedValue) so the lift never depends on a React re-render.
+  const blankSpace = useSharedValue(bottomInset);
+  useEffect(() => {
+    blankSpace.value = bottomInset;
+  }, [bottomInset, blankSpace]);
+
+  // A stable component (not an inline render fn) for FlashList's
+  // renderScrollComponent, closing over the chat-specific keyboard props. Memo'd
+  // so FlashList doesn't see a new scroll component type every render (which
+  // would remount the scroll view).
+  const ScrollComponent = useMemo(
+    () =>
+      forwardRef<any, ScrollViewProps>((scrollProps, scrollRef) => (
+        <ChatKeyboardScrollView
+          ref={scrollRef}
+          {...scrollProps}
+          blankSpace={blankSpace}
+        />
+      )),
+    [blankSpace],
+  );
 
   // Ref to hold latest messages — used inside callbacks to avoid re-creating them when messages change
   const messagesRef = useRef(messages);
@@ -1135,13 +1163,16 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         getItemType={(item) => item.renderType}
-        // Push the first row down past the translucent header (topInset) and
-        // pad the bottom so the newest message rests above the floating
-        // composer + tab bar (bottomInset). Older messages still scroll behind.
+        // The scroll container is ChatKeyboardScrollView (keyboard library),
+        // which owns the BOTTOM inset: at rest it holds `blankSpace` (the
+        // composer + tab-bar clearance, so the newest message rests above the
+        // composer) and on keyboard-open it lifts the content in lockstep with
+        // the keyboard on the UI thread. So we only pad the TOP here (to clear a
+        // translucent header on iOS); the bottom is no longer a static
+        // paddingBottom (that would double-count with blankSpace).
+        renderScrollComponent={ScrollComponent}
         contentContainerStyle={
-          topInset > 0 || bottomInset > 0
-            ? { paddingTop: topInset || undefined, paddingBottom: bottomInset || undefined }
-            : undefined
+          topInset > 0 ? { paddingTop: topInset } : undefined
         }
         maintainVisibleContentPosition={{
           startRenderingFromBottom: true,
