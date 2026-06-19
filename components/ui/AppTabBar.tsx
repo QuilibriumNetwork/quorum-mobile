@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
-import { composerPanelOpenSV, useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
+import { composerBottomBusySV, useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Height of the icon-only primary row.
@@ -318,19 +318,18 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
   const bottomOffset = BOTTOM_MARGIN + insets.bottom;
 
   // ── Tab-bar visibility: ONE UI-thread rule for every transition ──────────
-  // The bar is shown ONLY when nothing occupies the bottom: no keyboard AND no
-  // panel. It's hidden whenever the panel is open OR a keyboard is present (even
-  // partially, mid-slide). Both inputs are UI-thread shared values combined in
-  // this one worklet, so the bar reacts in the SAME frame as either trigger —
-  // no React lag, which is what caused the flashes on every swap direction:
-  //   - keyboard→panel: stays hidden (panel open) the whole keyboard slide-down.
-  //   - panel→keyboard: stays hidden (keyboard rising) until the kb covers it.
-  //   - keyboard→idle:  snaps visible only once the kb is essentially gone.
-  // The small threshold avoids a 1px-keyboard keeping it hidden after dismiss.
+  // Shown ONLY when the bottom is truly idle: no keyboard AND the composer
+  // doesn't own the bottom. Hidden whenever a keyboard is present (any height,
+  // mid-slide) OR composerBottomBusySV is set. `bottomBusy` spans the WHOLE
+  // panel↔keyboard hand-off (set on panel-open, cleared on keyboard settle), so
+  // it also covers the gap where the panel just closed but the summoned keyboard
+  // hasn't started rising — the source of the panel→keyboard flicker. Both
+  // inputs are UI-thread shared values in one worklet, so there's no React lag
+  // in any direction. The small threshold ignores a 1px residual keyboard.
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const hideStyle = useAnimatedStyle(() => {
     const kbUp = Math.abs(keyboardHeight.value) > 1;
-    const hidden = composerPanelOpenSV.value === 1 || kbUp;
+    const hidden = composerBottomBusySV.value === 1 || kbUp;
     return { opacity: hidden ? 0 : 1 };
   });
 

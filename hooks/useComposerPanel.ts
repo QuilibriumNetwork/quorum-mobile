@@ -10,6 +10,7 @@ import {
   useSharedValue,
   type SharedValue,
 } from 'react-native-reanimated';
+import { composerBottomBusySV } from '@/services/ui/composerPanelVisible';
 
 export interface ComposerPanelOptions {
   /** Bottom safe-area inset to leave below the pill when nothing is open. */
@@ -162,9 +163,16 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
           // every onMove frame) keeps this cheap, and avoids reading a shared
           // value during render (which Reanimated strict mode warns about).
           runOnJS(rememberSessionKeyboardHeight)(e.height);
+          // Keyboard is up and covering the bottom — the hand-off is done; the
+          // tab bar's own keyboard check now keeps it hidden.
+          composerBottomBusySV.value = 0;
         } else {
           // Keyboard fully hidden — nothing to bridge to.
           closingSV.value = 0;
+          // Release the bottom ONLY if the panel isn't holding it. (On a
+          // panel-open dismiss the keyboard also settles at 0, but the panel now
+          // owns the bottom and the bar must stay hidden.)
+          if (panelOpenSV.value !== 1) composerBottomBusySV.value = 0;
         }
       },
     },
@@ -212,6 +220,9 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
 
   const openPanel = useCallback(() => {
     closingSV.value = 0;
+    // The composer owns the bottom from now until the keyboard settles — keeps
+    // the tab bar hidden across the whole panel↔keyboard hand-off (no flicker).
+    composerBottomBusySV.value = 1;
     // Remember whether a keyboard was up at open time — drives the close path.
     openedWithKeyboardRef.current = KeyboardController.isVisible();
     panelOpenRef.current = true;
@@ -227,6 +238,8 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     // Hot path (every keystroke): bail if already closed.
     if (!panelOpenRef.current) return;
     closingSV.value = 0;
+    // Plain close (no keyboard hand-off) — release the bottom immediately.
+    composerBottomBusySV.value = 0;
     panelOpenRef.current = false;
     panelOpenSV.value = 0;
     onVisibilityRef.current?.(false);
@@ -251,6 +264,8 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
       // Opened with NO keyboard: nothing is coming back, so just collapse the
       // spacer (don't arm the hand-off — that would leave a permanent gap).
       closingSV.value = 0;
+      // No keyboard settle will fire to release the bottom — release it now.
+      composerBottomBusySV.value = 0;
     }
     panelOpenRef.current = false;
     panelOpenSV.value = 0;

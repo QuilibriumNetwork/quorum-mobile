@@ -25,20 +25,18 @@ function emit() {
   for (const l of listeners) l();
 }
 
-// UI-thread mirror of `panelOpen` (1/0). Set synchronously alongside the JS
-// store so consumers on the UI thread (e.g. the tab bar's opacity worklet) react
-// in the SAME tick the panel opens — with no React render round-trip. The store
-// path drives React consumers; this drives Reanimated ones. The flash on the
-// keyboard→panel swap came from the React path lagging the keyboard slide by a
-// frame or two; the tab bar uses this instead so it hides instantly.
-export const composerPanelOpenSV: SharedValue<number> = makeMutable(0);
+// UI-thread flag: "the composer owns the bottom of the screen" — 1 from the
+// moment the panel opens, held through the panel↔keyboard hand-off, cleared only
+// once the keyboard has settled (or on a plain close). It spans the brief gap
+// where the panel is already closed but the summoned keyboard hasn't started
+// rising yet — without it the tab bar flickers in during that gap. Set by
+// useComposerPanel (which owns the hand-off state) and read by the tab bar's
+// visibility worklet, so the bar reacts with no React render lag.
+export const composerBottomBusySV: SharedValue<number> = makeMutable(0);
 
 export const composerPanelVisibleStore = {
   /** Producer: set whether the composer emoji panel is currently open. */
   set(open: boolean) {
-    // Always mirror to the UI-thread value (cheap, idempotent), even if the JS
-    // value is unchanged, so the two never drift.
-    composerPanelOpenSV.value = open ? 1 : 0;
     if (panelOpen === open) return;
     panelOpen = open;
     emit();
