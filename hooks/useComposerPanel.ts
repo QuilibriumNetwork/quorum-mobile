@@ -8,6 +8,7 @@ import {
   runOnJS,
   useDerivedValue,
   useSharedValue,
+  type DerivedValue,
   type SharedValue,
 } from 'react-native-reanimated';
 import { composerBottomBusySV } from '@/services/ui/composerPanelVisible';
@@ -77,6 +78,10 @@ export interface ComposerPanel {
    * that inset as the keyboard/panel takes over the space.
    */
   spacerHeight: SharedValue<number>;
+  /** UI-thread 1/0: whether the panel content should be painted. Drives the
+   *  panel's opacity so it preloads behind a fully-up keyboard and hides in
+   *  lockstep as the keyboard descends — no React-lagged peek. */
+  panelVisibleSV: DerivedValue<number>;
   /** Show the panel: dismiss the keyboard, hold its footprint. */
   openPanel: () => void;
   /** Hide the panel (caller is responsible for refocusing the input). */
@@ -218,6 +223,23 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     return Math.max(liveKeyboardHeight, restingFootprint);
   });
 
+  // Whether the emoji panel should be PAINTED (1) or hidden (0), on the UI
+  // thread so it tracks the keyboard with no React lag. Painted when:
+  //   - the panel is open; or
+  //   - a keyboard is essentially fully up (preload behind it, so opening the
+  //     panel reveals an already-painted grid).
+  // As the keyboard DESCENDS to dismiss-to-idle (panel not open), it drops below
+  // the threshold immediately, so the panel hides in lockstep with the slide —
+  // no peek in the strip below the tab bar (which a lagged React flag caused).
+  const panelVisibleSV = useDerivedValue<number>(() => {
+    if (panelOpenSV.value === 1) return 1;
+    const liveKeyboardHeight = Math.max(-keyboardHeight.value, 0);
+    const kbTarget = lastKeyboardHeight.value;
+    // "Essentially up" = within 90% of the last full height. Anything less means
+    // the keyboard is rising-not-yet-there or descending — hide the preload.
+    return kbTarget > 0 && liveKeyboardHeight >= kbTarget * 0.9 ? 1 : 0;
+  });
+
   const openPanel = useCallback(() => {
     closingSV.value = 0;
     // The composer owns the bottom from now until the keyboard settles — keeps
@@ -306,6 +328,7 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     panelOpen,
     keyboardVisible,
     spacerHeight,
+    panelVisibleSV,
     openPanel,
     closePanel,
     togglePanel,

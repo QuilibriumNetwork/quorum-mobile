@@ -284,16 +284,19 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   });
   const showEmojiPicker = composerPanel.panelOpen;
   const keyboardVisible = composerPanel.keyboardVisible;
-  // The panel is VISIBLE only when the panel itself is open (set synchronously
-  // in openPanel, so it's painted behind the keyboard before the keyboard slides
-  // away — an already-there reveal). It is NOT shown merely because a keyboard is
-  // up: doing that made the panel peek through below the tab bar during an
-  // unrelated keyboard session.
-  const panelShown = showEmojiPicker;
-  // Mount latch: build the (heavy) panel on first need — either the panel opening
-  // or a keyboard coming up (so the grid is pre-built before the first emoji tap)
-  // — then keep it mounted and merely hide it (`display: none`) when not shown.
-  // Reopening is a pure reveal. Resets per chat (component remounts).
+  // Panel VISIBILITY is driven on the UI thread by panelVisibleSV (opacity, see
+  // panelOpacityStyle): painted behind a fully-up keyboard (preload → instant
+  // reveal on open) and hidden in lockstep as the keyboard descends (no peek
+  // below the tab bar). `panelShown` is the React mirror, used only for
+  // pointerEvents (touch-inertness; a frame of lag here is harmless because the
+  // panel is either behind the keyboard or in the collapsed resting spacer).
+  const panelShown = keyboardVisible || showEmojiPicker;
+  const panelOpacityStyle = useAnimatedStyle(() => ({
+    opacity: composerPanel.panelVisibleSV.value,
+  }));
+  // Mount latch: build the (heavy) panel on first need — the panel opening or a
+  // keyboard coming up (so the grid is pre-built before the first emoji tap) —
+  // then keep it mounted. Reopening is a pure reveal. Resets per chat (remount).
   const [panelEverNeeded, setPanelEverNeeded] = useState(false);
   useEffect(() => {
     if (keyboardVisible || showEmojiPicker) setPanelEverNeeded(true);
@@ -681,7 +684,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   const emojiPanelContent = useMemo(() => {
     if (!panelPresent) return null;
     return (
-    <View style={[styles.emojiPanelInner, !panelShown && styles.hidden]}>
+    <View style={styles.emojiPanelInner} pointerEvents={panelShown ? 'auto' : 'none'}>
       {/* Search bar */}
       <View style={styles.searchContainer}>
         <IconSymbol name="magnifyingglass" size={16} color={theme.colors.textMuted} />
@@ -1146,9 +1149,16 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
 
       {/* Animated spacer beneath the pill. Closed: it follows the keyboard so
           the pill rides up (keyboard avoidance). Open: it holds the keyboard
-          footprint and shows the emoji panel — no layout jump on swap. */}
+          footprint and shows the emoji panel — no layout jump on swap. The inner
+          opacity (panelOpacityStyle) hides the panel in lockstep with the
+          keyboard on the UI thread, so it preloads behind a full keyboard but
+          never peeks during a dismiss. */}
       <Reanimated.View style={spacerAnimatedStyle}>
-        {emojiPanelContent}
+        {emojiPanelContent && (
+          <Reanimated.View style={[styles.panelOpacityWrap, panelOpacityStyle]}>
+            {emojiPanelContent}
+          </Reanimated.View>
+        )}
       </Reanimated.View>
     </View>
   );
@@ -1362,9 +1372,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Hides the kept-mounted panel while closed (node tree preserved for reopen).
-  hidden: {
-    display: 'none',
+  // Wraps the kept-mounted panel; its opacity (UI-thread) hides it while closed.
+  panelOpacityWrap: {
+    flex: 1,
   },
   emojiPanelInner: {
     flex: 1,
