@@ -1134,11 +1134,7 @@ function MinimizedPill({
               paddingHorizontal: Skin.space(14),
               borderRadius: PILL_HEIGHT / 2,
               backgroundColor: theme.colors.surface3,
-              shadowColor: '#000',
-              shadowOpacity: 0.2,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 2 },
-              elevation: 4,
+              ...Skin.floatingShadow(),
             },
             style,
           ]}
