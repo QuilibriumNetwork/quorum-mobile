@@ -85,6 +85,7 @@ import { Image as ExpoImage } from 'expo-image';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, BackHandler, Dimensions, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View, type KeyboardEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReanimatedModule, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -2192,7 +2193,7 @@ function ThreadDetailView({
     currentFarcasterProfile?.pfp?.url ??
     currentUser?.farcaster?.pfpUrl ??
     null;
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<KeyboardAwareScrollViewRef>(null);
   const replyInputRef = useRef<TextInput>(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   // Track whether the inline reply editor is in the scroll viewport. Used
@@ -2973,17 +2974,6 @@ function ThreadDetailView({
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      // Android Modal contexts ignore `adjustResize` from the
-      // manifest and default to `adjustNothing`, so `behavior:
-      // undefined` left the reply composer hidden behind the
-      // keyboard. `height` is the correct Android counterpart to
-      // iOS `padding` for this layout — both keep the bottom of the
-      // KAV pinned to the keyboard top edge.
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? (8 + 32 + Math.max(8, bottomInset)) : 0}
-    >
     <View style={{ flex: 1, backgroundColor: theme.colors.surface1 }}>
       {error && (
         <View style={{ padding: Skin.space(20) }}>
@@ -2992,16 +2982,27 @@ function ThreadDetailView({
       )}
 
       {mainCast && (
-        <ScrollView
+        // KeyboardAwareScrollView (react-native-keyboard-controller) keeps the
+        // focused reply input visible above the keyboard on BOTH platforms and
+        // in BOTH presentation contexts (route mode = adjustResize, modal mode =
+        // adjustNothing), without the per-platform/per-context magic numbers the
+        // old KeyboardAvoidingView needed. `bottomOffset` is the gap kept between
+        // the focused input and the keyboard top. Resting bottom clearance for
+        // the floating tab bar is the content paddingBottom (bottomInset).
+        <KeyboardAwareScrollView
           ref={scrollViewRef}
           style={{ flex: 1 }}
+          // Keep ~the footer row's height of space below the focused input
+          // visible above the keyboard, so the Post button / char count stay in
+          // view while typing (not just the caret). Long multi-line replies can
+          // still push it off — the user scrolls a hair — but typical replies
+          // keep Post visible.
+          bottomOffset={Skin.space(64)}
           contentContainerStyle={{
-            // Resting: include bottomInset so the reply editor (the last item in
-            // this scroll content) clears the floating tab bar in route mode — a
-            // hardcoded 16 left it hidden behind the bar. When the editor is
-            // focused the keyboard is up and the tab bar is hidden behind it, so
-            // drop the tab-bar clearance — otherwise the editor is pushed BELOW
-            // the keyboard and the cursor is hidden.
+            // Resting: clear the floating tab bar (bottomInset). When the editor
+            // is focused the keyboard is up and covers the tab-bar zone, so the
+            // tab-bar clearance becomes pure dead space below the editor — drop
+            // it to a small gap so there's no big empty area under the Post row.
             paddingBottom: isEditorFocused ? Skin.space(16) : Skin.space(16) + bottomInset,
           }}
           keyboardShouldPersistTaps="handled"
@@ -3283,7 +3284,7 @@ function ThreadDetailView({
               </View>
             </View>
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
       )}
 
       {/* Floating reply FAB — hidden when the editor is in viewport (the
@@ -3367,7 +3368,6 @@ function ThreadDetailView({
         target={reportCastTarget ? { type: 'cast', ...reportCastTarget } : null}
       />
     </View>
-    </KeyboardAvoidingView>
   );
 }
 
