@@ -2996,7 +2996,13 @@ function ThreadDetailView({
           ref={scrollViewRef}
           style={{ flex: 1 }}
           contentContainerStyle={{
-            paddingBottom: Skin.space(16),
+            // Resting: include bottomInset so the reply editor (the last item in
+            // this scroll content) clears the floating tab bar in route mode — a
+            // hardcoded 16 left it hidden behind the bar. When the editor is
+            // focused the keyboard is up and the tab bar is hidden behind it, so
+            // drop the tab-bar clearance — otherwise the editor is pushed BELOW
+            // the keyboard and the cursor is hidden.
+            paddingBottom: isEditorFocused ? Skin.space(16) : Skin.space(16) + bottomInset,
           }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
@@ -3295,11 +3301,7 @@ function ThreadDetailView({
             backgroundColor: theme.colors.accent,
             alignItems: 'center',
             justifyContent: 'center',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 4,
-            elevation: 5,
+            ...Skin.floatingShadow(),
           }}
         >
           <IconSymbol name="arrowshape.turn.up.left.fill" size={22} color="#fff" />
@@ -6841,11 +6843,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                 borderColor: theme.colors.surface3,
                 alignItems: 'center',
                 justifyContent: 'center',
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.2,
-                shadowRadius: 4,
-                elevation: 4,
+                ...Skin.floatingShadow(),
               }}
             >
               <IconSymbol name="magnifyingglass" size={18} color={theme.colors.textMain} />
@@ -6873,11 +6871,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                 borderRadius: Skin.radius(20),
                 paddingHorizontal: Skin.space(12),
                 paddingVertical: Skin.space(8),
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.25,
-                shadowRadius: 6,
-                elevation: 6,
+                ...Skin.floatingShadow(),
               }}
             >
               <IconSymbol name="magnifyingglass" size={18} color={theme.colors.textMuted} />
@@ -6953,7 +6947,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   onShareToChat={handleShareToChat}
                   followStates={followStates}
                   onFollow={handleFollow}
-                  bottomInset={insets.bottom}
+                  // In route mode these stack screens render UNDER the floating
+                  // tab bar, so the reply editor + FAB + list padding must clear
+                  // it (insets.bottom alone leaves them hidden behind the bar).
+                  // In modal mode there's no tab bar, so insets.bottom is right.
+                  bottomInset={isRouteMode ? floatingTabBarPadding : insets.bottom}
                   currentUserFid={currentUserFid}
                   onTipPress={handleOpenTip}
                   maxCastLength={maxCastLength}
@@ -6979,7 +6977,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   onOpenChannel={(channelKey) => pushScreen({ type: 'channel', channelKey })}
                   likeStates={likeStates}
                   onLikeToggle={handleLikeToggle}
-                  bottomInset={insets.bottom}
+                  bottomInset={isRouteMode ? floatingTabBarPadding : insets.bottom}
                   onTipPress={handleOpenTip}
                 />,
                 `profile-${screen.fid}-${stackIndex}`
@@ -7000,7 +6998,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   onOpenChannel={(channelKey) => pushScreen({ type: 'channel', channelKey })}
                   likeStates={likeStates}
                   onLikeToggle={handleLikeToggle}
-                  bottomInset={insets.bottom}
+                  bottomInset={isRouteMode ? floatingTabBarPadding : insets.bottom}
                   onTipPress={handleOpenTip}
                 />,
                 `channel-${screen.channelKey}-${stackIndex}`
@@ -7633,11 +7631,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       backgroundColor: theme.colors.accent,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#000',
-      shadowOpacity: 0.25,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 8,
+      ...Skin.floatingShadow(),
     },
     composeOverlay: {
       ...StyleSheet.absoluteFillObject,

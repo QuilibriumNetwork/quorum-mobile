@@ -985,6 +985,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
               name={showEmojiPicker ? 'keyboard' : 'face.smiling'}
               color={showEmojiPicker ? theme.colors.primary : (disabled ? theme.colors.textMuted : theme.colors.textSubtle)}
               size={27}
+              strokeWidth={1.5}
             />
           </TouchableOpacity>
         </View>
@@ -1029,6 +1030,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
                 name="paperclip"
                 color={disabled ? theme.colors.textMuted : theme.colors.textSubtle}
                 size={27}
+                strokeWidth={1.5}
               />
             </TouchableOpacity>
           )}
