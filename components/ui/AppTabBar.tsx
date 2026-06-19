@@ -20,7 +20,8 @@ import {
   View,
 } from 'react-native';
 import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
-import { composerPanelOpenSV } from '@/services/ui/composerPanelVisible';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import { composerPanelOpenSV, useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Height of the icon-only primary row.
@@ -166,18 +167,21 @@ function SecondaryItem({
 
 // ─── AppTabBar ────────────────────────────────────────────────────────────────
 
-export function AppTabBar({ state, navigation, hidden = false }: BottomTabBarProps & { hidden?: boolean }) {
+export function AppTabBar({ state, navigation }: BottomTabBarProps) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  // Panel-open as React state, only to make the bar inert (pointerEvents) while
+  // the panel is open so it can't catch taps meant for it. The VISUAL hide is
+  // the UI-thread worklet (hideStyle); this is just touch-inertness.
+  const panelOpen = useComposerPanelVisible();
 
   const [extraOpen, setExtraOpen] = useState(false);
   // 0 = closed, 1 = open
   const anim = useRef(new Animated.Value(0)).current;
-  // The bar is ALWAYS mounted so the keyboard reveals it on dismiss with no
-  // remount gap. When the panel opens it's hidden via opacity on the UI thread
-  // (hideStyle below) so it's gone before the keyboard clears it, and made inert
-  // via pointerEvents (the `hidden` prop) so it can't catch taps meant for the
-  // panel.
+  // The bar is ALWAYS mounted (never unmounted) so transitions reveal/cover it
+  // with no remount lag. Visual visibility is the UI-thread `hideStyle` worklet
+  // below; `panelOpen` (above) only drives pointerEvents (touch-inertness while
+  // the panel is open, so it can't catch taps meant for the panel).
 
   const activeColor = theme.colors.primary;
   const inactiveColor = theme.colors.tabBarIconInactive;
@@ -313,18 +317,27 @@ export function AppTabBar({ state, navigation, hidden = false }: BottomTabBarPro
 
   const bottomOffset = BOTTOM_MARGIN + insets.bottom;
 
-  // Hide on the UI thread the instant the panel opens — no React render lag, so
-  // the bar is gone before the keyboard slides away to reveal the panel (the
-  // source of the swap flash). When no panel, opacity stays 1 and the keyboard
-  // (drawn on top) covers/reveals the always-mounted bar with no gap.
-  const hideStyle = useAnimatedStyle(() => ({
-    opacity: composerPanelOpenSV.value === 1 ? 0 : 1,
-  }));
+  // ── Tab-bar visibility: ONE UI-thread rule for every transition ──────────
+  // The bar is shown ONLY when nothing occupies the bottom: no keyboard AND no
+  // panel. It's hidden whenever the panel is open OR a keyboard is present (even
+  // partially, mid-slide). Both inputs are UI-thread shared values combined in
+  // this one worklet, so the bar reacts in the SAME frame as either trigger —
+  // no React lag, which is what caused the flashes on every swap direction:
+  //   - keyboard→panel: stays hidden (panel open) the whole keyboard slide-down.
+  //   - panel→keyboard: stays hidden (keyboard rising) until the kb covers it.
+  //   - keyboard→idle:  snaps visible only once the kb is essentially gone.
+  // The small threshold avoids a 1px-keyboard keeping it hidden after dismiss.
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  const hideStyle = useAnimatedStyle(() => {
+    const kbUp = Math.abs(keyboardHeight.value) > 1;
+    const hidden = composerPanelOpenSV.value === 1 || kbUp;
+    return { opacity: hidden ? 0 : 1 };
+  });
 
   return (
     <Reanimated.View
       style={[styles.outerWrapper, { bottom: bottomOffset }, hideStyle]}
-      pointerEvents={hidden ? 'none' : 'box-none'}
+      pointerEvents={panelOpen ? 'none' : 'box-none'}
     >
       <Animated.View
         style={[
