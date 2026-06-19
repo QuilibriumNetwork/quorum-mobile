@@ -1197,11 +1197,13 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     // eyeballed once on dark.
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: theme.colors.composerPillBorder,
+    // Shadow is lighter on light skins (a black drop shadow reads much stronger
+    // against a white background than against a dark one).
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10,
+    shadowOpacity: theme.dark ? 0.10 : 0.05,
     shadowRadius: 5,
-    elevation: 3,
+    elevation: theme.dark ? 3 : 2,
     // Uniform inner padding on all four sides: the send circle then has the
     // same gap to the right edge as it does to the top/bottom, so it reads as
     // evenly inset (snug but balanced) rather than cramped against one side.
@@ -1258,7 +1260,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   emojiPanelInner: {
     flex: 1,
-    backgroundColor: theme.colors.surface4,
+    // Same semantic token as the composer pill so the pill and the panel read
+    // as one continuous surface in BOTH schemes (near-white on light, raised
+    // surface on dark). The sub-bands below stay one step off this base.
+    backgroundColor: theme.colors.composerPillBg,
     borderTopLeftRadius: Skin.radius(16),
     borderTopRightRadius: Skin.radius(16),
     // Clip the search bar / category band to the rounded top corners.
