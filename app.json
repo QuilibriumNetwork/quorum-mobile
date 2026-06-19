@@ -47,17 +47,17 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#0a0a0b"
+        "foregroundImage": "./assets/images/icon-android-adaptive.png",
+        "backgroundColor": "#0087FA"
       },
       "splash": {
-        "image": "./assets/images/qlogo.png",
+        "image": "./assets/images/splash-glyph.png",
         "resizeMode": "contain",
-        "backgroundColor": "#ffffff",
+        "backgroundColor": "#006EF0",
         "dark": {
-          "image": "./assets/images/qlogo.png",
+          "image": "./assets/images/splash-glyph.png",
           "resizeMode": "contain",
-          "backgroundColor": "#0a0a0b"
+          "backgroundColor": "#006EF0"
         }
       },
       "edgeToEdgeEnabled": true,
