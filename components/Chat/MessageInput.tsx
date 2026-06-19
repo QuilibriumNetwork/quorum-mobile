@@ -284,16 +284,20 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   });
   const showEmojiPicker = composerPanel.panelOpen;
   const keyboardVisible = composerPanel.keyboardVisible;
-  // Preload the panel behind the keyboard: it's visible (`panelShown`) whenever
-  // the keyboard is up OR the panel is open, so dismissing the keyboard reveals
-  // an already-painted panel. `panelEverNeeded` latches the (heavy) mount on
-  // first need, then keeps it mounted — hidden via `display: none` when not
-  // shown. Resets per chat (component remounts), so it stays lazy across chats.
-  const panelShown = keyboardVisible || showEmojiPicker;
+  // The panel is VISIBLE only when the panel itself is open (set synchronously
+  // in openPanel, so it's painted behind the keyboard before the keyboard slides
+  // away — an already-there reveal). It is NOT shown merely because a keyboard is
+  // up: doing that made the panel peek through below the tab bar during an
+  // unrelated keyboard session.
+  const panelShown = showEmojiPicker;
+  // Mount latch: build the (heavy) panel on first need — either the panel opening
+  // or a keyboard coming up (so the grid is pre-built before the first emoji tap)
+  // — then keep it mounted and merely hide it (`display: none`) when not shown.
+  // Reopening is a pure reveal. Resets per chat (component remounts).
   const [panelEverNeeded, setPanelEverNeeded] = useState(false);
   useEffect(() => {
-    if (panelShown) setPanelEverNeeded(true);
-  }, [panelShown]);
+    if (keyboardVisible || showEmojiPicker) setPanelEverNeeded(true);
+  }, [keyboardVisible, showEmojiPicker]);
   const panelPresent = panelEverNeeded;
   const showEmojiGrid = panelEverNeeded;
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('smileys');
