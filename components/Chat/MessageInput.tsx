@@ -287,6 +287,14 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     onPanelVisibilityChange: composerPanelVisibleStore.set,
   });
   const showEmojiPicker = composerPanel.panelOpen;
+  // Gates the heavy emoji grid: the panel chrome (background, search, category
+  // tabs) renders as soon as the panel opens so it slides in solid, then the
+  // ~120-node grid mounts once the keyboard-dismiss has settled — hidden behind
+  // the keyboard as it slides away, so there's no empty gap and the heavy mount
+  // never competes with the open animation. Safe to defer now that the panel's
+  // position is owned solely by the UI-thread spacer (mounting grid content
+  // can't move the pill).
+  const showEmojiGrid = composerPanel.panelContentReady;
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('smileys');
   const [searchQuery, setSearchQuery] = useState('');
   // When the input wraps to multiple lines the pill switches from a single-line
@@ -711,7 +719,13 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         </ScrollView>
       )}
 
-      {/* Emoji/Sticker grid */}
+      {/* Emoji/Sticker grid. Gated on `showEmojiGrid` so the heavy ~120-node
+          tree mounts only after the keyboard-dismiss settles. Until then a
+          `flex: 1` placeholder holds the panel's height so there's no layout
+          jump when the grid fills in. */}
+      {!showEmojiGrid ? (
+        <View style={styles.emojiGrid} />
+      ) : (
       <ScrollView
         style={styles.emojiGrid}
         contentContainerStyle={styles.emojiGridContent}
@@ -843,10 +857,12 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           </View>
         )}
       </ScrollView>
+      )}
     </View>
     );
   }, [
     showEmojiPicker,
+    showEmojiGrid,
     searchQuery,
     selectedCategory,
     categories,

@@ -67,6 +67,17 @@ export interface ComposerPanel {
   /** Whether the custom (emoji) panel is currently shown. */
   panelOpen: boolean;
   /**
+   * Whether the panel's HEAVY content (the emoji grid) should mount yet. Goes
+   * false the instant the panel opens and true once the keyboard-dismiss has
+   * settled (or, when the panel is opened with no keyboard up, on the next
+   * tick). Lets the caller paint the cheap panel chrome immediately so the panel
+   * slides in solid, then mount the ~120-node grid a beat later — hidden behind
+   * the keyboard as it slides away, so there's no empty gap and the heavy mount
+   * never competes with the open animation's frames. Gated on a real settle
+   * event, NOT a frame/time guess.
+   */
+  panelContentReady: boolean;
+  /**
    * Animated height for the spacer/panel container under the pill. Includes
    * the resting bottom safe-area inset when nothing is open, and collapses
    * that inset as the keyboard/panel takes over the space.
@@ -112,6 +123,20 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   const panelOpenSV = useSharedValue(0);
   const [panelOpen, setPanelOpen] = useState(false);
   const panelOpenRef = useRef(false);
+  // Gates the heavy panel content (emoji grid). False until the keyboard-dismiss
+  // settles (or the next tick when opening with no keyboard up), so the cheap
+  // chrome paints immediately and the grid mounts a beat later, off the open
+  // animation's frames. Read the ref synchronously inside the settle worklet's
+  // JS hop; the state drives the actual render.
+  const [panelContentReady, setPanelContentReady] = useState(false);
+  const panelContentReadyRef = useRef(false);
+  const markPanelContentReady = useCallback(() => {
+    // Only arm content once the panel is actually open (guards a stray keyboard
+    // settle that isn't a panel-open).
+    if (!panelOpenRef.current || panelContentReadyRef.current) return;
+    panelContentReadyRef.current = true;
+    setPanelContentReady(true);
+  }, []);
   // Set while closing the panel BY bringing the keyboard back. During this
   // window the spacer holds the panel footprint until the rising keyboard
   // catches up, so the pill never drops to the bottom and bounces back up.
@@ -142,10 +167,13 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
         } else {
           // Keyboard fully hidden — nothing is bridging to, clear the flag.
           closingSV.value = 0;
+          // If we got here because the panel opened (dismissing the keyboard to
+          // make room), the dismiss is now complete — mount the heavy grid.
+          runOnJS(markPanelContentReady)();
         }
       },
     },
-    []
+    [markPanelContentReady]
   );
 
   // The spacer height — the SINGLE owner of the composer pill's on-screen
@@ -186,16 +214,28 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     // Any prior close hand-off is moot once we're opening again.
     closingSV.value = 0;
     // Remember whether a keyboard was up at open time — drives the close path.
-    openedWithKeyboardRef.current = KeyboardController.isVisible();
+    const keyboardWasUp = KeyboardController.isVisible();
+    openedWithKeyboardRef.current = keyboardWasUp;
     panelOpenRef.current = true;
     panelOpenSV.value = 1;
+    // Defer the heavy grid: paint the cheap chrome now, mount the grid once the
+    // keyboard-dismiss settles (handled in the keyboard onEnd handler).
+    panelContentReadyRef.current = false;
+    setPanelContentReady(false);
     onVisibilityRef.current?.(true);
     setPanelOpen(true);
-    // keepFocus: true hides the soft keyboard but leaves the TextInput focused,
-    // so the blinking caret stays visible and emojis insert at the cursor.
-    // (RN's Keyboard.dismiss() always blurs, which hides the caret.)
-    KeyboardController.dismiss({ keepFocus: true });
-  }, [panelOpenSV, closingSV]);
+    if (keyboardWasUp) {
+      // keepFocus: true hides the soft keyboard but leaves the TextInput focused,
+      // so the blinking caret stays visible and emojis insert at the cursor.
+      // (RN's Keyboard.dismiss() always blurs, which hides the caret.) The grid
+      // mounts when this dismiss settles (keyboard onEnd, height 0).
+      KeyboardController.dismiss({ keepFocus: true });
+    } else {
+      // No keyboard up → no dismiss settle is coming. Mount the grid on the next
+      // frame so the chrome still paints first, then the grid fills in.
+      requestAnimationFrame(markPanelContentReady);
+    }
+  }, [panelOpenSV, closingSV, markPanelContentReady]);
 
   const closePanel = useCallback(() => {
     // Cheap to call on hot paths (e.g. every keystroke): bail if already closed
@@ -206,6 +246,8 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     closingSV.value = 0;
     panelOpenRef.current = false;
     panelOpenSV.value = 0;
+    panelContentReadyRef.current = false;
+    setPanelContentReady(false);
     onVisibilityRef.current?.(false);
     setPanelOpen(false);
   }, [panelOpenSV, closingSV]);
@@ -231,6 +273,8 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     }
     panelOpenRef.current = false;
     panelOpenSV.value = 0;
+    panelContentReadyRef.current = false;
+    setPanelContentReady(false);
     onVisibilityRef.current?.(false);
     setPanelOpen(false);
   }, [panelOpenSV, closingSV]);
@@ -251,12 +295,15 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     closingSV.value = 1;
     panelOpenRef.current = false;
     panelOpenSV.value = 0;
+    panelContentReadyRef.current = false;
+    setPanelContentReady(false);
     onVisibilityRef.current?.(false);
     setPanelOpen(false);
   }, [panelOpenSV, closingSV]);
 
   return {
     panelOpen,
+    panelContentReady,
     spacerHeight,
     openPanel,
     closePanel,
