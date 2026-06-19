@@ -50,11 +50,13 @@ interface MessageInputProps {
   /** Bottom safe area inset */
   bottomInset?: number;
   /**
-   * Height of bottom chrome (e.g. a tab bar) the composer already sits above.
-   * The keyboard/panel footprint is reduced by this so the pill lands exactly
-   * on top of the keyboard instead of overshooting it.
+   * Resting height of the bottom chrome (the tab bar) the composer floats above.
+   * The composer overlay sits at `bottom: 0`; this is the clearance the animated
+   * spacer holds at rest so the pill floats above the tab bar, and which the
+   * keyboard/panel footprint grows past when it opens. Pass the raw tab-bar
+   * height (do NOT zero it while the panel is open).
    */
-  bottomChromeHeight?: number;
+  restingChromeHeight?: number;
   /** Custom emojis for the space */
   customEmojis?: Emoji[];
   /** Stickers for the space */
@@ -242,7 +244,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   replyTo,
   onDismissReply,
   bottomInset = 0,
-  bottomChromeHeight = 0,
+  restingChromeHeight = 0,
   customEmojis = [],
   stickers = [],
   onSendSticker,
@@ -278,7 +280,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     // pill's own marginBottom, applied in BOTH states — so the no-keyboard
     // spacing matches the tighter keyboard-up spacing instead of being larger.
     bottomInset,
-    bottomChromeHeight,
+    // The tab-bar clearance the spacer holds at rest (overlay sits at bottom: 0).
+    restingChromeHeight,
     // Publish open/close synchronously (in the toggle action, not via an effect)
     // so the tab bar hides/shows in the same tick — no extra render-cycle lag.
     onPanelVisibilityChange: composerPanelVisibleStore.set,

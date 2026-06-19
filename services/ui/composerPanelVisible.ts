@@ -2,8 +2,10 @@
  * composerPanelVisible — reactive module-level store for "the chat composer's
  * emoji panel is open". Two unrelated parts of the tree react to it:
  *   - the Tabs layout hides the bottom tab bar so the panel gets more room; and
- *   - the chat screens drop their `bottomChromeHeight` to 0 so the emoji panel
- *     extends down into the space the (now hidden) tab bar vacated, with no gap.
+ *   - the chat screens drop their EFFECTIVE chrome height to 0 so the bottom fade
+ *     and the message-list inset collapse the (now vacated) tab-bar zone. (The
+ *     composer's own animated spacer handles the panel reaching the screen
+ *     bottom; it is fed the RAW tab-bar height, not this zeroed value.)
  *
  * Why a module-level store and not React context: the producer (MessageInput,
  * deep in a chat screen) and the consumers (the Tabs layout above it, and the

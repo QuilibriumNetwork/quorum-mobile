@@ -15,13 +15,22 @@ export interface ComposerPanelOptions {
   /** Bottom safe-area inset to leave below the pill when nothing is open. */
   bottomInset?: number;
   /**
-   * Height of any chrome (e.g. a bottom tab bar) the composer already sits
-   * above. The keyboard height reported by the OS is measured from the true
-   * bottom of the screen, but the composer's layout origin is this many pixels
-   * higher, so we subtract it from the keyboard footprint to avoid overshooting
-   * the top of the keyboard.
+   * Resting chrome height (the bottom tab bar's stable height, `54 + insets.bottom`)
+   * that the composer sits above when nothing is open.
+   *
+   * The composer overlay sits at `bottom: 0`, so the spacer is the SINGLE owner
+   * of the pill's on-screen position. The spacer holds `max(liveKeyboard,
+   * restingChromeHeight + bottomInset)`: at rest it equals the chrome height (the
+   * pill floats above the tab bar); as the keyboard rises past it, the live
+   * keyboard takes over (the keyboard covers the tab bar). Because position has
+   * one owner on the UI thread, the keyboard <-> panel swap can't desync.
+   *
+   * Pass the RAW tab-bar height here (NOT zeroed while the panel is open):
+   * `useBottomTabBarHeight()` is stable across the panel's open/close, and hiding
+   * the tab bar is handled by the keyboard/panel footprint exceeding the resting
+   * chrome, not by changing this value.
    */
-  bottomChromeHeight?: number;
+  restingChromeHeight?: number;
   /**
    * Called synchronously whenever the panel opens (true) or closes (false).
    * Fired inside the open/close actions (not via an effect) so dependent UI —
@@ -36,16 +45,22 @@ export interface ComposerPanelOptions {
  * composer: the emoji panel opens downward, replacing the soft keyboard in the
  * same footprint.
  *
- * The composer renders a single animated spacer below the input pill. That
- * spacer's height drives both:
- *   - keyboard avoidance — when the panel is closed it follows the live
- *     keyboard height, so the pill rides up with the keyboard; and
+ * The composer overlay is anchored at the screen bottom (`bottom: 0`), so the
+ * single animated spacer below the input pill is the SOLE owner of the pill's
+ * on-screen vertical position. That spacer's height (`max(liveKeyboard,
+ * restingChrome)`) drives all of:
+ *   - resting — it holds the tab-bar clearance (`restingChromeHeight`) so the
+ *     pill floats above the tab bar; and
+ *   - keyboard avoidance — when the panel is closed it follows the live keyboard
+ *     height, so the pill rides up with the keyboard; and
  *   - the emoji panel — when the panel is open it holds the LAST real keyboard
  *     height (captured while the keyboard was up) so dismissing the soft
  *     keyboard and revealing the panel happens in the same vertical space with
  *     no layout jump.
  *
- * Returned `spacerHeight` is a Reanimated SharedValue to be applied as the
+ * Because position has ONE owner on the UI thread (not a spacer height plus a
+ * React-driven overlay offset), the keyboard <-> panel swap has nothing to
+ * desync. Returned `spacerHeight` is a Reanimated SharedValue applied as the
  * `height` of a `Reanimated.View` sitting under the pill.
  */
 export interface ComposerPanel {
@@ -81,12 +96,12 @@ function rememberSessionKeyboardHeight(height: number) {
 }
 
 export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPanel {
-  const { bottomInset = 0, bottomChromeHeight = 0, onPanelVisibilityChange } = options;
+  const { bottomInset = 0, restingChromeHeight = 0, onPanelVisibilityChange } = options;
   // Keep the latest callback in a ref so the open/close callbacks don't need it
   // in their dep arrays (which would re-create them every render).
   const onVisibilityRef = useRef(onPanelVisibilityChange);
   onVisibilityRef.current = onPanelVisibilityChange;
-  const { height: keyboardHeight, progress: keyboardProgress } = useReanimatedKeyboardAnimation();
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   // Last real keyboard height we've observed, kept on the UI thread for the
   // spacer worklet. Seeded from the session cache so a panel opened before this
   // composer ever showed the keyboard still uses a real height when available.
@@ -133,36 +148,38 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     []
   );
 
-  // The spacer height: follow the live keyboard when the panel is closed,
-  // otherwise hold the last keyboard height (panel footprint). In both cases we
-  // subtract the bottom chrome the composer already sits above, so the pill
-  // lands exactly on top of the keyboard/panel rather than overshooting it. The
-  // resting bottom inset is added when nothing is open and fades out (via
-  // keyboard progress) as the keyboard/panel takes over.
+  // The spacer height — the SINGLE owner of the composer pill's on-screen
+  // position. The overlay sits at `bottom: 0`, so the spacer alone decides how
+  // far the pill floats above the screen bottom. It holds the larger of:
+  //   - the resting chrome the pill floats above (tab bar + safe inset), or
+  //   - the live keyboard height (which, edge-to-edge, is measured from the true
+  //     screen bottom and covers the tab bar's zone).
+  // The keyboard rising past the resting chrome, and the panel taking the last
+  // keyboard height, are the SAME quantity resolved by one `Math.max` on the UI
+  // thread — so the keyboard <-> panel swap has nothing to desync (no second,
+  // React-driven position owner). The tab bar is "hidden" simply by the
+  // keyboard/panel footprint exceeding the resting chrome; no value flips.
   const spacerHeight = useDerivedValue(() => {
+    const restingFootprint = restingChromeHeight + bottomInset;
     if (panelOpenSV.value === 1) {
-      // Panel fully open: the tab bar is hidden, so the panel takes the FULL
-      // keyboard height (no chrome subtraction) and reaches the screen bottom.
-      // Not subtracting bottomChromeHeight here also makes open instant — the
-      // height doesn't depend on the store round-trip that zeroes the chrome.
-      return Math.max(lastKeyboardHeight.value, 0);
+      // Panel open: hold the last real keyboard height (it reaches the screen
+      // bottom). Never drop below the resting chrome.
+      return Math.max(lastKeyboardHeight.value, restingFootprint);
     }
     // useReanimatedKeyboardAnimation().height is NEGATIVE-going (0 -> -kbHeight),
     // matching the library's own components which negate it. Flip the sign to
-    // get the positive on-screen keyboard height.
-    const liveKeyboardHeight = -keyboardHeight.value;
-    const kb = Math.max(liveKeyboardHeight - bottomChromeHeight, 0);
+    // get the positive on-screen keyboard height (from the true screen bottom).
+    const liveKeyboardHeight = Math.max(-keyboardHeight.value, 0);
     if (closingSV.value === 1) {
-      // Closing the panel by summoning the keyboard back. The tab bar reappears
-      // on close, so the target is the chrome-subtracted keyboard footprint.
-      // Hold it and let the RISING keyboard meet it (Math.max) so the pill stays
-      // put — seamless once the keyboard catches up.
-      const target = Math.max(lastKeyboardHeight.value - bottomChromeHeight, 0);
-      return Math.max(kb, target);
+      // Closing the panel by summoning the keyboard back: hold the panel
+      // footprint and let the RISING keyboard meet it (Math.max) so the pill
+      // stays put — seamless once the keyboard catches up.
+      return Math.max(liveKeyboardHeight, lastKeyboardHeight.value, restingFootprint);
     }
-    // progress goes 0 -> 1 as the keyboard appears; fade the resting inset out.
-    const progress = Math.min(Math.max(keyboardProgress.value, 0), 1);
-    return kb + bottomInset * (1 - progress);
+    // Resting / keyboard following: the larger of the live keyboard and the
+    // resting chrome. As the keyboard rises past the chrome it takes over; as it
+    // falls it hands back to the chrome — a continuous swap, no progress fade.
+    return Math.max(liveKeyboardHeight, restingFootprint);
   });
 
   const openPanel = useCallback(() => {

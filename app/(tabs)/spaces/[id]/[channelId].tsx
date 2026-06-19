@@ -318,6 +318,7 @@ export default function SpaceChannelChat() {
         addBookmark={addBookmark}
         removeBookmark={removeBookmark}
         tabBarHeight={effectiveChromeHeight}
+        restingChromeHeight={tabBarHeight}
         theme={theme}
         draftsRef={draftsRef}
         onChannelLinkPress={handleChannelLinkPress}
