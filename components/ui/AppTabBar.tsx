@@ -20,7 +20,6 @@ import {
   View,
 } from 'react-native';
 import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
-import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { composerBottomBusySV, useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -318,20 +317,19 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
   const bottomOffset = BOTTOM_MARGIN + insets.bottom;
 
   // ── Tab-bar visibility: ONE UI-thread rule for every transition ──────────
-  // Shown ONLY when the bottom is truly idle: no keyboard AND the composer
-  // doesn't own the bottom. Hidden whenever a keyboard is present (any height,
-  // mid-slide) OR composerBottomBusySV is set. `bottomBusy` spans the WHOLE
-  // panel↔keyboard hand-off (set on panel-open, cleared on keyboard settle), so
-  // it also covers the gap where the panel just closed but the summoned keyboard
-  // hasn't started rising — the source of the panel→keyboard flicker. Both
-  // inputs are UI-thread shared values in one worklet, so there's no React lag
-  // in any direction. The small threshold ignores a 1px residual keyboard.
-  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
-  const hideStyle = useAnimatedStyle(() => {
-    const kbUp = Math.abs(keyboardHeight.value) > 1;
-    const hidden = composerBottomBusySV.value === 1 || kbUp;
-    return { opacity: hidden ? 0 : 1 };
-  });
+  // Hidden iff the composer owns the bottom (composerBottomBusySV) — i.e. the
+  // panel is open or mid panel↔keyboard hand-off, when an RN panel (not the OS
+  // keyboard) occupies the bottom and wouldn't cover the bar.
+  //
+  // We deliberately do NOT gate on keyboard height. The bar is always mounted at
+  // bottom: 0; for a plain keyboard show/dismiss the OS keyboard is drawn on top
+  // and covers/reveals it, so the bar stays opacity 1 and the descending
+  // keyboard reveals an already-present bar (no empty-gap-then-appear). Gating on
+  // keyboard height instead hid the bar for the whole slide and snapped it in at
+  // the end — the close-direction gap. `bottomBusy` is UI-thread, so no React lag.
+  const hideStyle = useAnimatedStyle(() => ({
+    opacity: composerBottomBusySV.value === 1 ? 0 : 1,
+  }));
 
   return (
     <Reanimated.View
