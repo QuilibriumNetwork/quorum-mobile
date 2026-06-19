@@ -164,13 +164,18 @@ function SecondaryItem({
 
 // ─── AppTabBar ────────────────────────────────────────────────────────────────
 
-export function AppTabBar({ state, navigation }: BottomTabBarProps) {
+export function AppTabBar({ state, navigation, hidden = false }: BottomTabBarProps & { hidden?: boolean }) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
   const [extraOpen, setExtraOpen] = useState(false);
   // 0 = closed, 1 = open
   const anim = useRef(new Animated.Value(0)).current;
+  // The bar is ALWAYS mounted so the keyboard reveals it on dismiss with no
+  // remount gap. When the emoji panel opens it's hidden (instantly, not
+  // unmounted) and made inert (pointerEvents none below) so it can't intercept
+  // taps meant for the panel. Hide/show is a snap, not an animation: the smooth
+  // "reveal" comes from the keyboard sliding over an already-positioned bar.
 
   const activeColor = theme.colors.primary;
   const inactiveColor = theme.colors.tabBarIconInactive;
@@ -307,7 +312,10 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
   const bottomOffset = BOTTOM_MARGIN + insets.bottom;
 
   return (
-    <View style={[styles.outerWrapper, { bottom: bottomOffset }]} pointerEvents="box-none">
+    <View
+      style={[styles.outerWrapper, { bottom: bottomOffset }, hidden && styles.hidden]}
+      pointerEvents={hidden ? 'none' : 'box-none'}
+    >
       <Animated.View
         style={[
           styles.pill,
@@ -432,6 +440,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: H_MARGIN,
     right: H_MARGIN,
+  },
+  // Hidden-but-mounted: invisible. pointerEvents="none" (set on the element)
+  // makes it inert so it can't catch taps meant for the emoji panel.
+  hidden: {
+    opacity: 0,
   },
   pill: {
     overflow: 'hidden',

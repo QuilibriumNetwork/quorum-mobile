@@ -5,7 +5,6 @@ import { SwapModalProvider } from '@/context/SwapModalContext';
 import { useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { useKeyboardState } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // The true visual clearance the bar needs below screen content.
@@ -16,22 +15,18 @@ const TAB_BAR_CONTENT_HEIGHT = 54;
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
-  // Hide the bottom tab bar while the emoji panel is open OR a keyboard is up.
-  // Hiding it on keyboard-up too (not just panel-open) removes the swap flash:
-  // the bar is already gone before the keyboard slides away to reveal the panel,
-  // so it can't peek out from under the descending keyboard for a frame.
+  // Hide the bottom tab bar while the emoji panel is open. The bar is ALWAYS
+  // mounted (never null) and hidden via a `hidden` prop, not unmounted — so on
+  // both the open swap and a plain keyboard dismiss the keyboard slides over an
+  // already-present bar (revealed, not re-mounted). No flash, no gap.
   const composerPanelOpen = useComposerPanelVisible();
-  const keyboardVisible = useKeyboardState((s) => s.isVisible);
-  const hideTabBar = composerPanelOpen || keyboardVisible;
 
   return (
     <SwapModalProvider>
     <MiniappOverlayProvider>
     <AudioSpaceProvider>
     <Tabs
-      tabBar={(props) =>
-        hideTabBar ? null : <AppTabBar {...props} />
-      }
+      tabBar={(props) => <AppTabBar {...props} hidden={composerPanelOpen} />}
       screenOptions={{
         headerShown: false,
         // NOTE: `freezeOnBlur` was tried here to stop off-screen tabs
