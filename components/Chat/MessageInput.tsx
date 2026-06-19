@@ -14,7 +14,9 @@ import Reanimated, { useAnimatedStyle, useDerivedValue, withTiming, interpolate,
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useComposerPanel } from '@/hooks/useComposerPanel';
 import { composerPanelVisibleStore } from '@/services/ui/composerPanelVisible';
+import { composerFootprintSV } from '@/services/ui/composerFootprint';
 import * as Skin from '@/theme/skins/geometry';
+import type { LayoutChangeEvent } from 'react-native';
 
 
 export interface ReplyToMessage {
@@ -574,6 +576,18 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     [singleLineThreshold]
   );
 
+  // Measure the composer's on-screen footprint (the pill + any reply/edit banner
+  // + attachment preview — everything ABOVE the keyboard/panel spacer) and write
+  // it to the shared value the chat list's KeyboardChatScrollView reads as
+  // `extraContentPadding`. This makes the keyboard-open lift clear `keyboard +
+  // composer` (not just the keyboard), so the newest message rests above the
+  // pill in every state — single line, wrapped multi-line, image preview, reply
+  // banner. Writing a SharedValue (not React state) keeps it off the re-render
+  // path; the consumer reads it on the UI thread.
+  const handleFootprintLayout = useCallback((e: LayoutChangeEvent) => {
+    composerFootprintSV.value = e.nativeEvent.layout.height;
+  }, []);
+
   // Build categories list including custom emojis, stickers, and recent if available
   const categories = useMemo(() => {
     const result: { key: CategoryKey; name: string; icon: string }[] = [];
@@ -704,6 +718,16 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
             <IconSymbol name="xmark.circle.fill" size={16} color={theme.colors.textMuted} />
           </TouchableOpacity>
         )}
+        {/* Close the emoji panel. Far right of the search row. */}
+        <TouchableOpacity
+          onPress={() => composerPanel.closePanel()}
+          hitSlop={8}
+          style={styles.panelCloseButton}
+          accessibilityRole="button"
+          accessibilityLabel="Close emoji panel"
+        >
+          <IconSymbol name="xmark" size={18} color={theme.colors.textMuted} />
+        </TouchableOpacity>
       </View>
 
       {/* Category tabs */}
@@ -886,12 +910,17 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     handleSelectSticker,
     composerPanel.onSearchFocus,
     composerPanel.onSearchBlur,
+    composerPanel.closePanel,
     styles,
     theme,
   ]);
 
   return (
     <View style={[styles.container, containerDynamicStyle]}>
+      {/* Composer footprint: everything above the keyboard/panel spacer (banners
+          + attachment preview + autocomplete anchor + pill). Measured so the
+          chat list can lift to clear the composer exactly in every state. */}
+      <View onLayout={handleFootprintLayout}>
       {/* Edit mode preview */}
       {editingMessage && (
         <View style={styles.editContainer}>
@@ -1146,6 +1175,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           </Reanimated.View>
         </View>
       </View>
+      </View>{/* end composer footprint */}
 
       {/* Animated spacer beneath the pill. Closed: it follows the keyboard so
           the pill rides up (keyboard avoidance). Open: it holds the keyboard
@@ -1412,6 +1442,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: theme.colors.textMain,
     fontFamily: theme.fonts.regular.fontFamily,
     padding: 0,
+  },
+  panelCloseButton: {
+    // Slight left pad so it reads as a distinct affordance at the far right,
+    // separated from the in-field clear button.
+    paddingLeft: Skin.space(4),
   },
   categoryTabs: {
     // A continuous band (no top/bottom separators), a subtle step off the panel

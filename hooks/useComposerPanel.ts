@@ -6,12 +6,14 @@ import {
 } from 'react-native-keyboard-controller';
 import {
   runOnJS,
+  useAnimatedReaction,
   useDerivedValue,
   useSharedValue,
   type DerivedValue,
   type SharedValue,
 } from 'react-native-reanimated';
 import { composerBottomBusySV } from '@/services/ui/composerPanelVisible';
+import { composerPanelFootprintSV } from '@/services/ui/composerFootprint';
 
 export interface ComposerPanelOptions {
   /** Bottom safe-area inset to leave below the pill when nothing is open. */
@@ -222,6 +224,18 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     // falls it hands back to the chrome — a continuous swap, no progress fade.
     return Math.max(liveKeyboardHeight, restingFootprint);
   });
+
+  // Publish the panel's below-pill footprint (the spacer height) WHILE the panel
+  // is open, else 0. The chat list's KeyboardChatScrollView adds this to its
+  // `extraContentPadding` so that opening the emoji panel (keyboard down, so the
+  // library's own keyboard lift is 0) still lifts the list to clear panel + pill.
+  // UI-thread only (writes a shared value), so it never hits a React re-render.
+  useAnimatedReaction(
+    () => (panelOpenSV.value === 1 ? spacerHeight.value : 0),
+    (panelFootprint) => {
+      composerPanelFootprintSV.value = panelFootprint;
+    },
+  );
 
   // Whether the emoji panel should be PAINTED (1) or hidden (0), on the UI
   // thread so it tracks the keyboard with no React lag. Painted when:
