@@ -283,22 +283,19 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     onPanelVisibilityChange: composerPanelVisibleStore.set,
   });
   const showEmojiPicker = composerPanel.panelOpen;
-  // Two latches keep the panel cheap to reopen within a chat. `panelEverOpened`
-  // mounts the chrome on first open; `gridEverMounted` mounts the heavy grid
-  // after the first keyboard-settle (`panelContentReady`) and then KEEPS it
-  // mounted. Both stay true until the component unmounts (per chat), so reopening
-  // is a pure reveal (grid already built) while a chat where emoji is never
-  // opened never builds the grid. Without the grid latch the grid would unmount
-  // on every close and re-mount on the next settle — the "still reloading" bug.
-  const [panelEverOpened, setPanelEverOpened] = useState(false);
-  const [gridEverMounted, setGridEverMounted] = useState(false);
+  const keyboardVisible = composerPanel.keyboardVisible;
+  // Preload the panel behind the keyboard: it's visible (`panelShown`) whenever
+  // the keyboard is up OR the panel is open, so dismissing the keyboard reveals
+  // an already-painted panel. `panelEverNeeded` latches the (heavy) mount on
+  // first need, then keeps it mounted — hidden via `display: none` when not
+  // shown. Resets per chat (component remounts), so it stays lazy across chats.
+  const panelShown = keyboardVisible || showEmojiPicker;
+  const [panelEverNeeded, setPanelEverNeeded] = useState(false);
   useEffect(() => {
-    if (showEmojiPicker) setPanelEverOpened(true);
-  }, [showEmojiPicker]);
-  useEffect(() => {
-    if (composerPanel.panelContentReady) setGridEverMounted(true);
-  }, [composerPanel.panelContentReady]);
-  const showEmojiGrid = gridEverMounted;
+    if (panelShown) setPanelEverNeeded(true);
+  }, [panelShown]);
+  const panelPresent = panelEverNeeded;
+  const showEmojiGrid = panelEverNeeded;
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('smileys');
   const [searchQuery, setSearchQuery] = useState('');
   // When the input wraps to multiple lines the pill switches from a single-line
@@ -673,12 +670,14 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     opacity: interpolate(sendProgress.value, [0, 1], [0.6, 1]),
   }));
 
-  // Panel markup inside the spacer. Built after the first open, then kept
-  // mounted and hidden while closed (reopen = pure reveal). Memoized.
+  // Panel markup inside the spacer. Mounted once needed (keyboard up or panel
+  // open) and then kept mounted; visible whenever `panelShown` (so it sits
+  // preloaded behind the keyboard and is revealed when the keyboard dismisses),
+  // hidden otherwise. Memoized.
   const emojiPanelContent = useMemo(() => {
-    if (!panelEverOpened) return null;
+    if (!panelPresent) return null;
     return (
-    <View style={[styles.emojiPanelInner, !showEmojiPicker && styles.hidden]}>
+    <View style={[styles.emojiPanelInner, !panelShown && styles.hidden]}>
       {/* Search bar */}
       <View style={styles.searchContainer}>
         <IconSymbol name="magnifyingglass" size={16} color={theme.colors.textMuted} />
@@ -724,8 +723,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         </ScrollView>
       )}
 
-      {/* Heavy grid mounts only after the keyboard settles; a flex placeholder
-          holds the height until then so it fills in without a jump. */}
+      {/* Grid mounts on first need (latched), then stays. Placeholder holds the
+          height before that so the first fill-in doesn't jump. */}
       {!showEmojiGrid ? (
         <View style={styles.emojiGrid} />
       ) : (
@@ -864,8 +863,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     </View>
     );
   }, [
-    panelEverOpened,
-    showEmojiPicker,
+    panelPresent,
+    panelShown,
     showEmojiGrid,
     searchQuery,
     selectedCategory,
