@@ -274,6 +274,7 @@ export function FarcasterDirectMessageView({
 
       <MessagesList
         messages={displayMessages}
+        currentUserId={currentUserFid != null ? String(currentUserFid) : undefined}
         bottomInset={listBottomInset}
         theme={theme}
         isLoading={messagesQuery.isLoading}
