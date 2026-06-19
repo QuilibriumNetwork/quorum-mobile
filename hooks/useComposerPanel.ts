@@ -92,6 +92,11 @@ export interface ComposerPanel {
   togglePanel: () => void;
   /** Call when the input gains focus — collapses the panel without animation fight. */
   onInputFocus: () => void;
+  /** Call when the in-panel search field gains focus — lifts the panel above the
+   *  keyboard the search field summons so it stays visible. */
+  onSearchFocus: () => void;
+  /** Call when the in-panel search field loses focus — drops the lift. */
+  onSearchBlur: () => void;
 }
 
 // Sensible fallback before we've ever seen the keyboard (first open on a fresh
@@ -146,6 +151,9 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   // keyboard hand-off — there's no keyboard coming back, so the spacer should
   // collapse to 0 rather than hold the footprint forever (which leaves a gap).
   const openedWithKeyboardRef = useRef(false);
+  // 1 while the in-panel search field is focused. Drives the panel "lift" so it
+  // rides above the keyboard the search field summons (see spacer worklet).
+  const searchFocusedSV = useSharedValue(0);
 
   // Capture the keyboard height whenever it's meaningfully open so the panel
   // can match it. We latch the height on settle and, once the keyboard is fully
@@ -189,15 +197,20 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   // keyboard/panel footprint exceeding the resting chrome; no value flips.
   const spacerHeight = useDerivedValue(() => {
     const restingFootprint = restingChromeHeight + bottomInset;
-    if (panelOpenSV.value === 1) {
-      // Panel open: hold the last real keyboard height (it reaches the screen
-      // bottom). Never drop below the resting chrome.
-      return Math.max(lastKeyboardHeight.value, restingFootprint);
-    }
     // useReanimatedKeyboardAnimation().height is NEGATIVE-going (0 -> -kbHeight),
     // matching the library's own components which negate it. Flip the sign to
     // get the positive on-screen keyboard height (from the true screen bottom).
     const liveKeyboardHeight = Math.max(-keyboardHeight.value, 0);
+    if (panelOpenSV.value === 1) {
+      // Panel open: hold the last real keyboard height (the panel's footprint).
+      // When the in-panel SEARCH field is focused, a keyboard rises over the
+      // panel — ADD its live height so the whole panel rides up and stays
+      // visible above the keyboard. Gated on the search-focus flag (not raw
+      // keyboard height) so the keyboard DISMISS that happens during open
+      // doesn't transiently inflate the panel.
+      const searchLift = searchFocusedSV.value === 1 ? liveKeyboardHeight : 0;
+      return Math.max(lastKeyboardHeight.value + searchLift, restingFootprint);
+    }
     if (closingSV.value === 1) {
       // Closing the panel by summoning the keyboard back: hold the panel
       // footprint and let the RISING keyboard meet it (Math.max) so the pill
@@ -301,6 +314,15 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     setPanelOpen(false);
   }, [panelOpenSV, closingSV]);
 
+  // The in-panel search field gained/lost focus: lift the panel above the
+  // keyboard it summons (or drop back). See the spacer worklet's search-lift.
+  const onSearchFocus = useCallback(() => {
+    searchFocusedSV.value = 1;
+  }, [searchFocusedSV]);
+  const onSearchBlur = useCallback(() => {
+    searchFocusedSV.value = 0;
+  }, [searchFocusedSV]);
+
   return {
     panelOpen,
     panelContentReady,
@@ -309,5 +331,7 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     closePanel,
     togglePanel,
     onInputFocus,
+    onSearchFocus,
+    onSearchBlur,
   };
 }

@@ -202,13 +202,9 @@ const EMOJI_CATEGORIES = {
 
 type CategoryKey = keyof typeof EMOJI_CATEGORIES | 'custom' | 'stickers' | 'recent';
 
-// Lightweight unicode-emoji cell. The grid mounts ~120 of these on first open,
-// so each one skips the SkinTouchable machinery (theme context read +
-// StyleSheet.flatten + action-color match per node — pure overhead here, since
-// an emoji button is always transparent and never a "filled" button). Memoized
-// so switching category or re-rendering the panel doesn't re-evaluate every
-// cell. Passes the emoji back to a stable onSelect so the closure isn't
-// re-created per cell.
+// Lightweight emoji cell: a plain memoized touchable, skipping SkinTouchable's
+// per-node theme/flatten/color work (pure overhead for an always-transparent
+// button). ~120 of these mount on first open.
 const EmojiCell = React.memo(function EmojiCell({
   emoji,
   onSelect,
@@ -287,14 +283,22 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     onPanelVisibilityChange: composerPanelVisibleStore.set,
   });
   const showEmojiPicker = composerPanel.panelOpen;
-  // Gates the heavy emoji grid: the panel chrome (background, search, category
-  // tabs) renders as soon as the panel opens so it slides in solid, then the
-  // ~120-node grid mounts once the keyboard-dismiss has settled — hidden behind
-  // the keyboard as it slides away, so there's no empty gap and the heavy mount
-  // never competes with the open animation. Safe to defer now that the panel's
-  // position is owned solely by the UI-thread spacer (mounting grid content
-  // can't move the pill).
-  const showEmojiGrid = composerPanel.panelContentReady;
+  // Two latches keep the panel cheap to reopen within a chat. `panelEverOpened`
+  // mounts the chrome on first open; `gridEverMounted` mounts the heavy grid
+  // after the first keyboard-settle (`panelContentReady`) and then KEEPS it
+  // mounted. Both stay true until the component unmounts (per chat), so reopening
+  // is a pure reveal (grid already built) while a chat where emoji is never
+  // opened never builds the grid. Without the grid latch the grid would unmount
+  // on every close and re-mount on the next settle — the "still reloading" bug.
+  const [panelEverOpened, setPanelEverOpened] = useState(false);
+  const [gridEverMounted, setGridEverMounted] = useState(false);
+  useEffect(() => {
+    if (showEmojiPicker) setPanelEverOpened(true);
+  }, [showEmojiPicker]);
+  useEffect(() => {
+    if (composerPanel.panelContentReady) setGridEverMounted(true);
+  }, [composerPanel.panelContentReady]);
+  const showEmojiGrid = gridEverMounted;
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('smileys');
   const [searchQuery, setSearchQuery] = useState('');
   // When the input wraps to multiple lines the pill switches from a single-line
@@ -669,13 +673,12 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     opacity: interpolate(sendProgress.value, [0, 1], [0.6, 1]),
   }));
 
-  // The emoji grid markup, rendered inside the downward panel below the pill.
-  // Memoized and gated on `showEmojiPicker` so the (potentially hundreds of
-  // nodes) grid isn't rebuilt on every keystroke while the panel is closed.
+  // Panel markup inside the spacer. Built after the first open, then kept
+  // mounted and hidden while closed (reopen = pure reveal). Memoized.
   const emojiPanelContent = useMemo(() => {
-    if (!showEmojiPicker) return null;
+    if (!panelEverOpened) return null;
     return (
-    <View style={styles.emojiPanelInner}>
+    <View style={[styles.emojiPanelInner, !showEmojiPicker && styles.hidden]}>
       {/* Search bar */}
       <View style={styles.searchContainer}>
         <IconSymbol name="magnifyingglass" size={16} color={theme.colors.textMuted} />
@@ -685,6 +688,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           placeholderTextColor={theme.colors.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
+          onFocus={composerPanel.onSearchFocus}
+          onBlur={composerPanel.onSearchBlur}
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -719,10 +724,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         </ScrollView>
       )}
 
-      {/* Emoji/Sticker grid. Gated on `showEmojiGrid` so the heavy ~120-node
-          tree mounts only after the keyboard-dismiss settles. Until then a
-          `flex: 1` placeholder holds the panel's height so there's no layout
-          jump when the grid fills in. */}
+      {/* Heavy grid mounts only after the keyboard settles; a flex placeholder
+          holds the height until then so it fills in without a jump. */}
       {!showEmojiGrid ? (
         <View style={styles.emojiGrid} />
       ) : (
@@ -861,6 +864,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     </View>
     );
   }, [
+    panelEverOpened,
     showEmojiPicker,
     showEmojiGrid,
     searchQuery,
@@ -874,6 +878,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     stickers,
     handleSelectEmoji,
     handleSelectSticker,
+    composerPanel.onSearchFocus,
+    composerPanel.onSearchBlur,
     styles,
     theme,
   ]);
@@ -1352,6 +1358,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Hides the kept-mounted panel while closed (node tree preserved for reopen).
+  hidden: {
+    display: 'none',
   },
   emojiPanelInner: {
     flex: 1,
