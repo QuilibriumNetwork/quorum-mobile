@@ -19,6 +19,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
+import { composerPanelOpenSV } from '@/services/ui/composerPanelVisible';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Height of the icon-only primary row.
@@ -172,10 +174,10 @@ export function AppTabBar({ state, navigation, hidden = false }: BottomTabBarPro
   // 0 = closed, 1 = open
   const anim = useRef(new Animated.Value(0)).current;
   // The bar is ALWAYS mounted so the keyboard reveals it on dismiss with no
-  // remount gap. When the emoji panel opens it's hidden (instantly, not
-  // unmounted) and made inert (pointerEvents none below) so it can't intercept
-  // taps meant for the panel. Hide/show is a snap, not an animation: the smooth
-  // "reveal" comes from the keyboard sliding over an already-positioned bar.
+  // remount gap. When the panel opens it's hidden via opacity on the UI thread
+  // (hideStyle below) so it's gone before the keyboard clears it, and made inert
+  // via pointerEvents (the `hidden` prop) so it can't catch taps meant for the
+  // panel.
 
   const activeColor = theme.colors.primary;
   const inactiveColor = theme.colors.tabBarIconInactive;
@@ -311,9 +313,17 @@ export function AppTabBar({ state, navigation, hidden = false }: BottomTabBarPro
 
   const bottomOffset = BOTTOM_MARGIN + insets.bottom;
 
+  // Hide on the UI thread the instant the panel opens — no React render lag, so
+  // the bar is gone before the keyboard slides away to reveal the panel (the
+  // source of the swap flash). When no panel, opacity stays 1 and the keyboard
+  // (drawn on top) covers/reveals the always-mounted bar with no gap.
+  const hideStyle = useAnimatedStyle(() => ({
+    opacity: composerPanelOpenSV.value === 1 ? 0 : 1,
+  }));
+
   return (
-    <View
-      style={[styles.outerWrapper, { bottom: bottomOffset }, hidden && styles.hidden]}
+    <Reanimated.View
+      style={[styles.outerWrapper, { bottom: bottomOffset }, hideStyle]}
       pointerEvents={hidden ? 'none' : 'box-none'}
     >
       <Animated.View
@@ -429,7 +439,7 @@ export function AppTabBar({ state, navigation, hidden = false }: BottomTabBarPro
           </Animated.View>
         </Animated.View>
       </Animated.View>
-    </View>
+    </Reanimated.View>
   );
 }
 
@@ -440,11 +450,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: H_MARGIN,
     right: H_MARGIN,
-  },
-  // Hidden-but-mounted: invisible. pointerEvents="none" (set on the element)
-  // makes it inert so it can't catch taps meant for the emoji panel.
-  hidden: {
-    opacity: 0,
   },
   pill: {
     overflow: 'hidden',

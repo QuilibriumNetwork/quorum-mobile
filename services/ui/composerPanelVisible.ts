@@ -16,6 +16,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { makeMutable, type SharedValue } from 'react-native-reanimated';
 
 let panelOpen = false;
 const listeners = new Set<() => void>();
@@ -24,9 +25,20 @@ function emit() {
   for (const l of listeners) l();
 }
 
+// UI-thread mirror of `panelOpen` (1/0). Set synchronously alongside the JS
+// store so consumers on the UI thread (e.g. the tab bar's opacity worklet) react
+// in the SAME tick the panel opens — with no React render round-trip. The store
+// path drives React consumers; this drives Reanimated ones. The flash on the
+// keyboard→panel swap came from the React path lagging the keyboard slide by a
+// frame or two; the tab bar uses this instead so it hides instantly.
+export const composerPanelOpenSV: SharedValue<number> = makeMutable(0);
+
 export const composerPanelVisibleStore = {
   /** Producer: set whether the composer emoji panel is currently open. */
   set(open: boolean) {
+    // Always mirror to the UI-thread value (cheap, idempotent), even if the JS
+    // value is unchanged, so the two never drift.
+    composerPanelOpenSV.value = open ? 1 : 0;
     if (panelOpen === open) return;
     panelOpen = open;
     emit();
