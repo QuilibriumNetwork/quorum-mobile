@@ -60,8 +60,11 @@ export function useChatListBottomInset(tabBarHeight: number): number {
 }
 
 interface ChatBottomChromeProps {
-  /** Height of the floating tab bar the composer sits above (0 when hidden,
-   *  e.g. while the emoji panel is open so the panel reaches the screen bottom). */
+  /** Height of the floating tab bar, used only to size the bottom fade so it
+   *  covers the composer→tab-bar zone. Pass the EFFECTIVE height (0 while the
+   *  emoji panel is open, so the fade collapses to just the composer). The
+   *  composer's own animated spacer — NOT this prop — positions the pill, so the
+   *  overlay sits at `bottom: 0` regardless of this value. */
   tabBarHeight: number;
   /** Chat background color the fade resolves to (theme.colors.surface1). */
   surfaceColor: string;
@@ -101,11 +104,14 @@ export function ChatBottomChrome({ tabBarHeight, surfaceColor, isDark, children 
         pointerEvents="none"
       />
 
-      {/* Composer floats over the bottom of the list, just above the tab bar
-          (bottom: tabBarHeight). When the keyboard opens, the composer's own
-          animated spacer grows by (keyboard − tabBarHeight) so the pill lands
-          exactly on the keyboard. */}
-      <View style={[styles.composerOverlay, { bottom: tabBarHeight }]} pointerEvents="box-none">
+      {/* Composer anchored at the screen bottom (bottom: 0). The composer's own
+          animated spacer is the SINGLE owner of the pill's on-screen position:
+          at rest it holds the tab-bar clearance so the pill floats above the
+          bar; when the keyboard/panel opens it grows to the full keyboard
+          height. Anchoring here (not at bottom: tabBarHeight) removes the second,
+          React-driven position owner that used to desync the keyboard↔panel
+          swap. */}
+      <View style={[styles.composerOverlay, { bottom: 0 }]} pointerEvents="box-none">
         {children}
       </View>
     </>

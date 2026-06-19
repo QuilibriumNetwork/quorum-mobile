@@ -2,7 +2,6 @@ import { AppTabBar } from '@/components/ui/AppTabBar';
 import { AudioSpaceProvider } from '@/context/AudioSpaceContext';
 import { MiniappOverlayProvider } from '@/context/MiniappOverlayContext';
 import { SwapModalProvider } from '@/context/SwapModalContext';
-import { useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,18 +14,15 @@ const TAB_BAR_CONTENT_HEIGHT = 54;
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
-  // Hide the bottom tab bar while the chat composer's emoji panel is open so
-  // the panel gets the full bottom of the screen.
-  const composerPanelOpen = useComposerPanelVisible();
 
   return (
     <SwapModalProvider>
     <MiniappOverlayProvider>
     <AudioSpaceProvider>
+    {/* AppTabBar is always mounted; it hides itself (UI-thread) while the emoji
+        panel is open or a keyboard is up, so transitions never flash. */}
     <Tabs
-      tabBar={(props) =>
-        composerPanelOpen ? null : <AppTabBar {...props} />
-      }
+      tabBar={(props) => <AppTabBar {...props} />}
       screenOptions={{
         headerShown: false,
         // NOTE: `freezeOnBlur` was tried here to stop off-screen tabs

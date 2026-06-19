@@ -338,7 +338,7 @@ export default function DMChatScreen() {
           onOpenFarcasterCast={handleOpenFarcasterCast}
           onLinkPress={handleLinkPress}
           bottomInset={0}
-          tabBarHeight={effectiveChromeHeight}
+          restingChromeHeight={tabBarHeight}
         />
 
       </View>
@@ -367,6 +367,7 @@ export default function DMChatScreen() {
         addBookmark={addBookmark}
         removeBookmark={removeBookmark}
         tabBarHeight={effectiveChromeHeight}
+        restingChromeHeight={tabBarHeight}
         theme={theme}
         draftsRef={draftsRef}
       />

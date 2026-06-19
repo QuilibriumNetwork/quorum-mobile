@@ -50,11 +50,13 @@ interface MessageInputProps {
   /** Bottom safe area inset */
   bottomInset?: number;
   /**
-   * Height of bottom chrome (e.g. a tab bar) the composer already sits above.
-   * The keyboard/panel footprint is reduced by this so the pill lands exactly
-   * on top of the keyboard instead of overshooting it.
+   * Resting height of the bottom chrome (the tab bar) the composer floats above.
+   * The composer overlay sits at `bottom: 0`; this is the clearance the animated
+   * spacer holds at rest so the pill floats above the tab bar, and which the
+   * keyboard/panel footprint grows past when it opens. Pass the raw tab-bar
+   * height (do NOT zero it while the panel is open).
    */
-  bottomChromeHeight?: number;
+  restingChromeHeight?: number;
   /** Custom emojis for the space */
   customEmojis?: Emoji[];
   /** Stickers for the space */
@@ -200,13 +202,9 @@ const EMOJI_CATEGORIES = {
 
 type CategoryKey = keyof typeof EMOJI_CATEGORIES | 'custom' | 'stickers' | 'recent';
 
-// Lightweight unicode-emoji cell. The grid mounts ~120 of these on first open,
-// so each one skips the SkinTouchable machinery (theme context read +
-// StyleSheet.flatten + action-color match per node — pure overhead here, since
-// an emoji button is always transparent and never a "filled" button). Memoized
-// so switching category or re-rendering the panel doesn't re-evaluate every
-// cell. Passes the emoji back to a stable onSelect so the closure isn't
-// re-created per cell.
+// Lightweight emoji cell: a plain memoized touchable, skipping SkinTouchable's
+// per-node theme/flatten/color work (pure overhead for an always-transparent
+// button). ~120 of these mount on first open.
 const EmojiCell = React.memo(function EmojiCell({
   emoji,
   onSelect,
@@ -242,7 +240,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   replyTo,
   onDismissReply,
   bottomInset = 0,
-  bottomChromeHeight = 0,
+  restingChromeHeight = 0,
   customEmojis = [],
   stickers = [],
   onSendSticker,
@@ -278,12 +276,33 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     // pill's own marginBottom, applied in BOTH states — so the no-keyboard
     // spacing matches the tighter keyboard-up spacing instead of being larger.
     bottomInset,
-    bottomChromeHeight,
+    // The tab-bar clearance the spacer holds at rest (overlay sits at bottom: 0).
+    restingChromeHeight,
     // Publish open/close synchronously (in the toggle action, not via an effect)
     // so the tab bar hides/shows in the same tick — no extra render-cycle lag.
     onPanelVisibilityChange: composerPanelVisibleStore.set,
   });
   const showEmojiPicker = composerPanel.panelOpen;
+  const keyboardVisible = composerPanel.keyboardVisible;
+  // Panel VISIBILITY is driven on the UI thread by panelVisibleSV (opacity, see
+  // panelOpacityStyle): painted behind a fully-up keyboard (preload → instant
+  // reveal on open) and hidden in lockstep as the keyboard descends (no peek
+  // below the tab bar). `panelShown` is the React mirror, used only for
+  // pointerEvents (touch-inertness; a frame of lag here is harmless because the
+  // panel is either behind the keyboard or in the collapsed resting spacer).
+  const panelShown = keyboardVisible || showEmojiPicker;
+  const panelOpacityStyle = useAnimatedStyle(() => ({
+    opacity: composerPanel.panelVisibleSV.value,
+  }));
+  // Mount latch: build the (heavy) panel on first need — the panel opening or a
+  // keyboard coming up (so the grid is pre-built before the first emoji tap) —
+  // then keep it mounted. Reopening is a pure reveal. Resets per chat (remount).
+  const [panelEverNeeded, setPanelEverNeeded] = useState(false);
+  useEffect(() => {
+    if (keyboardVisible || showEmojiPicker) setPanelEverNeeded(true);
+  }, [keyboardVisible, showEmojiPicker]);
+  const panelPresent = panelEverNeeded;
+  const showEmojiGrid = panelEverNeeded;
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('smileys');
   const [searchQuery, setSearchQuery] = useState('');
   // When the input wraps to multiple lines the pill switches from a single-line
@@ -658,13 +677,14 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     opacity: interpolate(sendProgress.value, [0, 1], [0.6, 1]),
   }));
 
-  // The emoji grid markup, rendered inside the downward panel below the pill.
-  // Memoized and gated on `showEmojiPicker` so the (potentially hundreds of
-  // nodes) grid isn't rebuilt on every keystroke while the panel is closed.
+  // Panel markup inside the spacer. Mounted once needed (keyboard up or panel
+  // open) and then kept mounted; visible whenever `panelShown` (so it sits
+  // preloaded behind the keyboard and is revealed when the keyboard dismisses),
+  // hidden otherwise. Memoized.
   const emojiPanelContent = useMemo(() => {
-    if (!showEmojiPicker) return null;
+    if (!panelPresent) return null;
     return (
-    <View style={styles.emojiPanelInner}>
+    <View style={styles.emojiPanelInner} pointerEvents={panelShown ? 'auto' : 'none'}>
       {/* Search bar */}
       <View style={styles.searchContainer}>
         <IconSymbol name="magnifyingglass" size={16} color={theme.colors.textMuted} />
@@ -674,6 +694,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           placeholderTextColor={theme.colors.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
+          onFocus={composerPanel.onSearchFocus}
+          onBlur={composerPanel.onSearchBlur}
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -708,7 +730,11 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         </ScrollView>
       )}
 
-      {/* Emoji/Sticker grid */}
+      {/* Grid mounts on first need (latched), then stays. Placeholder holds the
+          height before that so the first fill-in doesn't jump. */}
+      {!showEmojiGrid ? (
+        <View style={styles.emojiGrid} />
+      ) : (
       <ScrollView
         style={styles.emojiGrid}
         contentContainerStyle={styles.emojiGridContent}
@@ -840,10 +866,13 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           </View>
         )}
       </ScrollView>
+      )}
     </View>
     );
   }, [
-    showEmojiPicker,
+    panelPresent,
+    panelShown,
+    showEmojiGrid,
     searchQuery,
     selectedCategory,
     categories,
@@ -855,6 +884,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     stickers,
     handleSelectEmoji,
     handleSelectSticker,
+    composerPanel.onSearchFocus,
+    composerPanel.onSearchBlur,
     styles,
     theme,
   ]);
@@ -1118,9 +1149,16 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
 
       {/* Animated spacer beneath the pill. Closed: it follows the keyboard so
           the pill rides up (keyboard avoidance). Open: it holds the keyboard
-          footprint and shows the emoji panel — no layout jump on swap. */}
+          footprint and shows the emoji panel — no layout jump on swap. The inner
+          opacity (panelOpacityStyle) hides the panel in lockstep with the
+          keyboard on the UI thread, so it preloads behind a full keyboard but
+          never peeks during a dismiss. */}
       <Reanimated.View style={spacerAnimatedStyle}>
-        {emojiPanelContent}
+        {emojiPanelContent && (
+          <Reanimated.View style={[styles.panelOpacityWrap, panelOpacityStyle]}>
+            {emojiPanelContent}
+          </Reanimated.View>
+        )}
       </Reanimated.View>
     </View>
   );
@@ -1333,6 +1371,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Wraps the kept-mounted panel; its opacity (UI-thread) hides it while closed.
+  panelOpacityWrap: {
+    flex: 1,
   },
   emojiPanelInner: {
     flex: 1,

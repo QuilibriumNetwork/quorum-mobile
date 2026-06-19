@@ -65,7 +65,12 @@ interface DMChatAreaProps {
   isBookmarked: (messageId: string) => boolean;
   addBookmark: (bookmark: Bookmark) => void;
   removeBookmark: (bookmarkId: string) => void;
+  /** Effective tab-bar height (0 while the emoji panel is open) — sizes the
+   *  bottom fade and the list content inset. */
   tabBarHeight?: number;
+  /** Raw, stable tab-bar height (NOT zeroed on panel open) — the resting
+   *  clearance the composer's spacer holds so the pill floats above the bar. */
+  restingChromeHeight?: number;
   theme: AppTheme;
   draftsRef: React.MutableRefObject<Map<string, string>>;
 }
@@ -88,6 +93,7 @@ export const DMChatArea = React.memo(function DMChatArea({
   addBookmark,
   removeBookmark,
   tabBarHeight = 0,
+  restingChromeHeight = 0,
   theme,
   draftsRef,
 }: DMChatAreaProps) {
@@ -493,7 +499,7 @@ export const DMChatArea = React.memo(function DMChatArea({
           pendingAttachment={pendingAttachment}
           onClearAttachment={handleClearAttachment}
           bottomInset={0}
-          bottomChromeHeight={tabBarHeight}
+          restingChromeHeight={restingChromeHeight}
           replyTo={replyToMessage}
           onDismissReply={handleDismissReply}
           editingMessage={editingMessage}

@@ -42,7 +42,9 @@ interface FarcasterDirectMessageViewProps {
   onOpenFarcasterCast?: (username: string, castHashPrefix: string) => void;
   onLinkPress?: (url: string) => void;
   bottomInset?: number;
-  tabBarHeight?: number;
+  /** Raw, stable tab-bar height (NOT zeroed on panel open) — the resting
+   *  clearance the composer's spacer holds so the pill floats above the bar. */
+  restingChromeHeight?: number;
 }
 
 export function FarcasterDirectMessageView({
@@ -52,7 +54,7 @@ export function FarcasterDirectMessageView({
   onOpenFarcasterCast,
   onLinkPress,
   bottomInset = 0,
-  tabBarHeight = 0,
+  restingChromeHeight = 0,
 }: FarcasterDirectMessageViewProps) {
   const { user, farcasterAuthToken } = useAuth();
   const currentUserFid = user?.farcaster?.fid;
@@ -290,7 +292,7 @@ export function FarcasterDirectMessageView({
         pendingAttachment={pendingAttachment}
         onClearAttachment={handleClearAttachment}
         bottomInset={bottomInset}
-        bottomChromeHeight={tabBarHeight}
+        restingChromeHeight={restingChromeHeight}
       />
     </View>
   );

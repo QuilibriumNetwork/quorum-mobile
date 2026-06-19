@@ -19,6 +19,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
+import { composerBottomBusySV, useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Height of the icon-only primary row.
@@ -167,10 +169,18 @@ function SecondaryItem({
 export function AppTabBar({ state, navigation }: BottomTabBarProps) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  // Panel-open as React state, only to make the bar inert (pointerEvents) while
+  // the panel is open so it can't catch taps meant for it. The VISUAL hide is
+  // the UI-thread worklet (hideStyle); this is just touch-inertness.
+  const panelOpen = useComposerPanelVisible();
 
   const [extraOpen, setExtraOpen] = useState(false);
   // 0 = closed, 1 = open
   const anim = useRef(new Animated.Value(0)).current;
+  // The bar is ALWAYS mounted (never unmounted) so transitions reveal/cover it
+  // with no remount lag. Visual visibility is the UI-thread `hideStyle` worklet
+  // below; `panelOpen` (above) only drives pointerEvents (touch-inertness while
+  // the panel is open, so it can't catch taps meant for the panel).
 
   const activeColor = theme.colors.primary;
   const inactiveColor = theme.colors.tabBarIconInactive;
@@ -306,8 +316,26 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
 
   const bottomOffset = BOTTOM_MARGIN + insets.bottom;
 
+  // ── Tab-bar visibility: ONE UI-thread rule for every transition ──────────
+  // Hidden iff the composer owns the bottom (composerBottomBusySV) — i.e. the
+  // panel is open or mid panel↔keyboard hand-off, when an RN panel (not the OS
+  // keyboard) occupies the bottom and wouldn't cover the bar.
+  //
+  // We deliberately do NOT gate on keyboard height. The bar is always mounted at
+  // bottom: 0; for a plain keyboard show/dismiss the OS keyboard is drawn on top
+  // and covers/reveals it, so the bar stays opacity 1 and the descending
+  // keyboard reveals an already-present bar (no empty-gap-then-appear). Gating on
+  // keyboard height instead hid the bar for the whole slide and snapped it in at
+  // the end — the close-direction gap. `bottomBusy` is UI-thread, so no React lag.
+  const hideStyle = useAnimatedStyle(() => ({
+    opacity: composerBottomBusySV.value === 1 ? 0 : 1,
+  }));
+
   return (
-    <View style={[styles.outerWrapper, { bottom: bottomOffset }]} pointerEvents="box-none">
+    <Reanimated.View
+      style={[styles.outerWrapper, { bottom: bottomOffset }, hideStyle]}
+      pointerEvents={panelOpen ? 'none' : 'box-none'}
+    >
       <Animated.View
         style={[
           styles.pill,
@@ -421,7 +449,7 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
           </Animated.View>
         </Animated.View>
       </Animated.View>
-    </View>
+    </Reanimated.View>
   );
 }
 
