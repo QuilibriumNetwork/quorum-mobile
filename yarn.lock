@@ -1952,10 +1952,10 @@
     tslib "^2.8.0"
     ws "^8.18.0"
 
-"@quilibrium/quorum-shared@2.1.0-31":
-  version "2.1.0-31"
-  resolved "https://registry.yarnpkg.com/@quilibrium/quorum-shared/-/quorum-shared-2.1.0-31.tgz#ad903235335fe00448af5aebec3e25b8716fe7ca"
-  integrity sha512-XY+Hec8A4YgXGWDqR18KVFXSgow5Cz7QDOXHIVrPj0KYz2HrMeV6PAGVhRHwQWLhgsPwNEMpcN1tS1acMKM5/w==
+"@quilibrium/quorum-shared@2.1.0-32":
+  version "2.1.0-32"
+  resolved "https://registry.yarnpkg.com/@quilibrium/quorum-shared/-/quorum-shared-2.1.0-32.tgz#309dda91f1d1ce39e9a8d329de82be63e6e612f5"
+  integrity sha512-eLMxB5jljRXLoRh8qyCrV67xNReRdBAgIzEtwLCJ4ZltpgbJrcBqRn7TFo5Q6TyMwqO6o72o/A2q0EQJLfvgLQ==
   dependencies:
     "@noble/hashes" "1.8.0"
     dayjs "1.11.19"
@@ -5011,6 +5011,15 @@ expo-modules-core@3.0.29:
   integrity sha512-LzipcjGqk8gvkrOUf7O2mejNWugPkf3lmd9GkqL9WuNyeN2fRwU0Dn77e3ZUKI3k6sI+DNwjkq4Nu9fNN9WS7Q==
   dependencies:
     invariant "^2.2.4"
+
+expo-navigation-bar@~5.0.10:
+  version "5.0.10"
+  resolved "https://registry.yarnpkg.com/expo-navigation-bar/-/expo-navigation-bar-5.0.10.tgz#64e4fdb91ff3872110373b56c8e65d196b40979c"
+  integrity sha512-r9rdLw8mY6GPMQmVVOY/r1NBBw74DZefXHF60HxhRsdNI2kjc1wLdfWfR2rk4JVdOvdMDujnGrc9HQmqM3n8Jg==
+  dependencies:
+    "@react-native/normalize-colors" "0.81.5"
+    debug "^4.3.2"
+    react-native-is-edge-to-edge "^1.2.1"
 
 expo-notifications@0.32.16:
   version "0.32.16"

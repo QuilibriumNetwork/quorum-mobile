@@ -78,8 +78,9 @@ export const EditHistoryModal = React.memo(function EditHistoryModal({
     >
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
-        {/* Bottom inset so content clears the system nav bar. */}
-        <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, Skin.space(16)) }]}>
+        {/* Additive bottom inset so content clears the system nav bar with a
+            real gap (max() swallowed the gap when insets.bottom >= it). */}
+        <View style={[styles.container, { paddingBottom: insets.bottom + Skin.space(16) }]}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Edit History</Text>
             <Pressable onPress={onClose} hitSlop={8}>

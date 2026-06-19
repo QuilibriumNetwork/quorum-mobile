@@ -55,6 +55,7 @@ const SF_TO_TABLER = {
   'flag.fill': tabler('IconFlag', 'IconFlagFilled'),
   'nosign': tabler('IconBan'),
   'ellipsis': tabler('IconDots'),
+  'ellipsis.vertical': tabler('IconDotsVertical'),
   'exclamationmark.circle': tabler('IconAlertCircle'),
   'exclamationmark.circle.fill': tabler('IconAlertCircle', 'IconAlertCircleFilled'),
   'exclamationmark.triangle': tabler('IconAlertTriangle'),
@@ -394,6 +395,7 @@ export function IconSymbol({
   color,
   style,
   variant,
+  strokeWidth,
 }: {
   name: IconSymbolName;
   size?: number;
@@ -401,6 +403,9 @@ export function IconSymbol({
   style?: StyleProp<TextStyle>;
   weight?: SymbolWeight;
   variant?: 'outline' | 'filled';
+  /** Outline-icon line thickness (Tabler `strokeWidth`, default 2). Lower =
+   *  thinner. Ignored by filled variants and skin PNG substitutions. */
+  strokeWidth?: number;
 }) {
   // Skin icon substitution: when the active skin overrides this glyph, render
   // its (validated PNG/JPEG) image. `tint` (default true) renders it as a
@@ -436,6 +441,11 @@ export function IconSymbol({
     <Component
       color={color as string}
       size={size}
+      // Tabler RN uses `strokeWidth` for line thickness (the `stroke` prop is the
+      // COLOR — passing a number there triggers "not a valid color or brush" and
+      // the icon renders invisible). Only forward when set, so unspecified icons
+      // keep Tabler's default width (2).
+      {...(strokeWidth !== undefined ? { strokeWidth } : null)}
       style={style}
     />
   );

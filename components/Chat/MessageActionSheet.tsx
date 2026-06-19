@@ -202,10 +202,10 @@ export function MessageActionSheet({
     >
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={guardedClose} />
-        {/* Pad the bottom by the real safe-area inset so the last row clears
-            the system nav bar (Android 3-button nav is taller than the old
-            hardcoded 34px home-indicator guess, which clipped "Report"). */}
-        <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, Skin.space(16)) }]}>
+        {/* Additive bottom inset so the last row clears the system nav bar with
+            a real gap. max(inset, 16) swallowed the gap on Android 3-button nav
+            (inset >= 16), letting "Report" sit flush against the nav buttons. */}
+        <View style={[styles.container, { paddingBottom: insets.bottom + Skin.space(16) }]}>
           {/* Drag handle */}
           <View style={styles.handleContainer}>
             <View style={styles.handle} />

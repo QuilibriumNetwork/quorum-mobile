@@ -13,11 +13,14 @@ import { Pressable, Text, View } from 'react-native';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
+import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { useTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 
 export function MinimizedMiniappChip() {
   const { theme } = useTheme();
+  // Sit just above the tab bar (its footprint = tab bar height + nav bar inset).
+  const tabBarClearance = useFloatingTabBarPadding();
   const { entry, minimized, restoreMiniapp, closeMiniapp } = useMiniappOverlay();
 
   if (!entry || !minimized) return null;
@@ -34,8 +37,8 @@ export function MinimizedMiniappChip() {
       pointerEvents="box-none"
       style={{
         position: 'absolute',
-        // Above the tab bar.
-        bottom: 90,
+        // Above the tab bar (clears the bar + system nav bar in edge-to-edge).
+        bottom: tabBarClearance,
         left: 12,
         right: 12,
       }}
@@ -53,11 +56,7 @@ export function MinimizedMiniappChip() {
           alignItems: 'center',
           gap: Skin.space(8),
           opacity: pressed ? 0.85 : 1,
-          shadowColor: '#000',
-          shadowOpacity: 0.15,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 2 },
-          elevation: 4,
+          ...Skin.floatingShadow(),
         })}
       >
         <CachedAvatar

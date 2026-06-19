@@ -1,5 +1,6 @@
+import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
+import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
 import { SpaceIcon } from '@/components/ui/SpaceIcon';
-import { HeaderAvatar } from '@/components/HeaderAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useSpaces } from '@/hooks/chat/useSpaces';
 import { isValidAvatarUri } from '@/utils/validation';
@@ -108,7 +109,8 @@ export default function SpacesIndex() {
     void importSpaceModal();
   }, []);
 
-  const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
+  const listPadding = useFloatingTabBarPadding();
+  const styles = useMemo(() => createStyles(theme, isDark, listPadding), [theme, isDark, listPadding]);
 
   const items = useMemo<SpaceItem[]>(() => {
     const rows: SpaceItem[] = [];
@@ -173,16 +175,11 @@ export default function SpacesIndex() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <FloatingTabScreen surfaceColor={theme.colors.surface1} isDark={isDark} style={{ paddingTop: insets.top }}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>
-        <View style={styles.headerSlotLeft}>
-          <HeaderAvatar />
-        </View>
-        <View style={styles.headerSlotCenter}>
-          <Text style={styles.heading}>Spaces</Text>
-        </View>
+        <Text style={styles.heading}>Spaces</Text>
         <View style={styles.headerSlotRight}>
           <TouchableOpacity onPress={() => router.push('/spaces/discover')} style={styles.headerIconButton} hitSlop={8}>
             <IconSymbol name="safari" size={22} color={theme.colors.textMain} />
@@ -260,11 +257,11 @@ export default function SpacesIndex() {
           />
         </Suspense>
       )}
-    </View>
+    </FloatingTabScreen>
   );
 }
 
-const createStyles = (theme: AppTheme, isDark: boolean) =>
+const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.surface1 },
     header: {
@@ -275,13 +272,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       paddingTop: Skin.space(8),
       paddingBottom: Skin.space(4),
     },
-    heading: { ...theme.textStyles.title3, color: theme.colors.textMain, textAlign: 'center' as const },
-    // Side slots take their natural width; center slot flex-fills the
-    // remainder. This way the title gets ~75-80% of the screen width
-    // (vs. the ~33% it had under equal flex), avoiding both wrapping
-    // and ellipsizing on common screen sizes.
-    headerSlotLeft: { alignItems: 'flex-start' as const, flexDirection: 'row' as const },
-    headerSlotCenter: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, paddingHorizontal: Skin.space(8) },
+    heading: { ...theme.textStyles.title3, color: theme.colors.textMain, flex: 1 },
     headerSlotRight: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'flex-end' as const, gap: Skin.space(4) },
     headerIconButton: { padding: Skin.space(8) },
     searchContainer: {
@@ -312,7 +303,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     emptySubtitle: { ...theme.textStyles.subheadline, color: theme.colors.textMuted, textAlign: 'center', paddingHorizontal: Skin.space(40) },
     emptyButton: { marginTop: Skin.space(16), paddingHorizontal: Skin.space(20), paddingVertical: Skin.space(10), borderRadius: Skin.radius(20) },
     emptyButtonText: { ...theme.textStyles.subheadline, color: '#fff', fontWeight: '600' },
-    listContent: { paddingBottom: Skin.space(100) },
+    listContent: { paddingBottom: listPadding },
     row: {
       flexDirection: 'row',
       alignItems: 'center',

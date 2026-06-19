@@ -256,10 +256,12 @@ export function CreateSpaceSheet({
           <View
             style={[
               styles.sheet,
-              // Real safe-area inset so the anchored submit button clears the
-              // system nav bar (Android 3-button nav is taller than the old
-              // hardcoded 24px guess).
-              { backgroundColor: theme.colors.surface1, paddingBottom: Math.max(insets.bottom, Skin.space(24)) },
+              // The sheet background reaches the screen bottom (statusBarTranslucent
+              // Modal), so pad the content by the safe-area inset PLUS a gap — the
+              // anchored submit button must sit clearly ABOVE the system nav bar,
+              // not flush against it. Additive, not max(): max(inset, 24) left the
+              // button touching the nav buttons when inset ≈ 24-36px.
+              { backgroundColor: theme.colors.surface1, paddingBottom: insets.bottom + Skin.space(16) },
             ]}
           >
             <View style={styles.header}>

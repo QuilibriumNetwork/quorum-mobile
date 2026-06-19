@@ -214,6 +214,7 @@ export default function UnifiedProfileScreen({
           setEditTarget(t);
         }}
         theme={theme}
+        bottomInset={insets.bottom}
       />
 
       {/* Unified edit modal */}
@@ -267,11 +268,13 @@ function EditTargetPicker({
   onClose,
   onPick,
   theme,
+  bottomInset,
 }: {
   visible: boolean;
   onClose: () => void;
   onPick: (target: 'quorum' | 'farcaster' | 'both') => void;
   theme: AppTheme;
+  bottomInset: number;
 }) {
   if (!visible) return null;
   return (
@@ -286,7 +289,7 @@ function EditTargetPicker({
           position: 'absolute',
           left: 20,
           right: 20,
-          bottom: 40,
+          bottom: Math.max(40, bottomInset + 20),
           backgroundColor: theme.colors.surface1,
           borderRadius: Skin.radius(14),
           padding: Skin.space(16),

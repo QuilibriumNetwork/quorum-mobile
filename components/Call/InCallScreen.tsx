@@ -182,7 +182,7 @@ export function InCallScreen() {
 
   // Audio-only layout
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 60, backgroundColor: theme.colors.background }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 60, paddingBottom: Skin.space(80) + insets.bottom, backgroundColor: theme.colors.background }]}>
       <View style={styles.callerInfo}>
         <DefaultAvatar displayName={activeCall.recipientDisplayName} address={activeCall.recipientAddress} size={80} />
         <Text style={[styles.callerName, { color: theme.colors.text }]}>
@@ -248,7 +248,8 @@ const styles = createSkinnable(() => StyleSheet.create({
     zIndex: 9999,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: Skin.space(80),
+    // paddingBottom is applied inline (Skin.space(80) + insets.bottom) so it
+    // clears the system nav bar in edge-to-edge mode.
   },
   videoContainer: {
     ...StyleSheet.absoluteFillObject,

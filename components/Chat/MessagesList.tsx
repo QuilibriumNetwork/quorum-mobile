@@ -101,6 +101,10 @@ interface MessagesListProps {
    *  *under* the header and the user can't scroll-to-top — which both
    *  hides content and prevents `onStartReached` from firing. */
   topInset?: number;
+  /** Padding to apply at the bottom of the list content so the newest
+   *  message rests above the floating composer + tab bar instead of being
+   *  hidden behind them. Older messages still scroll behind the composer. */
+  bottomInset?: number;
 }
 
 export interface MessagesListHandle {
@@ -313,6 +317,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   spaceId,
   channelId,
   topInset = 0,
+  bottomInset = 0,
 }, ref) {
   const { width: screenWidth } = useWindowDimensions();
   const MESSAGE_IMAGE_MAX_WIDTH = screenWidth - 84;
@@ -1038,7 +1043,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         setActionSheetMessageId(item.id);
       };
       return (
-        <View style={{ paddingHorizontal: Skin.space(12), paddingVertical: Skin.space(4) }}>
+        <View style={{ paddingHorizontal: Skin.contentRowPaddingH(), paddingVertical: Skin.space(4) }}>
           <FarcasterCastCard
             cast={item.cast}
             channelKey={item.castChannelKey}
@@ -1123,10 +1128,14 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         getItemType={(item) => item.renderType}
-        // Push the first row down past the translucent header so the
-        // topmost messages aren't hidden under it AND `onStartReached`
-        // can actually fire when the user scrolls back to the top.
-        contentContainerStyle={topInset > 0 ? { paddingTop: topInset } : undefined}
+        // Push the first row down past the translucent header (topInset) and
+        // pad the bottom so the newest message rests above the floating
+        // composer + tab bar (bottomInset). Older messages still scroll behind.
+        contentContainerStyle={
+          topInset > 0 || bottomInset > 0
+            ? { paddingTop: topInset || undefined, paddingBottom: bottomInset || undefined }
+            : undefined
+        }
         maintainVisibleContentPosition={{
           startRenderingFromBottom: true,
           // autoscrollToBottomThreshold removed — it also triggered on cell
@@ -1252,7 +1261,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   message: {
     flexDirection: 'row',
-    padding: Skin.space(16),
+    paddingVertical: Skin.space(16),
+    // Shared content-row width (matches the Farcaster feed cards).
+    paddingHorizontal: Skin.contentRowPaddingH(),
     width: '100%',
   },
   messageAvatar: {

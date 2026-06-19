@@ -100,7 +100,8 @@ export default function FarcasterReimportSheet({ visible, onClose, onImported }:
         <View
           style={[
             styles.card,
-            { backgroundColor: theme.colors.surface1, paddingBottom: Math.max(insets.bottom, Skin.space(20)) },
+            // Additive so the action buttons clear the nav bar with a real gap.
+            { backgroundColor: theme.colors.surface1, paddingBottom: insets.bottom + Skin.space(20) },
           ]}
         >
           <Text style={[styles.title, { color: theme.colors.textStrong }]}>
