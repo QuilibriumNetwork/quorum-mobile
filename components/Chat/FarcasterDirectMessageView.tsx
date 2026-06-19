@@ -13,9 +13,9 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
-import { DMChatHeader } from './DMChatHeader';
 import { MessagesList } from './MessagesList';
 import { MessageInput, type MessageInputHandle, type ReplyToMessage } from './MessageInput';
+import { ChatBottomChrome, useChatListBottomInset } from './ChatBottomChrome';
 import { directCastToDisplayMessage, type DisplayMessage } from './types';
 import type { Conversation } from '@quilibrium/quorum-shared';
 import {
@@ -42,6 +42,9 @@ interface FarcasterDirectMessageViewProps {
   onOpenFarcasterCast?: (username: string, castHashPrefix: string) => void;
   onLinkPress?: (url: string) => void;
   bottomInset?: number;
+  /** Effective tab-bar height (0 while the emoji panel is open) — sizes the
+   *  bottom fade and the list content inset. */
+  tabBarHeight?: number;
   /** Raw, stable tab-bar height (NOT zeroed on panel open) — the resting
    *  clearance the composer's spacer holds so the pill floats above the bar. */
   restingChromeHeight?: number;
@@ -54,6 +57,7 @@ export function FarcasterDirectMessageView({
   onOpenFarcasterCast,
   onLinkPress,
   bottomInset = 0,
+  tabBarHeight = 0,
   restingChromeHeight = 0,
 }: FarcasterDirectMessageViewProps) {
   const { user, farcasterAuthToken } = useAuth();
@@ -249,8 +253,15 @@ export function FarcasterDirectMessageView({
   const displayName = conversation.displayName ||
     (conversation.farcasterUsername ? `@${conversation.farcasterUsername}` : 'Unknown');
 
+  // Bottom content padding so the newest message rests above the floating
+  // composer; the composer + fade layout itself lives in ChatBottomChrome.
+  const listBottomInset = useChatListBottomInset(tabBarHeight);
+
   // Keyboard avoidance is owned by the composer itself (it grows an animated
-  // spacer that follows the keyboard), so the container is a plain flex column.
+  // spacer that follows the keyboard). The composer floats over the bottom of
+  // the list so messages scroll behind it (Telegram-style), the same as the
+  // regular DM/channel screens; the list pads its content to clear the
+  // composer's resting footprint.
   return (
     <View style={styles.container}>
       {/* Security warning banner */}
@@ -263,6 +274,7 @@ export function FarcasterDirectMessageView({
 
       <MessagesList
         messages={displayMessages}
+        bottomInset={listBottomInset}
         theme={theme}
         isLoading={messagesQuery.isLoading}
         isRefreshing={messagesQuery.isRefetching}
@@ -278,22 +290,24 @@ export function FarcasterDirectMessageView({
         onLinkPress={onLinkPress}
       />
 
-      <MessageInput
-        ref={messageInputRef}
-        value={messageText}
-        onChangeText={setMessageText}
-        onSend={handleSendMessage}
-        channelName={displayName}
-        theme={theme}
-        isSending={sendMutation.isPending || isUploading}
-        replyTo={replyTo}
-        onDismissReply={handleDismissReply}
-        onAttachmentPress={handleAttachmentPress}
-        pendingAttachment={pendingAttachment}
-        onClearAttachment={handleClearAttachment}
-        bottomInset={bottomInset}
-        restingChromeHeight={restingChromeHeight}
-      />
+      <ChatBottomChrome tabBarHeight={tabBarHeight} surfaceColor={theme.colors.surface1} isDark={theme.dark}>
+        <MessageInput
+          ref={messageInputRef}
+          value={messageText}
+          onChangeText={setMessageText}
+          onSend={handleSendMessage}
+          channelName={displayName}
+          theme={theme}
+          isSending={sendMutation.isPending || isUploading}
+          replyTo={replyTo}
+          onDismissReply={handleDismissReply}
+          onAttachmentPress={handleAttachmentPress}
+          pendingAttachment={pendingAttachment}
+          onClearAttachment={handleClearAttachment}
+          bottomInset={0}
+          restingChromeHeight={restingChromeHeight}
+        />
+      </ChatBottomChrome>
     </View>
   );
 }
@@ -303,6 +317,7 @@ const createStyles = (theme: AppTheme) =>
     container: {
       flex: 1,
       flexDirection: 'column',
+      backgroundColor: theme.colors.surface1,
     },
     warningBanner: {
       flexDirection: 'row',

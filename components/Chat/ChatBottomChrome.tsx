@@ -26,24 +26,28 @@ import { StyleSheet, View } from 'react-native';
 // padding + margin). Used to pad the list bottom and size the fade.
 const COMPOSER_RESTING_HEIGHT = 60;
 
-// Extra fade distance ABOVE the composer top so the gradient is already mostly
-// opaque by the time it reaches the composer — the composer→tab-bar gap reads as
-// dissolved rather than showing crisp messages.
-const FADE_LEAD = 56;
+// Fade distance ABOVE the composer top. Kept at 0 so the gradient STARTS at the
+// composer top and never dims messages sitting above the composer (any lead here
+// visibly greys the last message line — reported + reverted). The fade covers
+// only the composer → tab-bar zone; everything above the composer stays crisp.
+const FADE_LEAD = 0;
 
 // The gradient is a SINGLE colour (the chat background) ramping in OPACITY from
 // top to bottom — never a different hue, so it can't shift the colour, it just
 // makes the background progressively more solid. Three alpha stops:
-//   TOP    — at the very top of the fade zone (ABOVE the composer). MUST stay
-//            fully transparent so messages there are crisp — any tint here
-//            dims content above the composer (a regression).
-//   GAP    — by the composer top (upper end of the composer→tab-bar gap). High
-//            so the gap reads as mostly solid / not see-through.
+//   TOP    — at the composer TOP. Transparent, so a message scrolling down
+//            DISSOLVES gradually as it passes behind the composer instead of
+//            hitting a hard solid edge (the "solid strip cutting an avatar in
+//            half" regression). The opaque composer pill covers this zone, so
+//            transparency here only affects the brief moment content slides
+//            under the pill.
+//   GAP    — at the BOTTOM of the composer pill (start of the composer→tab-bar
+//            gap). High, so the gap below the pill reads mostly solid.
 //   BOTTOM — at the screen bottom (device-button zone). Kept lowish so content
 //            stays clearly visible there, matching the lighter ListBottomFade.
 // Per scheme: a white (light-skin) scrim reads much stronger than a dark one,
 // so the light profile uses lower opacities or content vanishes under it.
-const TOP_OPACITY = 0; // always fully transparent (don't dim messages above the composer)
+const TOP_OPACITY = 0; // transparent at the composer top → smooth dissolve, no hard edge
 const GAP_OPACITY_DARK = 0.92;
 const GAP_OPACITY_LIGHT = 0.70;
 const BOTTOM_OPACITY_DARK = 0.55;
@@ -76,9 +80,12 @@ interface ChatBottomChromeProps {
 
 export function ChatBottomChrome({ tabBarHeight, surfaceColor, isDark, children }: ChatBottomChromeProps) {
   const fadeHeight = tabBarHeight + COMPOSER_RESTING_HEIGHT + FADE_LEAD;
-  // The composer top sits FADE_LEAD px down from the top of the fade zone; we
-  // want peak opacity there so the composer→tab-bar gap reads solid.
-  const gapStop = Math.min(0.95, FADE_LEAD / fadeHeight);
+  // The gradient ramps from transparent at the composer top to peak (gap)
+  // opacity at the BOTTOM of the composer pill, so content dissolves smoothly
+  // as it scrolls behind the pill (no hard solid edge), and the gap below the
+  // pill reads solid. The pill sits in the top COMPOSER_RESTING_HEIGHT of the
+  // fade zone; below it is the tab-bar gap.
+  const gapStop = Math.min(0.95, (FADE_LEAD + COMPOSER_RESTING_HEIGHT) / fadeHeight);
   const gapOpacity = isDark ? GAP_OPACITY_DARK : GAP_OPACITY_LIGHT;
   const bottomOpacity = isDark ? BOTTOM_OPACITY_DARK : BOTTOM_OPACITY_LIGHT;
 
