@@ -81,10 +81,6 @@ import {
   storeFarcasterCustodyKey,
   storeFarcasterFid,
   storeFarcasterSignerKey,
-  deleteFarcasterSignerKey,
-  deleteFarcasterCustodyKey,
-  deleteFarcasterAuthToken,
-  deleteFarcasterAuthTokenExpiresAt,
 } from '@/services/onboarding/secureStorage';
 import { maybeSendUpdateProfileMessage } from '@/services/space/spaceMessageService';
 import { isDevModeLocal, setDevModeLocal, getApiConfig } from '@/services/api/config';
@@ -935,19 +931,6 @@ export default function ProfileModal({
       });
       if (!ok) return;
       updateProfile({ farcaster: undefined });
-      // Clear the Farcaster key material + signer record from secure storage so a
-      // disconnect leaves nothing behind (reconnecting re-provisions cleanly).
-      try {
-        await Promise.all([
-          deleteFarcasterSignerKey(),
-          deleteFarcasterCustodyKey(),
-          deleteFarcasterAuthToken(),
-          deleteFarcasterAuthTokenExpiresAt(),
-          forgetHypersnapSigner(),
-        ]);
-      } catch {
-        // Best-effort cleanup — the profile is already disconnected.
-      }
     })();
   };
 
