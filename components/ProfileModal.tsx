@@ -81,6 +81,10 @@ import {
   storeFarcasterCustodyKey,
   storeFarcasterFid,
   storeFarcasterSignerKey,
+  deleteFarcasterSignerKey,
+  deleteFarcasterCustodyKey,
+  deleteFarcasterAuthToken,
+  deleteFarcasterAuthTokenExpiresAt,
 } from '@/services/onboarding/secureStorage';
 import { maybeSendUpdateProfileMessage } from '@/services/space/spaceMessageService';
 import { isDevModeLocal, setDevModeLocal, getApiConfig } from '@/services/api/config';
@@ -517,6 +521,18 @@ export default function ProfileModal({
     }
   }, [visible, user]);
 
+  // Collapse the Connect-Farcaster import form when leaving Settings. In route
+  // mode `visible` never changes, so the open form would otherwise persist when
+  // the user navigates to another pill and back.
+  React.useEffect(() => {
+    if (activeTab !== 'settings') {
+      setShowFarcasterImport(false);
+      setFarcasterMnemonic('');
+      setFarcasterError(null);
+      setRevealMnemonic(false);
+    }
+  }, [activeTab]);
+
   // Toggle the Hypersnap signer opt-in. Enabling provisions immediately so
   // the user gets feedback here rather than waiting for the feed-mounted
   // lifecycle hook; disabling clears the local signer record (the on-chain
@@ -919,6 +935,19 @@ export default function ProfileModal({
       });
       if (!ok) return;
       updateProfile({ farcaster: undefined });
+      // Clear the Farcaster key material + signer record from secure storage so a
+      // disconnect leaves nothing behind (reconnecting re-provisions cleanly).
+      try {
+        await Promise.all([
+          deleteFarcasterSignerKey(),
+          deleteFarcasterCustodyKey(),
+          deleteFarcasterAuthToken(),
+          deleteFarcasterAuthTokenExpiresAt(),
+          forgetHypersnapSigner(),
+        ]);
+      } catch {
+        // Best-effort cleanup — the profile is already disconnected.
+      }
     })();
   };
 

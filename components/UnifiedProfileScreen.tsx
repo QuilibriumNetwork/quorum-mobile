@@ -89,13 +89,19 @@ export default function UnifiedProfileScreen({
   // Which identity the big profile card shows in the unmerged switcher layout.
   const [identityTab, setIdentityTab] = useState<IdentityTab>('quorum');
 
-  // If the active pill becomes unavailable (e.g. Farcaster disconnected while on
-  // the Farcaster pill), fall back to Profile.
+  // Disconnecting Farcaster removes the Farcaster pill + switcher. Derive safe
+  // values for THIS render so there's no one-frame window where the Farcaster
+  // section/identity renders without a Farcaster account (avoids a blank flash).
+  const effectiveActivePill: ProfileSection =
+    !hasFarcaster && activePill === 'farcaster' ? 'profile' : activePill;
+  const effectiveIdentityTab: IdentityTab = !hasFarcaster ? 'quorum' : identityTab;
+
+  // Persist the fallback so the state matches what we render (also resets the
+  // identity tab so reconnecting doesn't silently land on the Farcaster card).
   useEffect(() => {
-    if (!hasFarcaster && activePill === 'farcaster') {
-      setActivePill('profile');
-    }
-  }, [hasFarcaster, activePill]);
+    if (!hasFarcaster && activePill === 'farcaster') setActivePill('profile');
+    if (!hasFarcaster && identityTab === 'farcaster') setIdentityTab('quorum');
+  }, [hasFarcaster, activePill, identityTab]);
 
   // Open the current user's own cast feed (their ProfileView) via the feed tab's
   // existing profileFid deep-link. Surfaced from the Farcaster section's
@@ -149,7 +155,7 @@ export default function UnifiedProfileScreen({
         user={user}
         farcasterProfile={farcasterAuthor}
         splitMode={splitMode}
-        identityTab={identityTab}
+        identityTab={effectiveIdentityTab}
         onIdentityTabChange={setIdentityTab}
         onEditQuorum={() => setEditTarget('quorum')}
         onEditFarcaster={() => setEditTarget('farcaster')}
@@ -159,7 +165,7 @@ export default function UnifiedProfileScreen({
 
       <SegmentedPills
         items={pills}
-        activeKey={activePill}
+        activeKey={effectiveActivePill}
         onChange={(key) => setActivePill(key as ProfileSection)}
         variant="solid"
         scrollable
@@ -183,7 +189,7 @@ export default function UnifiedProfileScreen({
           isRouteMode={true}
           hideHeader={true}
           hideTabBar={true}
-          activeSection={activePill}
+          activeSection={effectiveActivePill}
           onViewMyCasts={handleViewMyCasts}
           // Merge when unmerged; unmerge when merged. ProfileModal confirms first;
           // here we just flip the split-mode display flag (no data is altered).
@@ -194,7 +200,7 @@ export default function UnifiedProfileScreen({
           farcasterIdentity={{
             // Only drive the Profile section to Farcaster when unmerged AND the
             // header switcher is on Farcaster.
-            active: splitMode && hasFarcaster && identityTab === 'farcaster',
+            active: splitMode && hasFarcaster && effectiveIdentityTab === 'farcaster',
             displayName: farcasterAuthor?.displayName || user.farcaster?.username,
             bio: farcasterAuthor?.profile?.bio?.text,
             username: user.farcaster?.username,
