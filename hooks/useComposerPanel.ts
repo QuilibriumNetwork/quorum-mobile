@@ -140,6 +140,13 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   // keyboard hand-off — there's no keyboard coming back, so the spacer should
   // collapse to 0 rather than hold the footprint forever (which leaves a gap).
   const openedWithKeyboardRef = useRef(false);
+  // UI-thread mirror of openedWithKeyboardRef, so worklets can branch on it.
+  // Gates the chat-list freeze: we only freeze the list's auto-scroll when the
+  // panel is opened FROM a keyboard (to suppress the library chasing the
+  // dismissing keyboard). On a COLD open (no keyboard) there's nothing to chase,
+  // and freezing would also block the extra-padding lift that should scroll the
+  // list up to clear the panel — so freeze must stay off in that case.
+  const openedWithKeyboardSV = useSharedValue(0);
   // 1 while the in-panel search field is focused. Drives the panel "lift" so it
   // rides above the keyboard the search field summons (see spacer worklet).
   const searchFocusedSV = useSharedValue(0);
@@ -287,16 +294,22 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     },
   );
 
-  // Freeze the chat list's keyboard-driven auto-scroll WHILE the panel is open.
-  // Opening the panel dismisses the keyboard; the keyboard library reads that as
-  // a plain keyboard close and scrolls the list down to chase the descending
-  // keyboard (the variable "scrolls down a little / a lot" on emoji-open). Since
-  // the panel takes the keyboard's place, the list shouldn't move at all. Freeze
-  // suppresses that chase (the scrollable range still grows for the panel via the
-  // contentInset path, which is not gated by freeze). Scoped to panelOpen only so
-  // a re-summoned keyboard is handled normally the instant the panel closes.
+  // Freeze the chat list's keyboard-driven auto-scroll while the panel is open
+  // AND was opened FROM a keyboard. That's the only case that needs it: opening
+  // from a keyboard dismisses it, and the keyboard library reads that as a plain
+  // close and scrolls the list down to chase the descending keyboard (the
+  // variable "scrolls down a little / a lot" on emoji-open). The panel takes the
+  // keyboard's place, so the list shouldn't move — freeze suppresses the chase.
+  //
+  // On a COLD open (no keyboard up) there's nothing to chase, and we WANT the
+  // list to scroll up to clear the newly-grown panel footprint — that lift is
+  // driven by the extra-padding scroll correction, which freeze also blocks. So
+  // freeze must stay OFF for a cold open, or the last message stays hidden behind
+  // the panel (the keyboard scrolls up, the cold panel didn't). Gating on
+  // openedWithKeyboardSV gives the keyboard path no-chase and the cold path a
+  // proper lift.
   useAnimatedReaction(
-    () => panelOpenSV.value === 1,
+    () => panelOpenSV.value === 1 && openedWithKeyboardSV.value === 1,
     (frozen) => {
       composerListFreezeSV.value = frozen;
     },
@@ -368,6 +381,7 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     // Remember whether a keyboard was up at open time — drives the close path.
     const keyboardWasUp = KeyboardController.isVisible();
     openedWithKeyboardRef.current = keyboardWasUp;
+    openedWithKeyboardSV.value = keyboardWasUp ? 1 : 0;
     // Cold open (no keyboard to slide): animate the spacer in. Opened from a
     // keyboard: jump to 1 so the keyboard's own slide reveals the panel.
     if (keyboardWasUp) {
