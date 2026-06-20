@@ -68,7 +68,7 @@ export default function UnifiedProfileScreen({
 
   // Page indices - dynamically built based on farcaster presence
   const pages = useMemo(() => {
-    const pageList: { key: string; label: string }[] = [{ key: 'quorum', label: 'Profile' }];
+    const pageList: { key: string; label: string }[] = [{ key: 'quorum', label: 'Account' }];
     if (hasFarcaster) {
       pageList.push({ key: 'casts', label: 'Casts' });
     }
