@@ -237,6 +237,42 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     },
   );
 
+  // Self-correcting tab-bar guard. The tab bar hides itself purely off
+  // `composerBottomBusySV` (opacity 1/0), which `openPanel` sets to 1 and which
+  // every exit path must clear. Two hand-off paths (onInputFocus, the keyboard
+  // branch of closePanelAndRestoreKeyboard) DON'T clear it directly — they rely
+  // on the summoned keyboard's `onEnd(height>0)` firing. If that settle never
+  // arrives (focus race, keyboard already up so no fresh onEnd, OS quirk), the
+  // flag stays 1 and the tab bar is stuck HIDDEN (reported on the prod build,
+  // non-deterministic). This reaction makes the flag impossible to leave stuck:
+  // once the panel is closed AND no keyboard hand-off is in flight, nothing can
+  // legitimately own the bottom, so force-release it. Runs on the UI thread, so
+  // it self-heals within a frame of the racing state settling — no React lag,
+  // and it never fights a legitimate hold (panel open or mid hand-off both keep
+  // one of the two flags set). Mirror of the channels "bar visible above panel"
+  // bug — same flag, opposite direction — so this hardens both.
+  useAnimatedReaction(
+    () => {
+      if (panelOpenSV.value === 1) return false; // panel open → legitimately busy
+      if (closingSV.value === 0) return true; // closed, no hand-off → must be idle
+      // A hand-off is armed (closingSV===1). It's legitimate ONLY while the
+      // summoned keyboard is rising. Once the keyboard is essentially fully up,
+      // the hand-off is effectively complete even if onEnd hasn't fired — so the
+      // bottom can be released. This covers the "onEnd(height>0) never arrives"
+      // race that otherwise leaves both flags stuck and the tab bar hidden.
+      const liveKb = Math.max(-keyboardHeight.value, 0);
+      const kbTarget = lastKeyboardHeight.value;
+      return kbTarget > 0 && liveKb >= kbTarget * 0.9;
+    },
+    (shouldRelease) => {
+      if (shouldRelease && composerBottomBusySV.value !== 0) {
+        composerBottomBusySV.value = 0;
+        // Disarm the hand-off too so it can't re-trigger a stuck state.
+        if (closingSV.value !== 0) closingSV.value = 0;
+      }
+    },
+  );
+
   // Whether the emoji panel should be PAINTED (1) or hidden (0), on the UI
   // thread so it tracks the keyboard with no React lag. Painted when:
   //   - the panel is open; or
@@ -256,13 +292,16 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
 
   const openPanel = useCallback(() => {
     closingSV.value = 0;
+    // Mark the panel open BEFORE arming the bottom-busy flag so the
+    // self-correcting guard's "idle" condition (panel closed && not closing) is
+    // already false — it can never clear the flag we're about to set.
+    panelOpenRef.current = true;
+    panelOpenSV.value = 1;
     // The composer owns the bottom from now until the keyboard settles — keeps
     // the tab bar hidden across the whole panel↔keyboard hand-off (no flicker).
     composerBottomBusySV.value = 1;
     // Remember whether a keyboard was up at open time — drives the close path.
     openedWithKeyboardRef.current = KeyboardController.isVisible();
-    panelOpenRef.current = true;
-    panelOpenSV.value = 1;
     onVisibilityRef.current?.(true);
     setPanelOpen(true);
     // keepFocus keeps the caret + insertion point while hiding the keyboard.
