@@ -182,8 +182,14 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
           // value during render (which Reanimated strict mode warns about).
           runOnJS(rememberSessionKeyboardHeight)(e.height);
           // Keyboard is up and covering the bottom — the hand-off is done; the
-          // tab bar's own keyboard check now keeps it hidden.
-          composerBottomBusySV.value = 0;
+          // tab bar's own keyboard check now keeps it hidden. BUT only release
+          // the bottom if the panel isn't holding it: in a slow (channel)
+          // subtree the keyboard's settle event can arrive AFTER the user has
+          // already tapped emoji to open the panel; releasing here then would
+          // leave the tab bar visible OVER the open panel for as long as it's
+          // open (the persistent channels bug). Guarded exactly like the
+          // height==0 branch below.
+          if (panelOpenSV.value !== 1) composerBottomBusySV.value = 0;
         } else {
           // Keyboard fully hidden — nothing to bridge to.
           closingSV.value = 0;
