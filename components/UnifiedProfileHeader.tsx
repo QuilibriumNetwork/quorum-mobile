@@ -2,6 +2,7 @@ import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { QuorumLogoIcon } from '@/components/SocialFeed/content/QuorumLogoIcon';
+import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 import type { UserInfo } from '@/context/AuthContext';
 import type { ProfileAuthor } from '@/hooks/useFarcasterProfile';
 import { truncateAddress } from '@/utils/formatAddress';
@@ -11,19 +12,32 @@ import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
 
+/** Which identity the big profile card shows when unmerged with both profiles. */
+export type IdentityTab = 'quorum' | 'farcaster';
+
 interface UnifiedProfileHeaderProps {
   user: UserInfo;
   farcasterProfile?: ProfileAuthor | null;
   splitMode: boolean;
+  /** Selected identity (unmerged-with-both layout). Owned by the parent. */
+  identityTab: IdentityTab;
+  onIdentityTabChange: (tab: IdentityTab) => void;
   onEditQuorum?: () => void;
   onEditFarcaster?: () => void;
   onEditUnified?: () => void;
 }
 
+const IDENTITY_PILLS: SegmentedPillItem[] = [
+  { key: 'quorum', label: 'Quorum', leading: <QuorumLogoIcon size={14} /> },
+  { key: 'farcaster', label: 'Farcaster', leading: <FarcasterLogoIcon size={14} /> },
+];
+
 export default function UnifiedProfileHeader({
   user,
   farcasterProfile,
   splitMode,
+  identityTab,
+  onIdentityTabChange,
   onEditQuorum,
   onEditFarcaster,
   onEditUnified,
@@ -37,14 +51,53 @@ export default function UnifiedProfileHeader({
     return <QuorumOnlyHeader user={user} onEdit={onEditQuorum} theme={theme} styles={styles} />;
   }
 
+  // Unmerged with both profiles: one big card + a [Quorum | Farcaster] switcher
+  // above it. Swapping changes only this card; the nav pills below are separate.
   if (splitMode) {
+    const showingFarcaster = identityTab === 'farcaster';
+    // Quorum identity owns the QNS handle + on-chain address; Farcaster identity
+    // shows only its @handle (no Quorum address). The address line renders only
+    // when `address` is set, so neither identity duplicates it.
+    const identity = showingFarcaster
+      ? {
+          displayName: farcasterProfile?.displayName || user.farcaster?.username || 'Unnamed',
+          avatarUri: farcasterProfile?.pfp?.url || user.farcaster?.pfpUrl,
+          bio: farcasterProfile?.profile?.bio?.text,
+          handle: user.farcaster?.username ? `@${user.farcaster.username}` : undefined,
+          handleAccent: false,
+          address: undefined as string | undefined,
+          onEdit: onEditFarcaster,
+        }
+      : {
+          displayName: user.displayName || user.primaryUsername || 'Unnamed',
+          avatarUri: user.profileImage,
+          bio: user.bio,
+          handle: user.primaryUsername ? `${user.primaryUsername}.q` : undefined,
+          handleAccent: Boolean(user.primaryUsername),
+          address: user.address,
+          onEdit: onEditQuorum,
+        };
+
     return (
-      <View style={styles.splitContainer}>
-        <QuorumCard user={user} onEdit={onEditQuorum} theme={theme} styles={styles} />
-        <FarcasterCard
-          user={user}
-          profile={farcasterProfile}
-          onEdit={onEditFarcaster}
+      <View style={styles.switcherContainer}>
+        {/* 'segmented' (iOS track) look distinguishes the identity switcher from
+            the solid nav pills below, so the two rows don't read as one. */}
+        <SegmentedPills
+          items={IDENTITY_PILLS}
+          activeKey={identityTab}
+          onChange={(key) => onIdentityTabChange(key as IdentityTab)}
+          variant="segmented"
+          scrollable={false}
+          itemRole="tab"
+          style={styles.identitySwitcher}
+        />
+        <BigProfileCard
+          displayName={identity.displayName}
+          avatarUri={identity.avatarUri}
+          handle={identity.handle}
+          handleAccent={identity.handleAccent}
+          address={identity.address}
+          onEdit={identity.onEdit}
           theme={theme}
           styles={styles}
         />
@@ -100,6 +153,63 @@ export default function UnifiedProfileHeader({
   );
 }
 
+/**
+ * The big single-identity profile card (96px avatar, pencil badge, name, handle,
+ * bio) used in the unmerged switcher layout. Mirrors the merged/Quorum-only look
+ * but renders whichever identity is selected.
+ */
+function BigProfileCard({
+  displayName,
+  avatarUri,
+  handle,
+  handleAccent,
+  address,
+  onEdit,
+  theme,
+  styles,
+}: {
+  displayName: string;
+  avatarUri?: string | null;
+  handle?: string;
+  handleAccent?: boolean;
+  address?: string;
+  onEdit?: () => void;
+  theme: AppTheme;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <View style={styles.bigCardContainer}>
+      <TouchableOpacity onPress={onEdit} activeOpacity={0.8} style={styles.mergedAvatarWrap}>
+        <CachedAvatar
+          source={avatarUri ? { uri: avatarUri } : null}
+          style={styles.mergedAvatar}
+          fallbackName={displayName}
+        />
+        <View style={styles.editBadge}>
+          <IconSymbol name="pencil" size={12} color="#fff" />
+        </View>
+      </TouchableOpacity>
+
+      <Text style={styles.mergedDisplayName} numberOfLines={1}>
+        {displayName}
+      </Text>
+
+      <View style={styles.handlesRow}>
+        {handle ? (
+          <Text style={[styles.handleText, handleAccent && { color: theme.colors.accent }]}>
+            {handle}
+          </Text>
+        ) : null}
+        {address ? (
+          <Text style={styles.addressText}>{truncateAddress(address, 'medium')}</Text>
+        ) : null}
+      </View>
+      {/* Bio intentionally omitted here — it's shown in the Profile section
+          below, which reflects the selected identity. */}
+    </View>
+  );
+}
+
 function QuorumOnlyHeader({
   user,
   onEdit,
@@ -141,82 +251,6 @@ function QuorumOnlyHeader({
         </Text>
       ) : null}
     </View>
-  );
-}
-
-function QuorumCard({
-  user,
-  onEdit,
-  theme,
-  styles,
-}: {
-  user: UserInfo;
-  onEdit?: () => void;
-  theme: AppTheme;
-  styles: ReturnType<typeof createStyles>;
-}) {
-  const displayName = user.displayName || user.primaryUsername || 'Unnamed';
-  return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={onEdit}>
-      <View style={styles.cardEditBadge}>
-        <IconSymbol name="pencil" size={11} color="#fff" />
-      </View>
-      <CachedAvatar
-        source={user.profileImage ? { uri: user.profileImage } : null}
-        style={styles.cardAvatar}
-        fallbackName={displayName}
-      />
-      <View style={styles.cardText}>
-        <View style={styles.cardLabelRow}>
-          <QuorumLogoIcon size={11} />
-          <Text style={[styles.cardLabel, { color: theme.colors.accent }]}>Quorum</Text>
-        </View>
-        <Text style={styles.cardDisplayName} numberOfLines={1}>{displayName}</Text>
-        <Text style={styles.cardHandleMuted} numberOfLines={1}>
-          {user.primaryUsername ? `${user.primaryUsername}.q` : truncateAddress(user.address, 'short')}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-function FarcasterCard({
-  user,
-  profile,
-  onEdit,
-  theme,
-  styles,
-}: {
-  user: UserInfo;
-  profile?: ProfileAuthor | null;
-  onEdit?: () => void;
-  theme: AppTheme;
-  styles: ReturnType<typeof createStyles>;
-}) {
-  const displayName =
-    profile?.displayName || user.farcaster?.username || 'Unnamed';
-  const avatarUri = profile?.pfp?.url || user.farcaster?.pfpUrl;
-  return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={onEdit}>
-      <View style={styles.cardEditBadge}>
-        <IconSymbol name="pencil" size={11} color="#fff" />
-      </View>
-      <CachedAvatar
-        source={avatarUri ? { uri: avatarUri } : null}
-        style={styles.cardAvatar}
-        fallbackName={displayName}
-      />
-      <View style={styles.cardText}>
-        <View style={styles.cardLabelRow}>
-          <FarcasterLogoIcon size={11} color={theme.colors.textMuted} />
-          <Text style={[styles.cardLabel, { color: theme.colors.textMuted }]}>Farcaster</Text>
-        </View>
-        <Text style={styles.cardDisplayName} numberOfLines={1}>{displayName}</Text>
-        {user.farcaster?.username ? (
-          <Text style={styles.cardHandleMuted} numberOfLines={1}>@{user.farcaster.username}</Text>
-        ) : null}
-      </View>
-    </TouchableOpacity>
   );
 }
 
@@ -279,73 +313,21 @@ function createStyles(theme: AppTheme) {
       marginTop: Skin.space(6),
       lineHeight: Skin.font(19),
     },
-    splitContainer: {
-      flexDirection: 'row',
-      paddingHorizontal: Skin.space(12),
-      paddingTop: Skin.space(10),
-      paddingBottom: Skin.space(12),
-      gap: Skin.space(8),
-    },
-    card: {
-      flex: 1,
-      flexDirection: 'row',
+    // Unmerged switcher layout: [Quorum|Farcaster] track + one big card.
+    switcherContainer: {
       alignItems: 'center',
-      position: 'relative',
-      paddingVertical: Skin.space(10),
-      paddingHorizontal: Skin.space(10),
-      borderRadius: Skin.radius(12),
-      backgroundColor: theme.colors.surface1,
-      borderWidth: Skin.border(1),
-      borderColor: theme.colors.surface3,
-      gap: Skin.space(10),
+      paddingTop: Skin.space(20),
     },
-    cardText: {
-      flex: 1,
-      minWidth: 0,
+    identitySwitcher: {
+      alignSelf: 'center',
+      marginBottom: Skin.space(4),
     },
-    cardLabelRow: {
-      flexDirection: 'row',
+    bigCardContainer: {
       alignItems: 'center',
-      gap: Skin.space(5),
-    },
-    cardLabel: {
-      fontSize: Skin.font(10),
-      fontWeight: '600',
-      letterSpacing: 0.4,
-      textTransform: 'uppercase',
-    },
-    cardAvatar: {
-      width: 40,
-      height: 40,
-      borderRadius: Skin.radius(20),
-      backgroundColor: theme.colors.surface2,
-    },
-    // Pencil badge in the top-right corner of the split-mode card — signals the
-    // card is tappable to edit, mirroring the merged/Quorum-only header's badge.
-    cardEditBadge: {
-      position: 'absolute',
-      top: Skin.space(6),
-      right: Skin.space(6),
-      width: 18,
-      height: 18,
-      borderRadius: Skin.radius(9),
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.accent,
-      zIndex: 1,
-    },
-    cardDisplayName: {
-      fontSize: Skin.font(14),
-      fontWeight: '600',
-      color: theme.colors.textStrong,
-    },
-    cardHandle: {
-      fontSize: Skin.font(12),
-      fontWeight: '500',
-    },
-    cardHandleMuted: {
-      fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      paddingHorizontal: Skin.space(20),
+      paddingTop: Skin.space(16),
+      paddingBottom: Skin.space(16),
+      gap: Skin.space(6),
     },
   });
 }

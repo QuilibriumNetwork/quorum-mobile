@@ -255,6 +255,7 @@ const SF_TO_TABLER = {
   'square.and.pencil': tabler('IconEdit'),
   'pencil': tabler('IconPencil'),
   'feather': tabler('IconFeather'),
+  'merge': tabler('IconArrowMerge'),
   'hammer': tabler('IconHammer'),
   'hammer.fill': tabler('IconHammer'),
 

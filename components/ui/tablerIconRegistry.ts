@@ -29,6 +29,7 @@ import IconArrowDownLeft from '@tabler/icons-react-native/IconArrowDownLeft';
 import IconArrowDownRight from '@tabler/icons-react-native/IconArrowDownRight';
 import IconArrowForwardUp from '@tabler/icons-react-native/IconArrowForwardUp';
 import IconArrowLeft from '@tabler/icons-react-native/IconArrowLeft';
+import IconArrowMerge from '@tabler/icons-react-native/IconArrowMerge';
 import IconArrowUp from '@tabler/icons-react-native/IconArrowUp';
 import IconArrowUpRight from '@tabler/icons-react-native/IconArrowUpRight';
 import IconArrowsExchange from '@tabler/icons-react-native/IconArrowsExchange';
@@ -285,6 +286,7 @@ export const TablerIcons = {
   IconArrowDownRight,
   IconArrowForwardUp,
   IconArrowLeft,
+  IconArrowMerge,
   IconArrowUp,
   IconArrowUpRight,
   IconArrowsExchange,

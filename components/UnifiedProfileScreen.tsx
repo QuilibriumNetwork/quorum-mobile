@@ -5,7 +5,7 @@ import BuyNameModal from '@/components/qns/BuyNameModal';
 import MarketplaceModal from '@/components/qns/MarketplaceModal';
 import OffersModal from '@/components/qns/OffersModal';
 import type { ResaleListing } from '@/services/api/qnsClient';
-import UnifiedProfileHeader from '@/components/UnifiedProfileHeader';
+import UnifiedProfileHeader, { type IdentityTab } from '@/components/UnifiedProfileHeader';
 import UnifiedProfileEditModal from '@/components/UnifiedProfileEditModal';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
@@ -37,7 +37,7 @@ export default function UnifiedProfileScreen({
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const [splitMode] = useProfileSplitMode();
+  const [splitMode, setSplitMode] = useProfileSplitMode();
   const [decisionModalVisible, setDecisionModalVisible] = useState(false);
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
   const [editPickerVisible, setEditPickerVisible] = useState(false);
@@ -82,6 +82,9 @@ export default function UnifiedProfileScreen({
   }, [hasFarcaster]);
 
   const [activePill, setActivePill] = useState<ProfileSection>('profile');
+
+  // Which identity the big profile card shows in the unmerged switcher layout.
+  const [identityTab, setIdentityTab] = useState<IdentityTab>('quorum');
 
   // If the active pill becomes unavailable (e.g. Farcaster disconnected while on
   // the Farcaster pill), fall back to Profile.
@@ -136,6 +139,8 @@ export default function UnifiedProfileScreen({
         user={user}
         farcasterProfile={farcasterAuthor}
         splitMode={splitMode}
+        identityTab={identityTab}
+        onIdentityTabChange={setIdentityTab}
         onEditQuorum={() => setEditTarget('quorum')}
         onEditFarcaster={() => setEditTarget('farcaster')}
         onEditUnified={handleEditRequest}
@@ -162,6 +167,18 @@ export default function UnifiedProfileScreen({
           hideTabBar={true}
           activeSection={activePill}
           onViewMyCasts={handleViewMyCasts}
+          // Offer "Merge profiles" only while unmerged (split mode). ProfileModal
+          // shows a confirmation before invoking this; here we just apply it.
+          onMergeProfiles={splitMode ? () => setSplitMode(false) : undefined}
+          farcasterIdentity={{
+            // Only drive the Profile section to Farcaster when unmerged AND the
+            // header switcher is on Farcaster.
+            active: splitMode && hasFarcaster && identityTab === 'farcaster',
+            displayName: farcasterAuthor?.displayName || user.farcaster?.username,
+            bio: farcasterAuthor?.profile?.bio?.text,
+            username: user.farcaster?.username,
+            fid: user.farcaster?.fid,
+          }}
           onOpenMarketplace={() => setMarketplaceModalVisible(true)}
           onOpenAuctions={() => setAuctionsModalVisible(true)}
           onOpenOffers={() => setOffersModalVisible(true)}
