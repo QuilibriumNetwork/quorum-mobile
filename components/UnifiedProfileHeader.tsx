@@ -51,7 +51,7 @@ export default function UnifiedProfileHeader({
   const hasFarcaster = Boolean(user.farcaster?.fid);
 
   if (!hasFarcaster) {
-    return <QuorumOnlyHeader user={user} onEdit={onEditQuorum} theme={theme} styles={styles} />;
+    return <QuorumOnlyHeader user={user} onEdit={onEditQuorum} onCopyAddress={onCopyAddress} theme={theme} styles={styles} />;
   }
 
   // Unmerged with both profiles: one big card + a [Quorum | Farcaster] switcher
@@ -106,7 +106,6 @@ export default function UnifiedProfileHeader({
     user.farcaster?.username ||
     'Unnamed';
   const avatarUri = user.profileImage || farcasterProfile?.pfp?.url || user.farcaster?.pfpUrl;
-  const bio = user.bio || farcasterProfile?.profile?.bio?.text;
 
   return (
     <View style={styles.mergedContainer}>
@@ -134,14 +133,17 @@ export default function UnifiedProfileHeader({
             {user.primaryUsername}.q
           </Text>
         )}
-        <Text style={styles.addressText}>{truncateAddress(user.address, 'medium')}</Text>
       </View>
-
-      {bio ? (
-        <Text style={styles.bioText} numberOfLines={3}>
-          {bio}
-        </Text>
-      ) : null}
+      <TouchableOpacity
+        style={styles.addressRow}
+        onPress={onCopyAddress}
+        accessibilityRole="button"
+        accessibilityLabel="Copy address"
+      >
+        <Text style={styles.addressText}>{truncateAddress(user.address, 'medium')}</Text>
+        <IconSymbol name="doc.on.doc" size={13} color={theme.colors.textMuted} />
+      </TouchableOpacity>
+      {/* Bio intentionally omitted — shown only in the Profile section's Bio. */}
     </View>
   );
 }
@@ -231,11 +233,13 @@ function BigProfileCard({
 function QuorumOnlyHeader({
   user,
   onEdit,
+  onCopyAddress,
   theme,
   styles,
 }: {
   user: UserInfo;
   onEdit?: () => void;
+  onCopyAddress?: () => void;
   theme: AppTheme;
   styles: ReturnType<typeof createStyles>;
 }) {
@@ -255,19 +259,21 @@ function QuorumOnlyHeader({
       <Text style={styles.mergedDisplayName} numberOfLines={1}>
         {displayName}
       </Text>
-      <View style={styles.handlesRow}>
-        {user.primaryUsername && (
-          <Text style={[styles.handleText, { color: theme.colors.accent }]}>
-            {user.primaryUsername}.q
-          </Text>
-        )}
-        <Text style={styles.addressText}>{truncateAddress(user.address, 'medium')}</Text>
-      </View>
-      {user.bio ? (
-        <Text style={styles.bioText} numberOfLines={3}>
-          {user.bio}
+      {user.primaryUsername ? (
+        <Text style={[styles.handleText, { color: theme.colors.accent }]}>
+          {user.primaryUsername}.q
         </Text>
       ) : null}
+      <TouchableOpacity
+        style={styles.addressRow}
+        onPress={onCopyAddress}
+        accessibilityRole="button"
+        accessibilityLabel="Copy address"
+      >
+        <Text style={styles.addressText}>{truncateAddress(user.address, 'medium')}</Text>
+        <IconSymbol name="doc.on.doc" size={13} color={theme.colors.textMuted} />
+      </TouchableOpacity>
+      {/* Bio intentionally omitted — shown only in the Profile section's Bio. */}
     </View>
   );
 }

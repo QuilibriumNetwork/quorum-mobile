@@ -165,7 +165,14 @@ export default function UnifiedProfileScreen({
         scrollable
         centerOnSelect
         style={styles.pillRow}
-        contentContainerStyle={styles.pillRowContent}
+        // Center the row only when there are few pills (merged/Quorum-only:
+        // Profile/Premium/Settings always fit). With the 5-pill split layout we
+        // keep left-aligned so the row can scroll without clipping on narrow
+        // screens. flexGrow makes the centered content fill the viewport.
+        contentContainerStyle={[
+          styles.pillRowContent,
+          pills.length <= 3 && styles.pillRowContentCentered,
+        ]}
       />
 
       <View style={styles.content}>
@@ -178,9 +185,12 @@ export default function UnifiedProfileScreen({
           hideTabBar={true}
           activeSection={activePill}
           onViewMyCasts={handleViewMyCasts}
-          // Offer "Merge profiles" only while unmerged (split mode). ProfileModal
-          // shows a confirmation before invoking this; here we just apply it.
+          // Merge when unmerged; unmerge when merged. ProfileModal confirms first;
+          // here we just flip the split-mode display flag (no data is altered).
           onMergeProfiles={splitMode ? () => setSplitMode(false) : undefined}
+          onUnmergeProfiles={!splitMode ? () => setSplitMode(true) : undefined}
+          // After connecting Farcaster, jump to the Farcaster pill.
+          onFarcasterConnected={() => setActivePill('farcaster')}
           farcasterIdentity={{
             // Only drive the Profile section to Farcaster when unmerged AND the
             // header switcher is on Farcaster.
@@ -337,6 +347,11 @@ function createStyles(theme: AppTheme) {
     },
     pillRowContent: {
       paddingHorizontal: Skin.space(16),
+    },
+    // Applied only with few pills: fill the viewport and center them.
+    pillRowContentCentered: {
+      flexGrow: 1,
+      justifyContent: 'center',
     },
     content: {
       flex: 1,

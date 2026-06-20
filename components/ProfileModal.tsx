@@ -149,6 +149,12 @@ interface ProfileModalProps {
   /** True when the header shows the identity switcher (unmerged + both profiles).
    *  Drives the Bio heading's brand icon + the duplicated My Casts button. */
   dualIdentity?: boolean;
+  /** Called after a Farcaster account is successfully connected/imported, so the
+   *  parent can redirect to the Farcaster pill. */
+  onFarcasterConnected?: () => void;
+  /** Re-enter split mode (unmerge). Surfaced as a "Keep profiles separate" row in
+   *  the Farcaster section when currently merged. */
+  onUnmergeProfiles?: () => void;
 }
 
 /** The selectable sections of the profile body. 'farcaster' only applies when a
@@ -349,6 +355,8 @@ export default function ProfileModal({
   onMergeProfiles,
   farcasterIdentity,
   dualIdentity,
+  onFarcasterConnected,
+  onUnmergeProfiles,
 }: ProfileModalProps) {
   const { theme, isDark, activeSkin } = useTheme();
   const { user, signOut, updateProfile } = useAuth();
@@ -447,6 +455,23 @@ export default function ProfileModal({
   const [farcasterMnemonic, setFarcasterMnemonic] = React.useState('');
   const [farcasterImporting, setFarcasterImporting] = React.useState(false);
   const [farcasterError, setFarcasterError] = React.useState<string | null>(null);
+  // Recovery phrase is hidden by default (treated like a password); the user can
+  // reveal it to double-check the words.
+  const [revealMnemonic, setRevealMnemonic] = React.useState(false);
+  // Paste the recovery phrase from the clipboard (mirrors the onboarding import).
+  const handlePasteFarcasterMnemonic = React.useCallback(async () => {
+    try {
+      const text = await Clipboard.getStringAsync();
+      if (!text || !text.trim()) {
+        setFarcasterError('Clipboard is empty');
+        return;
+      }
+      setFarcasterMnemonic(text.trim());
+      setFarcasterError(null);
+    } catch {
+      setFarcasterError('Failed to read clipboard');
+    }
+  }, []);
 
   // Device management
   const [deviceRegistrations, setDeviceRegistrations] = React.useState<DeviceRegistration[]>([]);
@@ -874,7 +899,10 @@ export default function ProfileModal({
       // Reset state and show success
       setShowFarcasterImport(false);
       setFarcasterMnemonic('');
+      setRevealMnemonic(false);
       Alert.alert('Success', `Connected as @${account.username}`);
+      // Redirect to the Farcaster pill now that it exists.
+      onFarcasterConnected?.();
     } catch (error) {
       setFarcasterError('Failed to import Farcaster account. Please try again.');
     } finally {
@@ -909,6 +937,22 @@ export default function ProfileModal({
       onMergeProfiles();
     })();
   }, [confirm, onMergeProfiles]);
+
+  // Unmerge (keep separate) — confirm first, then delegate to the parent (which
+  // flips split mode back on). Purely a display change; no data is altered.
+  const handleUnmergeProfiles = React.useCallback(() => {
+    if (!onUnmergeProfiles) return;
+    void (async () => {
+      const ok = await confirm({
+        title: 'Keep profiles separate',
+        message:
+          'Your Quorum and Farcaster profiles will be shown and edited separately again. Nothing is deleted.',
+        confirmLabel: 'Keep separate',
+      });
+      if (!ok) return;
+      onUnmergeProfiles();
+    })();
+  }, [confirm, onUnmergeProfiles]);
 
   const handlePickImage = React.useCallback(async () => {
     if (!user?.address) return;
@@ -2191,6 +2235,9 @@ export default function ProfileModal({
                     <Text style={styles.farcasterImportDescription}>
                       Enter your Farcaster recovery phrase (12 or 24 words) to import your account.
                     </Text>
+                    {/* Hidden by default (treated like a password). Hidden state
+                        uses a single-line secure field; revealing switches to a
+                        multiline plaintext field so the words can be checked. */}
                     <TextInput
                       style={styles.farcasterMnemonicInput}
                       value={farcasterMnemonic}
@@ -2198,15 +2245,34 @@ export default function ProfileModal({
                         setFarcasterMnemonic(text);
                         setFarcasterError(null);
                       }}
-                      placeholder="Enter recovery phrase..."
+                      placeholder="Enter or paste your recovery phrase..."
                       placeholderTextColor={theme.colors.textMuted}
-                      multiline
-                      numberOfLines={3}
+                      secureTextEntry={!revealMnemonic}
+                      multiline={revealMnemonic}
+                      numberOfLines={revealMnemonic ? 3 : 1}
                       textAlignVertical="top"
                       autoCapitalize="none"
                       autoCorrect={false}
                       editable={!farcasterImporting}
                     />
+                    <View style={styles.farcasterImportTools}>
+                      <TouchableOpacity
+                        style={styles.farcasterImportToolButton}
+                        onPress={handlePasteFarcasterMnemonic}
+                        disabled={farcasterImporting}
+                      >
+                        <IconSymbol name="doc.on.clipboard" size={16} color={theme.colors.primary} />
+                        <Text style={styles.farcasterImportToolText}>Paste</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.farcasterImportToolButton}
+                        onPress={() => setRevealMnemonic((v) => !v)}
+                        disabled={farcasterImporting}
+                      >
+                        <IconSymbol name={revealMnemonic ? 'eye.slash' : 'eye'} size={16} color={theme.colors.primary} />
+                        <Text style={styles.farcasterImportToolText}>{revealMnemonic ? 'Hide' : 'Show'}</Text>
+                      </TouchableOpacity>
+                    </View>
                     {farcasterError && (
                       <View style={styles.farcasterErrorContainer}>
                         <IconSymbol name="exclamationmark.circle.fill" size={16} color={theme.colors.danger} />
@@ -2220,6 +2286,7 @@ export default function ProfileModal({
                           setShowFarcasterImport(false);
                           setFarcasterMnemonic('');
                           setFarcasterError(null);
+                          setRevealMnemonic(false);
                         }}
                         disabled={farcasterImporting}
                       >
@@ -2408,14 +2475,25 @@ export default function ProfileModal({
                     <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success} />
                   </View>
                 )}
-                {/* Merge profiles — re-reachable entry to the merge chooser
-                    (only when currently unmerged; parent gates the callback). */}
+                {/* Merge profiles — shown when currently unmerged (parent gates
+                    the callback on splitMode). */}
                 {onMergeProfiles && (
                   <TouchableOpacity style={[styles.actionButton, { alignItems: 'flex-start' }]} onPress={handleMergeProfiles}>
                     <IconSymbol name="merge" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
                     <View style={styles.actionButtonContent}>
                       <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Merge profiles</Text>
                       <Text style={styles.actionButtonSubtext}>Combine your Quorum and Farcaster profiles into one</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                {/* Keep separate (unmerge) — shown when currently merged. Purely a
+                    display change; no data is altered. */}
+                {onUnmergeProfiles && (
+                  <TouchableOpacity style={[styles.actionButton, { alignItems: 'flex-start' }]} onPress={handleUnmergeProfiles}>
+                    <IconSymbol name="split" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
+                    <View style={styles.actionButtonContent}>
+                      <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Keep profiles separate</Text>
+                      <Text style={styles.actionButtonSubtext}>Show and edit your Quorum and Farcaster profiles separately</Text>
                     </View>
                   </TouchableOpacity>
                 )}
@@ -3540,6 +3618,24 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       borderWidth: Skin.border(1),
       borderColor: theme.colors.border,
     },
+    // Paste / Show-Hide tool row under the recovery-phrase input.
+    farcasterImportTools: {
+      flexDirection: 'row',
+      gap: Skin.space(16),
+      marginTop: Skin.space(8),
+    },
+    farcasterImportToolButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(6),
+      paddingVertical: Skin.space(4),
+    },
+    farcasterImportToolText: {
+      fontSize: Skin.font(13),
+      color: theme.colors.primary,
+      fontFamily: theme.fonts.medium.fontFamily,
+      fontWeight: theme.fonts.medium.fontWeight,
+    },
     farcasterErrorContainer: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -3994,7 +4090,12 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
             <Text style={styles.bioText}>
               {showFarcaster
                 ? (farcasterIdentity?.bio || 'No Farcaster bio yet.')
-                : (user?.bio || 'No bio yet. Tap Edit to add one.')}
+                : // Merged (has Farcaster, not the dual-identity switcher): bios are
+                  // meant to be identical after editing, so fall back to the
+                  // Farcaster bio if the Quorum bio is empty.
+                  (user?.bio
+                    || (!dualIdentity && farcasterIdentity?.bio)
+                    || 'No bio yet. Tap Edit to add one.')}
             </Text>
           </View>
         )}

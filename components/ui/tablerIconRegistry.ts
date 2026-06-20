@@ -33,6 +33,7 @@ import IconArrowMerge from '@tabler/icons-react-native/IconArrowMerge';
 import IconArrowUp from '@tabler/icons-react-native/IconArrowUp';
 import IconArrowUpRight from '@tabler/icons-react-native/IconArrowUpRight';
 import IconArrowsExchange from '@tabler/icons-react-native/IconArrowsExchange';
+import IconArrowsSplit2 from '@tabler/icons-react-native/IconArrowsSplit2';
 import IconArrowsUpDown from '@tabler/icons-react-native/IconArrowsUpDown';
 import IconAt from '@tabler/icons-react-native/IconAt';
 import IconBadge from '@tabler/icons-react-native/IconBadge';
@@ -290,6 +291,7 @@ export const TablerIcons = {
   IconArrowUp,
   IconArrowUpRight,
   IconArrowsExchange,
+  IconArrowsSplit2,
   IconArrowsUpDown,
   IconAt,
   IconBadge,
