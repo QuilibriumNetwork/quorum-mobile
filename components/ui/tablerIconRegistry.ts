@@ -91,6 +91,7 @@ import IconDeviceDesktopFilled from '@tabler/icons-react-native/IconDeviceDeskto
 import IconDeviceGamepad from '@tabler/icons-react-native/IconDeviceGamepad';
 import IconDeviceMobile from '@tabler/icons-react-native/IconDeviceMobile';
 import IconDots from '@tabler/icons-react-native/IconDots';
+import IconDotsVertical from '@tabler/icons-react-native/IconDotsVertical';
 import IconDownload from '@tabler/icons-react-native/IconDownload';
 import IconEdit from '@tabler/icons-react-native/IconEdit';
 import IconExternalLink from '@tabler/icons-react-native/IconExternalLink';
@@ -105,6 +106,7 @@ import IconFlag from '@tabler/icons-react-native/IconFlag';
 import IconFlagFilled from '@tabler/icons-react-native/IconFlagFilled';
 import IconFlame from '@tabler/icons-react-native/IconFlame';
 import IconFlameFilled from '@tabler/icons-react-native/IconFlameFilled';
+import IconFlask from '@tabler/icons-react-native/IconFlask';
 import IconGift from '@tabler/icons-react-native/IconGift';
 import IconGiftFilled from '@tabler/icons-react-native/IconGiftFilled';
 import IconGripVertical from '@tabler/icons-react-native/IconGripVertical';
@@ -300,6 +302,7 @@ export const TablerIcons = {
   IconDeviceGamepad,
   IconDeviceMobile,
   IconDots,
+  IconDotsVertical,
   IconDownload,
   IconEdit,
   IconExternalLink,
@@ -314,6 +317,7 @@ export const TablerIcons = {
   IconFlagFilled,
   IconFlame,
   IconFlameFilled,
+  IconFlask,
   IconGift,
   IconGiftFilled,
   IconGripVertical,
