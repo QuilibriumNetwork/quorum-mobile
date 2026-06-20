@@ -127,6 +127,9 @@ interface ProfileModalProps {
   /** Hide ProfileModal's built-in Profile/Premium/Settings tab bar — used when
    *  the parent renders the pill row instead. */
   hideTabBar?: boolean;
+  /** Open the current user's own cast feed (their ProfileView). Surfaced as a
+   *  "My Casts" row in the Farcaster section. */
+  onViewMyCasts?: () => void;
 }
 
 /** The selectable sections of the profile body. 'farcaster' only applies when a
@@ -323,6 +326,7 @@ export default function ProfileModal({
   onOpenOffers,
   activeSection,
   hideTabBar = false,
+  onViewMyCasts,
 }: ProfileModalProps) {
   const { theme, isDark, activeSkin } = useTheme();
   const { user, signOut, updateProfile } = useAuth();
@@ -2170,13 +2174,17 @@ export default function ProfileModal({
 
         {activeTab === 'farcaster' && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Farcaster</Text>
+            {/* The pill already labels this "Farcaster"; only show the heading in
+                the standalone tab-bar mode to avoid a redundant title. */}
+            {!hideTabBar && <Text style={styles.sectionTitle}>Farcaster</Text>}
             {user?.farcaster ? (
               // Connected state
               <>
-                <View style={styles.farcasterConnected}>
-                  <View style={styles.farcasterInfo}>
-                    <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success} />
+                {/* Account card with Disconnect — first item. Icon top-aligned
+                    to match the Warpcast import row. */}
+                <View style={[styles.farcasterConnected, { alignItems: 'flex-start' }]}>
+                  <View style={[styles.farcasterInfo, { alignItems: 'flex-start' }]}>
+                    <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success} style={{ marginTop: Skin.space(2) }} />
                     <View style={styles.farcasterDetails}>
                       <Text style={styles.farcasterUsername}>@{user.farcaster.username}</Text>
                       <Text style={styles.farcasterFid}>FID: {user.farcaster.fid}</Text>
@@ -2189,6 +2197,15 @@ export default function ProfileModal({
                     <Text style={styles.farcasterDisconnectText}>Disconnect</Text>
                   </TouchableOpacity>
                 </View>
+                {/* My Casts — opens the user's own ProfileView (their cast feed).
+                    Replaces the former dedicated Casts pill. */}
+                {onViewMyCasts && (
+                  <TouchableOpacity style={styles.actionButton} onPress={onViewMyCasts}>
+                    <IconSymbol name="feather" size={20} color={theme.colors.primary} />
+                    <Text style={styles.actionButtonText}>My Casts</Text>
+                    <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+                  </TouchableOpacity>
+                )}
                 {/* Feed display preferences — Farcaster-only (drive useFarcasterFeed).
                     Plain settingRow → uniform 8px marginBottom like every card. */}
                 <View style={styles.settingRow}>
@@ -2352,7 +2369,10 @@ export default function ProfileModal({
   if (isRouteMode) {
     return (
       <>
-        <View style={[styles.routeContainer, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
+        {/* When embedded under the pill row (hideHeader), the parent screen
+            already covers the status-bar safe area — adding insets.top here
+            would double up and leave a large gap below the pills. */}
+        <View style={[styles.routeContainer, { paddingTop: hideHeader ? 0 : insets.top, backgroundColor: theme.colors.background }]}>
           {profileContent}
         </View>
 
@@ -2761,7 +2781,9 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     scrollContent: {
       paddingHorizontal: Skin.space(20),
-      paddingTop: Skin.space(20),
+      // Modest top gap below the pill row (the former tab-bar-era 20 was too
+      // much once the duplicated safe-area inset was removed).
+      paddingTop: Skin.space(16),
     },
     // Trailing space so the last section (e.g. Danger Zone) scrolls clear of
     // the blur tab bar instead of butting against it. Lives on the scroll

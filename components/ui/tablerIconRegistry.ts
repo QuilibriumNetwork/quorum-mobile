@@ -116,6 +116,7 @@ import IconEye from '@tabler/icons-react-native/IconEye';
 import IconEyeFilled from '@tabler/icons-react-native/IconEyeFilled';
 import IconEyeOff from '@tabler/icons-react-native/IconEyeOff';
 import IconFaceId from '@tabler/icons-react-native/IconFaceId';
+import IconFeather from '@tabler/icons-react-native/IconFeather';
 import IconFile from '@tabler/icons-react-native/IconFile';
 import IconFileCode from '@tabler/icons-react-native/IconFileCode';
 import IconFileCodeFilled from '@tabler/icons-react-native/IconFileCodeFilled';
@@ -371,6 +372,7 @@ export const TablerIcons = {
   IconEyeFilled,
   IconEyeOff,
   IconFaceId,
+  IconFeather,
   IconFile,
   IconFileCode,
   IconFileCodeFilled,
