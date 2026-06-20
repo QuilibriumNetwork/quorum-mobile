@@ -1,5 +1,7 @@
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
+import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { QuorumLogoIcon } from '@/components/SocialFeed/content/QuorumLogoIcon';
 import type { UserInfo } from '@/context/AuthContext';
 import type { ProfileAuthor } from '@/hooks/useFarcasterProfile';
 import { truncateAddress } from '@/utils/formatAddress';
@@ -156,6 +158,9 @@ function QuorumCard({
   const displayName = user.displayName || user.primaryUsername || 'Unnamed';
   return (
     <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={onEdit}>
+      <View style={styles.cardEditBadge}>
+        <IconSymbol name="pencil" size={11} color="#fff" />
+      </View>
       <CachedAvatar
         source={user.profileImage ? { uri: user.profileImage } : null}
         style={styles.cardAvatar}
@@ -163,7 +168,7 @@ function QuorumCard({
       />
       <View style={styles.cardText}>
         <View style={styles.cardLabelRow}>
-          <IconSymbol name="shield.fill" size={10} color={theme.colors.accent} />
+          <QuorumLogoIcon size={11} />
           <Text style={[styles.cardLabel, { color: theme.colors.accent }]}>Quorum</Text>
         </View>
         <Text style={styles.cardDisplayName} numberOfLines={1}>{displayName}</Text>
@@ -193,6 +198,9 @@ function FarcasterCard({
   const avatarUri = profile?.pfp?.url || user.farcaster?.pfpUrl;
   return (
     <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={onEdit}>
+      <View style={styles.cardEditBadge}>
+        <IconSymbol name="pencil" size={11} color="#fff" />
+      </View>
       <CachedAvatar
         source={avatarUri ? { uri: avatarUri } : null}
         style={styles.cardAvatar}
@@ -200,7 +208,7 @@ function FarcasterCard({
       />
       <View style={styles.cardText}>
         <View style={styles.cardLabelRow}>
-          <IconSymbol name="person.2.fill" size={10} color={theme.colors.textMuted} />
+          <FarcasterLogoIcon size={11} color={theme.colors.textMuted} />
           <Text style={[styles.cardLabel, { color: theme.colors.textMuted }]}>Farcaster</Text>
         </View>
         <Text style={styles.cardDisplayName} numberOfLines={1}>{displayName}</Text>
@@ -282,6 +290,7 @@ function createStyles(theme: AppTheme) {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
+      position: 'relative',
       paddingVertical: Skin.space(10),
       paddingHorizontal: Skin.space(10),
       borderRadius: Skin.radius(12),
@@ -297,7 +306,7 @@ function createStyles(theme: AppTheme) {
     cardLabelRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: Skin.space(3),
+      gap: Skin.space(5),
     },
     cardLabel: {
       fontSize: Skin.font(10),
@@ -310,6 +319,20 @@ function createStyles(theme: AppTheme) {
       height: 40,
       borderRadius: Skin.radius(20),
       backgroundColor: theme.colors.surface2,
+    },
+    // Pencil badge in the top-right corner of the split-mode card — signals the
+    // card is tappable to edit, mirroring the merged/Quorum-only header's badge.
+    cardEditBadge: {
+      position: 'absolute',
+      top: Skin.space(6),
+      right: Skin.space(6),
+      width: 18,
+      height: 18,
+      borderRadius: Skin.radius(9),
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.accent,
+      zIndex: 1,
     },
     cardDisplayName: {
       fontSize: Skin.font(14),

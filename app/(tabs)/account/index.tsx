@@ -26,7 +26,7 @@ export default function ProfileAccountScreen() {
       <Stack.Screen
         options={{
           headerShown: true,
-          title: 'Profile',
+          title: 'Account',
           // Override layout-level transparent header on iOS — see the
           // comment in profile/index.tsx for the rationale.
           headerTransparent: false,

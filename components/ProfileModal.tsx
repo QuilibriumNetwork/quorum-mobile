@@ -121,7 +121,20 @@ interface ProfileModalProps {
   onOpenMarketplace?: () => void;
   onOpenAuctions?: () => void;
   onOpenOffers?: () => void;
+  /** When set, the parent (UnifiedProfileScreen pill row) drives which section
+   *  is shown; ProfileModal's own inner tab state is ignored. */
+  activeSection?: ProfileSection;
+  /** Hide ProfileModal's built-in Profile/Premium/Settings tab bar — used when
+   *  the parent renders the pill row instead. */
+  hideTabBar?: boolean;
+  /** Open the current user's own cast feed (their ProfileView). Surfaced as a
+   *  "My Casts" row in the Farcaster section. */
+  onViewMyCasts?: () => void;
 }
+
+/** The selectable sections of the profile body. 'farcaster' only applies when a
+ *  Farcaster account is connected (the parent gates the pill). */
+export type ProfileSection = 'profile' | 'premium' | 'settings' | 'farcaster';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -311,6 +324,9 @@ export default function ProfileModal({
   onOpenMarketplace,
   onOpenAuctions,
   onOpenOffers,
+  activeSection,
+  hideTabBar = false,
+  onViewMyCasts,
 }: ProfileModalProps) {
   const { theme, isDark, activeSkin } = useTheme();
   const { user, signOut, updateProfile } = useAuth();
@@ -319,7 +335,11 @@ export default function ProfileModal({
   const { allowSync, setAllowSync, isLoading: isSyncLoading } = useSyncSettings();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = React.useState<'profile' | 'premium' | 'settings'>('profile');
+  const [internalTab, setInternalTab] = React.useState<ProfileSection>('profile');
+  // When the parent drives selection (pill row), follow activeSection; otherwise
+  // use the modal's own tab state.
+  const activeTab = activeSection ?? internalTab;
+  const setActiveTab = setInternalTab;
   const [usernameSearch, setUsernameSearch] = React.useState('');
   const [inviteCode, setInviteCode] = React.useState('');
   // Reset App Data — type-to-confirm (T3: the only catastrophic op; wipes keys).
@@ -1573,27 +1593,29 @@ export default function ProfileModal({
         </View>
       )}
 
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'profile' && styles.tabActive]}
-          onPress={() => setActiveTab('profile')}
-        >
-          <Text style={[styles.tabText, activeTab === 'profile' && styles.tabTextActive]}>Profile</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'premium' && styles.tabActive]}
-          onPress={() => setActiveTab('premium')}
-        >
-          <Text style={[styles.tabText, activeTab === 'premium' && styles.tabTextActive]}>Premium</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'settings' && styles.tabActive]}
-          onPress={() => setActiveTab('settings')}
-        >
-          <Text style={[styles.tabText, activeTab === 'settings' && styles.tabTextActive]}>Settings</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Tabs — hidden when the parent renders the pill row instead */}
+      {!hideTabBar && (
+        <View style={styles.tabs}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'profile' && styles.tabActive]}
+            onPress={() => setActiveTab('profile')}
+          >
+            <Text style={[styles.tabText, activeTab === 'profile' && styles.tabTextActive]}>Profile</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'premium' && styles.tabActive]}
+            onPress={() => setActiveTab('premium')}
+          >
+            <Text style={[styles.tabText, activeTab === 'premium' && styles.tabTextActive]}>Premium</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'settings' && styles.tabActive]}
+            onPress={() => setActiveTab('settings')}
+          >
+            <Text style={[styles.tabText, activeTab === 'settings' && styles.tabTextActive]}>Settings</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -2106,182 +2128,6 @@ export default function ProfileModal({
               </TouchableOpacity>
             </View>
 
-            {/* Farcaster */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Farcaster</Text>
-              {user?.farcaster ? (
-                // Connected state
-                <>
-                  <View style={styles.farcasterConnected}>
-                    <View style={styles.farcasterInfo}>
-                      <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success} />
-                      <View style={styles.farcasterDetails}>
-                        <Text style={styles.farcasterUsername}>@{user.farcaster.username}</Text>
-                        <Text style={styles.farcasterFid}>FID: {user.farcaster.fid}</Text>
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.farcasterDisconnectButton}
-                      onPress={handleDisconnectFarcaster}
-                    >
-                      <Text style={styles.farcasterDisconnectText}>Disconnect</Text>
-                    </TouchableOpacity>
-                  </View>
-                  {/* Feed display preferences — Farcaster-only (drive useFarcasterFeed).
-                      Plain settingRow → uniform 8px marginBottom like every card. */}
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingLeft}>
-                      <Text style={styles.settingLabel}>Show replies in main feed</Text>
-                      <Text style={styles.settingDescription}>
-                        Include reply casts in your main feed (thread views always show replies)
-                      </Text>
-                    </View>
-                    <Switch
-                      value={showRepliesInFeed}
-                      onValueChange={setShowRepliesInFeed}
-                      trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-                      thumbColor={showRepliesInFeed ? '#ffffff' : '#f4f3f4'}
-                    />
-                  </View>
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingLeft}>
-                      <Text style={styles.settingLabel}>Show replies from non-followed in main feed</Text>
-                      <Text style={styles.settingDescription}>
-                        Include replies from people you don't follow in your main feed
-                      </Text>
-                    </View>
-                    <Switch
-                      value={showNonFollowReplies}
-                      onValueChange={setShowNonFollowReplies}
-                      disabled={!showRepliesInFeed}
-                      trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-                      thumbColor={showNonFollowReplies ? '#ffffff' : '#f4f3f4'}
-                    />
-                  </View>
-                  {/* Hypersnap signer opt-in */}
-                  <View style={styles.farcasterConnected}>
-                    <View style={{ flex: 1, marginRight: Skin.space(12) }}>
-                      <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Hypersnap Signer</Text>
-                      <Text style={{ fontSize: Skin.font(12), color: theme.colors.textMuted, marginTop: Skin.space(2) }}>
-                        Post and react through Quilibrium's hub to earn $SNAP
-                      </Text>
-                    </View>
-                    {hypersnapBusy ? (
-                      <ActivityIndicator size="small" color={theme.colors.primary} />
-                    ) : (
-                      <Switch
-                        value={hypersnapEnabled}
-                        onValueChange={handleToggleHypersnap}
-                        trackColor={{ true: theme.colors.primary }}
-                      />
-                    )}
-                  </View>
-                  {/* Warpcast Wallet Import */}
-                  {hasWarpcastWallet && !hasImportedWarpcastWallet && onOpenWarpcastImport && (
-                    <TouchableOpacity
-                      style={[styles.actionButton, { alignItems: 'flex-start' }]}
-                      onPress={() => {
-                        if (isRouteMode) {
-                          // In route mode, just open the import modal directly (no need to close ProfileModal)
-                          onOpenWarpcastImport();
-                        } else {
-                          // In modal mode, close ProfileModal first then open import modal
-                          onClose();
-                          setTimeout(onOpenWarpcastImport, 300);
-                        }
-                      }}
-                    >
-                      <IconSymbol name="wallet.pass.fill" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.actionButtonText}>Import Warpcast Wallet</Text>
-                        <Text style={[styles.settingDescription, { marginTop: Skin.space(4), marginLeft: Skin.space(12) }]}>
-                          Import your Warpcast embedded wallet to use alongside your Quorum wallet
-                        </Text>
-                      </View>
-                      <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} style={{ marginTop: Skin.space(2) }} />
-                    </TouchableOpacity>
-                  )}
-                  {hasImportedWarpcastWallet && importedWallet && (
-                    <View style={styles.farcasterConnected}>
-                      <View style={styles.farcasterInfo}>
-                        <IconSymbol name="wallet.pass.fill" size={20} color={theme.colors.primary} />
-                        <View style={styles.farcasterDetails}>
-                          <Text style={styles.farcasterUsername}>Warpcast Wallet</Text>
-                          <Text style={styles.farcasterFid}>
-                            {importedWallet.address.slice(0, 10)}...{importedWallet.address.slice(-6)}
-                          </Text>
-                        </View>
-                      </View>
-                      <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success} />
-                    </View>
-                  )}
-                </>
-              ) : !showFarcasterImport ? (
-                // Not connected state
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => setShowFarcasterImport(true)}
-                >
-                  <IconSymbol name="person.badge.plus" size={20} color={theme.colors.textMain} />
-                  <Text style={styles.actionButtonText}>Import Farcaster Account</Text>
-                  <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
-                </TouchableOpacity>
-              ) : (
-                // Import state
-                <View style={styles.farcasterImportContainer}>
-                  <Text style={styles.farcasterImportDescription}>
-                    Enter your Farcaster recovery phrase (12 or 24 words) to import your account.
-                  </Text>
-                  <TextInput
-                    style={styles.farcasterMnemonicInput}
-                    value={farcasterMnemonic}
-                    onChangeText={(text) => {
-                      setFarcasterMnemonic(text);
-                      setFarcasterError(null);
-                    }}
-                    placeholder="Enter recovery phrase..."
-                    placeholderTextColor={theme.colors.textMuted}
-                    multiline
-                    numberOfLines={3}
-                    textAlignVertical="top"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    editable={!farcasterImporting}
-                  />
-                  {farcasterError && (
-                    <View style={styles.farcasterErrorContainer}>
-                      <IconSymbol name="exclamationmark.circle.fill" size={16} color={theme.colors.danger} />
-                      <Text style={styles.farcasterErrorText}>{farcasterError}</Text>
-                    </View>
-                  )}
-                  <View style={styles.farcasterImportActions}>
-                    <TouchableOpacity
-                      style={styles.farcasterCancelButton}
-                      onPress={() => {
-                        setShowFarcasterImport(false);
-                        setFarcasterMnemonic('');
-                        setFarcasterError(null);
-                      }}
-                      disabled={farcasterImporting}
-                    >
-                      <Text style={styles.farcasterCancelText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.farcasterImportButton, farcasterImporting && styles.farcasterImportButtonDisabled]}
-                      onPress={handleImportFarcaster}
-                      disabled={farcasterImporting}
-                    >
-                      {farcasterImporting ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Text style={styles.farcasterImportButtonText}>Import</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            </View>
-
             {/* Account Actions */}
             <AccountRecoverySection
               styles={styles}
@@ -2325,6 +2171,196 @@ export default function ProfileModal({
             </View>
           </>
         )}
+
+        {activeTab === 'farcaster' && (
+          <View style={styles.section}>
+            {/* The pill already labels this "Farcaster"; only show the heading in
+                the standalone tab-bar mode to avoid a redundant title. */}
+            {!hideTabBar && <Text style={styles.sectionTitle}>Farcaster</Text>}
+            {user?.farcaster ? (
+              // Connected state
+              <>
+                {/* Account card with Disconnect — first item. Icon top-aligned
+                    to match the Warpcast import row. */}
+                <View style={[styles.farcasterConnected, { alignItems: 'flex-start' }]}>
+                  <View style={[styles.farcasterInfo, { alignItems: 'flex-start' }]}>
+                    <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success} style={{ marginTop: Skin.space(2) }} />
+                    <View style={styles.farcasterDetails}>
+                      <Text style={styles.farcasterUsername}>@{user.farcaster.username}</Text>
+                      <Text style={styles.farcasterFid}>FID: {user.farcaster.fid}</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.farcasterDisconnectButton}
+                    onPress={handleDisconnectFarcaster}
+                  >
+                    <Text style={styles.farcasterDisconnectText}>Disconnect</Text>
+                  </TouchableOpacity>
+                </View>
+                {/* My Casts — opens the user's own ProfileView (their cast feed).
+                    Replaces the former dedicated Casts pill. */}
+                {onViewMyCasts && (
+                  <TouchableOpacity style={styles.actionButton} onPress={onViewMyCasts}>
+                    <IconSymbol name="feather" size={20} color={theme.colors.primary} />
+                    <Text style={styles.actionButtonText}>My Casts</Text>
+                    <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+                {/* Feed display preferences — Farcaster-only (drive useFarcasterFeed).
+                    Plain settingRow → uniform 8px marginBottom like every card. */}
+                <View style={styles.settingRow}>
+                  <View style={styles.settingLeft}>
+                    <Text style={styles.settingLabel}>Show replies in main feed</Text>
+                    <Text style={styles.settingDescription}>
+                      Include reply casts in your main feed (thread views always show replies)
+                    </Text>
+                  </View>
+                  <Switch
+                    value={showRepliesInFeed}
+                    onValueChange={setShowRepliesInFeed}
+                    trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+                    thumbColor={showRepliesInFeed ? '#ffffff' : '#f4f3f4'}
+                  />
+                </View>
+                <View style={styles.settingRow}>
+                  <View style={styles.settingLeft}>
+                    <Text style={styles.settingLabel}>Show replies from non-followed in main feed</Text>
+                    <Text style={styles.settingDescription}>
+                      Include replies from people you don&apos;t follow in your main feed
+                    </Text>
+                  </View>
+                  <Switch
+                    value={showNonFollowReplies}
+                    onValueChange={setShowNonFollowReplies}
+                    disabled={!showRepliesInFeed}
+                    trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+                    thumbColor={showNonFollowReplies ? '#ffffff' : '#f4f3f4'}
+                  />
+                </View>
+                {/* Hypersnap signer opt-in */}
+                <View style={styles.farcasterConnected}>
+                  <View style={{ flex: 1, marginRight: Skin.space(12) }}>
+                    <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Hypersnap Signer</Text>
+                    <Text style={{ fontSize: Skin.font(12), color: theme.colors.textMuted, marginTop: Skin.space(2) }}>
+                      Post and react through Quilibrium&apos;s hub to earn $SNAP
+                    </Text>
+                  </View>
+                  {hypersnapBusy ? (
+                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                  ) : (
+                    <Switch
+                      value={hypersnapEnabled}
+                      onValueChange={handleToggleHypersnap}
+                      trackColor={{ true: theme.colors.primary }}
+                    />
+                  )}
+                </View>
+                {/* Warpcast Wallet Import */}
+                {hasWarpcastWallet && !hasImportedWarpcastWallet && onOpenWarpcastImport && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, { alignItems: 'flex-start' }]}
+                    onPress={() => {
+                      if (isRouteMode) {
+                        // In route mode, just open the import modal directly (no need to close ProfileModal)
+                        onOpenWarpcastImport();
+                      } else {
+                        // In modal mode, close ProfileModal first then open import modal
+                        onClose();
+                        setTimeout(onOpenWarpcastImport, 300);
+                      }
+                    }}
+                  >
+                    <IconSymbol name="wallet.pass.fill" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.actionButtonText}>Import Warpcast Wallet</Text>
+                      <Text style={[styles.settingDescription, { marginTop: Skin.space(4), marginLeft: Skin.space(12) }]}>
+                        Import your Warpcast embedded wallet to use alongside your Quorum wallet
+                      </Text>
+                    </View>
+                    <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} style={{ marginTop: Skin.space(2) }} />
+                  </TouchableOpacity>
+                )}
+                {hasImportedWarpcastWallet && importedWallet && (
+                  <View style={styles.farcasterConnected}>
+                    <View style={styles.farcasterInfo}>
+                      <IconSymbol name="wallet.pass.fill" size={20} color={theme.colors.primary} />
+                      <View style={styles.farcasterDetails}>
+                        <Text style={styles.farcasterUsername}>Warpcast Wallet</Text>
+                        <Text style={styles.farcasterFid}>
+                          {importedWallet.address.slice(0, 10)}...{importedWallet.address.slice(-6)}
+                        </Text>
+                      </View>
+                    </View>
+                    <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success} />
+                  </View>
+                )}
+              </>
+            ) : !showFarcasterImport ? (
+              // Not connected state
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => setShowFarcasterImport(true)}
+              >
+                <IconSymbol name="person.badge.plus" size={20} color={theme.colors.textMain} />
+                <Text style={styles.actionButtonText}>Import Farcaster Account</Text>
+                <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            ) : (
+              // Import state
+              <View style={styles.farcasterImportContainer}>
+                <Text style={styles.farcasterImportDescription}>
+                  Enter your Farcaster recovery phrase (12 or 24 words) to import your account.
+                </Text>
+                <TextInput
+                  style={styles.farcasterMnemonicInput}
+                  value={farcasterMnemonic}
+                  onChangeText={(text) => {
+                    setFarcasterMnemonic(text);
+                    setFarcasterError(null);
+                  }}
+                  placeholder="Enter recovery phrase..."
+                  placeholderTextColor={theme.colors.textMuted}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!farcasterImporting}
+                />
+                {farcasterError && (
+                  <View style={styles.farcasterErrorContainer}>
+                    <IconSymbol name="exclamationmark.circle.fill" size={16} color={theme.colors.danger} />
+                    <Text style={styles.farcasterErrorText}>{farcasterError}</Text>
+                  </View>
+                )}
+                <View style={styles.farcasterImportActions}>
+                  <TouchableOpacity
+                    style={styles.farcasterCancelButton}
+                    onPress={() => {
+                      setShowFarcasterImport(false);
+                      setFarcasterMnemonic('');
+                      setFarcasterError(null);
+                    }}
+                    disabled={farcasterImporting}
+                  >
+                    <Text style={styles.farcasterCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.farcasterImportButton, farcasterImporting && styles.farcasterImportButtonDisabled]}
+                    onPress={handleImportFarcaster}
+                    disabled={farcasterImporting}
+                  >
+                    {farcasterImporting ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.farcasterImportButtonText}>Import</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
     </>
   );
@@ -2333,7 +2369,10 @@ export default function ProfileModal({
   if (isRouteMode) {
     return (
       <>
-        <View style={[styles.routeContainer, { paddingTop: insets.top, backgroundColor: theme.colors.background }]}>
+        {/* When embedded under the pill row (hideHeader), the parent screen
+            already covers the status-bar safe area — adding insets.top here
+            would double up and leave a large gap below the pills. */}
+        <View style={[styles.routeContainer, { paddingTop: hideHeader ? 0 : insets.top, backgroundColor: theme.colors.background }]}>
           {profileContent}
         </View>
 
@@ -2742,7 +2781,9 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     scrollContent: {
       paddingHorizontal: Skin.space(20),
-      paddingTop: Skin.space(20),
+      // Modest top gap below the pill row (the former tab-bar-era 20 was too
+      // much once the duplicated safe-area inset was removed).
+      paddingTop: Skin.space(16),
     },
     // Trailing space so the last section (e.g. Danger Zone) scrolls clear of
     // the blur tab bar instead of butting against it. Lives on the scroll
@@ -3929,7 +3970,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
         <View style={styles.settingRow}>
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Show Online Status</Text>
-            <Text style={styles.settingDescription}>Let others see when you're active</Text>
+            <Text style={styles.settingDescription}>Let others see when you&apos;re active</Text>
           </View>
           <Switch
             value={true}

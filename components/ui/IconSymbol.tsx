@@ -254,6 +254,7 @@ const SF_TO_TABLER = {
   // Edit
   'square.and.pencil': tabler('IconEdit'),
   'pencil': tabler('IconPencil'),
+  'feather': tabler('IconFeather'),
   'hammer': tabler('IconHammer'),
   'hammer.fill': tabler('IconHammer'),
 

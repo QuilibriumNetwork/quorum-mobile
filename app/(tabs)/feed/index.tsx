@@ -27,6 +27,9 @@ export default function FeedScreen() {
      *  profile screen instead of a thread. */
     profileFid?: string;
     profileUsername?: string;
+    /** Unique per navigation so re-opening the same profile re-triggers the
+     *  feed modal's nav effect even when the tab is already mounted. */
+    profileNonce?: string;
   }>();
 
   // Imperative handle to SocialFeedModal — driven by the
@@ -117,7 +120,7 @@ export default function FeedScreen() {
   const initialProfile = (() => {
     const fid = params.profileFid ? parseInt(params.profileFid, 10) : NaN;
     if (!Number.isFinite(fid) || fid <= 0) return undefined;
-    return { fid, username: params.profileUsername };
+    return { fid, username: params.profileUsername, nonce: params.profileNonce };
   })();
 
   if (fcState.kind === 'checking') {

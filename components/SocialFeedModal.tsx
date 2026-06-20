@@ -4586,6 +4586,9 @@ interface SocialFeedModalProps {
   initialProfile?: {
     fid: number;
     username?: string;
+    /** Changes per navigation request so re-opening the same profile re-fires
+     *  the nav effect even when this modal is already mounted on the feed. */
+    nonce?: string;
   };
   /** When true, renders as a full screen without modal animation (for route-based navigation) */
   isRouteMode?: boolean;
@@ -5279,6 +5282,28 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     }
     return [{ type: 'feed' }];
   });
+
+  // After mount, a new initialProfile request (keyed by fid + nonce) re-navigates
+  // to that profile. The lazy initializer above only runs once, so without this
+  // a second "My Casts"/deep-link tap into a profile while the feed tab is
+  // already mounted would be ignored. The nonce makes same-fid re-pushes fire.
+  const initialProfileKey = initialProfile
+    ? `${initialProfile.fid}:${initialProfile.nonce ?? ''}`
+    : null;
+  // Remember the key the lazy initializer already consumed at mount, so the
+  // effect below doesn't re-navigate for it. null when the tab mounted without
+  // a profile request (then the first real request must NOT be skipped).
+  const seededProfileKeyRef = useRef<string | null>(initialProfileKey);
+  useEffect(() => {
+    if (!initialProfile || initialProfileKey === null) return;
+    if (initialProfileKey === seededProfileKeyRef.current) return; // already shown
+    seededProfileKeyRef.current = initialProfileKey;
+    setNavStack([
+      { type: 'feed' },
+      { type: 'profile', fid: initialProfile.fid, username: initialProfile.username },
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialProfileKey]);
 
   const { openMiniapp } = useMiniappOverlay();
   // Tip flow — one TipModal mounted at this level serves every surface
@@ -6094,6 +6119,15 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     return m;
   }, [governanceCasts]);
 
+  // Drop optimistic pending top-level casts once the server feed includes
+  // them (matched by the confirmed hash set after the background submit).
+  // Must run before the `if (!rendered)` early return so hook order stays
+  // consistent across renders (react-hooks/rules-of-hooks).
+  useEffect(() => {
+    if (posts && posts.length) optimistic.reconcilePendingByHash(posts.map((p) => p.hash));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts, optimistic.reconcilePendingByHash]);
+
   if (!rendered) {
     return null;
   }
@@ -6126,13 +6160,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   const handleRemoveImage = (index: number) => {
     setSelectedImages(prev => prev.filter((_, i) => i !== index));
   };
-
-  // Drop optimistic pending top-level casts once the server feed includes
-  // them (matched by the confirmed hash set after the background submit).
-  useEffect(() => {
-    if (posts && posts.length) optimistic.reconcilePendingByHash(posts.map((p) => p.hash));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [posts, optimistic.reconcilePendingByHash]);
 
   const handleSubmitCast = async () => {
     if (!canPost) {
