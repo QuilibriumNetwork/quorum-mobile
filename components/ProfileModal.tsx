@@ -930,7 +930,7 @@ export default function ProfileModal({
       const ok = await confirm({
         title: 'Merge profiles',
         message:
-          'Your Quorum and Farcaster profiles will be combined into one. You can keep them separate again later.',
+          'You’ll see and edit one profile. From now on, editing your name, bio, or picture updates both Quorum and Farcaster at once. Until you edit, each keeps its current values. Usernames always stay separate. You can separate them again later.',
         confirmLabel: 'Merge',
       });
       if (!ok) return;
@@ -944,10 +944,10 @@ export default function ProfileModal({
     if (!onUnmergeProfiles) return;
     void (async () => {
       const ok = await confirm({
-        title: 'Keep profiles separate',
+        title: 'Separate profiles',
         message:
-          'Your Quorum and Farcaster profiles will be shown and edited separately again. Nothing is deleted.',
-        confirmLabel: 'Keep separate',
+          'Your Quorum and Farcaster profiles will be shown and edited separately again. Nothing is deleted or changed.',
+        confirmLabel: 'Separate',
       });
       if (!ok) return;
       onUnmergeProfiles();
