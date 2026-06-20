@@ -129,11 +129,10 @@ export function ReportModal({ visible, onClose, target, onSubmitted }: ReportMod
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.kbWrap}
         >
-          {/* Pad the bottom by the real safe-area inset so the action buttons
-              clear the system nav bar (Android 3-button nav is taller than the
-              old hardcoded inset). */}
+          {/* Additive bottom inset so the action buttons clear the system nav
+              bar with a real gap (max() swallowed the gap on tall nav bars). */}
           <Pressable
-            style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, Skin.space(20)) }]}
+            style={[styles.sheet, { paddingBottom: insets.bottom + Skin.space(20) }]}
             onPress={(e) => e.stopPropagation()}
           >
             <Text style={styles.title}>{headerLabel}</Text>

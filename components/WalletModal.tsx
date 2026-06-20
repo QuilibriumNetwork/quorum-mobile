@@ -10,6 +10,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context';
 import { useToast } from '@/context/ToastContext';
 import { useWallet, useNFTs, aggregateAssets, getChainUsdValue, AggregatedAsset, useEvmBalancesForAddress } from '@/hooks/useWallet';
+import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
 import type { NFT } from '@/services/wallet/balanceService';
 import { formatBalance, getChainName, formatUsdValue } from '@/services/wallet/balanceService';
@@ -57,6 +58,7 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
   const { theme, isDark } = useTheme();
   const walletSurface = useSurface('wallet');
   const insets = useSafeAreaInsets();
+  const listBottomPadding = useFloatingTabBarPadding();
   const { showToast } = useToast();
   // Persistent preferences — survive modal close/reopen and app restarts.
   const [activeTab, setActiveTab] = useWalletPref<
@@ -456,6 +458,10 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.scrollContent}
+        // In route mode the content scrolls behind the floating tab bar, so pad
+        // the bottom so the last item clears it. Modal mode keeps BaseModal's
+        // own bottom inset (no extra padding here).
+        contentContainerStyle={isRouteMode ? { paddingBottom: listBottomPadding } : undefined}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1257,7 +1263,6 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
   StyleSheet.create({
     routeContainer: {
       flex: 1,
-      paddingBottom: Skin.space(90), // Clear the blur tab bar
     },
     header: {
       flexDirection: 'row',

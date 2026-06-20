@@ -24,7 +24,6 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
@@ -60,7 +59,6 @@ export default function DMChatScreen() {
   }, []);
 
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   // While the composer emoji panel is open the tab bar is hidden, so reclaim
   // its space: zero the bottom padding here and pass 0 chrome height to the
@@ -71,11 +69,16 @@ export default function DMChatScreen() {
     () => [
       styles.container,
       {
-        paddingBottom: effectiveChromeHeight,
+        // No paddingBottom — the chat area fills the full screen so messages
+        // scroll behind the floating composer + tab bar (Telegram-style), the
+        // same as the channel screen. The composer floats above the tab bar
+        // (DMChatArea positions it at bottom: tabBarHeight) and the list pads
+        // its content to clear it. effectiveChromeHeight is still passed to the
+        // chat area so the composer floats at the right height.
         backgroundColor: theme.colors.surface1,
       },
     ],
-    [effectiveChromeHeight, theme.colors.surface1]
+    [theme.colors.surface1]
   );
 
   // Grab the conversation from unified conversations first (has richest data)
@@ -257,7 +260,7 @@ export default function DMChatScreen() {
             <IconSymbol name="phone" color={theme.colors.primary} size={20} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setSettingsVisible(true)} hitSlop={8}>
-            <IconSymbol name="info.circle" color={theme.colors.primary} size={20} />
+            <IconSymbol name="gearshape" color={theme.colors.textMain} size={20} />
           </TouchableOpacity>
         </>
       )}
@@ -336,6 +339,7 @@ export default function DMChatScreen() {
           onLinkPress={handleLinkPress}
           bottomInset={0}
           tabBarHeight={effectiveChromeHeight}
+          restingChromeHeight={tabBarHeight}
         />
 
       </View>
@@ -364,6 +368,7 @@ export default function DMChatScreen() {
         addBookmark={addBookmark}
         removeBookmark={removeBookmark}
         tabBarHeight={effectiveChromeHeight}
+        restingChromeHeight={tabBarHeight}
         theme={theme}
         draftsRef={draftsRef}
       />

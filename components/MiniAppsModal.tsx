@@ -2,6 +2,7 @@ import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { useAuth } from '@/context';
+import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -143,6 +144,7 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
   const insets = useSafeAreaInsets();
   const { farcasterAuthToken } = useAuth();
   const [activeTab, setActiveTab] = useState<LauncherTab>('all');
+  const floatingTabBarPadding = useFloatingTabBarPadding();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [miniApps, setMiniApps] = useState<MiniApp[]>([]);
@@ -491,7 +493,11 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
       )}
 
       {!isLoading && !error && (
-        <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollContent}
+          contentContainerStyle={isRouteMode ? { paddingBottom: floatingTabBarPadding } : undefined}
+        >
           {/* Featured Section - hide during search */}
           {!isSearchMode && featuredApps.length > 0 && (
             <>
@@ -663,7 +669,6 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
   StyleSheet.create({
     routeContainer: {
       flex: 1,
-      paddingBottom: Skin.space(90), // Clear the blur tab bar
     },
     header: {
       flexDirection: 'row',

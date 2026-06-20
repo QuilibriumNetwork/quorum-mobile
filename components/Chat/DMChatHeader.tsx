@@ -85,7 +85,7 @@ export const DMChatHeader = React.memo(function DMChatHeader({
           </TouchableOpacity>
         )}
         <TouchableOpacity style={styles.headerIconButton} onPress={onInfoPress} hitSlop={headerIconHitSlop}>
-          <IconSymbol name="info.circle" color={theme.colors.textMuted} size={18} />
+          <IconSymbol name="gearshape" color={theme.colors.textMain} size={18} />
         </TouchableOpacity>
       </View>
     </View>

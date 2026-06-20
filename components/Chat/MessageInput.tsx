@@ -9,12 +9,14 @@ import type { Channel, Emoji, SpaceMember, Sticker, Role, Space } from '@quilibr
 import { hasPermission, getRoleColorHex } from '@quilibrium/quorum-shared';
 import { searchEmojis } from '@/data/emojiData';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, useWindowDimensions, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputSubmitEditingEventData, View } from 'react-native';
-import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
+import { ActivityIndicator, Image, useWindowDimensions, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputSubmitEditingEventData, TouchableOpacity as RNTouchableOpacity, View } from 'react-native';
+import Reanimated, { useAnimatedStyle, useDerivedValue, withTiming, interpolate, interpolateColor, Easing } from 'react-native-reanimated';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useComposerPanel } from '@/hooks/useComposerPanel';
 import { composerPanelVisibleStore } from '@/services/ui/composerPanelVisible';
+import { composerFootprintSV } from '@/services/ui/composerFootprint';
 import * as Skin from '@/theme/skins/geometry';
+import type { LayoutChangeEvent } from 'react-native';
 
 
 export interface ReplyToMessage {
@@ -50,11 +52,13 @@ interface MessageInputProps {
   /** Bottom safe area inset */
   bottomInset?: number;
   /**
-   * Height of bottom chrome (e.g. a tab bar) the composer already sits above.
-   * The keyboard/panel footprint is reduced by this so the pill lands exactly
-   * on top of the keyboard instead of overshooting it.
+   * Resting height of the bottom chrome (the tab bar) the composer floats above.
+   * The composer overlay sits at `bottom: 0`; this is the clearance the animated
+   * spacer holds at rest so the pill floats above the tab bar, and which the
+   * keyboard/panel footprint grows past when it opens. Pass the raw tab-bar
+   * height (do NOT zero it while the panel is open).
    */
-  bottomChromeHeight?: number;
+  restingChromeHeight?: number;
   /** Custom emojis for the space */
   customEmojis?: Emoji[];
   /** Stickers for the space */
@@ -200,6 +204,28 @@ const EMOJI_CATEGORIES = {
 
 type CategoryKey = keyof typeof EMOJI_CATEGORIES | 'custom' | 'stickers' | 'recent';
 
+// Lightweight emoji cell: a plain memoized touchable, skipping SkinTouchable's
+// per-node theme/flatten/color work (pure overhead for an always-transparent
+// button). ~120 of these mount on first open.
+const EmojiCell = React.memo(function EmojiCell({
+  emoji,
+  onSelect,
+  buttonStyle,
+  textStyle,
+}: {
+  emoji: string;
+  onSelect: (emoji: string) => void;
+  buttonStyle: object;
+  textStyle: object;
+}) {
+  const handlePress = useCallback(() => onSelect(emoji), [emoji, onSelect]);
+  return (
+    <RNTouchableOpacity style={buttonStyle} onPress={handlePress}>
+      <Text style={textStyle}>{emoji}</Text>
+    </RNTouchableOpacity>
+  );
+});
+
 export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(function MessageInput({
   value,
   onChangeText,
@@ -216,7 +242,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   replyTo,
   onDismissReply,
   bottomInset = 0,
-  bottomChromeHeight = 0,
+  restingChromeHeight = 0,
   customEmojis = [],
   stickers = [],
   onSendSticker,
@@ -252,12 +278,33 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     // pill's own marginBottom, applied in BOTH states — so the no-keyboard
     // spacing matches the tighter keyboard-up spacing instead of being larger.
     bottomInset,
-    bottomChromeHeight,
+    // The tab-bar clearance the spacer holds at rest (overlay sits at bottom: 0).
+    restingChromeHeight,
     // Publish open/close synchronously (in the toggle action, not via an effect)
     // so the tab bar hides/shows in the same tick — no extra render-cycle lag.
     onPanelVisibilityChange: composerPanelVisibleStore.set,
   });
   const showEmojiPicker = composerPanel.panelOpen;
+  const keyboardVisible = composerPanel.keyboardVisible;
+  // Panel VISIBILITY is driven on the UI thread by panelVisibleSV (opacity, see
+  // panelOpacityStyle): painted behind a fully-up keyboard (preload → instant
+  // reveal on open) and hidden in lockstep as the keyboard descends (no peek
+  // below the tab bar). `panelShown` is the React mirror, used only for
+  // pointerEvents (touch-inertness; a frame of lag here is harmless because the
+  // panel is either behind the keyboard or in the collapsed resting spacer).
+  const panelShown = keyboardVisible || showEmojiPicker;
+  const panelOpacityStyle = useAnimatedStyle(() => ({
+    opacity: composerPanel.panelVisibleSV.value,
+  }));
+  // Mount latch: build the (heavy) panel on first need — the panel opening or a
+  // keyboard coming up (so the grid is pre-built before the first emoji tap) —
+  // then keep it mounted. Reopening is a pure reveal. Resets per chat (remount).
+  const [panelEverNeeded, setPanelEverNeeded] = useState(false);
+  useEffect(() => {
+    if (keyboardVisible || showEmojiPicker) setPanelEverNeeded(true);
+  }, [keyboardVisible, showEmojiPicker]);
+  const panelPresent = panelEverNeeded;
+  const showEmojiGrid = panelEverNeeded;
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('smileys');
   const [searchQuery, setSearchQuery] = useState('');
   // When the input wraps to multiple lines the pill switches from a single-line
@@ -529,6 +576,18 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     [singleLineThreshold]
   );
 
+  // Measure the composer's on-screen footprint (the pill + any reply/edit banner
+  // + attachment preview — everything ABOVE the keyboard/panel spacer) and write
+  // it to the shared value the chat list's KeyboardChatScrollView reads as
+  // `extraContentPadding`. This makes the keyboard-open lift clear `keyboard +
+  // composer` (not just the keyboard), so the newest message rests above the
+  // pill in every state — single line, wrapped multi-line, image preview, reply
+  // banner. Writing a SharedValue (not React state) keeps it off the re-render
+  // path; the consumer reads it on the UI thread.
+  const handleFootprintLayout = useCallback((e: LayoutChangeEvent) => {
+    composerFootprintSV.value = e.nativeEvent.layout.height;
+  }, []);
+
   // Build categories list including custom emojis, stickers, and recent if available
   const categories = useMemo(() => {
     const result: { key: CategoryKey; name: string; icon: string }[] = [];
@@ -597,13 +656,49 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   // when the input is empty. Emoji toggle always stays.
   const isComposing = value.trim().length > 0;
 
-  // The emoji grid markup, rendered inside the downward panel below the pill.
-  // Memoized and gated on `showEmojiPicker` so the (potentially hundreds of
-  // nodes) grid isn't rebuilt on every keystroke while the panel is closed.
+  // --- Composer focus/compose micro-animations ---------------------------
+  // Two driven progress values so the transitions are smooth instead of
+  // snapping:
+  //   composeProgress — 0 idle, 1 composing. Slides the paperclip to the
+  //     right, fades it out, and collapses its width so the input reclaims
+  //     the space. Reverses when the input is cleared.
+  //   sendProgress    — 0 can't-send, 1 can-send. Cross-fades the send
+  //     button from the muted grey surface to the accent color.
+  const TIMING = { duration: 180, easing: Easing.out(Easing.quad) };
+  const composeProgress = useDerivedValue(
+    () => withTiming(isComposing ? 1 : 0, TIMING),
+    [isComposing],
+  );
+  const sendProgress = useDerivedValue(
+    () => withTiming(canSend ? 1 : 0, TIMING),
+    [canSend],
+  );
+
+  // Width the paperclip occupies when shown: icon (27) + button padding
+  // (6 each side). Collapsing it to 0 lets the input grow without a jump.
+  const ATTACH_WIDTH = 27 + Skin.space(6) * 2;
+  const attachAnimatedStyle = useAnimatedStyle(() => ({
+    width: interpolate(composeProgress.value, [0, 1], [ATTACH_WIDTH, 0]),
+    opacity: interpolate(composeProgress.value, [0, 1], [1, 0]),
+    transform: [{ translateX: interpolate(composeProgress.value, [0, 1], [0, ATTACH_WIDTH]) }],
+  }));
+  const sendAnimatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      sendProgress.value,
+      [0, 1],
+      [theme.colors.surface7, theme.colors.accent],
+    ),
+    opacity: interpolate(sendProgress.value, [0, 1], [0.6, 1]),
+  }));
+
+  // Panel markup inside the spacer. Mounted once needed (keyboard up or panel
+  // open) and then kept mounted; visible whenever `panelShown` (so it sits
+  // preloaded behind the keyboard and is revealed when the keyboard dismisses),
+  // hidden otherwise. Memoized.
   const emojiPanelContent = useMemo(() => {
-    if (!showEmojiPicker) return null;
+    if (!panelPresent) return null;
     return (
-    <View style={styles.emojiPanelInner}>
+    <View style={styles.emojiPanelInner} pointerEvents={panelShown ? 'auto' : 'none'}>
       {/* Search bar */}
       <View style={styles.searchContainer}>
         <IconSymbol name="magnifyingglass" size={16} color={theme.colors.textMuted} />
@@ -613,6 +708,8 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           placeholderTextColor={theme.colors.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
+          onFocus={composerPanel.onSearchFocus}
+          onBlur={composerPanel.onSearchBlur}
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -621,6 +718,16 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
             <IconSymbol name="xmark.circle.fill" size={16} color={theme.colors.textMuted} />
           </TouchableOpacity>
         )}
+        {/* Close the emoji panel. Far right of the search row. */}
+        <TouchableOpacity
+          onPress={() => composerPanel.closePanel()}
+          hitSlop={8}
+          style={styles.panelCloseButton}
+          accessibilityRole="button"
+          accessibilityLabel="Close emoji panel"
+        >
+          <IconSymbol name="xmark" size={18} color={theme.colors.textMuted} />
+        </TouchableOpacity>
       </View>
 
       {/* Category tabs */}
@@ -647,7 +754,11 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         </ScrollView>
       )}
 
-      {/* Emoji/Sticker grid */}
+      {/* Grid mounts on first need (latched), then stays. Placeholder holds the
+          height before that so the first fill-in doesn't jump. */}
+      {!showEmojiGrid ? (
+        <View style={styles.emojiGrid} />
+      ) : (
       <ScrollView
         style={styles.emojiGrid}
         contentContainerStyle={styles.emojiGridContent}
@@ -702,13 +813,13 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
                 <Text style={styles.emojiSectionTitle}>Emoji</Text>
                 <View style={styles.emojiRow}>
                   {filteredEmojis.map((emoji, index) => (
-                    <TouchableOpacity
+                    <EmojiCell
                       key={`${emoji}-${index}`}
-                      style={styles.emojiButton}
-                      onPress={() => handleSelectEmoji(emoji)}
-                    >
-                      <Text style={styles.emoji}>{emoji}</Text>
-                    </TouchableOpacity>
+                      emoji={emoji}
+                      onSelect={handleSelectEmoji}
+                      buttonStyle={styles.emojiButton}
+                      textStyle={styles.emoji}
+                    />
                   ))}
                 </View>
               </View>
@@ -765,13 +876,13 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         {!searchQuery && selectedCategory !== 'custom' && selectedCategory !== 'stickers' && (
           <View style={styles.emojiRow}>
             {displayEmojis.map((emoji, index) => (
-              <TouchableOpacity
+              <EmojiCell
                 key={`${emoji}-${index}`}
-                style={styles.emojiButton}
-                onPress={() => handleSelectEmoji(emoji)}
-              >
-                <Text style={styles.emoji}>{emoji}</Text>
-              </TouchableOpacity>
+                emoji={emoji}
+                onSelect={handleSelectEmoji}
+                buttonStyle={styles.emojiButton}
+                textStyle={styles.emoji}
+              />
             ))}
             {selectedCategory === 'recent' && displayEmojis.length === 0 && (
               <Text style={styles.emptyText}>No recent emojis</Text>
@@ -779,10 +890,13 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           </View>
         )}
       </ScrollView>
+      )}
     </View>
     );
   }, [
-    showEmojiPicker,
+    panelPresent,
+    panelShown,
+    showEmojiGrid,
     searchQuery,
     selectedCategory,
     categories,
@@ -794,12 +908,19 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     stickers,
     handleSelectEmoji,
     handleSelectSticker,
+    composerPanel.onSearchFocus,
+    composerPanel.onSearchBlur,
+    composerPanel.closePanel,
     styles,
     theme,
   ]);
 
   return (
     <View style={[styles.container, containerDynamicStyle]}>
+      {/* Composer footprint: everything above the keyboard/panel spacer (banners
+          + attachment preview + autocomplete anchor + pill). Measured so the
+          chat list can lift to clear the composer exactly in every state. */}
+      <View onLayout={handleFootprintLayout}>
       {/* Edit mode preview */}
       {editingMessage && (
         <View style={styles.editContainer}>
@@ -985,6 +1106,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
               name={showEmojiPicker ? 'keyboard' : 'face.smiling'}
               color={showEmojiPicker ? theme.colors.primary : (disabled ? theme.colors.textMuted : theme.colors.textSubtle)}
               size={27}
+              strokeWidth={1.5}
             />
           </TouchableOpacity>
         </View>
@@ -1016,12 +1138,15 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         />
 
         <View style={styles.rightButtons}>
-          {/* Attach hides while composing to give the text room. */}
-          {!isComposing && (
+          {/* Attach slides right + fades out while composing to give the text
+              room; it slides back when the input is cleared. Kept mounted (not
+              conditionally unmounted) so it can animate in both directions, with
+              its width collapsing to 0 so the input reclaims the space. */}
+          <Reanimated.View style={[styles.attachContainer, attachAnimatedStyle]}>
             <TouchableOpacity
               style={styles.inputIconButton}
               onPress={onAttachmentPress}
-              disabled={disabled}
+              disabled={disabled || isComposing}
               accessibilityRole="button"
               accessibilityLabel="Attach image"
             >
@@ -1029,36 +1154,41 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
                 name="paperclip"
                 color={disabled ? theme.colors.textMuted : theme.colors.textSubtle}
                 size={27}
+                strokeWidth={1.5}
               />
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              {
-                backgroundColor: canSend ? theme.colors.accent : theme.colors.surface7,
-                opacity: canSend ? 1 : 0.6,
-              },
-            ]}
-            onPress={handleSend}
-            disabled={!canSend}
-            accessibilityRole="button"
-            accessibilityLabel="Send message"
-          >
-            {isSending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <SendIcon color="#fff" size={20} />
-            )}
-          </TouchableOpacity>
+          </Reanimated.View>
+          <Reanimated.View style={[styles.sendButton, sendAnimatedStyle]}>
+            <TouchableOpacity
+              style={styles.sendButtonTouch}
+              onPress={handleSend}
+              disabled={!canSend}
+              accessibilityRole="button"
+              accessibilityLabel="Send message"
+            >
+              {isSending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <SendIcon color="#fff" size={20} />
+              )}
+            </TouchableOpacity>
+          </Reanimated.View>
         </View>
       </View>
+      </View>{/* end composer footprint */}
 
       {/* Animated spacer beneath the pill. Closed: it follows the keyboard so
           the pill rides up (keyboard avoidance). Open: it holds the keyboard
-          footprint and shows the emoji panel — no layout jump on swap. */}
+          footprint and shows the emoji panel — no layout jump on swap. The inner
+          opacity (panelOpacityStyle) hides the panel in lockstep with the
+          keyboard on the UI thread, so it preloads behind a full keyboard but
+          never peeks during a dismiss. */}
       <Reanimated.View style={spacerAnimatedStyle}>
-        {emojiPanelContent}
+        {emojiPanelContent && (
+          <Reanimated.View style={[styles.panelOpacityWrap, panelOpacityStyle]}>
+            {emojiPanelContent}
+          </Reanimated.View>
+        )}
       </Reanimated.View>
     </View>
   );
@@ -1066,9 +1196,11 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
 
 const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
-    // Match the messages page so the composer bar blends with the chat
-    // background; the pill sits on top as the distinct surface.
-    backgroundColor: theme.colors.surface1,
+    // Transparent so chat messages scroll visibly behind the composer; only
+    // the pill itself carries a surface. (The keyboard/emoji-panel spacer below
+    // the pill is covered by the keyboard or the panel's own background, so the
+    // transparency only reveals messages in the resting state.)
+    backgroundColor: 'transparent',
     paddingHorizontal: Skin.space(12),
     paddingTop: Skin.space(8),
     // paddingBottom and width depend on insets/screen width and are
@@ -1185,11 +1317,26 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     // containers (justifyContent: flex-end) and text position by the input's
     // own textAlignVertical, so neither depends on the pill's vertical align.
     alignItems: 'stretch',
-    // Same shade as the emoji panel so the pill and the panel read as one
-    // continuous surface.
-    backgroundColor: theme.colors.surface4,
+    // Per-scheme semantic token: distinct raised surface on dark, white on light.
+    backgroundColor: theme.colors.composerPillBg,
     // Large radius => the short ends are perfect semicircles while single-line.
     borderRadius: 999,
+    // "Raised" cue via a per-scheme rim token (faint white top-light on dark,
+    // subtle grey hairline on light where white-on-white would be invisible)
+    // plus a soft shadow for lift. Both tuned per scheme by the token, not
+    // eyeballed once on dark.
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.composerPillBorder,
+    // Per-scheme "raised" cue:
+    //   DARK  — a soft drop shadow (shadows read well on dark).
+    //   LIGHT — a visible hairline `borderColor` (above) plus a TIGHT elevation 1.
+    //           elevation 1 on Android casts a low-diffusion shadow right under
+    //           the pill — a crisp lift, not the heavy diffuse drop of 2+.
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme.dark ? 0.10 : 0.06,
+    shadowRadius: theme.dark ? 5 : 3,
+    elevation: theme.dark ? 5 : 1,
     // Uniform inner padding on all four sides: the send circle then has the
     // same gap to the right edge as it does to the top/bottom, so it reads as
     // evenly inset (snug but balanced) rather than cramped against one side.
@@ -1244,16 +1391,41 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   inputIconButton: {
     padding: Skin.space(6),
   },
+  // Clips the paperclip as its width animates to 0 while composing, so the
+  // icon slides out cleanly instead of overflowing the collapsing container.
+  attachContainer: {
+    overflow: 'hidden',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
   sendButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
+  },
+  sendButtonTouch: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Wraps the kept-mounted panel; its opacity (UI-thread) hides it while closed.
+  panelOpacityWrap: {
+    flex: 1,
+  },
   emojiPanelInner: {
     flex: 1,
-    backgroundColor: theme.colors.surface4,
+    // Same semantic token as the composer pill so the pill and the panel read
+    // as one continuous surface in BOTH schemes (near-white on light, raised
+    // surface on dark). The sub-bands below stay one step off this base.
+    backgroundColor: theme.colors.composerPillBg,
+    // Rim so the panel has a defined edge — on light it's near-white and would
+    // otherwise blend into the page. Same token as the pill's rim (grey hairline
+    // on light, faint white on dark). Top + sides; the bottom runs off-screen.
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.composerPillBorder,
     borderTopLeftRadius: Skin.radius(16),
     borderTopRightRadius: Skin.radius(16),
     // Clip the search bar / category band to the rounded top corners.
@@ -1278,11 +1450,17 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontFamily: theme.fonts.regular.fontFamily,
     padding: 0,
   },
+  panelCloseButton: {
+    // Slight left pad so it reads as a distinct affordance at the far right,
+    // separated from the in-field clear button.
+    paddingLeft: Skin.space(4),
+  },
   categoryTabs: {
-    // A continuous band (no top/bottom separators), one shade off the panel.
+    // A continuous band (no top/bottom separators), a subtle step off the panel
+    // (semantic token so it tracks the panel surface in both schemes).
     // Tall enough that the 20px emoji + pill padding aren't clipped.
     maxHeight: 48,
-    backgroundColor: theme.colors.surface3,
+    backgroundColor: theme.colors.composerPanelBand,
   },
   categoryTabsContent: {
     paddingHorizontal: Skin.space(6),
@@ -1299,8 +1477,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   categoryTabActive: {
     // Floating pill one step above the band so it reads as raised, inset by the
-    // content padding so it never touches the band edges.
-    backgroundColor: theme.colors.surface6,
+    // content padding so it never touches the band edges. Semantic token,
+    // derived from the panel surface so it tracks it in both schemes.
+    backgroundColor: theme.colors.composerPanelBandActive,
   },
   categoryTabEmoji: {
     fontSize: Skin.font(20),

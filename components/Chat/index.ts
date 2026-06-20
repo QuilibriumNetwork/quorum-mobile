@@ -9,7 +9,6 @@ export { PinnedMessagesPanel } from './PinnedMessagesPanel';
 export { BookmarksPanel } from './BookmarksPanel';
 export { SearchBar } from './SearchBar';
 export { DirectMessagesList } from './DirectMessagesList';
-export { DirectMessageView } from './DirectMessageView';
 export { InviteLinkCard, containsInviteLink, extractInviteLink } from './InviteLinkCard';
 export { MentionableText } from './MentionableText';
 export { SpaceChatArea } from './SpaceChatArea';

@@ -17,6 +17,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from '../utils';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const ReanimatedView = Reanimated.View;
 
@@ -52,6 +53,7 @@ export function ImageViewer({
   onClose,
   onIndexChange,
 }: ImageViewerProps) {
+  const insets = useSafeAreaInsets();
   // Normalize to array of images
   const imageArray = images ?? (imageUrl ? [imageUrl] : []);
   const hasMultipleImages = imageArray.length > 1;
@@ -292,7 +294,7 @@ export function ImageViewer({
       <GestureHandlerRootView style={styles.gestureRoot}>
         <ReanimatedView style={[styles.container, containerAnimatedStyle]}>
           {/* Header with page indicator on left, close button on right */}
-          <View style={styles.header}>
+          <View style={[styles.header, { top: insets.top + 8 }]}>
             {hasMultipleImages ? (
               <View style={styles.pageIndicator}>
                 <Text style={styles.pageIndicatorText}>
@@ -380,7 +382,8 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   header: {
     position: 'absolute',
-    top: 50,
+    // `top` is applied inline (insets.top + 8) so the buttons clear the status
+    // bar / camera cutout in edge-to-edge mode.
     left: 0,
     right: 0,
     zIndex: 10,

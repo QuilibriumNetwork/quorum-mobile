@@ -10,6 +10,7 @@ import type { AppTheme } from '@/theme';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { ChatBottomChrome, useChatListBottomInset } from './ChatBottomChrome';
 
 import {
   DMChatHeader,
@@ -64,7 +65,12 @@ interface DMChatAreaProps {
   isBookmarked: (messageId: string) => boolean;
   addBookmark: (bookmark: Bookmark) => void;
   removeBookmark: (bookmarkId: string) => void;
+  /** Effective tab-bar height (0 while the emoji panel is open) — sizes the
+   *  bottom fade and the list content inset. */
   tabBarHeight?: number;
+  /** Raw, stable tab-bar height (NOT zeroed on panel open) — the resting
+   *  clearance the composer's spacer holds so the pill floats above the bar. */
+  restingChromeHeight?: number;
   theme: AppTheme;
   draftsRef: React.MutableRefObject<Map<string, string>>;
 }
@@ -87,6 +93,7 @@ export const DMChatArea = React.memo(function DMChatArea({
   addBookmark,
   removeBookmark,
   tabBarHeight = 0,
+  restingChromeHeight = 0,
   theme,
   draftsRef,
 }: DMChatAreaProps) {
@@ -429,8 +436,14 @@ export const DMChatArea = React.memo(function DMChatArea({
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  // Bottom content padding so the newest message rests above the floating
+  // composer; the composer + fade layout itself lives in ChatBottomChrome.
+  const listBottomInset = useChatListBottomInset(tabBarHeight);
+
   // Keyboard avoidance is owned by the composer itself (it grows an animated
-  // spacer that follows the keyboard), so the chat area is a plain flex column.
+  // spacer that follows the keyboard). The composer floats over the bottom of
+  // the list so messages scroll behind it (Telegram-style); the list pads its
+  // content to clear the composer's resting footprint.
   return (
     <View style={styles.chatArea}>
       {dmSearch.isSearchOpen && (
@@ -446,7 +459,9 @@ export const DMChatArea = React.memo(function DMChatArea({
       <MessagesList
         ref={dmMessagesListRef}
         messages={dmSearch.isSearchOpen && dmSearch.query.trim().length > 0 ? dmSearch.results.map(r => r.message) : dmMessages}
+        currentUserId={user?.address}
         topInset={Platform.OS === 'ios' ? headerHeight : 0}
+        bottomInset={listBottomInset}
         theme={theme}
         isLoading={dmMessagesLoading}
         isRefreshing={dmMessagesRefetching}
@@ -471,25 +486,27 @@ export const DMChatArea = React.memo(function DMChatArea({
         onReport={handleReportMessage}
       />
 
-      <MessageInput
-        ref={dmMessageInputRef}
-        value={messageText}
-        onChangeText={setMessageText}
-        onSend={handleSendDirectMessage}
-        channelName={conversationData.displayName || conversationData.address?.slice(0, 8) || 'DM'}
-        isDM
-        theme={theme}
-        isSending={sendDirectMessageMutation.isPending || sendDirectEmbedMutation.isPending}
-        onAttachmentPress={handleAttachmentPress}
-        pendingAttachment={pendingAttachment}
-        onClearAttachment={handleClearAttachment}
-        bottomInset={0}
-        bottomChromeHeight={tabBarHeight}
-        replyTo={replyToMessage}
-        onDismissReply={handleDismissReply}
-        editingMessage={editingMessage}
-        onCancelEdit={handleCancelEdit}
-      />
+      <ChatBottomChrome tabBarHeight={tabBarHeight} surfaceColor={theme.colors.surface1} isDark={theme.dark}>
+        <MessageInput
+          ref={dmMessageInputRef}
+          value={messageText}
+          onChangeText={setMessageText}
+          onSend={handleSendDirectMessage}
+          channelName={conversationData.displayName || conversationData.address?.slice(0, 8) || 'DM'}
+          isDM
+          theme={theme}
+          isSending={sendDirectMessageMutation.isPending || sendDirectEmbedMutation.isPending}
+          onAttachmentPress={handleAttachmentPress}
+          pendingAttachment={pendingAttachment}
+          onClearAttachment={handleClearAttachment}
+          bottomInset={0}
+          restingChromeHeight={restingChromeHeight}
+          replyTo={replyToMessage}
+          onDismissReply={handleDismissReply}
+          editingMessage={editingMessage}
+          onCancelEdit={handleCancelEdit}
+        />
+      </ChatBottomChrome>
 
       {bookmarksPanelVisible && (
         <BookmarksPanel

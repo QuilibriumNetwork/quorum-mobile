@@ -1,6 +1,5 @@
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import ComposeChannelPickerModal from '@/components/ComposeChannelPickerModal';
-import { HeaderAvatar } from '@/components/HeaderAvatar';
 import { InviteLinkCard, containsInviteLink } from '@/components/Chat/InviteLinkCard';
 import type { ComposeCastOptions, ComposeCastResult } from '@/services/miniapp';
 import { AudioSpaceEmbed } from '@/components/SocialFeed/content/AudioSpaceEmbed';
@@ -12,6 +11,7 @@ import TipModal, { type TipTarget } from '@/components/wallet/TipModal';
 import { ActionSheet, type ActionRowItem } from '@/components/shared/ActionSheet';
 import { ActionRow, ActionRowGroup } from '@/components/shared/ActionRow';
 import { useCenteredPillScroll } from '@/hooks/useCenteredPillScroll';
+import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { useMiniappManifest } from '@/hooks/useMiniappManifest';
 import { useOgMetadata } from '@/hooks/useOgMetadata';
 import { SnapEmbed, useSnapDetection } from '@/components/SocialFeed/content/SnapEmbed';
@@ -85,6 +85,7 @@ import { Image as ExpoImage } from 'expo-image';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, BackHandler, Dimensions, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View, type KeyboardEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReanimatedModule, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -2192,7 +2193,7 @@ function ThreadDetailView({
     currentFarcasterProfile?.pfp?.url ??
     currentUser?.farcaster?.pfpUrl ??
     null;
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<KeyboardAwareScrollViewRef>(null);
   const replyInputRef = useRef<TextInput>(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   // Track whether the inline reply editor is in the scroll viewport. Used
@@ -2973,17 +2974,6 @@ function ThreadDetailView({
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      // Android Modal contexts ignore `adjustResize` from the
-      // manifest and default to `adjustNothing`, so `behavior:
-      // undefined` left the reply composer hidden behind the
-      // keyboard. `height` is the correct Android counterpart to
-      // iOS `padding` for this layout — both keep the bottom of the
-      // KAV pinned to the keyboard top edge.
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? (8 + 32 + Math.max(8, bottomInset)) : 0}
-    >
     <View style={{ flex: 1, backgroundColor: theme.colors.surface1 }}>
       {error && (
         <View style={{ padding: Skin.space(20) }}>
@@ -2992,11 +2982,28 @@ function ThreadDetailView({
       )}
 
       {mainCast && (
-        <ScrollView
+        // KeyboardAwareScrollView (react-native-keyboard-controller) keeps the
+        // focused reply input visible above the keyboard on BOTH platforms and
+        // in BOTH presentation contexts (route mode = adjustResize, modal mode =
+        // adjustNothing), without the per-platform/per-context magic numbers the
+        // old KeyboardAvoidingView needed. `bottomOffset` is the gap kept between
+        // the focused input and the keyboard top. Resting bottom clearance for
+        // the floating tab bar is the content paddingBottom (bottomInset).
+        <KeyboardAwareScrollView
           ref={scrollViewRef}
           style={{ flex: 1 }}
+          // Keep ~the footer row's height of space below the focused input
+          // visible above the keyboard, so the Post button / char count stay in
+          // view while typing (not just the caret). Long multi-line replies can
+          // still push it off — the user scrolls a hair — but typical replies
+          // keep Post visible.
+          bottomOffset={Skin.space(64)}
           contentContainerStyle={{
-            paddingBottom: Skin.space(16),
+            // Resting: clear the floating tab bar (bottomInset). When the editor
+            // is focused the keyboard is up and covers the tab-bar zone, so the
+            // tab-bar clearance becomes pure dead space below the editor — drop
+            // it to a small gap so there's no big empty area under the Post row.
+            paddingBottom: isEditorFocused ? Skin.space(16) : Skin.space(16) + bottomInset,
           }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
@@ -3277,7 +3284,7 @@ function ThreadDetailView({
               </View>
             </View>
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
       )}
 
       {/* Floating reply FAB — hidden when the editor is in viewport (the
@@ -3295,11 +3302,7 @@ function ThreadDetailView({
             backgroundColor: theme.colors.accent,
             alignItems: 'center',
             justifyContent: 'center',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 4,
-            elevation: 5,
+            ...Skin.floatingShadow(),
           }}
         >
           <IconSymbol name="arrowshape.turn.up.left.fill" size={22} color="#fff" />
@@ -3365,7 +3368,6 @@ function ThreadDetailView({
         target={reportCastTarget ? { type: 'cast', ...reportCastTarget } : null}
       />
     </View>
-    </KeyboardAvoidingView>
   );
 }
 
@@ -5696,6 +5698,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   }, [backdropAnim, slideAnim, visible, isRouteMode]);
 
   const styles = useMemo(() => createStyles(theme, isDark, insets), [theme, isDark, insets]);
+  const floatingTabBarPadding = useFloatingTabBarPadding();
 
   const posts = useMemo<FeedPost[]>(() => {
     return farcasterItems.map((item) => {
@@ -6302,7 +6305,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               data={searchResultItems}
               keyExtractor={(item) => item.key}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.contentContainer}
+              contentContainerStyle={
+                isRouteMode
+                  ? { ...styles.contentContainer, paddingBottom: floatingTabBarPadding }
+                  : styles.contentContainer
+              }
               onEndReached={() => {
                 if (searchTab === 'users') onUsersEndReached();
                 else if (searchTab === 'channels') onChannelsEndReached();
@@ -6315,9 +6322,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                 {/* Search Input */}
                 <View style={styles.searchContainer}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(12) }}>
-                    {/* Avatar (top-left) — only in route mode, the modal
-                        presentation has its own dismiss affordance. */}
-                    {isRouteMode && <HeaderAvatar />}
                     <View style={[styles.searchInputContainer, { flex: 1 }]}>
                       <IconSymbol name="magnifyingglass" size={18} color={theme.colors.textMuted} />
                       <TextInput
@@ -6499,7 +6503,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               // text input's keyboard is open, instead of being swallowed to
               // dismiss it.
               keyboardShouldPersistTaps="handled"
-              contentContainerStyle={styles.contentContainer}
+              contentContainerStyle={
+                isRouteMode
+                  ? { ...styles.contentContainer, paddingBottom: floatingTabBarPadding }
+                  : styles.contentContainer
+              }
               onEndReached={() => {
                 // Governance is a single non-paginated fetch.
                 if (activeFilter !== 'governance' && hasNextPage && !isFetchingNextPage) {
@@ -6533,10 +6541,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                     }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(12) }}>
-                      {/* Avatar (top-left) — only in route mode. The
-                          modal presentation has its own dismiss
-                          affordance and doesn't need a header avatar. */}
-                      {isRouteMode && <HeaderAvatar />}
                       <View style={[styles.searchInputContainer, { flex: 1 }]}>
                         <IconSymbol name="magnifyingglass" size={18} color={theme.colors.textMuted} />
                         <TextInput
@@ -6785,10 +6789,12 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             </View>
           )}
 
-          {/* Floating Action Button */}
+          {/* Floating Action Button — in route mode it must float ABOVE the
+              floating tab bar (not the hardcoded bottom:16, which now overlaps
+              the tab bar / device buttons). Modal mode keeps bottom:16. */}
           {token && (
             <TouchableOpacity
-              style={styles.fab}
+              style={[styles.fab, isRouteMode && { bottom: floatingTabBarPadding }]}
               onPress={() => {
                 if (activeFilter === 'governance') {
                   // New proposal: blank /hegemony cast; `PROPOSAL:` is prepended
@@ -6837,11 +6843,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                 borderColor: theme.colors.surface3,
                 alignItems: 'center',
                 justifyContent: 'center',
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.2,
-                shadowRadius: 4,
-                elevation: 4,
+                ...Skin.floatingShadow(),
               }}
             >
               <IconSymbol name="magnifyingglass" size={18} color={theme.colors.textMain} />
@@ -6869,11 +6871,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                 borderRadius: Skin.radius(20),
                 paddingHorizontal: Skin.space(12),
                 paddingVertical: Skin.space(8),
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.25,
-                shadowRadius: 6,
-                elevation: 6,
+                ...Skin.floatingShadow(),
               }}
             >
               <IconSymbol name="magnifyingglass" size={18} color={theme.colors.textMuted} />
@@ -6949,7 +6947,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   onShareToChat={handleShareToChat}
                   followStates={followStates}
                   onFollow={handleFollow}
-                  bottomInset={insets.bottom}
+                  // In route mode these stack screens render UNDER the floating
+                  // tab bar, so the reply editor + FAB + list padding must clear
+                  // it (insets.bottom alone leaves them hidden behind the bar).
+                  // In modal mode there's no tab bar, so insets.bottom is right.
+                  bottomInset={isRouteMode ? floatingTabBarPadding : insets.bottom}
                   currentUserFid={currentUserFid}
                   onTipPress={handleOpenTip}
                   maxCastLength={maxCastLength}
@@ -6975,7 +6977,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   onOpenChannel={(channelKey) => pushScreen({ type: 'channel', channelKey })}
                   likeStates={likeStates}
                   onLikeToggle={handleLikeToggle}
-                  bottomInset={insets.bottom}
+                  bottomInset={isRouteMode ? floatingTabBarPadding : insets.bottom}
                   onTipPress={handleOpenTip}
                 />,
                 `profile-${screen.fid}-${stackIndex}`
@@ -6996,7 +6998,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   onOpenChannel={(channelKey) => pushScreen({ type: 'channel', channelKey })}
                   likeStates={likeStates}
                   onLikeToggle={handleLikeToggle}
-                  bottomInset={insets.bottom}
+                  bottomInset={isRouteMode ? floatingTabBarPadding : insets.bottom}
                   onTipPress={handleOpenTip}
                 />,
                 `channel-${screen.channelKey}-${stackIndex}`
@@ -7338,8 +7340,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
           />
 
         </Animated.View>
-        {/* Bottom spacer to align with userPanel - uses layout constraint instead of padding */}
-        <View style={{ height: userPanelHeight }} />
+        {/* Bottom spacer to align with the userPanel — modal mode only. In route
+            mode the feed scrolls full-height behind the floating tab bar, and the
+            FlashList's own contentContainerStyle.paddingBottom handles clearance,
+            so this spacer would otherwise leave a dead gap above the tab bar. */}
+        {!isRouteMode && <View style={{ height: userPanelHeight }} />}
       </View>
     </View>
   );
@@ -7512,7 +7517,8 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       borderBottomColor: theme.colors.surface3,
       paddingTop: Skin.space(12),
       paddingBottom: Skin.space(14),
-      paddingHorizontal: Skin.space(12),
+      // Shared content-row width so the feed matches the chat message stream.
+      paddingHorizontal: Skin.contentRowPaddingH(),
       gap: Skin.space(10),
     },
     postHeader: {
@@ -7625,11 +7631,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       backgroundColor: theme.colors.accent,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#000',
-      shadowOpacity: 0.25,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 8,
+      ...Skin.floatingShadow(),
     },
     composeOverlay: {
       ...StyleSheet.absoluteFillObject,

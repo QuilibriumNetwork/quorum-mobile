@@ -22,7 +22,6 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWebSocket, useSpaceCall } from '@/context';
 import { useQueryClient } from '@tanstack/react-query';
 import { canManageReadOnlyChannel, queryKeys, type Message } from '@quilibrium/quorum-shared';
@@ -59,7 +58,6 @@ export default function SpaceChannelChat() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const { enqueueOutbound, isConnected } = useWebSocket();
-  const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   // While the composer emoji panel is open the tab bar is hidden, so reclaim
   // its space (zero padding + 0 chrome height) and let the panel reach the
@@ -265,11 +263,11 @@ export default function SpaceChannelChat() {
       </TouchableOpacity>
       {isSpaceOwner && (
         <TouchableOpacity onPress={handleOpenInviteModal} hitSlop={8}>
-          <IconSymbol name="person.badge.plus" color={theme.colors.primary} size={20} />
+          <IconSymbol name="person.badge.plus" color={theme.colors.textMain} size={20} />
         </TouchableOpacity>
       )}
       <TouchableOpacity onPress={handleOpenSpaceSettings} hitSlop={8}>
-        <IconSymbol name="gearshape" color={theme.colors.primary} size={20} />
+        <IconSymbol name="gearshape" color={theme.colors.textMain} size={20} />
       </TouchableOpacity>
     </View>
   ), [theme, isSpaceOwner, startSpaceCall, handleOpenInviteModal, handleOpenSpaceSettings]);
@@ -279,7 +277,11 @@ export default function SpaceChannelChat() {
       style={[
         styles.container,
         {
-          paddingBottom: effectiveChromeHeight,
+          // No paddingBottom — the chat area fills the full screen so messages
+          // scroll behind the floating composer + tab bar (Telegram-style). The
+          // composer floats above the tab bar and the list pads its content to
+          // clear it. effectiveChromeHeight is still passed to the chat area so
+          // the composer floats at the right height and the list pads correctly.
           backgroundColor: theme.colors.surface1,
         },
       ]}
@@ -316,6 +318,7 @@ export default function SpaceChannelChat() {
         addBookmark={addBookmark}
         removeBookmark={removeBookmark}
         tabBarHeight={effectiveChromeHeight}
+        restingChromeHeight={tabBarHeight}
         theme={theme}
         draftsRef={draftsRef}
         onChannelLinkPress={handleChannelLinkPress}

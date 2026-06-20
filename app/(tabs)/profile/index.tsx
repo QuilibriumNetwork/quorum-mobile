@@ -14,13 +14,13 @@ import { ActivityIndicator, FlatList, Image, Pressable, RefreshControl, StyleShe
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
+import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
-import { HeaderAvatar } from '@/components/HeaderAvatar';
 import { useOtaUpdate } from '@/hooks/useOtaUpdate';
 import {
   clearNotificationLog,
@@ -44,8 +44,8 @@ function formatTime(ts: number): string {
 }
 
 export default function NotificationsScreen() {
-  const { theme } = useTheme();
-  const tabBarHeight = useBottomTabBarHeight();
+  const { theme, isDark } = useTheme();
+  const listPadding = useFloatingTabBarPadding();
   const { farcasterAuthToken } = useAuth();
   const {
     items,
@@ -191,18 +191,13 @@ export default function NotificationsScreen() {
   const hasChat = items.some(i => i.source === 'chat');
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: tabBarHeight }]}>
+    <FloatingTabScreen surfaceColor={theme.colors.surface1} isDark={isDark} style={{ paddingTop: insets.top }}>
       {/* Use an in-screen header to match spaces + messages exactly —
           the native Stack header was visually heavier and broke the
           design system across tabs. */}
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <View style={styles.headerSlotLeft}>
-          <HeaderAvatar />
-        </View>
-        <View style={styles.headerSlotCenter}>
-          <Text style={styles.heading}>Notifications</Text>
-        </View>
+        <Text style={styles.heading}>Notifications</Text>
         <View style={styles.headerSlotRight}>
           {showOta ? (
             <TouchableOpacity
@@ -254,7 +249,7 @@ export default function NotificationsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
-          contentContainerStyle={{ paddingBottom: Skin.space(24) }}
+          contentContainerStyle={{ paddingBottom: listPadding }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -275,7 +270,7 @@ export default function NotificationsScreen() {
           }
         />
       )}
-    </View>
+    </FloatingTabScreen>
   );
 }
 
@@ -293,16 +288,6 @@ const createStyles = (theme: AppTheme) =>
       paddingTop: Skin.space(8),
       paddingBottom: Skin.space(4),
     },
-    headerSlotLeft: {
-      alignItems: 'flex-start' as const,
-      flexDirection: 'row' as const,
-    },
-    headerSlotCenter: {
-      flex: 1,
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-      paddingHorizontal: Skin.space(8),
-    },
     headerSlotRight: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
@@ -311,7 +296,7 @@ const createStyles = (theme: AppTheme) =>
     heading: {
       ...theme.textStyles.title3,
       color: theme.colors.textMain,
-      textAlign: 'center' as const,
+      flex: 1,
     },
     headerIconButton: { padding: Skin.space(8) },
     empty: {

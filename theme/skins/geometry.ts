@@ -83,3 +83,32 @@ export function border(n: number): number {
 export function font(n: number): number {
   return Math.round(n * current.fontScale);
 }
+
+/**
+ * Canonical drop shadow for floating buttons (FABs, the search pill, floating
+ * chips). These sit over the feed/content, not over a backdrop, so they want a
+ * crisp lift, not a heavy diffuse drop. On light theme a wide blur radius reads
+ * as a muddy halo, so we keep the radius tight (offset 2 / radius 4 / elevation
+ * 4) and the opacity low. Surfaces that legitimately need a big soft shadow
+ * (modals, sheets, toasts, drag previews) keep their own values.
+ */
+export function floatingShadow() {
+  return {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  } as const;
+}
+
+/**
+ * Canonical horizontal padding for list-content rows that hold a stream of
+ * messages/casts (chat message rows, chat cast cards, Farcaster feed cards).
+ * Centralised so these surfaces share one width instead of each hardcoding its
+ * own (the feed used to be 12 while chat messages were 16, making the feed look
+ * wider). Skin-scaled like every other spacing value.
+ */
+export function contentRowPaddingH(): number {
+  return space(16);
+}

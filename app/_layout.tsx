@@ -25,6 +25,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { Slot, router, useSegments, useRootNavigationState } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import * as NavigationBar from 'expo-navigation-bar';
 import * as SystemUI from 'expo-system-ui';
 import React from 'react';
 import { ActivityIndicator, AppState, Platform, View } from 'react-native';
@@ -263,7 +264,21 @@ function StatusBarWrapper() {
 
   React.useEffect(() => {
     const bgColor = isDark ? '#0a0a0b' : '#ffffff';
+    // Root window background — shows through in the system bar zones (edge-to-edge).
     SystemUI.setBackgroundColorAsync(bgColor);
+
+    // System navigation-bar BUTTON tint. In edge-to-edge mode Android forces a
+    // transparent nav-bar background (our themed surface draws behind it), but
+    // the back/home/recents icon tint is a separate window flag that does NOT
+    // auto-contrast on every OEM (Samsung, Xiaomi). Set it explicitly so the
+    // icons stay visible: dark icons on the light surface, light on the dark.
+    // (setButtonStyleAsync is the supported API; only setBackgroundColorAsync
+    // is deprecated under edge-to-edge.)
+    if (Platform.OS === 'android') {
+      NavigationBar.setButtonStyleAsync(isDark ? 'light' : 'dark').catch(() => {
+        /* best-effort — older devices / unsupported, leave system default */
+      });
+    }
   }, [isDark]);
 
   return <StatusBar style={isDark ? 'light' : 'dark'} />;

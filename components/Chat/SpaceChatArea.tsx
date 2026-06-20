@@ -10,6 +10,7 @@ import type { AppTheme } from '@/theme';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { ChatBottomChrome, useChatListBottomInset } from './ChatBottomChrome';
 import { useHeaderHeight } from '@react-navigation/elements';
 
 import {
@@ -79,7 +80,12 @@ interface SpaceChatAreaProps {
   isBookmarked: (messageId: string) => boolean;
   addBookmark: (bookmark: Bookmark) => void;
   removeBookmark: (bookmarkId: string) => void;
+  /** Effective tab-bar height (0 while the emoji panel is open) — sizes the
+   *  bottom fade and the list content inset. */
   tabBarHeight?: number;
+  /** Raw, stable tab-bar height (NOT zeroed on panel open) — the resting
+   *  clearance the composer's spacer holds so the pill floats above the bar. */
+  restingChromeHeight?: number;
   theme: AppTheme;
   draftsRef: React.MutableRefObject<Map<string, string>>;
   onChannelLinkPress: (channelId: string) => void;
@@ -111,6 +117,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
   addBookmark,
   removeBookmark,
   tabBarHeight = 0,
+  restingChromeHeight = 0,
   theme,
   draftsRef,
   onChannelLinkPress,
@@ -634,8 +641,14 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  // Bottom content padding so the newest message rests above the floating
+  // composer; the composer + fade layout itself lives in ChatBottomChrome.
+  const listBottomInset = useChatListBottomInset(tabBarHeight);
+
   // Keyboard avoidance is owned by the composer itself (it grows an animated
-  // spacer that follows the keyboard), so the chat area is a plain flex column.
+  // spacer that follows the keyboard). The composer floats over the bottom of
+  // the list so messages scroll behind it (Telegram-style); the list pads its
+  // content to clear the composer's resting footprint.
   return (
     <View style={styles.chatArea}>
       <View style={styles.chatAreaInner}>
@@ -683,6 +696,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
           spaceId={spaceId}
           channelId={channelId}
           topInset={Platform.OS === 'ios' ? headerHeight : 0}
+          bottomInset={listBottomInset}
           theme={theme}
           isLoading={messagesLoading}
           isRefreshing={messagesRefetching}
@@ -717,6 +731,9 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
           onReport={handleReportMessage}
         />
 
+      </View>
+
+      <ChatBottomChrome tabBarHeight={tabBarHeight} surfaceColor={theme.colors.surface1} isDark={theme.dark}>
         {!canPost && isReadOnlyChannel ? (
           <View style={styles.readOnlyBanner}>
             <IconSymbol name="lock.fill" size={16} color={theme.colors.textMuted} />
@@ -735,7 +752,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             pendingAttachment={pendingAttachment}
             onClearAttachment={handleClearAttachment}
             bottomInset={0}
-            bottomChromeHeight={tabBarHeight}
+            restingChromeHeight={restingChromeHeight}
             replyTo={replyToMessage}
             onDismissReply={handleDismissReply}
             castReplyAvailable={isCastReply && Boolean(farcasterAuthToken)}
@@ -754,7 +771,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             disabled={!canPost}
           />
         )}
-      </View>
+      </ChatBottomChrome>
 
       {pinnedMessagesPanelVisible && (
         <PinnedMessagesPanel
