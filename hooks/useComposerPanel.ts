@@ -5,10 +5,12 @@ import {
   useReanimatedKeyboardAnimation,
 } from 'react-native-keyboard-controller';
 import {
+  Easing,
   runOnJS,
   useAnimatedReaction,
   useDerivedValue,
   useSharedValue,
+  withTiming,
   type DerivedValue,
   type SharedValue,
 } from 'react-native-reanimated';
@@ -141,6 +143,15 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   // 1 while the in-panel search field is focused. Drives the panel "lift" so it
   // rides above the keyboard the search field summons (see spacer worklet).
   const searchFocusedSV = useSharedValue(0);
+  // Cold-open slide progress (0 → 1). When the panel is opened with NO keyboard
+  // up, there's no OS keyboard slide to provide motion, so the spacer would snap
+  // from the resting chrome straight to the panel height in one frame (the panel
+  // just "appears"). We animate this 0→1 with a timing curve on a cold open and
+  // interpolate the spacer between the resting chrome and the panel height by it,
+  // so the panel slides up like a keyboard would. When opening FROM a keyboard
+  // it's set to 1 immediately so the existing reveal-as-the-keyboard-slides
+  // behaviour is unchanged (animating there would fight the OS keyboard).
+  const coldOpenSV = useSharedValue(1);
   // Keyboard up/down, flipped at animation start so the panel can be preloaded
   // in the keyboard's footprint and revealed when the keyboard dismisses.
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -211,7 +222,13 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
       // keyboard height) so the keyboard DISMISS that happens during open
       // doesn't transiently inflate the panel.
       const searchLift = searchFocusedSV.value === 1 ? liveKeyboardHeight : 0;
-      return Math.max(lastKeyboardHeight.value + searchLift, restingFootprint);
+      const target = Math.max(lastKeyboardHeight.value + searchLift, restingFootprint);
+      // Cold open (no keyboard to provide the slide): ramp from the resting
+      // chrome up to the panel target by coldOpenSV so the panel slides in. When
+      // opened from a keyboard, coldOpenSV is already 1 → returns the full target
+      // immediately (the keyboard slide does the motion). The Math.max floor
+      // keeps it from ever dropping below the resting chrome mid-ramp.
+      return Math.max(restingFootprint + (target - restingFootprint) * coldOpenSV.value, restingFootprint);
     }
     if (closingSV.value === 1) {
       // Closing the panel by summoning the keyboard back: hold the panel
@@ -225,13 +242,40 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     return Math.max(liveKeyboardHeight, restingFootprint);
   });
 
-  // Publish the panel's below-pill footprint (the spacer height) WHILE the panel
-  // is open, else 0. The chat list's KeyboardChatScrollView adds this to its
-  // `extraContentPadding` so that opening the emoji panel (keyboard down, so the
-  // library's own keyboard lift is 0) still lifts the list to clear panel + pill.
-  // UI-thread only (writes a shared value), so it never hits a React re-render.
+  // Publish the panel's below-pill footprint that the chat list must clear, on
+  // top of (and NOT double-counting) the keyboard. The list inset is
+  // `max(blankSpace, keyboardPadding + composerFootprint + composerPanelFootprint)`,
+  // so the panel footprint and the keyboard padding both cover the SAME bottom
+  // zone — publishing the full panel height while the keyboard is still up (or
+  // rising) double-counts it and the list jumps:
+  //   - open from keyboard: keyboardPadding animates kb→0 while the panel
+  //     footprint would snap to full instantly → transient ~double inset, then
+  //     settle → the list visibly scrolls DOWN as it settles. (#2)
+  //   - re-summon keyboard from panel: footprint snaps to 0 the instant the
+  //     panel closes, before the keyboard has risen → inset dips then the
+  //     rising keyboard overshoots → empty space below the last message. (#3)
+  // Fix: publish `max(0, panelHeight - liveKeyboard)`. As the keyboard slides
+  // out the footprint ramps in by exactly the amount the keyboard padding drops
+  // (and vice versa on re-summon), so `keyboardPadding + panelFootprint` stays
+  // continuous through the whole swap — no jump in either direction. Published
+  // while the panel is open OR mid closing-hand-off so the close stays
+  // continuous too. UI-thread only (writes a shared value), no React re-render.
   useAnimatedReaction(
-    () => (panelOpenSV.value === 1 ? spacerHeight.value : 0),
+    () => {
+      const active = panelOpenSV.value === 1 || closingSV.value === 1;
+      if (!active) return 0;
+      const liveKeyboardHeight = Math.max(-keyboardHeight.value, 0);
+      // panelHeight is what the spacer holds for the panel (last keyboard height,
+      // clamped to the resting chrome). Subtract the live keyboard so the two
+      // never stack over the same zone.
+      const restingFootprint = restingChromeHeight + bottomInset;
+      const panelHeight = Math.max(lastKeyboardHeight.value, restingFootprint);
+      // On a cold open the spacer ramps the panel in by coldOpenSV — track the
+      // SAME ramp here so the list lift stays in lockstep with the sliding panel
+      // (no gap between the last message and the rising panel during the slide).
+      const rampedPanel = restingFootprint + (panelHeight - restingFootprint) * coldOpenSV.value;
+      return Math.max(0, rampedPanel - liveKeyboardHeight);
+    },
     (panelFootprint) => {
       composerPanelFootprintSV.value = panelFootprint;
     },
@@ -301,7 +345,16 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     // the tab bar hidden across the whole panel↔keyboard hand-off (no flicker).
     composerBottomBusySV.value = 1;
     // Remember whether a keyboard was up at open time — drives the close path.
-    openedWithKeyboardRef.current = KeyboardController.isVisible();
+    const keyboardWasUp = KeyboardController.isVisible();
+    openedWithKeyboardRef.current = keyboardWasUp;
+    // Cold open (no keyboard to slide): animate the spacer in. Opened from a
+    // keyboard: jump to 1 so the keyboard's own slide reveals the panel.
+    if (keyboardWasUp) {
+      coldOpenSV.value = 1;
+    } else {
+      coldOpenSV.value = 0;
+      coldOpenSV.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) });
+    }
     onVisibilityRef.current?.(true);
     setPanelOpen(true);
     // keepFocus keeps the caret + insertion point while hiding the keyboard.
