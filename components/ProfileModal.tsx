@@ -146,6 +146,9 @@ interface ProfileModalProps {
     username?: string;
     fid?: number;
   };
+  /** True when the header shows the identity switcher (unmerged + both profiles).
+   *  Drives the Bio heading's brand icon + the duplicated My Casts button. */
+  dualIdentity?: boolean;
 }
 
 /** The selectable sections of the profile body. 'farcaster' only applies when a
@@ -345,6 +348,7 @@ export default function ProfileModal({
   onViewMyCasts,
   onMergeProfiles,
   farcasterIdentity,
+  dualIdentity,
 }: ProfileModalProps) {
   const { theme, isDark, activeSkin } = useTheme();
   const { user, signOut, updateProfile } = useAuth();
@@ -1673,6 +1677,8 @@ export default function ProfileModal({
             nameError={nameError}
             bioError={bioError}
             farcasterIdentity={farcasterIdentity}
+            onViewMyCasts={onViewMyCasts}
+            dualIdentity={dualIdentity}
           />
         )}
 
@@ -2136,6 +2142,7 @@ export default function ProfileModal({
               syncDisabled={isSyncLoading || isSyncToggling}
               notifications={notifications}
               onToggleNotifications={setNotifications}
+              privacyLevel={user?.privacyLevel}
             />
 
             {/* Appearance */}
@@ -3856,6 +3863,8 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
   nameError,
   bioError,
   farcasterIdentity,
+  onViewMyCasts,
+  dualIdentity,
 }: {
   styles: ProfileStyles;
   theme: AppTheme;
@@ -3882,11 +3891,17 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
     username?: string;
     fid?: number;
   };
+  /** Open the user's own cast feed — duplicated as a "My Casts" button below the
+   *  bio when the Farcaster identity is selected. */
+  onViewMyCasts?: () => void;
+  /** True only when there are two distinct identities to disambiguate (unmerged
+   *  with both profiles). Drives whether the Bio heading carries a brand icon. */
+  dualIdentity?: boolean;
 }) {
   // Whether to show Farcaster fields (vs Quorum) in Bio + Account Info.
   const showFarcaster = !!farcasterIdentity?.active;
-  // Brand icon prefixed to the Bio / Account Info headings so it's unmistakable
-  // which identity's fields are shown.
+  // Brand icon prefixed to the Bio heading so it's unmistakable which identity's
+  // bio is shown — but only when two identities exist (dual-identity switcher).
   const HeadingIcon = showFarcaster ? FarcasterLogoIcon : QuorumLogoIcon;
   return (
     <>
@@ -3945,12 +3960,16 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
 
       {/* Bio Section — Farcaster or Quorum bio depending on the selected identity */}
       <View style={styles.section}>
-        <View style={styles.sectionTitleRow}>
-          <View style={styles.sectionTitleIcon}>
-            <HeadingIcon size={16} />
+        {dualIdentity ? (
+          <View style={styles.sectionTitleRow}>
+            <View style={styles.sectionTitleIcon}>
+              <HeadingIcon size={16} />
+            </View>
+            <Text style={[styles.sectionTitle, styles.sectionTitleNoMargin]}>Bio</Text>
           </View>
-          <Text style={[styles.sectionTitle, styles.sectionTitleNoMargin]}>Bio</Text>
-        </View>
+        ) : (
+          <Text style={styles.sectionTitle}>Bio</Text>
+        )}
         {isEditing && !showFarcaster ? (
           <>
             <TextInput
@@ -3981,59 +4000,20 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
         )}
       </View>
 
-      {/* Account Info — a single card with internal dividers between rows */}
-      <View style={styles.section}>
-        <View style={styles.sectionTitleRow}>
-          <View style={styles.sectionTitleIcon}>
-            <HeadingIcon size={16} />
-          </View>
-          <Text style={[styles.sectionTitle, styles.sectionTitleNoMargin]}>Account Info</Text>
+      {/* My Casts — duplicated here (below the bio) on the Farcaster identity for
+          quick access to the user's own cast feed. Also lives in the Farcaster pill. */}
+      {showFarcaster && onViewMyCasts && (
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.actionButton} onPress={onViewMyCasts}>
+            <IconSymbol name="feather" size={20} color={theme.colors.primary} />
+            <Text style={styles.actionButtonText}>My Casts</Text>
+            <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+          </TouchableOpacity>
         </View>
-        {showFarcaster ? (
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Username</Text>
-              <Text style={styles.infoValue}>
-                {farcasterIdentity?.username ? `@${farcasterIdentity.username}` : 'N/A'}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Display Name</Text>
-              <Text style={styles.infoValue} numberOfLines={1}>
-                {farcasterIdentity?.displayName || 'N/A'}
-              </Text>
-            </View>
-            <View style={[styles.infoRow, styles.infoRowLast]}>
-              <Text style={styles.infoLabel}>FID</Text>
-              <Text style={styles.infoValue}>{farcasterIdentity?.fid ?? 'N/A'}</Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.infoCard}>
-            <TouchableOpacity style={styles.infoRow} onPress={onCopyAddress}>
-              <Text style={styles.infoLabel}>Address</Text>
-              <View style={styles.infoValueRow}>
-                <Text style={[styles.infoValue, { maxWidth: undefined }]} numberOfLines={1}>
-                  {user?.address ? truncateAddress(user.address) : 'N/A'}
-                </Text>
-                <IconSymbol name="doc.on.doc" size={14} color={theme.colors.textMuted} />
-              </View>
-            </TouchableOpacity>
-            <View style={[styles.infoRow, !user?.farcaster && styles.infoRowLast]}>
-              <Text style={styles.infoLabel}>Privacy Level</Text>
-              <Text style={styles.infoValue}>
-                {user?.privacyLevel ? user.privacyLevel.charAt(0).toUpperCase() + user.privacyLevel.slice(1) : 'Standard'}
-              </Text>
-            </View>
-            {user?.farcaster && (
-              <View style={[styles.infoRow, styles.infoRowLast]}>
-                <Text style={styles.infoLabel}>Farcaster</Text>
-                <Text style={styles.infoValue}>@{user.farcaster.username}</Text>
-              </View>
-            )}
-          </View>
-        )}
-      </View>
+      )}
+
+      {/* Account Info removed: identity fields (.q / address / @username / FID)
+          now live in the big profile card; Privacy Level moved to Settings. */}
     </>
   );
 });
@@ -4048,6 +4028,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
   syncDisabled,
   notifications,
   onToggleNotifications,
+  privacyLevel,
 }: {
   styles: ProfileStyles;
   theme: AppTheme;
@@ -4058,6 +4039,9 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
   syncDisabled: boolean;
   notifications: boolean;
   onToggleNotifications: (enabled: boolean) => void;
+  /** Read-only display of the account's privacy level (moved here from the old
+   *  Account Info card). */
+  privacyLevel?: string;
 }) {
   return (
     <>
@@ -4103,6 +4087,15 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
             trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
             thumbColor={'#ffffff'}
           />
+        </View>
+        {/* Privacy Level — read-only (moved from the old Account Info card). */}
+        <View style={styles.settingRow}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingLabel}>Privacy Level</Text>
+          </View>
+          <Text style={styles.infoValue}>
+            {privacyLevel ? privacyLevel.charAt(0).toUpperCase() + privacyLevel.slice(1) : 'Standard'}
+          </Text>
         </View>
       </View>
 

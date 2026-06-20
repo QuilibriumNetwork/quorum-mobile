@@ -25,6 +25,8 @@ interface UnifiedProfileHeaderProps {
   onEditQuorum?: () => void;
   onEditFarcaster?: () => void;
   onEditUnified?: () => void;
+  /** Copy the Quorum address (tappable address line on the Quorum card). */
+  onCopyAddress?: () => void;
 }
 
 const IDENTITY_PILLS: SegmentedPillItem[] = [
@@ -41,6 +43,7 @@ export default function UnifiedProfileHeader({
   onEditQuorum,
   onEditFarcaster,
   onEditUnified,
+  onCopyAddress,
 }: UnifiedProfileHeaderProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -55,28 +58,6 @@ export default function UnifiedProfileHeader({
   // above it. Swapping changes only this card; the nav pills below are separate.
   if (splitMode) {
     const showingFarcaster = identityTab === 'farcaster';
-    // Quorum identity owns the QNS handle + on-chain address; Farcaster identity
-    // shows only its @handle (no Quorum address). The address line renders only
-    // when `address` is set, so neither identity duplicates it.
-    const identity = showingFarcaster
-      ? {
-          displayName: farcasterProfile?.displayName || user.farcaster?.username || 'Unnamed',
-          avatarUri: farcasterProfile?.pfp?.url || user.farcaster?.pfpUrl,
-          bio: farcasterProfile?.profile?.bio?.text,
-          handle: user.farcaster?.username ? `@${user.farcaster.username}` : undefined,
-          handleAccent: false,
-          address: undefined as string | undefined,
-          onEdit: onEditFarcaster,
-        }
-      : {
-          displayName: user.displayName || user.primaryUsername || 'Unnamed',
-          avatarUri: user.profileImage,
-          bio: user.bio,
-          handle: user.primaryUsername ? `${user.primaryUsername}.q` : undefined,
-          handleAccent: Boolean(user.primaryUsername),
-          address: user.address,
-          onEdit: onEditQuorum,
-        };
 
     return (
       <View style={styles.switcherContainer}>
@@ -91,16 +72,28 @@ export default function UnifiedProfileHeader({
           itemRole="tab"
           style={styles.identitySwitcher}
         />
-        <BigProfileCard
-          displayName={identity.displayName}
-          avatarUri={identity.avatarUri}
-          handle={identity.handle}
-          handleAccent={identity.handleAccent}
-          address={identity.address}
-          onEdit={identity.onEdit}
-          theme={theme}
-          styles={styles}
-        />
+        {showingFarcaster ? (
+          <BigProfileCard
+            displayName={farcasterProfile?.displayName || user.farcaster?.username || 'Unnamed'}
+            avatarUri={farcasterProfile?.pfp?.url || user.farcaster?.pfpUrl}
+            username={user.farcaster?.username ? `@${user.farcaster.username}` : undefined}
+            fid={user.farcaster?.fid}
+            onEdit={onEditFarcaster}
+            theme={theme}
+            styles={styles}
+          />
+        ) : (
+          <BigProfileCard
+            displayName={user.displayName || user.primaryUsername || 'Unnamed'}
+            avatarUri={user.profileImage}
+            qname={user.primaryUsername ? `${user.primaryUsername}.q` : undefined}
+            address={user.address}
+            onCopyAddress={onCopyAddress}
+            onEdit={onEditQuorum}
+            theme={theme}
+            styles={styles}
+          />
+        )}
       </View>
     );
   }
@@ -154,25 +147,35 @@ export default function UnifiedProfileHeader({
 }
 
 /**
- * The big single-identity profile card (96px avatar, pencil badge, name, handle,
- * bio) used in the unmerged switcher layout. Mirrors the merged/Quorum-only look
- * but renders whichever identity is selected.
+ * The big single-identity profile card (96px avatar, pencil badge) used in the
+ * unmerged switcher layout. Renders identity-specific lines under the name:
+ *  - Quorum: `.q` name (accent) + a tappable, copyable address.
+ *  - Farcaster: @username + FID, with a top-right Disconnect control.
+ * Bio is omitted here — it lives in the Profile section below.
  */
 function BigProfileCard({
   displayName,
   avatarUri,
-  handle,
-  handleAccent,
+  qname,
+  username,
+  fid,
   address,
+  onCopyAddress,
   onEdit,
   theme,
   styles,
 }: {
   displayName: string;
   avatarUri?: string | null;
-  handle?: string;
-  handleAccent?: boolean;
+  /** Quorum `.q` primary username, e.g. "alice.q". */
+  qname?: string;
+  /** Farcaster @handle. */
+  username?: string;
+  /** Farcaster ID. */
+  fid?: number;
+  /** Quorum on-chain address (tappable to copy). */
   address?: string;
+  onCopyAddress?: () => void;
   onEdit?: () => void;
   theme: AppTheme;
   styles: ReturnType<typeof createStyles>;
@@ -194,18 +197,33 @@ function BigProfileCard({
         {displayName}
       </Text>
 
-      <View style={styles.handlesRow}>
-        {handle ? (
-          <Text style={[styles.handleText, handleAccent && { color: theme.colors.accent }]}>
-            {handle}
-          </Text>
-        ) : null}
-        {address ? (
+      {/* Quorum: .q name */}
+      {qname ? (
+        <Text style={[styles.handleText, { color: theme.colors.accent }]}>{qname}</Text>
+      ) : null}
+
+      {/* Quorum: tappable address + copy icon */}
+      {address ? (
+        <TouchableOpacity
+          style={styles.addressRow}
+          onPress={onCopyAddress}
+          accessibilityRole="button"
+          accessibilityLabel="Copy address"
+        >
           <Text style={styles.addressText}>{truncateAddress(address, 'medium')}</Text>
-        ) : null}
-      </View>
-      {/* Bio intentionally omitted here — it's shown in the Profile section
-          below, which reflects the selected identity. */}
+          <IconSymbol name="doc.on.doc" size={13} color={theme.colors.textMuted} />
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Farcaster: @username */}
+      {username ? (
+        <Text style={styles.handleText}>{username}</Text>
+      ) : null}
+
+      {/* Farcaster: FID — same size/style as the username line */}
+      {typeof fid === 'number' ? (
+        <Text style={styles.handleText}>FID: {fid}</Text>
+      ) : null}
     </View>
   );
 }
@@ -324,9 +342,16 @@ function createStyles(theme: AppTheme) {
     },
     bigCardContainer: {
       alignItems: 'center',
+      position: 'relative',
       paddingHorizontal: Skin.space(20),
       paddingTop: Skin.space(16),
       paddingBottom: Skin.space(16),
+      gap: Skin.space(6),
+    },
+    // Tappable address line (copy on press) with a trailing copy icon.
+    addressRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
       gap: Skin.space(6),
     },
   });

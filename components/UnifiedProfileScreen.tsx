@@ -10,6 +10,7 @@ import UnifiedProfileEditModal from '@/components/UnifiedProfileEditModal';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { useFarcasterProfile } from '@/hooks/useFarcasterProfile';
 import {
   hasDecidedSplitMode,
@@ -17,6 +18,7 @@ import {
 } from '@/services/profile/profilePrefs';
 import { useTheme, type AppTheme } from '@/theme';
 import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
@@ -34,6 +36,7 @@ export default function UnifiedProfileScreen({
 }: UnifiedProfileScreenProps) {
   const { theme } = useTheme();
   const { user, farcasterAuthToken } = useAuth();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -113,6 +116,13 @@ export default function UnifiedProfileScreen({
     });
   }, [router, user?.farcaster?.fid, user?.farcaster?.username]);
 
+  // Copy the Quorum address (tappable address line on the Quorum big card).
+  const handleCopyAddress = useCallback(() => {
+    if (!user?.address) return;
+    void Clipboard.setStringAsync(user.address);
+    showToast({ type: 'success', title: 'Address copied' });
+  }, [user?.address, showToast]);
+
   const handleEditRequest = () => {
     if (!hasFarcaster) {
       setEditTarget('quorum');
@@ -144,6 +154,7 @@ export default function UnifiedProfileScreen({
         onEditQuorum={() => setEditTarget('quorum')}
         onEditFarcaster={() => setEditTarget('farcaster')}
         onEditUnified={handleEditRequest}
+        onCopyAddress={handleCopyAddress}
       />
 
       <SegmentedPills
@@ -179,6 +190,9 @@ export default function UnifiedProfileScreen({
             username: user.farcaster?.username,
             fid: user.farcaster?.fid,
           }}
+          // The header shows the identity switcher only when unmerged with both
+          // profiles — that's when Bio carries a brand icon.
+          dualIdentity={splitMode && hasFarcaster}
           onOpenMarketplace={() => setMarketplaceModalVisible(true)}
           onOpenAuctions={() => setAuctionsModalVisible(true)}
           onOpenOffers={() => setOffersModalVisible(true)}
