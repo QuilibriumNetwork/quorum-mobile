@@ -1,4 +1,4 @@
-import ProfileModal from '@/components/ProfileModal';
+import ProfileModal, { type ProfileSection } from '@/components/ProfileModal';
 import ProfileSplitModeModal from '@/components/ProfileSplitModeModal';
 import AuctionsModal from '@/components/qns/AuctionsModal';
 import BuyNameModal from '@/components/qns/BuyNameModal';
@@ -9,6 +9,7 @@ import { ProfileView } from '@/components/SocialFeedModal';
 import UnifiedProfileHeader from '@/components/UnifiedProfileHeader';
 import UnifiedProfileEditModal from '@/components/UnifiedProfileEditModal';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 import { useAuth } from '@/context/AuthContext';
 import { useFarcasterProfile } from '@/hooks/useFarcasterProfile';
 import {
@@ -17,8 +18,8 @@ import {
 } from '@/services/profile/profilePrefs';
 import { useTheme, type AppTheme } from '@/theme';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
@@ -35,7 +36,6 @@ export default function UnifiedProfileScreen({
   const { theme } = useTheme();
   const { user, farcasterAuthToken } = useAuth();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const router = useRouter();
 
   const [splitMode] = useProfileSplitMode();
@@ -44,8 +44,8 @@ export default function UnifiedProfileScreen({
   const [editPickerVisible, setEditPickerVisible] = useState(false);
   const [castLikeStates] = useState<Map<string, { liked: boolean; count: number }>>(() => new Map());
   // Marketplace-family modals are rendered at this level (not inside ProfileModal)
-  // so they don't sit inside the horizontal pager's ScrollView, which can leave
-  // the pager's active page unable to receive touches after dismiss.
+  // so dismissing them doesn't leave the embedded ProfileModal unable to receive
+  // touches.
   const [marketplaceModalVisible, setMarketplaceModalVisible] = useState(false);
   const [auctionsModalVisible, setAuctionsModalVisible] = useState(false);
   const [offersModalVisible, setOffersModalVisible] = useState(false);
@@ -66,33 +66,32 @@ export default function UnifiedProfileScreen({
     enabled: hasFarcaster,
   });
 
-  // Page indices - dynamically built based on farcaster presence
-  const pages = useMemo(() => {
-    const pageList: { key: string; label: string }[] = [{ key: 'quorum', label: 'Account' }];
+  // One flat pill row replaces the old two-level nav. Profile / Premium /
+  // Settings always show; Farcaster + Casts only when a Farcaster account is
+  // connected (config / feed that don't apply to Quorum-only users).
+  type ProfilePill = ProfileSection | 'casts';
+  const pills = useMemo<SegmentedPillItem[]>(() => {
+    const list: SegmentedPillItem[] = [
+      { key: 'profile', label: 'Profile' },
+      { key: 'premium', label: 'Premium' },
+      { key: 'settings', label: 'Settings' },
+    ];
     if (hasFarcaster) {
-      pageList.push({ key: 'casts', label: 'Casts' });
+      list.push({ key: 'farcaster', label: 'Farcaster' });
+      list.push({ key: 'casts', label: 'Casts' });
     }
-    return pageList;
+    return list;
   }, [hasFarcaster]);
 
-  const [activePageIndex, setActivePageIndex] = useState(0);
-  const scrollRef = useRef<ScrollView | null>(null);
+  const [activePill, setActivePill] = useState<ProfilePill>('profile');
 
-  const handleScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const offsetX = e.nativeEvent.contentOffset.x;
-      const idx = Math.round(offsetX / width);
-      if (idx !== activePageIndex && idx >= 0 && idx < pages.length) {
-        setActivePageIndex(idx);
-      }
-    },
-    [activePageIndex, pages.length, width],
-  );
-
-  const goToPage = (i: number) => {
-    setActivePageIndex(i);
-    scrollRef.current?.scrollTo({ x: i * width, animated: true });
-  };
+  // If the active pill becomes unavailable (e.g. Farcaster disconnected while on
+  // the Farcaster/Casts pill), fall back to Profile.
+  useEffect(() => {
+    if (!hasFarcaster && (activePill === 'farcaster' || activePill === 'casts')) {
+      setActivePill('profile');
+    }
+  }, [hasFarcaster, activePill]);
 
   const handleEditRequest = () => {
     if (!hasFarcaster) {
@@ -114,8 +113,7 @@ export default function UnifiedProfileScreen({
     // The host (profile tab) renders an opaque Stack header above us
     // that already covers the status-bar safe area, so we don't add
     // another `insets.top` here — that would double up and leave a
-    // visible gap between the header and the Quorum/Farcaster segment
-    // selector.
+    // visible gap between the header and the pill row.
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
       <UnifiedProfileHeader
         user={user}
@@ -126,78 +124,58 @@ export default function UnifiedProfileScreen({
         onEditUnified={handleEditRequest}
       />
 
-      {pages.length > 1 && (
-        <View style={styles.segmentBar}>
-          {pages.map((page, i) => (
-            <TouchableOpacity
-              key={page.key}
-              style={[styles.segment, i === activePageIndex && styles.segmentActive]}
-              onPress={() => goToPage(i)}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.segmentLabel,
-                  i === activePageIndex && { color: theme.colors.accent, fontWeight: '600' },
-                ]}
-              >
-                {page.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+      <SegmentedPills
+        items={pills}
+        activeKey={activePill}
+        onChange={(key) => setActivePill(key as ProfilePill)}
+        variant="solid"
+        scrollable
+        centerOnSelect
+        style={styles.pillRow}
+        contentContainerStyle={styles.pillRowContent}
+      />
 
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={handleScroll}
-        scrollEventThrottle={16}
-        style={styles.pager}
-      >
-        {pages.map((page) => (
-          <View key={page.key} style={{ width }}>
-            {page.key === 'quorum' && (
-              <ProfileModal
-                visible={true}
-                onClose={() => {}}
-                onOpenWarpcastImport={onOpenWarpcastImport}
-                isRouteMode={true}
-                hideHeader={true}
-                onOpenMarketplace={() => setMarketplaceModalVisible(true)}
-                onOpenAuctions={() => setAuctionsModalVisible(true)}
-                onOpenOffers={() => setOffersModalVisible(true)}
-              />
-            )}
-            {page.key === 'casts' && user.farcaster?.fid && (
-              <ProfileView
-                fid={user.farcaster.fid}
-                token={farcasterAuthToken ?? undefined}
-                theme={theme}
-                currentUserFid={user.farcaster.fid}
-                hideBackButton={true}
-                onClose={() => {}}
-                onOpenThread={(username, hashPrefix) =>
-                  router.push({
-                    pathname: '/(tabs)/feed',
-                    params: { username, castHashPrefix: hashPrefix },
-                  })
-                }
-                onOpenMiniApp={(url) => router.push({ pathname: '/browser', params: { url } })}
-                onOpenProfile={() => router.push('/(tabs)/feed')}
-                onOpenChannel={() => router.push('/(tabs)/feed')}
-                likeStates={castLikeStates}
-                onLikeToggle={() => {
-                  // Like handling is owned by the feed tab; ignore in profile view.
-                }}
-                bottomInset={insets.bottom}
-              />
-            )}
-          </View>
-        ))}
-      </ScrollView>
+      <View style={styles.content}>
+        {activePill === 'casts' ? (
+          user.farcaster?.fid ? (
+            <ProfileView
+              fid={user.farcaster.fid}
+              token={farcasterAuthToken ?? undefined}
+              theme={theme}
+              currentUserFid={user.farcaster.fid}
+              hideBackButton={true}
+              onClose={() => {}}
+              onOpenThread={(username, hashPrefix) =>
+                router.push({
+                  pathname: '/(tabs)/feed',
+                  params: { username, castHashPrefix: hashPrefix },
+                })
+              }
+              onOpenMiniApp={(url) => router.push({ pathname: '/browser', params: { url } })}
+              onOpenProfile={() => router.push('/(tabs)/feed')}
+              onOpenChannel={() => router.push('/(tabs)/feed')}
+              likeStates={castLikeStates}
+              onLikeToggle={() => {
+                // Like handling is owned by the feed tab; ignore in profile view.
+              }}
+              bottomInset={insets.bottom}
+            />
+          ) : null
+        ) : (
+          <ProfileModal
+            visible={true}
+            onClose={() => {}}
+            onOpenWarpcastImport={onOpenWarpcastImport}
+            isRouteMode={true}
+            hideHeader={true}
+            hideTabBar={true}
+            activeSection={activePill}
+            onOpenMarketplace={() => setMarketplaceModalVisible(true)}
+            onOpenAuctions={() => setAuctionsModalVisible(true)}
+            onOpenOffers={() => setOffersModalVisible(true)}
+          />
+        )}
+      </View>
 
       {/* Decision modal (first-time prompt) */}
       <ProfileSplitModeModal
@@ -330,27 +308,14 @@ function createStyles(theme: AppTheme) {
     root: {
       flex: 1,
     },
-    segmentBar: {
-      flexDirection: 'row',
-      borderBottomWidth: Skin.border(1),
-      borderBottomColor: theme.colors.surface3,
+    pillRow: {
+      flexGrow: 0,
+      paddingVertical: Skin.space(8),
+    },
+    pillRowContent: {
       paddingHorizontal: Skin.space(16),
     },
-    segment: {
-      flex: 1,
-      paddingVertical: Skin.space(12),
-      alignItems: 'center',
-      borderBottomWidth: Skin.border(2),
-      borderBottomColor: 'transparent',
-    },
-    segmentActive: {
-      borderBottomColor: theme.colors.accent,
-    },
-    segmentLabel: {
-      fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
-    },
-    pager: {
+    content: {
       flex: 1,
     },
   });
