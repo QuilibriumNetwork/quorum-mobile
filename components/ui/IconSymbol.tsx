@@ -57,6 +57,7 @@ const SF_TO_TABLER = {
   // Status & flags
   'flag': tabler('IconFlag', 'IconFlagFilled'),
   'flag.fill': tabler('IconFlag', 'IconFlagFilled'),
+  'flask': tabler('IconFlask'),
   'nosign': tabler('IconBan'),
   'ellipsis': tabler('IconDots'),
   'ellipsis.vertical': tabler('IconDotsVertical'),

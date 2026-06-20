@@ -42,3 +42,21 @@ export const composerFootprintSV: SharedValue<number> = makeMutable(60);
  * mirroring how it clears `keyboard + pill` when the keyboard is up.
  */
 export const composerPanelFootprintSV: SharedValue<number> = makeMutable(0);
+
+/**
+ * composerListFreezeSV — `true` while the emoji panel is open (keyboard down,
+ * panel showing). Fed to KeyboardChatScrollView's `freeze` prop.
+ *
+ * Why: tapping the emoji button DISMISSES the keyboard to reveal the panel. From
+ * the keyboard library's point of view that's just a keyboard CLOSE, so its
+ * onMove handler actively `scrollTo`s the list down to follow the descending
+ * keyboard — the panel is replacing that space, so the list shouldn't move at
+ * all. `freeze` is the library's purpose-built switch for exactly this ("useful
+ * when dismissing the keyboard to open a bottom sheet — prevents visual
+ * disruption while the sheet is visible"). It suppresses the keyboard-driven
+ * AND extra-padding-driven auto-scroll while still letting the scrollable range
+ * (contentInset) grow for the panel, so the list holds position through the swap.
+ * Set true the instant the panel opens (before the dismiss starts) and false the
+ * instant it closes, so a returning keyboard is handled normally.
+ */
+export const composerListFreezeSV: SharedValue<boolean> = makeMutable(false);
