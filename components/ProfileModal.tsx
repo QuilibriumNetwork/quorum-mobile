@@ -132,11 +132,11 @@ function CallScreeningSection({ theme }: { theme: AppTheme }) {
   });
 
   return (
-    <View style={{ paddingHorizontal: Skin.space(16), marginBottom: Skin.space(24) }}>
-      <Text style={{ fontSize: Skin.font(13), fontWeight: '600', color: theme.colors.textMuted, marginBottom: Skin.space(8), textTransform: 'uppercase', letterSpacing: 0.5 }}>
+    <View style={{ marginBottom: Skin.space(24) }}>
+      <Text style={{ fontSize: Skin.font(16), fontFamily: theme.fonts.bold.fontFamily, fontWeight: theme.fonts.bold.fontWeight, color: theme.colors.textMain, marginBottom: Skin.space(12) }}>
         Calls
       </Text>
-      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(12), padding: Skin.space(14) }}>
+      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(8), padding: Skin.space(16) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flex: 1, marginRight: Skin.space(12) }}>
             <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Screen Unknown Callers</Text>
@@ -164,11 +164,11 @@ function DevModeSection({ theme }: { theme: AppTheme }) {
   const config = getApiConfig();
 
   return (
-    <View style={{ paddingHorizontal: Skin.space(16), marginBottom: Skin.space(24) }}>
-      <Text style={{ fontSize: Skin.font(13), fontWeight: '600', color: theme.colors.textMuted, marginBottom: Skin.space(8), textTransform: 'uppercase', letterSpacing: 0.5 }}>
+    <View style={{ marginBottom: Skin.space(24) }}>
+      <Text style={{ fontSize: Skin.font(16), fontFamily: theme.fonts.bold.fontFamily, fontWeight: theme.fonts.bold.fontWeight, color: theme.colors.textMain, marginBottom: Skin.space(12) }}>
         Developer
       </Text>
-      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(12), padding: Skin.space(14) }}>
+      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(8), padding: Skin.space(16) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flex: 1, marginRight: Skin.space(12) }}>
             <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Use Local API</Text>
@@ -229,11 +229,11 @@ function OtaUpdateSection({ theme }: { theme: AppTheme }) {
       : 'Update now';
 
   return (
-    <View style={{ paddingHorizontal: Skin.space(16), marginBottom: Skin.space(24) }}>
-      <Text style={{ fontSize: Skin.font(13), fontWeight: '600', color: theme.colors.textMuted, marginBottom: Skin.space(8), textTransform: 'uppercase', letterSpacing: 0.5 }}>
+    <View style={{ marginBottom: Skin.space(24) }}>
+      <Text style={{ fontSize: Skin.font(16), fontFamily: theme.fonts.bold.fontFamily, fontWeight: theme.fonts.bold.fontWeight, color: theme.colors.textMain, marginBottom: Skin.space(12) }}>
         App Updates
       </Text>
-      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(12), padding: Skin.space(14), gap: Skin.space(10) }}>
+      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(8), padding: Skin.space(16), gap: Skin.space(10) }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMuted }}>Current</Text>
           <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMain, flex: 1, textAlign: 'right', marginLeft: Skin.space(12) }} numberOfLines={1}>
@@ -724,39 +724,37 @@ export default function ProfileModal({
   };
 
   const handleExportRecoveryPhrase = React.useCallback(() => {
-    Alert.alert(
-      'Export Recovery Key',
-      'Your recovery key is the only way to restore your account. Never share it with anyone. Make sure no one is looking at your screen.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Show Key',
-          style: 'destructive',
-          onPress: async () => {
-            // First try mnemonic
-            const phrase = await getMnemonic();
-            if (phrase && phrase.length >= 12) {
-              setRecoveryPhrase(phrase);
-              setHexPrivateKey(null);
-              setShowRecoveryPhrase(true);
-              return;
-            }
+    void (async () => {
+      const ok = await confirm({
+        title: 'Export Recovery Key',
+        message:
+          'Your recovery key is the only way to restore your account. Never share it with anyone. Make sure no one is looking at your screen.',
+        confirmLabel: 'Show Key',
+        variant: 'danger',
+      });
+      if (!ok) return;
 
-            // Fall back to hex private key
-            const privateKey = await getPrivateKey();
-            if (privateKey && privateKey.length > 0) {
-              setHexPrivateKey(privateKey);
-              setRecoveryPhrase(null);
-              setShowRecoveryPhrase(true);
-              return;
-            }
+      // First try mnemonic
+      const phrase = await getMnemonic();
+      if (phrase && phrase.length >= 12) {
+        setRecoveryPhrase(phrase);
+        setHexPrivateKey(null);
+        setShowRecoveryPhrase(true);
+        return;
+      }
 
-            Alert.alert('Error', 'Could not retrieve recovery key.');
-          },
-        },
-      ]
-    );
-  }, []);
+      // Fall back to hex private key
+      const privateKey = await getPrivateKey();
+      if (privateKey && privateKey.length > 0) {
+        setHexPrivateKey(privateKey);
+        setRecoveryPhrase(null);
+        setShowRecoveryPhrase(true);
+        return;
+      }
+
+      Alert.alert('Error', 'Could not retrieve recovery key.');
+    })();
+  }, [confirm]);
 
   const handleCopyRecoveryPhrase = React.useCallback(async () => {
     if (recoveryPhrase) {
@@ -1597,7 +1595,11 @@ export default function ProfileModal({
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={styles.scrollContent}
+        contentContainerStyle={styles.scrollContentContainer}
+      >
         {activeTab === 'profile' && (
           <ProfileTabSection
             styles={styles}
@@ -2066,8 +2068,8 @@ export default function ProfileModal({
 
         {activeTab === 'settings' && (
           <>
-            {/* Privacy & Sync, Notifications, Feed Settings */}
-            <PrivacyFeedSettingsSection
+            {/* Privacy & Sync, Notifications */}
+            <PrivacySettingsSection
               styles={styles}
               theme={theme}
               isProfilePublic={!!user?.isProfilePublic}
@@ -2077,10 +2079,6 @@ export default function ProfileModal({
               syncDisabled={isSyncLoading || isSyncToggling}
               notifications={notifications}
               onToggleNotifications={setNotifications}
-              showRepliesInFeed={showRepliesInFeed}
-              onToggleShowReplies={setShowRepliesInFeed}
-              showNonFollowReplies={showNonFollowReplies}
-              onToggleShowNonFollowReplies={setShowNonFollowReplies}
             />
 
             {/* Appearance */}
@@ -2129,8 +2127,39 @@ export default function ProfileModal({
                       <Text style={styles.farcasterDisconnectText}>Disconnect</Text>
                     </TouchableOpacity>
                   </View>
+                  {/* Feed display preferences — Farcaster-only (drive useFarcasterFeed).
+                      Plain settingRow → uniform 8px marginBottom like every card. */}
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingLabel}>Show replies in main feed</Text>
+                      <Text style={styles.settingDescription}>
+                        Include reply casts in your main feed (thread views always show replies)
+                      </Text>
+                    </View>
+                    <Switch
+                      value={showRepliesInFeed}
+                      onValueChange={setShowRepliesInFeed}
+                      trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+                      thumbColor={showRepliesInFeed ? '#ffffff' : '#f4f3f4'}
+                    />
+                  </View>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingLabel}>Show replies from non-followed in main feed</Text>
+                      <Text style={styles.settingDescription}>
+                        Include replies from people you don't follow in your main feed
+                      </Text>
+                    </View>
+                    <Switch
+                      value={showNonFollowReplies}
+                      onValueChange={setShowNonFollowReplies}
+                      disabled={!showRepliesInFeed}
+                      trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+                      thumbColor={showNonFollowReplies ? '#ffffff' : '#f4f3f4'}
+                    />
+                  </View>
                   {/* Hypersnap signer opt-in */}
-                  <View style={[styles.farcasterConnected, { marginTop: Skin.space(12) }]}>
+                  <View style={styles.farcasterConnected}>
                     <View style={{ flex: 1, marginRight: Skin.space(12) }}>
                       <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Hypersnap Signer</Text>
                       <Text style={{ fontSize: Skin.font(12), color: theme.colors.textMuted, marginTop: Skin.space(2) }}>
@@ -2150,7 +2179,7 @@ export default function ProfileModal({
                   {/* Warpcast Wallet Import */}
                   {hasWarpcastWallet && !hasImportedWarpcastWallet && onOpenWarpcastImport && (
                     <TouchableOpacity
-                      style={[styles.actionButton, { marginTop: Skin.space(12), alignItems: 'flex-start' }]}
+                      style={[styles.actionButton, { alignItems: 'flex-start' }]}
                       onPress={() => {
                         if (isRouteMode) {
                           // In route mode, just open the import modal directly (no need to close ProfileModal)
@@ -2173,7 +2202,7 @@ export default function ProfileModal({
                     </TouchableOpacity>
                   )}
                   {hasImportedWarpcastWallet && importedWallet && (
-                    <View style={[styles.farcasterConnected, { marginTop: Skin.space(12) }]}>
+                    <View style={styles.farcasterConnected}>
                       <View style={styles.farcasterInfo}>
                         <IconSymbol name="wallet.pass.fill" size={20} color={theme.colors.primary} />
                         <View style={styles.farcasterDetails}>
@@ -2715,6 +2744,12 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       paddingHorizontal: Skin.space(20),
       paddingTop: Skin.space(20),
     },
+    // Trailing space so the last section (e.g. Danger Zone) scrolls clear of
+    // the blur tab bar instead of butting against it. Lives on the scroll
+    // content, not the outer container, so it adds scrollable room.
+    scrollContentContainer: {
+      paddingBottom: Skin.space(40),
+    },
     profileHeader: {
       flexDirection: 'row',
       marginBottom: Skin.space(24),
@@ -2818,13 +2853,21 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       borderWidth: Skin.border(1),
       borderColor: theme.colors.primary,
     },
+    infoCard: {
+      backgroundColor: theme.colors.surface2,
+      borderRadius: Skin.radius(8),
+      paddingHorizontal: Skin.space(16),
+    },
     infoRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: Skin.space(12),
+      paddingVertical: Skin.space(14),
       borderBottomWidth: Skin.border(1),
-      borderBottomColor: theme.colors.border,
+      borderBottomColor: theme.colors.surface4,
+    },
+    infoRowLast: {
+      borderBottomWidth: 0,
     },
     infoLabel: {
       fontSize: Skin.font(14),
@@ -3170,9 +3213,10 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: Skin.space(12),
-      borderBottomWidth: Skin.border(1),
-      borderBottomColor: theme.colors.border,
+      backgroundColor: theme.colors.surface2,
+      padding: Skin.space(16),
+      borderRadius: Skin.radius(8),
+      marginBottom: Skin.space(8),
     },
     settingLeft: {
       flex: 1,
@@ -3317,6 +3361,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       backgroundColor: theme.colors.surface2,
       padding: Skin.space(16),
       borderRadius: Skin.radius(8),
+      marginBottom: Skin.space(8),
     },
     farcasterInfo: {
       flexDirection: 'row',
@@ -3431,6 +3476,20 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       backgroundColor: theme.colors.surface2,
       borderRadius: Skin.radius(8),
       overflow: 'hidden',
+    },
+    // "Show N more / Show less" toggle row at the bottom of the device card.
+    deviceShowMore: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: Skin.space(6),
+      paddingVertical: Skin.space(12),
+    },
+    deviceShowMoreText: {
+      fontSize: Skin.font(13),
+      color: theme.colors.primary,
+      fontFamily: theme.fonts.medium.fontFamily,
+      fontWeight: theme.fonts.medium.fontWeight,
     },
     deviceItem: {
       flexDirection: 'row',
@@ -3781,36 +3840,38 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
         )}
       </View>
 
-      {/* Account Info */}
+      {/* Account Info — a single card with internal dividers between rows */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account Info</Text>
-        <TouchableOpacity style={styles.infoRow} onPress={onCopyAddress}>
-          <Text style={styles.infoLabel}>Address</Text>
-          <View style={styles.infoValueRow}>
-            <Text style={[styles.infoValue, { maxWidth: undefined }]} numberOfLines={1}>
-              {user?.address ? truncateAddress(user.address) : 'N/A'}
+        <View style={styles.infoCard}>
+          <TouchableOpacity style={styles.infoRow} onPress={onCopyAddress}>
+            <Text style={styles.infoLabel}>Address</Text>
+            <View style={styles.infoValueRow}>
+              <Text style={[styles.infoValue, { maxWidth: undefined }]} numberOfLines={1}>
+                {user?.address ? truncateAddress(user.address) : 'N/A'}
+              </Text>
+              <IconSymbol name="doc.on.doc" size={14} color={theme.colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+          <View style={[styles.infoRow, !user?.farcaster && styles.infoRowLast]}>
+            <Text style={styles.infoLabel}>Privacy Level</Text>
+            <Text style={styles.infoValue}>
+              {user?.privacyLevel ? user.privacyLevel.charAt(0).toUpperCase() + user.privacyLevel.slice(1) : 'Standard'}
             </Text>
-            <IconSymbol name="doc.on.doc" size={14} color={theme.colors.textMuted} />
           </View>
-        </TouchableOpacity>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Privacy Level</Text>
-          <Text style={styles.infoValue}>
-            {user?.privacyLevel ? user.privacyLevel.charAt(0).toUpperCase() + user.privacyLevel.slice(1) : 'Standard'}
-          </Text>
+          {user?.farcaster && (
+            <View style={[styles.infoRow, styles.infoRowLast]}>
+              <Text style={styles.infoLabel}>Farcaster</Text>
+              <Text style={styles.infoValue}>@{user.farcaster.username}</Text>
+            </View>
+          )}
         </View>
-        {user?.farcaster && (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Farcaster</Text>
-            <Text style={styles.infoValue}>@{user.farcaster.username}</Text>
-          </View>
-        )}
       </View>
     </>
   );
 });
 
-const PrivacyFeedSettingsSection = React.memo(function PrivacyFeedSettingsSection({
+const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
   styles,
   theme,
   isProfilePublic,
@@ -3820,10 +3881,6 @@ const PrivacyFeedSettingsSection = React.memo(function PrivacyFeedSettingsSectio
   syncDisabled,
   notifications,
   onToggleNotifications,
-  showRepliesInFeed,
-  onToggleShowReplies,
-  showNonFollowReplies,
-  onToggleShowNonFollowReplies,
 }: {
   styles: ProfileStyles;
   theme: AppTheme;
@@ -3834,10 +3891,6 @@ const PrivacyFeedSettingsSection = React.memo(function PrivacyFeedSettingsSectio
   syncDisabled: boolean;
   notifications: boolean;
   onToggleNotifications: (enabled: boolean) => void;
-  showRepliesInFeed: boolean;
-  onToggleShowReplies: (enabled: boolean) => void;
-  showNonFollowReplies: boolean;
-  onToggleShowNonFollowReplies: (enabled: boolean) => void;
 }) {
   return (
     <>
@@ -3903,39 +3956,6 @@ const PrivacyFeedSettingsSection = React.memo(function PrivacyFeedSettingsSectio
         </View>
       </View>
 
-      {/* Feed Settings */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Feed</Text>
-        <View style={styles.settingRow}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingLabel}>Show replies in main feed</Text>
-            <Text style={styles.settingDescription}>
-              Include reply casts in your main feed (thread views always show replies)
-            </Text>
-          </View>
-          <Switch
-            value={showRepliesInFeed}
-            onValueChange={onToggleShowReplies}
-            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-            thumbColor={showRepliesInFeed ? '#ffffff' : '#f4f3f4'}
-          />
-        </View>
-        <View style={styles.settingRow}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingLabel}>Show replies from non-followed in main feed</Text>
-            <Text style={styles.settingDescription}>
-              Include replies from people you don't follow in your main feed
-            </Text>
-          </View>
-          <Switch
-            value={showNonFollowReplies}
-            onValueChange={onToggleShowNonFollowReplies}
-            disabled={!showRepliesInFeed}
-            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-            thumbColor={showNonFollowReplies ? '#ffffff' : '#f4f3f4'}
-          />
-        </View>
-      </View>
     </>
   );
 });
@@ -4010,6 +4030,11 @@ const AccountRecoverySection = React.memo(function AccountRecoverySection({
   );
 });
 
+// Show at most this many device rows before collapsing the rest behind a
+// "Show N more" expander — avoids a long list pushing the page off-screen
+// without resorting to a nested scroll container.
+const DEVICE_LIST_COLLAPSED_COUNT = 5;
+
 const DeviceKeysSection = React.memo(function DeviceKeysSection({
   styles,
   theme,
@@ -4029,6 +4054,15 @@ const DeviceKeysSection = React.memo(function DeviceKeysSection({
   onRemoveDevice: (identityPublicKey: string) => void;
   onResetAllSessions: () => void;
 }) {
+  const [showAllDevices, setShowAllDevices] = React.useState(false);
+  const totalDevices = deviceRegistrations.length;
+  const hasOverflow = totalDevices > DEVICE_LIST_COLLAPSED_COUNT;
+  const visibleDevices =
+    hasOverflow && !showAllDevices
+      ? deviceRegistrations.slice(0, DEVICE_LIST_COLLAPSED_COUNT)
+      : deviceRegistrations;
+  const hiddenCount = totalDevices - DEVICE_LIST_COLLAPSED_COUNT;
+
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Device Keys</Text>
@@ -4043,7 +4077,7 @@ const DeviceKeysSection = React.memo(function DeviceKeysSection({
         </View>
       ) : deviceRegistrations.length > 0 ? (
         <View style={styles.deviceListContainer}>
-          {deviceRegistrations.map((device) => {
+          {visibleDevices.map((device) => {
             const isCurrentDevice = device.inbox_registration.inbox_address === currentDeviceInboxAddress;
             const inboxAddr = device.inbox_registration.inbox_address;
             const displayAddr = inboxAddr.length > 16
@@ -4083,6 +4117,21 @@ const DeviceKeysSection = React.memo(function DeviceKeysSection({
               </View>
             );
           })}
+          {hasOverflow && (
+            <TouchableOpacity
+              style={styles.deviceShowMore}
+              onPress={() => setShowAllDevices((v) => !v)}
+            >
+              <Text style={styles.deviceShowMoreText}>
+                {showAllDevices ? 'Show less' : `Show ${hiddenCount} more`}
+              </Text>
+              <IconSymbol
+                name={showAllDevices ? 'chevron.up' : 'chevron.down'}
+                size={14}
+                color={theme.colors.primary}
+              />
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <Text style={styles.deviceEmptyText}>No devices registered</Text>
