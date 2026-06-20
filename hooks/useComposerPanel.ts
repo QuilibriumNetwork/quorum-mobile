@@ -15,7 +15,7 @@ import {
   type SharedValue,
 } from 'react-native-reanimated';
 import { composerBottomBusySV } from '@/services/ui/composerPanelVisible';
-import { composerPanelFootprintSV } from '@/services/ui/composerFootprint';
+import { composerPanelFootprintSV, composerListFreezeSV } from '@/services/ui/composerFootprint';
 
 export interface ComposerPanelOptions {
   /** Bottom safe-area inset to leave below the pill when nothing is open. */
@@ -278,6 +278,21 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
     },
     (panelFootprint) => {
       composerPanelFootprintSV.value = panelFootprint;
+    },
+  );
+
+  // Freeze the chat list's keyboard-driven auto-scroll WHILE the panel is open.
+  // Opening the panel dismisses the keyboard; the keyboard library reads that as
+  // a plain keyboard close and scrolls the list down to chase the descending
+  // keyboard (the variable "scrolls down a little / a lot" on emoji-open). Since
+  // the panel takes the keyboard's place, the list shouldn't move at all. Freeze
+  // suppresses that chase (the scrollable range still grows for the panel via the
+  // contentInset path, which is not gated by freeze). Scoped to panelOpen only so
+  // a re-summoned keyboard is handled normally the instant the panel closes.
+  useAnimatedReaction(
+    () => panelOpenSV.value === 1,
+    (frozen) => {
+      composerListFreezeSV.value = frozen;
     },
   );
 
