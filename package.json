@@ -3,7 +3,9 @@
   "main": "./index.js",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
+    "start": "EXPO_NO_METRO_LAZY=1 NODE_OPTIONS=--max-old-space-size=8192 expo start",
+    "start:lazy": "expo start",
+    "gen:icons": "node ./scripts/gen-tabler-registry.mjs",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -106,7 +108,7 @@
     "react-native-worklets": "0.5.1",
     "react-native-youtube-iframe": "2.4.1",
     "tiny-secp256k1": "2.2.4",
-    "tus-js-client": "^4.3.1",
+    "tus-js-client": "4.3.1",
     "viem": "2.44.4"
   },
   "devDependencies": {

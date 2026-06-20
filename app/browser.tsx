@@ -24,6 +24,7 @@ import {
   signAndSendTransaction,
   signTransactionOnly,
 } from '@/services/miniapp/secureSigningService';
+import { simulateMiniAppTransaction } from '@/services/miniapp/txSimulationService';
 import * as Skin from '@/theme/skins/geometry';
 
 export default function BrowserScreen() {
@@ -140,6 +141,14 @@ export default function BrowserScreen() {
         },
       });
       setShowApprovalModal(true);
+      // Run a pre-sign simulation and fold the result into the open request
+      // so the approval sheet can warn (revert / insufficient native gas on
+      // the tx's chain) before the user taps Confirm. Never blocks.
+      void simulateMiniAppTransaction(tx).then((simulation) => {
+        setApprovalRequest((prev) =>
+          prev && prev.transaction === tx ? { ...prev, simulation } : prev,
+        );
+      });
     });
   }, [title, domain, activeWallet]);
 

@@ -12,7 +12,11 @@
 // delete this file. SF_TO_TABLER below is the migration cheat-sheet.
 // Plan: .agents/tasks/2026-06-09-migrate-iconsymbol-to-shared-icon-primitive.md
 
-import * as TablerIcons from '@tabler/icons-react-native';
+// Deep-imported registry of only the icons we use. Importing the package
+// barrel (`import * as TablerIcons from '@tabler/icons-react-native'`) pulled
+// all ~6000 icons into every bundle (Metro doesn't tree-shake in dev),
+// inflating each route to ~14k modules and OOM-crashing the dev server.
+import { TablerIcons } from './tablerIconRegistry';
 import type { SymbolViewProps, SymbolWeight } from 'expo-symbols';
 import type { ComponentType } from 'react';
 import {

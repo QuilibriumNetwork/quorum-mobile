@@ -22,7 +22,7 @@ installReactQueryRnBridges();
 
 import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { Slot, router, useSegments } from 'expo-router';
+import { Slot, router, useSegments, useRootNavigationState } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
@@ -57,6 +57,8 @@ import {
   initializeNotifications,
   registerBackgroundFetch,
   setupNotificationResponseListener,
+  setNotificationNavigationReady,
+  processColdStartNotification,
 } from '@/services/notifications';
 import {
   registerPushTokenWithQuorum,
@@ -130,6 +132,10 @@ function AuthRouter() {
 
     // Set up notification tap handler + Expo token rotation listener.
     const subscription = setupNotificationResponseListener();
+    // Cold start: route the tap that launched the app from a killed state.
+    // The live listener above can't see the launching tap, so read it
+    // explicitly. Queued until the navigator is ready (see effect below).
+    void processColdStartNotification();
     const stopRotation = startPushTokenRotationListener();
     // Retry a failed server-side notification-prefs sync whenever the
     // app comes back to the foreground (no-op when the last sync
@@ -143,6 +149,15 @@ function AuthRouter() {
       appStateSub.remove();
     };
   }, [authState]);
+
+  // Flush any notification-tap route queued before the navigator mounted,
+  // once the root navigation state exists (router is ready to accept push).
+  const rootNavState = useRootNavigationState();
+  React.useEffect(() => {
+    if (rootNavState?.key) {
+      setNotificationNavigationReady();
+    }
+  }, [rootNavState?.key]);
 
   // Hide splash screen once auth state is determined
   React.useEffect(() => {

@@ -49,6 +49,8 @@ export function LinkPreview({
           source={{ uri: image }}
           style={styles.imageLarge}
           contentFit="cover"
+          // Reset animated-GIF source on recycled cell reuse — see AutoHeightImage.
+          recyclingKey={image}
         />
         <View style={staticStyles.padding12}>
           <Text
@@ -86,6 +88,8 @@ export function LinkPreview({
           source={{ uri: image }}
           style={styles.imageSmall}
           contentFit="cover"
+          // Reset animated-GIF source on recycled cell reuse — see AutoHeightImage.
+          recyclingKey={image}
         />
       )}
       <View style={staticStyles.contentSmall}>

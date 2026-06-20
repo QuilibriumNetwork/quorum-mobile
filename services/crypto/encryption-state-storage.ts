@@ -28,6 +28,24 @@ export type {
   ConversationInboxKeypair,
 } from '@quilibrium/quorum-shared';
 
+// Debounced best-effort push re-registration. A brand-new conversation
+// inbox must be registered with quorum-api so the peer's DMs can wake this
+// device — push registration otherwise only runs at startup/token-rotation
+// and would miss the new inbox until the next launch. Debounced so a burst
+// of new conversations (e.g. initial restore/sync) collapses into a single
+// registration sweep. Dynamically imported to avoid a static import cycle
+// (notifications → crypto storage).
+let pushReregisterTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleConversationInboxPushRegistration(): void {
+  if (pushReregisterTimer) return;
+  pushReregisterTimer = setTimeout(() => {
+    pushReregisterTimer = null;
+    void import('../notifications/pushRegistration')
+      .then((m) => m.registerPushTokenWithQuorum({ force: true }))
+      .catch(() => {});
+  }, 3000);
+}
+
 /**
  * MMKVStorageProvider - MMKV implementation of KeyValueStorageProvider.
  *
@@ -354,7 +372,13 @@ class EncryptionStateStorage {
    */
   saveConversationInboxKeypair(keypair: ConversationInboxKeypair): void {
     const key = `${KEYS.CONVERSATION_INBOX_KEY}${keypair.conversationId}`;
+    // First time we've seen this conversation's inbox → make sure its push
+    // binding gets registered so the peer's messages wake this device.
+    const isNew = this.storage.getString(key) == null;
     this.storage.set(key, JSON.stringify(keypair));
+    if (isNew) {
+      scheduleConversationInboxPushRegistration();
+    }
   }
 
   /**

@@ -1,7 +1,7 @@
 /**
  * ApexSubscribeModal - Subscribe to (or renew) Quorum Apex.
  *
- * Apex is a $25/month subscription paid in wQUIL, SNAP, or USDC on
+ * Apex is a $5/month subscription paid in wQUIL, SNAP, or USDC on
  * Ethereum mainnet. The payment is split 5 ways through the ApexSplitter
  * contract — 1/5 to Q Inc and 1/5 each to four spaces of the
  * subscriber's choosing (spaces that have published an Apex config
@@ -106,7 +106,7 @@ export default function ApexSubscribeModal({ visible, onClose, mode }: ApexSubsc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, mode]);
 
-  // $25 → token units quote for the selected token
+  // $5 → token units quote for the selected token
   const {
     data: quote,
     isLoading: isQuoteLoading,

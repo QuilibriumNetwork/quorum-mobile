@@ -15,6 +15,7 @@
 import React from 'react';
 import BrowserModal from '@/components/BrowserModal';
 import { MinimizedMiniappChip } from '@/components/MinimizedMiniappChip';
+import { recordMiniappUse } from '@/services/miniapp/recentMiniapps';
 
 export interface MiniappOverlayEntry {
   url: string;
@@ -79,6 +80,8 @@ export function MiniappOverlayProvider({ children }: { children: React.ReactNode
       iconUrl: opts.iconUrl,
     });
     setMinimized(false);
+    // Record for the launcher's "Recently used" tab (device-local).
+    recordMiniappUse({ url: opts.url, name: opts.name, iconUrl: opts.iconUrl });
   }, []);
 
   const closeMiniapp = React.useCallback(() => {

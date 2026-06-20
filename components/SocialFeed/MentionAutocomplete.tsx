@@ -168,7 +168,7 @@ export function MentionAutocomplete({
               activeOpacity={0.7}
             >
               {item.pfp?.url ? (
-                <Image source={{ uri: item.pfp.url }} style={styles.avatar} cachePolicy="disk" />
+                <Image source={{ uri: item.pfp.url }} style={styles.avatar} cachePolicy="disk" recyclingKey={item.pfp.url} />
               ) : (
                 <View style={[styles.avatar, styles.avatarPlaceholder]}>
                   <Text style={styles.avatarPlaceholderText}>
@@ -199,7 +199,7 @@ export function MentionAutocomplete({
               activeOpacity={0.7}
             >
               {item.imageUrl ? (
-                <Image source={{ uri: item.imageUrl }} style={styles.channelIcon} cachePolicy="disk" />
+                <Image source={{ uri: item.imageUrl }} style={styles.channelIcon} cachePolicy="disk" recyclingKey={item.imageUrl} />
               ) : (
                 <View style={[styles.channelIcon, styles.channelIconPlaceholder]}>
                   <IconSymbol name="number" size={16} color={theme.colors.textMuted} />

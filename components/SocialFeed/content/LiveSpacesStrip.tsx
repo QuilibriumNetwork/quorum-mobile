@@ -250,7 +250,7 @@ function SpaceCard({
             ]}
           >
             {hostPfp ? (
-              <Image source={{ uri: hostPfp }} style={styles.avatar} />
+              <Image source={{ uri: hostPfp }} style={styles.avatar} recyclingKey={hostPfp} />
             ) : (
               <View style={[styles.avatar, { backgroundColor: theme.colors.surface3 }]} />
             )}

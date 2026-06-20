@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { HeaderAvatar } from '@/components/HeaderAvatar';
@@ -57,6 +58,7 @@ export default function NotificationsScreen() {
     farcasterError,
   } = useUnifiedNotifications();
   const insets = useSafeAreaInsets();
+  const { openMiniapp } = useMiniappOverlay();
   const [refreshing, setRefreshing] = useState(false);
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -99,16 +101,15 @@ export default function NotificationsScreen() {
         },
       });
     } else if (link.type === 'frame') {
-      // Mini-app notifications — route to the wallet tab, which hosts
-      // the BrowserModal that knows how to render frame URLs. Wallet
-      // picks up the param via useLocalSearchParams and opens the
-      // modal on mount.
-      router.push({
-        pathname: '/(tabs)/wallet',
-        params: { miniAppUrl: link.url },
-      });
+      // Mini-app notifications — open the global miniapp overlay directly.
+      // The provider wraps every tab, so the BrowserModal renders above the
+      // notifications screen immediately. (Previously this bounced through
+      // the wallet tab via a `?miniAppUrl=` param, which depended on the
+      // wallet screen mounting and reading the param — fragile across tab
+      // navigation and the likely reason taps didn't present the mini app.)
+      openMiniapp({ url: link.url, isQNative: false });
     }
-  }, []);
+  }, [openMiniapp]);
 
   const handleDelete = useCallback((entry: UnifiedNotification) => {
     if (entry.source === 'chat' && entry.raw?.chat) {

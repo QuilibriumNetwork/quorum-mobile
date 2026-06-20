@@ -134,6 +134,65 @@ export async function showMessageNotification(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Route readiness + cold-start handling.
+//
+// Two problems this solves:
+//  1. Cold start: when a tap launches the killed app, the live response
+//     listener is registered too late to see the launching tap. We read it
+//     explicitly via getLastNotificationResponseAsync() on startup.
+//  2. Early routing: handleNotificationTap may run before the navigation
+//     tree is mounted (router.push would no-op). We queue the target route
+//     and flush it once the root navigator reports ready.
+// ---------------------------------------------------------------------------
+
+type RouteTarget = Parameters<typeof router.push>[0];
+
+let navigationReady = false;
+let pendingRoute: RouteTarget | null = null;
+// Dedup guard: the cold-start read and the live listener can both deliver
+// the same launching tap. Handle each notification's tap at most once.
+let lastHandledResponseId: string | null = null;
+
+function routeTo(target: RouteTarget): void {
+  if (navigationReady) {
+    router.push(target);
+  } else {
+    // Last tap wins — only one screen can be foregrounded anyway.
+    pendingRoute = target;
+  }
+}
+
+/**
+ * Mark the navigation tree as mounted and flush any route queued by a tap
+ * that arrived before the router was ready. Call once the root navigator
+ * reports a navigation state (see app/_layout.tsx).
+ */
+export function setNotificationNavigationReady(): void {
+  navigationReady = true;
+  if (pendingRoute != null) {
+    const target = pendingRoute;
+    pendingRoute = null;
+    router.push(target);
+  }
+}
+
+/**
+ * Process the notification (if any) whose tap launched the app from a
+ * killed/suspended state. Safe to call on every startup — returns without
+ * effect on a normal launch (no pending response). Best-effort.
+ */
+export async function processColdStartNotification(): Promise<void> {
+  try {
+    const response = await Notifications.getLastNotificationResponseAsync();
+    if (response) {
+      handleNotificationTap(response);
+    }
+  } catch {
+    // Ignore — a missing/unsupported cold-start API just means no deep-link.
+  }
+}
+
 /**
  * Handle notification tap — deep-link to the right surface based on the
  * push `data.type`. The catalog of address → resource lives in the same
@@ -144,9 +203,30 @@ export async function showMessageNotification(
 export function handleNotificationTap(
   response: Notifications.NotificationResponse
 ): void {
+  // Dedup: cold-start read + live listener may both fire for the launching
+  // tap. Process each notification's tap once.
+  const responseId = response.notification.request.identifier;
+  if (responseId && responseId === lastHandledResponseId) {
+    return;
+  }
+  if (responseId) {
+    lastHandledResponseId = responseId;
+  }
+
   const rawData = response.notification.request.content.data;
   const data = rawData as unknown as
-    | { type?: string; inbox_address?: string; hub_address?: string }
+    | {
+        type?: string;
+        inbox_address?: string;
+        hub_address?: string;
+        // Mini-app pushes carry the target URL to open on tap.
+        url?: string;
+        miniapp_url?: string;
+        // Farcaster pushes carry the referenced cast so the tap can open
+        // the thread instead of just landing on the notifications tab.
+        cast_hash?: string;
+        username?: string;
+      }
     | undefined;
   if (!data?.type) {
     return;
@@ -175,7 +255,7 @@ export function handleNotificationTap(
     getSpaceKey = spaceMod.getSpaceKey;
     encryptionStateStorage = cryptoMod.encryptionStateStorage;
   } catch {
-    router.push('/');
+    routeTo('/');
     return;
   }
 
@@ -184,23 +264,23 @@ export function handleNotificationTap(
       // DM: resolve inbox_address -> conversationId via the per-DM
       // inbox keypair record. Same lookup path the chat surface uses.
       if (!data.inbox_address) {
-        router.push('/(tabs)/messages');
+        routeTo('/(tabs)/messages');
         return;
       }
       const kp = encryptionStateStorage.getConversationInboxKeypairByAddress(
         data.inbox_address
       );
       if (kp?.conversationId) {
-        router.push(`/(tabs)/messages/dm/${kp.conversationId}`);
+        routeTo(`/(tabs)/messages/dm/${kp.conversationId}`);
       } else {
-        router.push('/(tabs)/messages');
+        routeTo('/(tabs)/messages');
       }
       return;
     }
     case 'hub-log': {
       // Space: resolve hub_address -> spaceId by scanning known spaces.
       if (!data.hub_address) {
-        router.push('/(tabs)/spaces');
+        routeTo('/(tabs)/spaces');
         return;
       }
       const space = getAllSpaces().find(
@@ -213,20 +293,45 @@ export function handleNotificationTap(
           (s) => getSpaceKey(s.spaceId, 'hub')?.address === data.hub_address
         )?.spaceId;
       if (spaceId) {
-        router.push(`/(tabs)/spaces/${spaceId}`);
+        routeTo(`/(tabs)/spaces/${spaceId}`);
       } else {
-        router.push('/(tabs)/spaces');
+        routeTo('/(tabs)/spaces');
+      }
+      return;
+    }
+    case 'miniapp': {
+      // Mini-app push: open the mini app at its target URL. This module
+      // is non-React so it can't call the MiniappOverlay hook directly —
+      // route through the wallet tab's `?miniAppUrl=` bridge, which opens
+      // the global overlay on mount. Falls back to the notifications view
+      // when no URL is present.
+      const miniAppUrl = data.url ?? data.miniapp_url;
+      if (miniAppUrl) {
+        routeTo({ pathname: '/(tabs)/wallet', params: { miniAppUrl } });
+      } else {
+        routeTo('/(tabs)/profile');
       }
       return;
     }
     case 'farcaster':
-      // Farcaster activity lands in the unified notifications view,
-      // which is the default profile-tab landing.
-      router.push('/(tabs)/profile');
+      // Open the referenced cast's thread when the push carries it (the
+      // feed tab owns the cast viewer; params match feed/index.tsx).
+      // Otherwise land on the unified notifications view (profile tab).
+      if (data.cast_hash) {
+        routeTo({
+          pathname: '/(tabs)/feed',
+          params: {
+            username: data.username ?? '',
+            castHashPrefix: data.cast_hash,
+          },
+        });
+      } else {
+        routeTo('/(tabs)/profile');
+      }
       return;
     default:
       // Legacy / chat-driven local notifications used `type: 'message'`.
-      router.push('/');
+      routeTo('/');
   }
 }
 

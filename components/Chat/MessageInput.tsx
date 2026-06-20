@@ -1220,10 +1220,17 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flex: 1,
     color: theme.colors.textMain,
     paddingHorizontal: Skin.space(8),
+    // Size to content height and center within the pill. The pill uses
+    // `alignItems: stretch`, which would stretch the input to the button
+    // height and — because iOS IGNORES textAlignVertical on multiline inputs
+    // — leave a single line stuck at the top. `alignSelf: center` overrides
+    // the stretch for the input only (buttons stay bottom-pinned), so one
+    // line is vertically centered on iOS too; multiline grows the pill and
+    // still reads centered.
+    alignSelf: 'center',
     // No vertical padding and no minHeight: the input's height is its own
     // line-height (single line) and grows naturally up to maxHeight when
-    // wrapped. The parent's `alignItems: center` + the 36px controls keep a
-    // single line vertically centered without device-specific magic numbers.
+    // wrapped.
     paddingVertical: 0,
     fontFamily: theme.fonts.regular.fontFamily,
     fontSize: Skin.font(16),

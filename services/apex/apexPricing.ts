@@ -1,5 +1,5 @@
 /**
- * Apex pricing — convert the fixed $25/month subscription price into
+ * Apex pricing — convert the fixed $5/month subscription price into
  * token units for the chosen payment token.
  *
  * USD price sources per token:
@@ -10,12 +10,12 @@
  *
  * Conversion uses the raw decimal rate exactly: the price string is scaled
  * to an integer and the token amount computed with BigInt arithmetic
- * (units = $25 * 10^(decimals+scale) / scaledPrice) — no float division,
+ * (units = $5 * 10^(decimals+scale) / scaledPrice) — no float division,
  * so the quote is floor-exact at the token's full precision.
  *
  * The total is split 5 ways exactly: amountEachUnits = floor(total / 5),
  * then totalUnits = amountEachUnits * 5 — so the on-chain 5-way split
- * never produces dust and the payer is charged a hair under $25 rather
+ * never produces dust and the payer is charged a hair under $5 rather
  * than over.
  */
 
@@ -109,7 +109,7 @@ async function getTokenPriceUsd(token: ApexToken): Promise<string> {
 }
 
 /**
- * Quote the $25 Apex subscription in the given token, split 5 ways with
+ * Quote the $5 Apex subscription in the given token, split 5 ways with
  * no dust. Throws with a descriptive error if the token's USD price
  * cannot be determined.
  */

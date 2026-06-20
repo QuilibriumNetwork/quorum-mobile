@@ -48,7 +48,7 @@ import {
 } from 'viem/chains';
 
 // Chain ID to viem chain mapping
-const CHAIN_MAP: Record<number, Chain> = {
+export const CHAIN_MAP: Record<number, Chain> = {
   1: mainnet,
   10: optimism,
   56: bsc,
@@ -75,7 +75,7 @@ const SUPPORTED_CHAIN_IDS = new Set([
 
 // Get RPC URL for a chain (via proxy)
 // Proxy expects: /api/alchemy/{chainId}/rpc
-function getRpcUrl(chainId: number): string {
+export function getRpcUrl(chainId: number): string {
   if (SUPPORTED_CHAIN_IDS.has(chainId)) {
     return `${RPC_PROXY_BASE}/api/alchemy/${chainId}/rpc`;
   }

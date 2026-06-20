@@ -51,6 +51,13 @@ export function CachedAvatar({ source, style, fallback = DEFAULT_FALLBACK, fallb
     return <DefaultAvatar displayName={fallbackName} size={size} style={flat} />;
   }
 
+  // Key the underlying view to the source so a recycled FlashList row rebinds
+  // to a fresh avatar instead of retaining the previous (possibly animated)
+  // image. Avoids a use-after-free when an animated avatar's decoded backing
+  // store is purged under memory pressure — see AutoHeightImage for the crash.
+  const recyclingKey =
+    typeof source === 'object' && source && 'uri' in source ? source.uri : undefined;
+
   return (
     <Image
       source={hasValidSource ? source : fallback}
@@ -58,6 +65,7 @@ export function CachedAvatar({ source, style, fallback = DEFAULT_FALLBACK, fallb
       cachePolicy="disk"
       transition={useInitialsFallback ? 0 : 100}
       contentFit="cover"
+      recyclingKey={recyclingKey}
       onError={useInitialsFallback ? () => setImageError(true) : undefined}
     />
   );

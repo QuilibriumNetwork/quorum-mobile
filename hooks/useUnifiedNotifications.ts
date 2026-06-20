@@ -15,6 +15,7 @@ import {
   flattenFarcasterNotifications,
   useFarcasterNotifications,
 } from './useFarcasterNotifications';
+import { useHaatzNotifications } from './useHaatzNotifications';
 import { isScamCast } from '@/services/farcaster/scamFilter';
 import {
   getLastSeenTimestamp,
@@ -152,6 +153,92 @@ function farcasterToUnified(n: FarcasterNotification): UnifiedNotification {
   };
 }
 
+type CanonicalType = 'like' | 'recast' | 'mention' | 'reply' | 'quote' | 'follow' | 'other';
+
+/**
+ * Collapse the two sources' wildly different type vocabularies into one
+ * canonical bucket so we can dedup across them. The official farcaster.xyz
+ * feed and haatz use different (and, on the official side, not fully
+ * documented) spellings — `cast-like` vs `likes` vs `reactions`, `cast-reply`
+ * vs `replies`, etc. Substring matching is deliberately tolerant so an
+ * unanticipated spelling on either side doesn't silently fall to `other` and
+ * break dedup (the bug that let mirrored notifications show twice).
+ *
+ * `reactions` is ambiguous (Warpcast groups likes AND recasts under it), so we
+ * disambiguate with `reactionType` when the type itself is generic.
+ */
+function canonicalType(n: FarcasterNotification): CanonicalType {
+  const t = (n.type ?? '').toLowerCase();
+  if (t.includes('follow')) return 'follow';
+  if (t.includes('quote')) return 'quote';
+  if (t.includes('mention')) return 'mention';
+  if (t.includes('repl')) return 'reply';
+  if (t.includes('recast')) return 'recast';
+  if (t.includes('react') || t.includes('like')) {
+    return (n.reactionType ?? '').toLowerCase().includes('recast') ? 'recast' : 'like';
+  }
+  return 'other';
+}
+
+/** Canonicalize a cast hash for keying: lowercase, strip an optional 0x. */
+function normHash(hash: string | undefined): string | undefined {
+  return hash ? hash.toLowerCase().replace(/^0x/, '') : undefined;
+}
+
+/**
+ * Heuristic cross-source dedup key. The two sources share no ids and won't
+ * agree on timestamps to the second, so we key on stable semantic fields:
+ *
+ *   - likes/recasts: the official feed AGGREGATES these per cast ("X and 5
+ *     others liked"), so we key at cast level — this drops every per-actor
+ *     haatz like for a cast already covered by the official aggregate.
+ *   - replies/mentions/quotes: distinct per (actor, cast).
+ *   - follows: keyed by actor fid (no cast involved).
+ *
+ * Returns null when the notification lacks the fields to build a key, in
+ * which case it's never treated as a duplicate.
+ */
+function dedupKey(n: FarcasterNotification): string | null {
+  const ct = canonicalType(n);
+  const castHash = normHash(n.content?.cast?.hash);
+  const actorFid = n.actor?.fid;
+  if (ct === 'follow') return actorFid != null ? `follow:${actorFid}` : null;
+  // Likes/recasts reference a SHARED cast (yours) and aggregate across many
+  // actors, so key per (type, cast) — type separates a like from a recast on
+  // the same cast.
+  if (ct === 'like' || ct === 'recast') return castHash ? `${ct}:${castHash}` : null;
+  // Replies/mentions/quotes (and any other cast-bearing notification) each
+  // reference the NEW cast that was created, whose hash is globally unique —
+  // so key by the hash ALONE. This deliberately ignores both the actor (the
+  // official feed often omits it for mentions, putting the author on the cast
+  // instead — the actor-fid asymmetry that let mentions slip through) and the
+  // specific label (a reply that also mentions you can arrive as `reply` from
+  // one source and `mention` from the other — same cast, one notification).
+  if (castHash) return `cast:${castHash}`;
+  return null;
+}
+
+/**
+ * Merge the official farcaster.xyz feed with the haatz feed, dropping any
+ * haatz item that the official feed already represents. Official items are
+ * preferred (richer: stable id, unread flag, aggregation counts, pfp).
+ */
+function blendFarcasterSources(
+  official: FarcasterNotification[],
+  haatz: FarcasterNotification[],
+): FarcasterNotification[] {
+  const officialKeys = new Set<string>();
+  for (const n of official) {
+    const k = dedupKey(n);
+    if (k) officialKeys.add(k);
+  }
+  const extra = haatz.filter((n) => {
+    const k = dedupKey(n);
+    return !k || !officialKeys.has(k);
+  });
+  return [...official, ...extra];
+}
+
 function chatToUnified(e: NotificationLogEntry): UnifiedNotification {
   const data = e.data;
   const link: UnifiedNotification['link'] | undefined =
@@ -193,16 +280,20 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
   const { farcasterAuthToken } = useAuth();
   const { entries: chatEntries } = useNotificationLog();
   const farcasterQuery = useFarcasterNotifications(farcasterAuthToken ?? undefined);
+  // Supplementary auth-free source (hypersnap/haatz). Blended in and
+  // deduped against the official feed so notifications still show when the
+  // farcaster.xyz bearer token is missing or expired.
+  const haatzQuery = useHaatzNotifications();
 
-  const farcasterItems = useMemo(
-    () =>
-      flattenFarcasterNotifications(farcasterQuery.data?.pages).filter(
-        // Suppress notifications whose target/preview cast references
-        // the hyrpia.xyz wallet-drainer scam — see scamFilter.ts.
-        (n) => !isScamCast(n.content?.cast as unknown as Parameters<typeof isScamCast>[0]),
-      ),
-    [farcasterQuery.data?.pages],
-  );
+  const farcasterItems = useMemo(() => {
+    const isNotScam = (n: FarcasterNotification) =>
+      // Suppress notifications whose target/preview cast references the
+      // hyrpia.xyz wallet-drainer scam — see scamFilter.ts.
+      !isScamCast(n.content?.cast as unknown as Parameters<typeof isScamCast>[0]);
+    const official = flattenFarcasterNotifications(farcasterQuery.data?.pages).filter(isNotScam);
+    const haatz = (haatzQuery.data ?? []).filter(isNotScam);
+    return blendFarcasterSources(official, haatz);
+  }, [farcasterQuery.data?.pages, haatzQuery.data]);
 
   const items = useMemo(() => {
     const merged: UnifiedNotification[] = [
@@ -230,7 +321,7 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
   return {
     items,
     unreadCount,
-    isLoading: farcasterQuery.isLoading,
+    isLoading: farcasterQuery.isLoading || haatzQuery.isLoading,
     isFetchingMore: farcasterQuery.isFetchingNextPage,
     hasMore: !!farcasterQuery.hasNextPage,
     fetchMore: () => {
@@ -240,8 +331,14 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
     },
     refetch: () => {
       void farcasterQuery.refetch();
+      void haatzQuery.refetch();
     },
     farcasterEnabled: !!farcasterAuthToken,
-    farcasterError: (farcasterQuery.error as Error | null) ?? null,
+    // Only surface the official-feed error when the blended list is empty —
+    // if haatz (or anything) filled the feed, a farcaster.xyz auth lapse or
+    // 5xx shouldn't show an error banner. Per the resilience requirement:
+    // don't error out just because the official source didn't appear.
+    farcasterError:
+      farcasterItems.length > 0 ? null : ((farcasterQuery.error as Error | null) ?? null),
   };
 }

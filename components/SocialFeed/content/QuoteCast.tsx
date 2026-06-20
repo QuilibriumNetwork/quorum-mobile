@@ -56,6 +56,8 @@ export function QuoteCast({ cast, theme, onPress }: QuoteCastProps) {
           style={styles.image}
           contentFit="cover"
           cachePolicy="disk"
+          // Reset animated-GIF source on recycled cell reuse — see AutoHeightImage.
+          recyclingKey={cast.embeds.images[0].url}
         />
       )}
     </TouchableOpacity>

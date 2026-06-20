@@ -22,6 +22,7 @@ import {
   formatTransactionForDisplay,
   EthereumProviderService,
 } from '@/services/miniapp/ethereumProvider';
+import type { TxSimulationResult } from '@/services/miniapp/txSimulationService';
 import { formatEther } from 'viem';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -35,6 +36,13 @@ export interface ApprovalRequest {
   typedData?: TypedDataForApproval;
   appName?: string;
   appIcon?: string;
+  /**
+   * Pre-sign simulation result for transaction requests. `undefined` while
+   * the simulation is still running; the modal shows a "Checking…" row
+   * until it resolves. Only `will-revert` / `insufficient-funds` surface a
+   * danger banner — `ok`/`unknown` render nothing.
+   */
+  simulation?: TxSimulationResult;
   /**
    * Called with user's approval decision.
    * The callback may be async (e.g., to perform signing after approval).
@@ -208,6 +216,35 @@ export default function MiniAppApprovalModal({
     }
   };
 
+  const renderSimulation = () => {
+    if (request.type !== 'transaction') return null;
+    const sim = request.simulation;
+
+    // Still simulating.
+    if (sim === undefined) {
+      return (
+        <View style={styles.simCheckingRow}>
+          <ActivityIndicator size="small" color={theme.colors.textMuted} />
+          <Text style={styles.simCheckingText}>Checking transaction…</Text>
+        </View>
+      );
+    }
+
+    // Only the failure states get a banner; ok/unknown stay quiet.
+    if (sim.status !== 'will-revert' && sim.status !== 'insufficient-funds') {
+      return null;
+    }
+
+    return (
+      <View style={styles.simDangerContainer}>
+        <IconSymbol name="exclamationmark.triangle.fill" size={16} color="#EF4444" />
+        <Text style={styles.simDangerText}>
+          {sim.warning ?? 'This transaction is likely to fail.'}
+        </Text>
+      </View>
+    );
+  };
+
   const getWarningText = () => {
     switch (request.type) {
       case 'transaction':
@@ -248,6 +285,9 @@ export default function MiniAppApprovalModal({
             <IconSymbol name="exclamationmark.triangle.fill" size={16} color="#F59E0B" />
             <Text style={styles.warningText}>{getWarningText()}</Text>
           </View>
+
+          {/* Pre-sign simulation result (transactions only) */}
+          {renderSimulation()}
 
           {/* Wallet Selector - allows user to choose which wallet to use */}
           <WalletSelector hideIfSingle={false} />
@@ -330,6 +370,33 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flex: 1,
       fontSize: Skin.font(13),
       color: theme.colors.warning,
+      lineHeight: Skin.font(18),
+    },
+    simCheckingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(8),
+      marginBottom: Skin.space(16),
+    },
+    simCheckingText: {
+      fontSize: Skin.font(13),
+      color: theme.colors.textMuted,
+    },
+    simDangerContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#EF444415',
+      borderRadius: Skin.radius(12),
+      borderWidth: 1,
+      borderColor: '#EF444440',
+      padding: Skin.space(12),
+      gap: Skin.space(8),
+      marginBottom: Skin.space(16),
+    },
+    simDangerText: {
+      flex: 1,
+      fontSize: Skin.font(13),
+      color: '#EF4444',
       lineHeight: Skin.font(18),
     },
     scrollContainer: {

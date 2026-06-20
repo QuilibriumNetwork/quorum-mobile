@@ -67,6 +67,8 @@ export function FrameEmbed({
         source={{ uri: imageUrl }}
         style={styles.image}
         contentFit="cover"
+        // Reset animated-GIF source on recycled cell reuse — see AutoHeightImage.
+        recyclingKey={imageUrl}
       />
       <View style={styles.buttonRow}>
         <Text style={styles.buttonText}>

@@ -483,6 +483,8 @@ function SnapImage({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
       }}
       contentFit="cover"
       accessibilityLabel={p.alt ? String(p.alt) : undefined}
+      // Reset animated-GIF source on recycled cell reuse — see AutoHeightImage.
+      recyclingKey={String(p.url ?? '')}
     />
   );
 }

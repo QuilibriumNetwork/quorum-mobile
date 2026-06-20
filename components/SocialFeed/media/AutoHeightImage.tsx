@@ -69,6 +69,14 @@ export function AutoHeightImage({
       source={{ uri }}
       style={[style, { width: dimensions.width, height: dimensions.height }]}
       contentFit="cover"
+      // Reset the (possibly animated GIF) source cleanly when a recycled
+      // FlashList cell rebinds to a new URI. Without this the underlying
+      // ExpoImage view can keep a stale reference to the previous animated
+      // image; under memory pressure its decoded backing store is purged
+      // while a CALayer still points at the GIF's lazy data provider, and
+      // the next CoreAnimation commit re-decodes from freed memory and
+      // segfaults (GlobalGIFInfo::writeToStream → memmove from null).
+      recyclingKey={uri}
     />
   );
 

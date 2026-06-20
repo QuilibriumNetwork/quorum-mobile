@@ -30,6 +30,8 @@ export {
   showMessageNotification,
   handleNotificationTap,
   setupNotificationResponseListener,
+  setNotificationNavigationReady,
+  processColdStartNotification,
   setupNotificationReceivedListener,
   getBadgeCount,
   setBadgeCount,

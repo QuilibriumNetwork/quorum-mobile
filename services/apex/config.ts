@@ -1,7 +1,7 @@
 /**
  * Quorum Apex configuration — pricing, chain, contract, and token constants.
  *
- * Apex is a $25/month subscription paid in wQUIL, SNAP, or USDC on
+ * Apex is a $5/month subscription paid in wQUIL, SNAP, or USDC on
  * Ethereum mainnet (the only chain where all three tokens exist). The
  * payment goes through the ApexSplitter contract (contracts/ApexSplitter.sol),
  * which splits it 5 ways: 1/5 to the Q Inc registry address and 1/5 each
@@ -12,7 +12,7 @@ import type { Address } from 'viem';
 import { QNS_TOKEN_ADDRESSES, TOKEN_DECIMALS } from '@/services/wallet/qnsPaymentService';
 
 /** Monthly subscription price, in USD. Converted to token units at quote time. */
-export const APEX_PRICE_USD = 25;
+export const APEX_PRICE_USD = 5;
 
 /** Q Inc registry address — always recipients[0] of the 5-way split. */
 export const Q_INC_ADDRESS: Address = '0x4EB75d50C70faBAaF5f5980dE7c11009318C8635';

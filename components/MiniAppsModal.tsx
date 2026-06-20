@@ -1,10 +1,13 @@
 import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { useAuth } from '@/context';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { getAddedMiniapps, type AddedMiniapp } from '@/services/miniapp/addedMiniapps';
+import { getRecentMiniapps, recordMiniappUse, type RecentMiniapp } from '@/services/miniapp/recentMiniapps';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -56,6 +59,10 @@ interface SearchMiniAppsResponse {
   };
 }
 
+// Launcher tabs: All (discovery), Saved (favorites + locally added),
+// Recently used (device-local usage history).
+type LauncherTab = 'all' | 'saved' | 'recent';
+
 // Internal app type for display
 interface MiniApp {
   id: string;
@@ -90,10 +97,52 @@ const isExcludedAuthor = (frame: ApiFrame): boolean => {
   return Boolean(username && EXCLUDED_AUTHORS.has(username));
 };
 
+// Convert a locally-stored added/recent entry into the display MiniApp shape.
+const localToMiniApp = (e: {
+  domain: string;
+  url: string;
+  name?: string;
+  iconUrl?: string;
+}): MiniApp => ({
+  id: e.domain,
+  name: e.name ?? e.domain,
+  description: e.domain,
+  category: 'social',
+  url: e.url,
+  icon: e.iconUrl ? { uri: e.iconUrl } : null,
+  featured: false,
+  requiresFarcaster: false,
+  isQNative: false,
+});
+
+// Tolerantly pull frame objects out of the favorite-frames response, whose
+// exact shape isn't contractually documented. Accepts result.frames /
+// favoriteFrames / apps, and entries that are either a frame or {frame}.
+function extractFavoriteFrames(data: unknown): ApiFrame[] {
+  const result =
+    (data as { result?: Record<string, unknown> })?.result ??
+    (data as Record<string, unknown>) ??
+    {};
+  const arr =
+    (result as { frames?: unknown }).frames ??
+    (result as { favoriteFrames?: unknown }).favoriteFrames ??
+    (result as { apps?: unknown }).apps ??
+    [];
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((it) =>
+      it && typeof it === 'object' && 'frame' in it
+        ? (it as { frame: ApiFrame }).frame
+        : (it as ApiFrame),
+    )
+    .filter((f): f is ApiFrame => Boolean(f && (f.homeUrl || f.domain)));
+}
+
 export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRouteMode = false, noTopInset = false }: MiniAppsModalProps) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { farcasterAuthToken } = useAuth();
+  const [activeTab, setActiveTab] = useState<LauncherTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [miniApps, setMiniApps] = useState<MiniApp[]>([]);
@@ -101,6 +150,12 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // "Saved" tab: farcaster.xyz favorites (best-effort) merged with the
+  // locally-added apps. "Recently used": device-local usage history.
+  const [favoriteApps, setFavoriteApps] = useState<MiniApp[]>([]);
+  const [isFavLoading, setIsFavLoading] = useState(false);
+  const [localAdded, setLocalAdded] = useState<AddedMiniapp[]>([]);
+  const [recentList, setRecentList] = useState<RecentMiniapp[]>([]);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const styles = createStyles(theme, isDark, insets);
@@ -231,6 +286,58 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
     searchMiniApps();
   }, [debouncedQuery, frameToMiniApp, farcasterAuthToken]);
 
+  // Load device-local stores when shown / when switching tabs so freshly
+  // added or used apps appear without a remount.
+  useEffect(() => {
+    if (!visible) return;
+    setLocalAdded(getAddedMiniapps());
+    setRecentList(getRecentMiniapps());
+  }, [visible, activeTab]);
+
+  // Fetch the user's farcaster.xyz favorites for the "Saved" tab. Best-effort
+  // and auth-gated — failures fall back to the locally-added apps, so this
+  // never blocks the tab from rendering.
+  useEffect(() => {
+    if (!visible) return;
+    if (!farcasterAuthToken) {
+      setFavoriteApps([]);
+      return;
+    }
+    let cancelled = false;
+    const fetchFavorites = async () => {
+      setIsFavLoading(true);
+      try {
+        const response = await fetch(
+          'https://farcaster.xyz/~api/v1/favorite-frames?limit=50',
+          { headers: { Authorization: `Bearer ${farcasterAuthToken}` } },
+        );
+        if (!response.ok) throw new Error(`favorites ${response.status}`);
+        const data = await response.json();
+        const frames = extractFavoriteFrames(data).filter((f) => !isExcludedAuthor(f));
+        if (!cancelled) setFavoriteApps(frames.map((f, i) => frameToMiniApp(f, i, false)));
+      } catch {
+        if (!cancelled) setFavoriteApps([]);
+      } finally {
+        if (!cancelled) setIsFavLoading(false);
+      }
+    };
+    void fetchFavorites();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, farcasterAuthToken, frameToMiniApp]);
+
+  // Saved = favorites first (richer metadata), then locally-added apps not
+  // already represented, deduped by domain (id).
+  const savedApps = useMemo(() => {
+    const byId = new Map<string, MiniApp>();
+    for (const a of favoriteApps) byId.set(a.id, a);
+    for (const a of localAdded.map(localToMiniApp)) if (!byId.has(a.id)) byId.set(a.id, a);
+    return Array.from(byId.values());
+  }, [favoriteApps, localAdded]);
+
+  const recentApps = useMemo(() => recentList.map(localToMiniApp), [recentList]);
+
   // Use search results if searching, otherwise show all apps
   const isSearchMode = debouncedQuery.length > 0;
 
@@ -238,14 +345,75 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
 
   const featuredApps = miniApps.filter(app => app.featured).slice(0, 5);
 
-  const handleAppPress = (url: string, isQNative: boolean) => {
+  const handleAppPress = (app: MiniApp) => {
+    // Record rich metadata so the Recently-used tab shows a real name/icon
+    // (opening via the overlay only carries the URL).
+    recordMiniappUse({ url: app.url, name: app.name, iconUrl: app.icon?.uri });
     // In route mode, don't close - just open the mini app
     // In modal mode, close the modal first
     if (!isRouteMode) {
       onClose();
     }
-    onOpenMiniApp?.(url, isQNative);
+    onOpenMiniApp?.(app.url, app.isQNative);
   };
+
+  // A single app card in the grid — shared by All / Saved / Recently used.
+  const renderAppCard = (app: MiniApp) => (
+    <TouchableOpacity
+      key={app.id}
+      style={styles.appCard}
+      onPress={() => handleAppPress(app)}
+    >
+      <View style={styles.appIconContainer}>
+        {app.icon ? (
+          <Image source={app.icon} style={styles.appIcon} />
+        ) : (
+          <View style={styles.appIconPlaceholder}>
+            <Text style={styles.iconPlaceholderText}>{app.name.charAt(0)}</Text>
+          </View>
+        )}
+        {(app.requiresFarcaster || app.isQNative) && (
+          <View style={[styles.appIconBadge, app.isQNative && styles.appIconBadgeQNative]}>
+            {app.requiresFarcaster ? (
+              <Image
+                source={require('../assets/images/farcaster.png')}
+                style={styles.appIconBadgeIcon}
+              />
+            ) : (
+              <IconSymbol name="lock.fill" size={8} color="#ffffff" />
+            )}
+          </View>
+        )}
+      </View>
+      <Text style={styles.appName} numberOfLines={2}>{app.name}</Text>
+      <Text style={styles.appDescription} numberOfLines={2}>{app.description}</Text>
+    </TouchableOpacity>
+  );
+
+  // Grid body for the local tabs (Saved / Recently used), with loading +
+  // empty states.
+  const renderLocalTab = (
+    apps: MiniApp[],
+    loading: boolean,
+    emptyTitle: string,
+    emptyText: string,
+  ) => (
+    <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
+      {loading && apps.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      ) : apps.length === 0 ? (
+        <View style={styles.emptyState}>
+          <IconSymbol name="square.grid.2x2" size={48} color={theme.colors.textMuted} />
+          <Text style={styles.emptyStateTitle}>{emptyTitle}</Text>
+          <Text style={styles.emptyStateText}>{emptyText}</Text>
+        </View>
+      ) : (
+        <View style={styles.appsGrid}>{apps.map(renderAppCard)}</View>
+      )}
+    </ScrollView>
+  );
 
   const miniAppsContent = (
     <>
@@ -258,6 +426,23 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
         </View>
       )}
 
+      {/* All | Saved | Recently used */}
+      <View style={styles.tabSwitcher}>
+        <SegmentedPills
+          variant="segmented"
+          scrollable={false}
+          items={[
+            { key: 'all', label: 'All' },
+            { key: 'saved', label: 'Saved' },
+            { key: 'recent', label: 'Recent', accessibilityLabel: 'Recently used' },
+          ]}
+          activeKey={activeTab}
+          onChange={(k) => setActiveTab(k as LauncherTab)}
+        />
+      </View>
+
+      {activeTab === 'all' && (
+        <>
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <IconSymbol name="magnifyingglass" size={16} color={theme.colors.textMuted} />
@@ -320,7 +505,7 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
                   <TouchableOpacity
                     key={app.id}
                     style={styles.featuredCard}
-                    onPress={() => handleAppPress(app.url, app.isQNative)}
+                    onPress={() => handleAppPress(app)}
                     activeOpacity={0.9}
                   >
                     {app.bannerImage ? (
@@ -384,7 +569,7 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
               <TouchableOpacity
                 key={app.id}
                 style={styles.appCard}
-                onPress={() => handleAppPress(app.url, app.isQNative)}
+                onPress={() => handleAppPress(app)}
               >
                 <View style={styles.appIconContainer}>
                   {app.icon ? (
@@ -430,6 +615,24 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
           )}
         </ScrollView>
       )}
+        </>
+      )}
+
+      {activeTab === 'saved' &&
+        renderLocalTab(
+          savedApps,
+          isFavLoading,
+          'No saved apps',
+          'Apps you favorite on Farcaster or add here will show up.',
+        )}
+
+      {activeTab === 'recent' &&
+        renderLocalTab(
+          recentApps,
+          false,
+          'Nothing recent',
+          'Mini apps you open will appear here.',
+        )}
     </>
   );
 
@@ -474,6 +677,10 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
+    },
+    tabSwitcher: {
+      marginHorizontal: Skin.space(20),
+      marginBottom: Skin.space(16),
     },
     searchContainer: {
       flexDirection: 'row',

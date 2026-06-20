@@ -340,6 +340,10 @@ export function ImageViewer({
                     source={{ uri: url }}
                     style={styles.image}
                     contentFit="contain"
+                    // Reset animated-GIF source when this slot rebinds to
+                    // another image (swiping a multi-image set) — see
+                    // AutoHeightImage for the crash this prevents.
+                    recyclingKey={url}
                   />
                 </ReanimatedView>
               ))}

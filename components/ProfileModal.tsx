@@ -3610,7 +3610,7 @@ const ApexSectionCard = React.memo(function ApexSectionCard({
           <Text style={styles.apexPitchTitle}>Quorum Apex</Text>
         </View>
         <Text style={[styles.apexPitch, styles.apexPitchCentered]}>
-          Support 4 communities of your choice and get a gold ring on your profile — $25/month
+          Support 4 communities of your choice and get a gold ring on your profile — $5/month
         </Text>
         <TouchableOpacity style={styles.apexButton} onPress={() => onOpenApexModal('subscribe')}>
           <Text style={styles.apexButtonText}>Subscribe</Text>
