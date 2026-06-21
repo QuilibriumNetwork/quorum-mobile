@@ -400,6 +400,10 @@ export async function getConfig(address: string): Promise<UserConfig> {
       profile_image: decryptedConfig.profile_image,
       bio: (decryptedConfig as any).bio,
       isProfilePublic: (decryptedConfig as any).isProfilePublic,
+      // Explicitly carry the synced muted-DM list so an incoming config can't
+      // silently drop it (the failure mode that hit primaryUsername). The spread
+      // above should include it, but mute relies on this round-trip, so list it.
+      mutedConversations: (decryptedConfig as any).mutedConversations,
     } as UserConfig;
     saveLocalUserConfig(configWithTimestamp);
 
@@ -539,4 +543,32 @@ export function getDisplayName(address: string): string | undefined {
 export function getProfileImage(address: string): string | undefined {
   const config = getLocalUserConfig(address);
   return config?.profile_image;
+}
+
+// Muted DM conversations — config-backed so they sync across devices (the
+// "bookmark pattern": stored in UserConfig, read straight back from the local
+// MMKV config, never routed through the in-memory `user` object). Matches
+// desktop, which also stores mute in UserConfig.mutedConversations.
+
+export function getLocalMutedConversations(address: string): string[] {
+  const config = getLocalUserConfig(address);
+  return config?.mutedConversations ?? [];
+}
+
+/** Persist the muted list locally and sync outbound when allowSync is on. */
+export async function setMutedConversations(
+  address: string,
+  mutedConversations: string[]
+): Promise<void> {
+  const current = getLocalUserConfig(address) ?? getDefaultUserConfig(address);
+  const updated: UserConfig = { ...current, mutedConversations };
+  // Persist locally first so the value survives even if the sync below fails.
+  saveLocalUserConfig(updated);
+  try {
+    if (updated.allowSync) {
+      await saveConfig(updated);
+    }
+  } catch {
+    // Config sync is best-effort — the mute change is already saved locally.
+  }
 }

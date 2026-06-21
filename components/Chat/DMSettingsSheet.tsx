@@ -21,6 +21,8 @@ interface DMSettingsSheetProps {
   onToggleRepudiable?: (value: boolean) => void;
   saveEditHistory?: boolean;
   onToggleEditHistory?: (value: boolean) => void;
+  isMuted?: boolean;
+  onToggleMute?: (value: boolean) => void;
 }
 
 export function DMSettingsSheet({
@@ -34,6 +36,8 @@ export function DMSettingsSheet({
   onToggleRepudiable,
   saveEditHistory,
   onToggleEditHistory,
+  isMuted,
+  onToggleMute,
 }: DMSettingsSheetProps) {
   const styles = createStyles(theme);
   const { confirm, confirmDialog } = useConfirmDialog();
@@ -85,6 +89,22 @@ export function DMSettingsSheet({
         <View style={styles.header}>
           <Text style={styles.headerText}>Conversation Settings</Text>
         </View>
+
+        {onToggleMute && (
+          <ActionRowGroup style={styles.group}>
+            <ActionRow
+              label="Mute Conversation"
+              sublabel="No notifications or unread badges"
+              trailing={
+                <Switch
+                  value={isMuted ?? false}
+                  onValueChange={onToggleMute}
+                  trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                />
+              }
+            />
+          </ActionRowGroup>
+        )}
 
         {(onToggleRepudiable || onToggleEditHistory) && (
           <ActionRowGroup style={styles.group}>

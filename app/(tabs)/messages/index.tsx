@@ -12,6 +12,7 @@ import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context/AuthContext';
 import type { Conversation } from '@/hooks/chat';
+import { useDMMute } from '@/hooks/chat/useDMMute';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { haptics } from '@/utils/haptics';
@@ -39,6 +40,7 @@ interface InboxItem {
   unreadCount: number;
   isRepudiable?: boolean;
   isFarcaster?: boolean;
+  isMuted?: boolean;
   subtitle?: string;
   subtitlePrefix?: string;
   placeholder?: boolean;
@@ -78,6 +80,11 @@ const InboxRow = React.memo(function InboxRow({ item, styles, theme, onPress }: 
         {item.isFarcaster && (
           <View style={styles.farcasterBadge}>
             <FarcasterLogoIcon size={8} color="#fff" />
+          </View>
+        )}
+        {item.isMuted && (
+          <View style={styles.mutedBadge}>
+            <IconSymbol name="bell.slash" size={11} color={theme.colors.textSubtle} />
           </View>
         )}
       </View>
@@ -139,6 +146,10 @@ export default function MessagesInbox() {
   const listPadding = useFloatingTabBarPadding();
   const styles = useMemo(() => createStyles(theme, isDark, listPadding), [theme, isDark, listPadding]);
 
+  // Muted DMs (config-backed, syncs across devices). `mutedConversations` is a
+  // Set; depending on it keeps the list memo in sync when a mute toggles.
+  const { isMuted, mutedConversations } = useDMMute();
+
   // DMs list
   const items = useMemo<InboxItem[]>(() => {
     const rows: InboxItem[] = [];
@@ -157,6 +168,7 @@ export default function MessagesInbox() {
         unreadCount: hasUnread ? 1 : 0,
         isRepudiable: conv.isRepudiable,
         isFarcaster: conv.source === 'farcaster',
+        isMuted: isMuted(conv.conversationId),
         subtitle: preview || undefined,
         subtitlePrefix: preview && senderName ? senderName : undefined,
         placeholder: !preview,
@@ -172,7 +184,7 @@ export default function MessagesInbox() {
     // Sort by timestamp desc
     filtered.sort((a, b) => b.timestamp - a.timestamp);
     return filtered;
-  }, [conversations, search]);
+  }, [conversations, search, isMuted, mutedConversations]);
 
   const handlePressItem = useCallback((item: InboxItem) => {
     haptics.light();
@@ -390,6 +402,22 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
       height: 18,
       borderRadius: Skin.radius(9),
       backgroundColor: '#855DCD', // Farcaster brand purple
+      borderWidth: Skin.border(2),
+      borderColor: theme.colors.surface1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    // Muted indicator: bell-off badge at the top-left of the pfp (mirrors
+    // desktop's dm-muted-badge). Neutral surface chip so it reads as a status,
+    // not an action.
+    mutedBadge: {
+      position: 'absolute',
+      top: -2,
+      left: -2,
+      width: 18,
+      height: 18,
+      borderRadius: Skin.radius(9),
+      backgroundColor: theme.colors.surface3,
       borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,
       alignItems: 'center',

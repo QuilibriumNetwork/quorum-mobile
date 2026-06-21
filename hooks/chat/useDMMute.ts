@@ -1,32 +1,41 @@
 /**
  * useDMMute - Hook for muting/unmuting DM conversations
  *
- * Stores muted conversations in local MMKV storage.
+ * Mute state is stored in `UserConfig.mutedConversations` so it SYNCS ACROSS
+ * DEVICES (matching desktop). This follows the "bookmark pattern": the value
+ * lives in the config, is persisted to the local MMKV config, and is read
+ * straight back from there — it is NOT routed through the in-memory `user`
+ * object (that read-back bridge is the one that broke primaryUsername /
+ * isProfilePublic; see `config-to-user-readback-bridge-missing`).
+ *
  * Muted conversations are excluded from unread badge counts.
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context';
 import { createMMKV } from 'react-native-mmkv';
+import {
+  getLocalMutedConversations,
+  setMutedConversations as persistMutedConversations,
+} from '@/services/config';
 
-const storage = createMMKV({ id: 'dm-muted' });
-
-function getStorageKey(userAddress: string): string {
+// Legacy device-local store (pre-sync). Kept only to migrate existing muted
+// ids into the config-backed list once, then it is no longer written.
+const legacyStore = createMMKV({ id: 'dm-muted' });
+function legacyKey(userAddress: string): string {
   return `muted:${userAddress}`;
 }
-
-function loadMuted(userAddress: string): Set<string> {
-  const raw = storage.getString(getStorageKey(userAddress));
-  if (!raw) return new Set();
+function migrateLegacyMuted(userAddress: string): string[] {
+  const raw = legacyStore.getString(legacyKey(userAddress));
+  if (!raw) return [];
   try {
-    return new Set(JSON.parse(raw));
+    const ids = JSON.parse(raw) as string[];
+    // One-time consume: clear the legacy entry so this only merges once.
+    legacyStore.remove(legacyKey(userAddress));
+    return Array.isArray(ids) ? ids : [];
   } catch {
-    return new Set();
+    return [];
   }
-}
-
-function saveMuted(userAddress: string, muted: Set<string>): void {
-  storage.set(getStorageKey(userAddress), JSON.stringify([...muted]));
 }
 
 export function useDMMute() {
@@ -38,20 +47,33 @@ export function useDMMute() {
       setMutedConversations(new Set());
       return;
     }
-    setMutedConversations(loadMuted(user.address));
+
+    const fromConfig = getLocalMutedConversations(user.address);
+    const legacy = migrateLegacyMuted(user.address);
+
+    if (legacy.length > 0) {
+      // Fold any pre-sync local mutes into the config-backed list once.
+      const merged = Array.from(new Set([...fromConfig, ...legacy]));
+      setMutedConversations(new Set(merged));
+      void persistMutedConversations(user.address, merged);
+    } else {
+      setMutedConversations(new Set(fromConfig));
+    }
   }, [user?.address]);
 
   const toggleMute = useCallback((conversationId: string) => {
     if (!user?.address) return;
+    const address = user.address;
 
-    setMutedConversations(prev => {
+    setMutedConversations((prev) => {
       const next = new Set(prev);
       if (next.has(conversationId)) {
         next.delete(conversationId);
       } else {
         next.add(conversationId);
       }
-      saveMuted(user.address, next);
+      // Persist + sync (best-effort) outside the setter's pure return.
+      void persistMutedConversations(address, [...next]);
       return next;
     });
   }, [user?.address]);
