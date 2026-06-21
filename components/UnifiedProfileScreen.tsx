@@ -299,6 +299,16 @@ export default function UnifiedProfileScreen({
       <ProfileSplitModeModal
         visible={decisionModalVisible}
         onClose={() => setDecisionModalVisible(false)}
+        onDecision={(split) => {
+          // The modal already flipped the splitMode flag. If the user chose to
+          // MERGE (split === false), run the same field reconcile + sync as the
+          // in-app "Merge profiles" row so the onboarding path isn't a flag-only
+          // flip that bypasses the sync logic.
+          if (!split) {
+            showToast({ type: 'info', title: 'Merging…' });
+            void reconcileMergedProfiles();
+          }
+        }}
       />
 
       {/* Edit target picker (split mode) */}
