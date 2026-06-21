@@ -1780,6 +1780,10 @@ export default function SpaceSettingsModal({
           onClose={() => setSelectedUserProfile(null)}
           user={selectedUserProfile}
           spaceId={spaceId}
+          // Moderation mute broadcasts through a channel; from Settings there's
+          // no "current channel", so use the space's default channel. The mute
+          // applies space-wide regardless of which channel carries the message.
+          channelId={space?.defaultChannelId}
           roles={roles}
           isSpaceOwner={isSpaceOwner}
           onStartDM={(userId) => {

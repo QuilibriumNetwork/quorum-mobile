@@ -17,6 +17,7 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type { MuteMessage } from '@quilibrium/quorum-shared';
 import { useAuth, useWebSocket } from '@/context';
 import { sendMuteMessage } from '@/services/space/spaceMessageService';
 import { setMute, removeMute } from '@/services/space/modMuteStorage';
@@ -54,17 +55,18 @@ export function useModMuteUser() {
         duration,
       });
 
-      // Optimistic local record so the moderator's UI reflects it immediately.
-      // muteId comes from the sent content; we don't have it back here, so use a
-      // local marker — the authoritative record is rewritten when our own echo
-      // is processed. Using the envelope is unnecessary: own-echo filtering means
-      // this local write is what the moderator sees until/if a peer's copy lands.
+      // Optimistic local record so the moderator's UI reflects it immediately
+      // (own echoes are filtered on receive, so this local write is what the
+      // moderator sees). Use the REAL muteId from the sent content so the record
+      // and the replay-guard key match the authoritative broadcast — avoids an
+      // orphaned `local-*` key and keeps `lastMuteId` accurate.
+      const sentMuteId = (result.message.content as MuteMessage).muteId;
       setMute({
         spaceId: params.spaceId,
         targetUserId: params.targetUserId,
         mutedAt: now,
         mutedBy: user.address,
-        lastMuteId: `local-${now}`,
+        lastMuteId: sentMuteId,
         expiresAt: duration !== undefined ? now + duration : undefined,
       });
 
