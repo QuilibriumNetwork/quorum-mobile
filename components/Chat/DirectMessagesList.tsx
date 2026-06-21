@@ -158,7 +158,7 @@ const DMConversationItem = React.memo(function DMConversationItem({
         {hasUnread && <View style={styles.unreadBadge} />}
         {isFarcaster && (
           <View style={styles.farcasterBadge}>
-            <FarcasterLogoIcon size={10} color="#fff" />
+            <FarcasterLogoIcon size={8} color="#fff" />
           </View>
         )}
       </View>
@@ -454,7 +454,7 @@ const createStyles = (theme: AppTheme) =>
       width: 18,
       height: 18,
       borderRadius: Skin.radius(9),
-      backgroundColor: '#8B5CF6', // Farcaster purple
+      backgroundColor: '#855DCD', // Farcaster brand purple
       borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,
       alignItems: 'center',
