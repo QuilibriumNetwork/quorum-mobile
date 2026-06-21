@@ -12,6 +12,9 @@ import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/Segmente
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { useFarcasterProfile } from '@/hooks/useFarcasterProfile';
+import { updateFarcasterProfile } from '@/services/farcaster/updateProfile';
+import { compressAvatarImage } from '@/services/media/imageAttachment';
+import { capDisplayName, capBio } from '@/hooks/validation/errorTranslator';
 import {
   hasDecidedSplitMode,
   useProfileSplitMode,
@@ -35,7 +38,7 @@ export default function UnifiedProfileScreen({
   onOpenWarpcastImport,
 }: UnifiedProfileScreenProps) {
   const { theme } = useTheme();
-  const { user, farcasterAuthToken } = useAuth();
+  const { user, farcasterAuthToken, updateProfile } = useAuth();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -129,6 +132,66 @@ export default function UnifiedProfileScreen({
     showToast({ type: 'success', title: 'Address copied' });
   }, [user?.address, showToast]);
 
+  // Merge: reconcile name/bio/pfp across both identities, then enter merged mode.
+  // Per-field rule: whichever side has content wins; Quorum wins ties; if Quorum
+  // is empty for a field, pull Farcaster's value into it. After this both systems
+  // hold the same value per field, so the merged (Quorum-preferred) display is
+  // accurate on both sides. ProfileModal confirms before calling this.
+  const handleMergeProfiles = useCallback(async () => {
+    const fcName = farcasterAuthor?.displayName?.trim() || '';
+    const fcBio = farcasterAuthor?.profile?.bio?.text?.trim() || '';
+    const fcPfp = farcasterAuthor?.pfp?.url || '';
+    const qName = user?.displayName?.trim() || '';
+    const qBio = user?.bio?.trim() || '';
+    const qPfp = user?.profileImage || '';
+
+    // --- Pull Farcaster -> Quorum for any field Quorum is missing ---
+    const quorumUpdates: { displayName?: string; bio?: string; profileImage?: string } = {};
+    if (!qName && fcName) quorumUpdates.displayName = fcName;
+    if (!qBio && fcBio) quorumUpdates.bio = fcBio;
+    if (!qPfp && fcPfp) {
+      // Convert the remote FC pfp to a data URI (like the picker) so it displays
+      // AND broadcasts to peers, not just a bare stored URL.
+      try {
+        const compressed = await compressAvatarImage(fcPfp, 512, 512);
+        if (compressed?.dataUri) quorumUpdates.profileImage = compressed.dataUri;
+      } catch {
+        // If the image can't be fetched/compressed, skip the pfp pull; the rest
+        // of the merge still proceeds.
+      }
+    }
+    if (Object.keys(quorumUpdates).length > 0) {
+      updateProfile(quorumUpdates);
+    }
+
+    // --- Push Quorum -> Farcaster for fields Quorum has (Quorum wins) ---
+    if (farcasterAuthToken) {
+      const fcFields: { displayName?: string; bio?: string; pfp?: string } = {};
+      // Only push a field to Farcaster when it would actually change it (Quorum
+      // had content that differs), capped to Farcaster's byte limits.
+      if (qName && capDisplayName(qName) !== fcName) fcFields.displayName = capDisplayName(qName);
+      if (qBio && capBio(qBio) !== fcBio) fcFields.bio = capBio(qBio);
+      // Push the Quorum pfp (data URI) to Farcaster only when Quorum had its own.
+      if (qPfp) fcFields.pfp = qPfp;
+
+      if (Object.keys(fcFields).length > 0) {
+        try {
+          const res = await updateFarcasterProfile(farcasterAuthToken, fcFields);
+          if (!res.ok) {
+            showToast({ type: 'error', title: 'Farcaster not fully updated', message: res.error });
+          }
+        } catch {
+          showToast({ type: 'error', title: "Couldn't update Farcaster", message: 'Your Quorum profile was merged; Farcaster will sync on your next edit.' });
+        }
+      }
+    } else if (qName || qBio || qPfp) {
+      // No Farcaster token — can't push. Merge the display anyway; warn.
+      showToast({ type: 'info', title: 'Reconnect Farcaster to sync', message: 'Merged your profile view; Farcaster will update when you reconnect.' });
+    }
+
+    setSplitMode(false);
+  }, [farcasterAuthor, user?.displayName, user?.bio, user?.profileImage, farcasterAuthToken, updateProfile, showToast, setSplitMode]);
+
   const handleEditRequest = () => {
     if (!hasFarcaster) {
       setEditTarget('quorum');
@@ -193,7 +256,7 @@ export default function UnifiedProfileScreen({
           onViewMyCasts={handleViewMyCasts}
           // Merge when unmerged; unmerge when merged. ProfileModal confirms first;
           // here we just flip the split-mode display flag (no data is altered).
-          onMergeProfiles={splitMode ? () => setSplitMode(false) : undefined}
+          onMergeProfiles={splitMode ? () => { void handleMergeProfiles(); } : undefined}
           onUnmergeProfiles={!splitMode ? () => setSplitMode(true) : undefined}
           // After connecting Farcaster, jump to the Farcaster pill.
           onFarcasterConnected={() => setActivePill('farcaster')}

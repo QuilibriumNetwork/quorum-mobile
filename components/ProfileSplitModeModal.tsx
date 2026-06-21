@@ -58,8 +58,8 @@ export default function ProfileSplitModeModal({
           <View style={styles.optionTextWrap}>
             <Text style={styles.optionTitle}>Merge</Text>
             <Text style={styles.optionDesc}>
-              Nothing changes now. From then on, editing your name, avatar, or bio
-              updates both Quorum and Farcaster at once.
+              Your name, avatar, and bio are made the same on both, and editing
+              updates both at once. Usernames stay separate.
             </Text>
           </View>
         </TouchableOpacity>

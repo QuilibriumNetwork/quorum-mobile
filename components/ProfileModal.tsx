@@ -942,7 +942,7 @@ export default function ProfileModal({
       const ok = await confirm({
         title: 'Merge profiles',
         message:
-          'You’ll see and edit one profile. From now on, editing your name, bio, or picture updates both Quorum and Farcaster at once. Until you edit, each keeps its current values. Usernames always stay separate. You can separate them again later.',
+          'Your name, bio, and picture will be made the same on Quorum and Farcaster (Quorum wins where both are set), and editing will update both at once. Your usernames are never affected. You can un-merge the profiles again later.',
         confirmLabel: 'Merge',
       });
       if (!ok) return;
