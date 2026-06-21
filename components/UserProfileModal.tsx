@@ -198,9 +198,13 @@ export default function UserProfileModal({
     <BaseModal
       visible={visible}
       onClose={onClose}
-      height={0.55}
+      height={0.6}
     >
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={styles.scrollContent}
+        contentContainerStyle={styles.scrollContentContainer}
+      >
         {/* Profile Header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
@@ -406,6 +410,11 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     scrollContent: {
       paddingHorizontal: Skin.space(20),
       paddingTop: Skin.space(8),
+    },
+    // Bottom padding so the last action row (Mute/Kick) always clears the
+    // sheet's bottom edge + nav bar instead of sitting flush against it.
+    scrollContentContainer: {
+      paddingBottom: Skin.space(24),
     },
     profileHeader: {
       alignItems: 'center',
