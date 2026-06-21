@@ -1,5 +1,6 @@
 import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { useAuth } from '@/context';
 import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
@@ -366,24 +367,21 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
       style={styles.appCard}
       onPress={() => handleAppPress(app)}
     >
+      {(app.requiresFarcaster || app.isQNative) && (
+        <View style={styles.appCardBadge}>
+          {app.requiresFarcaster ? (
+            <FarcasterLogoIcon size={14} color={theme.colors.textMuted} />
+          ) : (
+            <IconSymbol name="lock.fill" size={13} color={theme.colors.textMuted} />
+          )}
+        </View>
+      )}
       <View style={styles.appIconContainer}>
         {app.icon ? (
           <Image source={app.icon} style={styles.appIcon} />
         ) : (
           <View style={styles.appIconPlaceholder}>
             <Text style={styles.iconPlaceholderText}>{app.name.charAt(0)}</Text>
-          </View>
-        )}
-        {(app.requiresFarcaster || app.isQNative) && (
-          <View style={[styles.appIconBadge, app.isQNative && styles.appIconBadgeQNative]}>
-            {app.requiresFarcaster ? (
-              <Image
-                source={require('../assets/images/farcaster.png')}
-                style={styles.appIconBadgeIcon}
-              />
-            ) : (
-              <IconSymbol name="lock.fill" size={8} color="#ffffff" />
-            )}
           </View>
         )}
       </View>
@@ -542,10 +540,7 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
                           <View style={styles.featuredAuthBadge}>
                             <View style={[styles.authBadge, app.isQNative && styles.authBadgeQNative]}>
                               {app.requiresFarcaster ? (
-                                <Image
-                                  source={require('../assets/images/farcaster.png')}
-                                  style={styles.authBadgeIcon}
-                                />
+                                <FarcasterLogoIcon size={8} color="#fff" />
                               ) : (
                                 <IconSymbol
                                   name="lock.fill"
@@ -577,28 +572,21 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
                 style={styles.appCard}
                 onPress={() => handleAppPress(app)}
               >
+                {(app.requiresFarcaster || app.isQNative) && (
+                  <View style={styles.appCardBadge}>
+                    {app.requiresFarcaster ? (
+                      <FarcasterLogoIcon size={14} color={theme.colors.textMuted} />
+                    ) : (
+                      <IconSymbol name="lock.fill" size={13} color={theme.colors.textMuted} />
+                    )}
+                  </View>
+                )}
                 <View style={styles.appIconContainer}>
                   {app.icon ? (
                     <Image source={app.icon} style={styles.appIcon} />
                   ) : (
                     <View style={styles.appIconPlaceholder}>
                       <Text style={styles.iconPlaceholderText}>{app.name.charAt(0)}</Text>
-                    </View>
-                  )}
-                  {(app.requiresFarcaster || app.isQNative) && (
-                    <View style={[styles.appIconBadge, app.isQNative && styles.appIconBadgeQNative]}>
-                      {app.requiresFarcaster ? (
-                        <Image
-                          source={require('../assets/images/farcaster.png')}
-                          style={styles.appIconBadgeIcon}
-                        />
-                      ) : (
-                        <IconSymbol
-                          name="lock.fill"
-                          size={8}
-                          color="#ffffff"
-                        />
-                      )}
                     </View>
                   )}
                 </View>
@@ -856,22 +844,34 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       padding: Skin.space(12),
       alignItems: 'center',
       justifyContent: 'center',
+      position: 'relative',
+    },
+    // Farcaster / lock badge pinned to the top-right of the whole app card.
+    // Bare Farcaster/lock glyph (theme-muted) pinned to the card's bottom-right.
+    // No circle background — a repeated row of purple circles read too heavy.
+    appCardBadge: {
+      position: 'absolute',
+      bottom: Skin.space(8),
+      right: Skin.space(8),
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1,
     },
     appIconContainer: {
-      width: 48,
-      height: 48,
+      width: 56,
+      height: 56,
       marginBottom: Skin.space(10),
       position: 'relative',
     },
     appIcon: {
-      width: 48,
-      height: 48,
-      borderRadius: Skin.radius(12),
+      width: 56,
+      height: 56,
+      borderRadius: Skin.radius(14),
     },
     appIconPlaceholder: {
-      width: 48,
-      height: 48,
-      borderRadius: Skin.radius(12),
+      width: 56,
+      height: 56,
+      borderRadius: Skin.radius(14),
       backgroundColor: theme.colors.surface4,
       alignItems: 'center',
       justifyContent: 'center',
@@ -898,27 +898,8 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       textAlign: 'center',
       lineHeight: Skin.font(17),
     },
-    appIconBadge: {
-      position: 'absolute',
-      top: -2,
-      right: -2,
-      width: 16,
-      height: 16,
-      borderRadius: Skin.radius(8),
-      backgroundColor: '#8B5CF6',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: Skin.border(1),
-      borderColor: theme.colors.background,
-    },
     appIconBadgeQNative: {
       backgroundColor: theme.colors.info,
-    },
-    appIconBadgeIcon: {
-      width: 10,
-      height: 10,
-      padding: Skin.space(1),
-      resizeMode: 'contain',
     },
     appStats: {
       flexDirection: 'row',
@@ -930,21 +911,15 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       color: theme.colors.textMuted,
     },
     authBadge: {
-      width: 14,
-      height: 14,
-      borderRadius: Skin.radius(7),
-      backgroundColor: '#8B5CF6',
+      width: 18,
+      height: 18,
+      borderRadius: Skin.radius(9),
+      backgroundColor: '#855DCD',
       alignItems: 'center',
       justifyContent: 'center',
     },
     authBadgeQNative: {
       backgroundColor: theme.colors.info,
-    },
-    authBadgeIcon: {
-      width: 10,
-      height: 10,
-      padding: Skin.space(1),
-      resizeMode: 'contain',
     },
     emptyState: {
       alignItems: 'center',
