@@ -11,6 +11,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { useFarcasterProfile } from '@/hooks/useFarcasterProfile';
 import { updateFarcasterProfile } from '@/services/farcaster/updateProfile';
 import { compressAvatarImage } from '@/services/media/imageAttachment';
@@ -40,6 +41,7 @@ export default function UnifiedProfileScreen({
   const { theme } = useTheme();
   const { user, farcasterAuthToken, updateProfile } = useAuth();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -191,8 +193,13 @@ export default function UnifiedProfileScreen({
       return;
     }
 
+    // Refresh the Farcaster profile query so My Casts (header + cast rows) picks
+    // up the new name/pfp instead of serving the stale cache until staleTime.
+    const fid = user?.farcaster?.fid;
+    if (fid) void queryClient.invalidateQueries({ queryKey: ['farcaster-profile', fid] });
+
     showToast({ type: 'success', title: 'Profiles merged' });
-  }, [farcasterAuthor, user?.displayName, user?.bio, user?.profileImage, farcasterAuthToken, updateProfile, showToast]);
+  }, [farcasterAuthor, user?.displayName, user?.bio, user?.profileImage, user?.farcaster?.fid, farcasterAuthToken, updateProfile, showToast, queryClient]);
 
   // Merge entry (called after ProfileModal's confirm). Optimistic: merge the
   // display immediately so it feels instant, then reconcile in the background.

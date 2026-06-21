@@ -2,7 +2,7 @@ import { BaseModal } from '@/components/shared';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth, useWebSocket } from '@/context';
-import { useFarcasterProfile, type ProfilePage } from '@/hooks/useFarcasterProfile';
+import { useFarcasterProfile, type ProfilePage, type ProfileAuthor } from '@/hooks/useFarcasterProfile';
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { updateFarcasterProfile } from '@/services/farcaster/updateProfile';
 import { getAllSpaces } from '@/services/config/spaceStorage';
@@ -186,23 +186,29 @@ export default function UnifiedProfileEditModal({
   // Optimistically patch the cached Farcaster profile so the new name/bio/pfp
   // show immediately, then invalidate to reconcile with the server. Without this
   // the display reads the stale useFarcasterProfile cache for up to staleTime.
+  // Patches BOTH the page-level author (profile header) AND every own cast's
+  // embedded author (each cast row carries its own author snapshot), so the
+  // cast list updates instantly too.
   const applyFarcasterOptimistic = (pfpUrl?: string) => {
     const fid = user?.farcaster?.fid;
     if (!fid) return;
     const name = displayName.trim();
     const b = bio.trim();
+    const patchAuthor = <T extends ProfileAuthor>(author: T): T => ({
+      ...author,
+      displayName: name || author.displayName,
+      profile: { ...author.profile, bio: { text: b } },
+      pfp: pfpUrl ? { ...author.pfp, url: pfpUrl } : author.pfp,
+    });
     queryClient.setQueryData<InfiniteData<ProfilePage>>(['farcaster-profile', fid], (prev) => {
       if (!prev?.pages?.length) return prev;
-      const page0 = prev.pages[0];
-      const author = page0.author;
-      if (!author) return prev;
-      const nextAuthor = {
-        ...author,
-        displayName: name || author.displayName,
-        profile: { ...author.profile, bio: { text: b } },
-        pfp: pfpUrl ? { ...author.pfp, url: pfpUrl } : author.pfp,
-      };
-      const nextPages = prev.pages.map((p, i) => (i === 0 ? { ...p, author: nextAuthor } : p));
+      const nextPages = prev.pages.map((p) => ({
+        ...p,
+        author: p.author && p.author.fid === fid ? patchAuthor(p.author) : p.author,
+        casts: p.casts.map((c) =>
+          c.author?.fid === fid ? { ...c, author: patchAuthor(c.author) } : c,
+        ),
+      }));
       return { ...prev, pages: nextPages };
     });
     void queryClient.invalidateQueries({ queryKey: ['farcaster-profile', fid] });
