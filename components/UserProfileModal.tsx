@@ -198,7 +198,7 @@ export default function UserProfileModal({
     <BaseModal
       visible={visible}
       onClose={onClose}
-      height={0.6}
+      height={0.75}
     >
       <ScrollView
         showsVerticalScrollIndicator={false}
