@@ -7,6 +7,7 @@ import { FarcasterDirectMessageView } from '@/components/Chat/FarcasterDirectMes
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useConversation } from '@/hooks/chat/useConversations';
+import { useDMMute } from '@/hooks/chat/useDMMute';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
 import { useStorageAdapter } from '@/context/StorageContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -204,6 +205,16 @@ export default function DMChatScreen() {
   const handleOpenDmSettings = useCallback(() => {
     setSettingsVisible(true);
   }, []);
+
+  // DM mute is config-backed (syncs across devices). `isMuted`/`toggleMute`
+  // read straight from the local config (bookmark pattern), so no per-device
+  // divergence.
+  const { isMuted, toggleMute } = useDMMute();
+  const conversationMuted = conversationId ? isMuted(conversationId) : false;
+  const handleToggleMute = useCallback(() => {
+    if (!conversationId) return;
+    toggleMute(conversationId);
+  }, [conversationId, toggleMute]);
 
   // Delete this conversation locally (DMs are E2E-encrypted, so this only
   // removes it from this device). The confirm lives in DMSettingsSheet; this
@@ -405,6 +416,8 @@ export default function DMChatScreen() {
             onDeleteConversation={handleDeleteConversation}
             isRepudiable={conversation.isRepudiable}
             saveEditHistory={conversation.saveEditHistory}
+            isMuted={conversationMuted}
+            onToggleMute={handleToggleMute}
           />
         </Suspense>
       )}

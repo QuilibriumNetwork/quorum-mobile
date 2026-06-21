@@ -4,10 +4,13 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, Alert, Switch, Image } from 'react-native';
 import { BaseModal, ActionRow, ActionRowGroup } from '@/components/shared';
+import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { resetDMSession } from '@/hooks/chat/useSendDirectMessage';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { isValidAvatarUri } from '@/utils/validation';
+import { truncateAddress } from '@/utils/formatAddress';
 import * as Skin from '@/theme/skins/geometry';
 
 interface DMSettingsSheetProps {
@@ -16,11 +19,18 @@ interface DMSettingsSheetProps {
   conversationId: string;
   displayName: string;
   theme: AppTheme;
+  /** When provided, the sheet shows the recipient's pfp + name above the title.
+   *  Used when opening the sheet from the messages list (long-press), where the
+   *  user has no other on-screen confirmation of which conversation they hit. */
+  avatarUri?: string;
+  address?: string;
   onDeleteConversation?: () => void;
   isRepudiable?: boolean;
   onToggleRepudiable?: (value: boolean) => void;
   saveEditHistory?: boolean;
   onToggleEditHistory?: (value: boolean) => void;
+  isMuted?: boolean;
+  onToggleMute?: (value: boolean) => void;
 }
 
 export function DMSettingsSheet({
@@ -29,11 +39,15 @@ export function DMSettingsSheet({
   conversationId,
   displayName,
   theme,
+  avatarUri,
+  address,
   onDeleteConversation,
   isRepudiable,
   onToggleRepudiable,
   saveEditHistory,
   onToggleEditHistory,
+  isMuted,
+  onToggleMute,
 }: DMSettingsSheetProps) {
   const styles = createStyles(theme);
   const { confirm, confirmDialog } = useConfirmDialog();
@@ -83,8 +97,41 @@ export function DMSettingsSheet({
     <BaseModal visible={visible} onClose={guardedClose} showHandle>
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerText}>Conversation Settings</Text>
+          {address != null && (
+            isValidAvatarUri(avatarUri) ? (
+              <Image source={{ uri: avatarUri }} style={styles.headerAvatar} />
+            ) : (
+              <DefaultAvatar displayName={displayName} address={address} size={56} style={styles.headerAvatar} />
+            )
+          )}
+          {address != null && (
+            <Text style={styles.headerName} numberOfLines={1}>{displayName}</Text>
+          )}
+          {address != null && (
+            <Text style={styles.headerAddress} numberOfLines={1}>
+              {truncateAddress(address, 'long')}
+            </Text>
+          )}
+          <Text style={address != null ? styles.headerSubtitle : styles.headerText}>
+            Conversation Settings
+          </Text>
         </View>
+
+        {onToggleMute && (
+          <ActionRowGroup style={styles.group}>
+            <ActionRow
+              icon="bell.slash"
+              label="Mute Conversation"
+              trailing={
+                <Switch
+                  value={isMuted ?? false}
+                  onValueChange={onToggleMute}
+                  trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                />
+              }
+            />
+          </ActionRowGroup>
+        )}
 
         {(onToggleRepudiable || onToggleEditHistory) && (
           <ActionRowGroup style={styles.group}>
@@ -147,13 +194,36 @@ const createStyles = (theme: AppTheme) =>
     },
     header: {
       alignItems: 'center',
-      paddingTop: Skin.space(4),
+      paddingTop: Skin.space(16),
       paddingBottom: Skin.space(14),
     },
     headerText: {
       ...theme.textStyles.headline,
       color: theme.colors.textStrong,
       textAlign: 'center',
+    },
+    headerAvatar: {
+      width: 56,
+      height: 56,
+      borderRadius: Skin.radius(28),
+      marginBottom: Skin.space(8),
+    },
+    headerName: {
+      ...theme.textStyles.headline,
+      color: theme.colors.textStrong,
+      textAlign: 'center',
+      marginBottom: Skin.space(2),
+    },
+    headerAddress: {
+      ...theme.textStyles.footnote,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+    },
+    headerSubtitle: {
+      ...theme.textStyles.subheadline,
+      color: theme.colors.textSubtle,
+      textAlign: 'center',
+      marginTop: Skin.space(12),
     },
     group: {
       marginBottom: Skin.space(12),

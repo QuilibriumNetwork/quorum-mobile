@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import { appendNotificationLog } from './notificationLog';
 import { shouldNotifyForContext } from './notificationPrefs';
+import { isConversationMutedForCurrentUser } from '@/services/config';
 
 // Wake-type strings sent by the server for silent / generic-body pushes.
 // In foreground these are redundant (the websocket has already delivered
@@ -105,6 +106,15 @@ export async function showMessageNotification(
     spaceId: content.data?.spaceId,
     channelId: content.data?.channelId,
   })) {
+    return undefined;
+  }
+
+  // Per-DM mute (config-backed, syncs across devices). The space/channel gate
+  // above doesn't cover DMs — a muted conversation must not notify. Only
+  // applies when we know the conversationId (the decrypted/foreground path);
+  // the generic background "new messages" wake has none and falls through.
+  const convId = content.data?.conversationId;
+  if (convId && isConversationMutedForCurrentUser(convId)) {
     return undefined;
   }
   try {

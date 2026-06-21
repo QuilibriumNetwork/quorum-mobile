@@ -17,6 +17,7 @@ import {
 } from './useFarcasterNotifications';
 import { useHaatzNotifications } from './useHaatzNotifications';
 import { isScamCast } from '@/services/farcaster/scamFilter';
+import { useDMMute } from '@/hooks/chat/useDMMute';
 import {
   getLastSeenTimestamp,
   useNotificationLog,
@@ -284,6 +285,9 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
   // deduped against the official feed so notifications still show when the
   // farcaster.xyz bearer token is missing or expired.
   const haatzQuery = useHaatzNotifications();
+  // Muted DMs are excluded from the unread count below. Consuming the hook (vs
+  // reading MMKV) makes `unreadCount` recompute the moment a mute toggles.
+  const { mutedConversations } = useDMMute();
 
   const farcasterItems = useMemo(() => {
     const isNotScam = (n: FarcasterNotification) =>
@@ -300,11 +304,20 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
       ...chatEntries.map(chatToUnified),
       ...farcasterItems.map(farcasterToUnified),
     ];
-    merged.sort((a, b) => b.timestamp - a.timestamp);
-    return merged;
-  }, [chatEntries, farcasterItems]);
+    // Drop muted DMs from the attention feed entirely — consistent with the
+    // badge + push suppression. The conversation stays reachable via the
+    // messages tab (its unread dot is intentionally kept).
+    const visible = merged.filter((e) => {
+      const convId = e.link?.type === 'message' ? e.link.conversationId : undefined;
+      return !(convId && mutedConversations.has(convId));
+    });
+    visible.sort((a, b) => b.timestamp - a.timestamp);
+    return visible;
+  }, [chatEntries, farcasterItems, mutedConversations]);
 
   const unreadCount = useMemo(() => {
+    // `items` is already filtered to exclude muted DMs (see above), so the
+    // badge count derived here inherits that exclusion — no separate mute check.
     // Prefer the server's per-notification isUnread for Farcaster items
     // (it survives mark-all-read calls from the web client), fall back
     // to lastSeen for chat items where we don't have a server flag.
