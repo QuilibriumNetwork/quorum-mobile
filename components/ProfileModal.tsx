@@ -152,7 +152,7 @@ interface ProfileModalProps {
   /** Called after a Farcaster account is successfully connected/imported, so the
    *  parent can redirect to the Farcaster pill. */
   onFarcasterConnected?: () => void;
-  /** Re-enter split mode (unmerge). Surfaced as a "Keep profiles separate" row in
+  /** Re-enter split mode (unmerge). Surfaced as a "Separate profiles" row in
    *  the Farcaster section when currently merged. */
   onUnmergeProfiles?: () => void;
 }
@@ -2504,7 +2504,7 @@ export default function ProfileModal({
                   <TouchableOpacity style={[styles.actionButton, { alignItems: 'flex-start' }]} onPress={handleUnmergeProfiles}>
                     <IconSymbol name="split" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
                     <View style={styles.actionButtonContent}>
-                      <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Keep profiles separate</Text>
+                      <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Separate profiles</Text>
                       <Text style={styles.actionButtonSubtext}>Show and edit your Quorum and Farcaster profiles separately</Text>
                     </View>
                   </TouchableOpacity>

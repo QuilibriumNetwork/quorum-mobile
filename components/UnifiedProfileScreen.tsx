@@ -132,12 +132,11 @@ export default function UnifiedProfileScreen({
     showToast({ type: 'success', title: 'Address copied' });
   }, [user?.address, showToast]);
 
-  // Merge: reconcile name/bio/pfp across both identities, then enter merged mode.
-  // Per-field rule: whichever side has content wins; Quorum wins ties; if Quorum
-  // is empty for a field, pull Farcaster's value into it. After this both systems
-  // hold the same value per field, so the merged (Quorum-preferred) display is
-  // accurate on both sides. ProfileModal confirms before calling this.
-  const handleMergeProfiles = useCallback(async () => {
+  // Background reconcile of name/bio/pfp across both identities. Per-field rule:
+  // whichever side has content wins; Quorum wins ties; if Quorum is empty, pull
+  // Farcaster's value in. Runs AFTER the display has already merged (optimistic),
+  // so the user never waits on the Farcaster API / image work.
+  const reconcileMergedProfiles = useCallback(async () => {
     const fcName = farcasterAuthor?.displayName?.trim() || '';
     const fcBio = farcasterAuthor?.profile?.bio?.text?.trim() || '';
     const fcPfp = farcasterAuthor?.pfp?.url || '';
@@ -179,18 +178,29 @@ export default function UnifiedProfileScreen({
           const res = await updateFarcasterProfile(farcasterAuthToken, fcFields);
           if (!res.ok) {
             showToast({ type: 'error', title: 'Farcaster not fully updated', message: res.error });
+            return;
           }
         } catch {
-          showToast({ type: 'error', title: "Couldn't update Farcaster", message: 'Your Quorum profile was merged; Farcaster will sync on your next edit.' });
+          showToast({ type: 'error', title: "Couldn't update Farcaster", message: 'Your profiles are merged; Farcaster will sync on your next edit.' });
+          return;
         }
       }
     } else if (qName || qBio || qPfp) {
-      // No Farcaster token — can't push. Merge the display anyway; warn.
-      showToast({ type: 'info', title: 'Reconnect Farcaster to sync', message: 'Merged your profile view; Farcaster will update when you reconnect.' });
+      // No Farcaster token — can't push. Display already merged; warn.
+      showToast({ type: 'info', title: 'Reconnect Farcaster to sync', message: 'Your profiles are merged; Farcaster will update when you reconnect.' });
+      return;
     }
 
+    showToast({ type: 'success', title: 'Profiles merged' });
+  }, [farcasterAuthor, user?.displayName, user?.bio, user?.profileImage, farcasterAuthToken, updateProfile, showToast]);
+
+  // Merge entry (called after ProfileModal's confirm). Optimistic: merge the
+  // display immediately so it feels instant, then reconcile in the background.
+  const handleMergeProfiles = useCallback(() => {
     setSplitMode(false);
-  }, [farcasterAuthor, user?.displayName, user?.bio, user?.profileImage, farcasterAuthToken, updateProfile, showToast, setSplitMode]);
+    showToast({ type: 'info', title: 'Merging…' });
+    void reconcileMergedProfiles();
+  }, [setSplitMode, showToast, reconcileMergedProfiles]);
 
   const handleEditRequest = () => {
     if (!hasFarcaster) {
