@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { isScamCast } from '@/services/farcaster/scamFilter';
 
@@ -309,8 +310,17 @@ export function useFarcasterChannel({
     staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
-  // Flatten all pages into a single array
-  const casts = feedQuery.data?.pages.flatMap((page) => page.casts) ?? [];
+  // Flatten all pages into a single array. Memoised on the query data so the
+  // returned `casts` keeps a STABLE identity across renders — without this it was
+  // a fresh array (and a fresh `[]` when disabled) every render, which churned
+  // any consumer that lists `casts` as a memo/effect dep. In SpaceChatArea that
+  // rebuilt the `messages` array on every render, and FlashList re-anchored the
+  // chat to the top (first message) on any re-render (e.g. opening a modal).
+  const feedData = feedQuery.data;
+  const casts = useMemo(
+    () => feedData?.pages.flatMap((page) => page.casts) ?? [],
+    [feedData],
+  );
 
   return {
     channel: channelQuery.data,

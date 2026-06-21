@@ -32,7 +32,7 @@ import React, { forwardRef } from 'react';
 import type { ScrollViewProps } from 'react-native';
 import { KeyboardChatScrollView } from 'react-native-keyboard-controller';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
-import { composerFootprintSV, composerPanelFootprintSV, composerListFreezeSV, modalListFreezeSV } from '@/services/ui/composerFootprint';
+import { composerFootprintSV, composerPanelFootprintSV, composerListFreezeSV } from '@/services/ui/composerFootprint';
 
 export interface ChatKeyboardScrollViewExtraProps {
   /** Minimum bottom-inset floor (resting composer + tab-bar clearance). The
@@ -65,12 +65,6 @@ export const ChatKeyboardScrollView = forwardRef<any, Props>(
     const composerExtra = useDerivedValue(
       () => composerFootprintSV.value + composerPanelFootprintSV.value,
     );
-    // Freeze the keyboard-driven auto-scroll when EITHER the emoji panel is open
-    // or a keyboard-dismissing bottom sheet (e.g. the profile modal) is open, so
-    // neither makes the list chase the descending keyboard. OR of the two owners.
-    const listFreeze = useDerivedValue(
-      () => composerListFreezeSV.value || modalListFreezeSV.value,
-    );
     return (
       <KeyboardChatScrollView
         ref={ref}
@@ -85,7 +79,7 @@ export const ChatKeyboardScrollView = forwardRef<any, Props>(
         // otherwise chase by scrolling the list down (the panel replaces that
         // space, so the list must hold). The scrollable range still grows for the
         // panel via contentInset (not gated by freeze). See composerListFreezeSV.
-        freeze={listFreeze}
+        freeze={composerListFreezeSV}
         onContentInsetChange={onContentInsetChange}
         {...props}
       />

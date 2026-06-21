@@ -128,6 +128,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
 }: SpaceChatAreaProps) {
   const { user, farcasterAuthToken } = useAuth();
 
+
   // Local state — this is the whole point: messageText changes
   // only re-render SpaceChatArea, not the parent HomeScreen
   const [messageText, setMessageText] = useState('');

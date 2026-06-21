@@ -17,7 +17,6 @@ import { getSpaceKey } from '@/services/config/spaceStorage';
 import { useTheme } from '@/theme';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
-import { modalListFreezeSV } from '@/services/ui/composerFootprint';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
@@ -173,19 +172,6 @@ export default function SpaceChannelChat() {
   const [inviteVisible, setInviteVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [castThread, setCastThread] = useState<{ username: string; castHashPrefix: string } | null>(null);
-
-  // Freeze the keyboard-synced chat list while a bottom-sheet modal is open over
-  // it. Opening one of these while the composer is focused dismisses the
-  // keyboard; without the freeze, KeyboardChatScrollView chases the descending
-  // keyboard and scrolls the chat to a new position, so closing the sheet leaves
-  // the user somewhere else. The freeze holds the list still through the swap.
-  const anyChatModalOpen = !!selectedUserProfile || inviteVisible || settingsVisible || !!castThread;
-  useEffect(() => {
-    modalListFreezeSV.value = anyChatModalOpen;
-    return () => {
-      modalListFreezeSV.value = false;
-    };
-  }, [anyChatModalOpen]);
 
   const handleShowSidebars = useCallback(() => {
     router.back();

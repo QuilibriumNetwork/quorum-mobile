@@ -60,15 +60,3 @@ export const composerPanelFootprintSV: SharedValue<number> = makeMutable(0);
  * instant it closes, so a returning keyboard is handled normally.
  */
 export const composerListFreezeSV: SharedValue<boolean> = makeMutable(false);
-
-/**
- * modalListFreezeSV — `true` while a bottom-sheet modal that dismisses the
- * keyboard is open OVER the chat (e.g. the user-profile sheet). Same purpose as
- * composerListFreezeSV but owned by a different producer, so the two must not
- * clobber each other's boolean. ChatKeyboardScrollView feeds `freeze` the OR of
- * both. Opening such a modal while the composer is focused dismisses the
- * keyboard; without the freeze the keyboard-synced list would chase the
- * descending keyboard down and leave the chat scrolled to a new position after
- * the modal closes.
- */
-export const modalListFreezeSV: SharedValue<boolean> = makeMutable(false);
