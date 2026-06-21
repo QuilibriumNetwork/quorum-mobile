@@ -333,6 +333,7 @@ export default function SpaceChannelChat() {
             onClose={() => setSelectedUserProfile(null)}
             user={selectedUserProfile}
             spaceId={spaceId}
+            channelId={channelId}
             roles={roles}
             isSpaceOwner={isSpaceOwner}
             onStartDM={(userId) => {

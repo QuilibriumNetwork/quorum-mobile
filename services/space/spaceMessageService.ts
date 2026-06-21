@@ -25,6 +25,7 @@ import {
   type MessageContent,
   type PostMessage,
   type ReactionMessage,
+  type MuteMessage,
   type RemoveMessage,
   type RemoveReactionMessage,
   type StickerMessage,
@@ -176,6 +177,21 @@ function canonicalizeContent(content: MessageContent): string {
   if (content.type === 'remove-message') {
     const removeContent = content as RemoveMessage;
     return content.type + removeContent.removeMessageId;
+  }
+
+  // Mute (moderation). MUST match shared canonicalize() byte-for-byte
+  // (quorum-shared/src/utils/canonicalize.ts 'mute' branch) so a mute signed on
+  // mobile verifies on desktop and vice-versa.
+  if (content.type === 'mute') {
+    const muteContent = content as MuteMessage;
+    return (
+      content.type +
+      muteContent.targetUserId +
+      muteContent.muteId +
+      muteContent.timestamp +
+      muteContent.action +
+      (muteContent.duration ?? '')
+    );
   }
 
   if (content.type === 'edit-message') {
@@ -801,6 +817,43 @@ export async function sendDeleteMessage(
     type: 'remove-message',
     senderId: senderAddress,
     removeMessageId: targetMessageId,
+  };
+
+  return sendGenericMessage({ spaceId, channelId, senderAddress, content });
+}
+
+// Mute User (moderation)
+
+export interface SendMuteMessageParams {
+  spaceId: string;
+  channelId: string;
+  /** The user being muted/unmuted. */
+  targetUserId: string;
+  senderAddress: string;
+  action: 'mute' | 'unmute';
+  /** Mute duration in ms. Omit / undefined = forever. Ignored for unmute. */
+  duration?: number;
+}
+
+/**
+ * Broadcast a moderation mute/unmute. The sender must hold the `user:mute` role
+ * permission; receivers RE-VALIDATE that on receipt (we never trust the sender's
+ * client). Mirrors desktop's MuteMessage so a mute crosses platforms. The muteId
+ * is a fresh nonce used by receivers for replay/dedup protection.
+ */
+export async function sendMuteMessage(
+  params: SendMuteMessageParams
+): Promise<SendGenericMessageResult> {
+  const { spaceId, channelId, targetUserId, senderAddress, action, duration } = params;
+
+  const content: MuteMessage = {
+    type: 'mute',
+    senderId: senderAddress,
+    targetUserId,
+    muteId: generateNonce(),
+    timestamp: Date.now(),
+    action,
+    ...(action === 'mute' && duration !== undefined ? { duration } : {}),
   };
 
   return sendGenericMessage({ spaceId, channelId, senderAddress, content });
