@@ -42,7 +42,7 @@ export default function UnifiedProfileEditModal({
 }: UnifiedProfileEditModalProps) {
   const { theme } = useTheme();
   const { user, farcasterAuthToken, updateProfile } = useAuth();
-  const { enqueueOutbound } = useWebSocket();
+  const { enqueueOutbound, subscribe } = useWebSocket();
   const queryClient = useQueryClient();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -155,6 +155,22 @@ export default function UnifiedProfileEditModal({
         return envelopes;
       });
     }
+
+    // Broadcast to all DM partners too (identity sync over established DM
+    // sessions). Without this, DM contacts wouldn't see name/bio/avatar changes
+    // made through this editor. Bio gated on the public-profile toggle, matching
+    // the legacy save path. Fire-and-forget; the service dedupes + never throws.
+    void import('@/services/dm/dmProfileService').then(({ broadcastProfileToAllDMs }) =>
+      broadcastProfileToAllDMs(
+        {
+          selfAddress: user.address,
+          displayName: name || undefined,
+          bio: user.isProfilePublic ? (b || undefined) : undefined,
+          userIcon: avatar || undefined,
+        },
+        { enqueueOutbound, subscribe },
+      ),
+    );
   };
 
   const saveFarcaster = async (): Promise<{ errors: string[]; pfpUrl?: string }> => {

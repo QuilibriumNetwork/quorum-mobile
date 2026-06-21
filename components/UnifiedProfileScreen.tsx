@@ -300,10 +300,14 @@ export default function UnifiedProfileScreen({
         visible={decisionModalVisible}
         onClose={() => setDecisionModalVisible(false)}
         onDecision={(split) => {
-          // The modal already flipped the splitMode flag. If the user chose to
-          // MERGE (split === false), run the same field reconcile + sync as the
-          // in-app "Merge profiles" row so the onboarding path isn't a flag-only
-          // flip that bypasses the sync logic.
+          // The modal writes MMKV directly via setProfileSplitMode, which the
+          // parent's useProfileSplitMode only picks up on its next poll (~2s).
+          // Mirror it through the React-state setter so the header/pills update
+          // immediately (idempotent with the modal's write).
+          setSplitMode(split);
+          // If the user chose to MERGE (split === false), run the same field
+          // reconcile + sync as the in-app "Merge profiles" row so the onboarding
+          // path isn't a flag-only flip that bypasses the sync logic.
           if (!split) {
             showToast({ type: 'info', title: 'Merging…' });
             void reconcileMergedProfiles();
