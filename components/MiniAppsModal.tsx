@@ -108,7 +108,10 @@ const localToMiniApp = (e: {
 }): MiniApp => ({
   id: e.domain,
   name: e.name ?? e.domain,
-  description: e.domain,
+  // Use the domain as a subtitle only when there's a distinct display name;
+  // otherwise it duplicates the name line (domain shown twice). Discovery
+  // enrichment fills a real description when the app is known.
+  description: e.name && e.name !== e.domain ? e.domain : '',
   category: 'social',
   url: e.url,
   icon: e.iconUrl ? { uri: e.iconUrl } : null,
@@ -330,16 +333,45 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
     };
   }, [visible, farcasterAuthToken, frameToMiniApp]);
 
+  // Discovery apps (top-frames + featured) carry full metadata: real name,
+  // icon, and requiresFarcaster. Locally-added / recent / sparse-favorite
+  // entries often only have a domain, so enrich them from discovery when the
+  // domain (id) matches — backfilling name, icon, and the Farcaster flag the
+  // saved/recent rows would otherwise be missing.
+  const discoveryById = useMemo(() => {
+    const map = new Map<string, MiniApp>();
+    for (const a of miniApps) map.set(a.id, a);
+    return map;
+  }, [miniApps]);
+
+  const enrichFromDiscovery = useCallback((app: MiniApp): MiniApp => {
+    const rich = discoveryById.get(app.id);
+    if (!rich) return app;
+    return {
+      ...app,
+      // Prefer the entry's own real name; fall back to discovery when the entry
+      // only had its domain (name === domain) or nothing.
+      name: app.name && app.name !== app.id ? app.name : rich.name,
+      icon: app.icon ?? rich.icon,
+      requiresFarcaster: app.requiresFarcaster || rich.requiresFarcaster,
+      isQNative: app.isQNative || rich.isQNative,
+      description: app.description && app.description !== app.id ? app.description : rich.description,
+    };
+  }, [discoveryById]);
+
   // Saved = favorites first (richer metadata), then locally-added apps not
-  // already represented, deduped by domain (id).
+  // already represented, deduped by domain (id). All enriched from discovery.
   const savedApps = useMemo(() => {
     const byId = new Map<string, MiniApp>();
     for (const a of favoriteApps) byId.set(a.id, a);
     for (const a of localAdded.map(localToMiniApp)) if (!byId.has(a.id)) byId.set(a.id, a);
-    return Array.from(byId.values());
-  }, [favoriteApps, localAdded]);
+    return Array.from(byId.values()).map(enrichFromDiscovery);
+  }, [favoriteApps, localAdded, enrichFromDiscovery]);
 
-  const recentApps = useMemo(() => recentList.map(localToMiniApp), [recentList]);
+  const recentApps = useMemo(
+    () => recentList.map(localToMiniApp).map(enrichFromDiscovery),
+    [recentList, enrichFromDiscovery],
+  );
 
   // Use search results if searching, otherwise show all apps
   const isSearchMode = debouncedQuery.length > 0;
@@ -386,7 +418,9 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
         )}
       </View>
       <Text style={styles.appName} numberOfLines={2}>{app.name}</Text>
-      <Text style={styles.appDescription} numberOfLines={2}>{app.description}</Text>
+      {app.description ? (
+        <Text style={styles.appDescription} numberOfLines={2}>{app.description}</Text>
+      ) : null}
     </TouchableOpacity>
   );
 
@@ -591,9 +625,11 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
                   )}
                 </View>
                 <Text style={styles.appName} numberOfLines={2}>{app.name}</Text>
-                <Text style={styles.appDescription} numberOfLines={2}>
-                  {app.description}
-                </Text>
+                {app.description ? (
+                  <Text style={styles.appDescription} numberOfLines={2}>
+                    {app.description}
+                  </Text>
+                ) : null}
               </TouchableOpacity>
             ))}
           </View>
