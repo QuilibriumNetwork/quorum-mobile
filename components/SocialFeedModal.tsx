@@ -29,6 +29,7 @@ import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { ApexAvatarRing } from '@/components/ui/ApexAvatarRing';
 import { useApexStatusForFids } from '@/hooks/useApex';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
+import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { SpaceIcon } from '@/components/ui/SpaceIcon';
 import { useAuth } from '@/context/AuthContext';
 import { useConversations, type ConversationWithPreview } from '@/hooks/chat/useConversations';
@@ -505,11 +506,6 @@ const shareToChatStyles = {
     height: 40,
     borderRadius: Skin.radius(20),
   },
-  farcasterBadge: {
-    width: 18,
-    height: 18,
-    opacity: 0.7,
-  },
 };
 
 function ShareToChatModal({
@@ -726,10 +722,7 @@ function ShareToChatModal({
                           sublabel={showHandle ? `@${conv.farcasterUsername}` : undefined}
                           trailing={
                             isFarcaster ? (
-                              <Image
-                                source={require('../assets/images/farcaster.png')}
-                                style={shareToChatStyles.farcasterBadge}
-                              />
+                              <FarcasterLogoIcon size={16} color="#855DCD" />
                             ) : undefined
                           }
                           onPress={() => (isFarcaster ? handleSelectFarcasterDM(conv) : handleSelectDM(conv))}

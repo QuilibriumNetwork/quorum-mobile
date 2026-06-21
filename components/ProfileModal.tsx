@@ -8,6 +8,8 @@ import RegisterPaymentModal from '@/components/qns/RegisterPaymentModal';
 import { BaseModal, TypeToConfirmModal } from '@/components/shared';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
+import { QuorumLogoIcon } from '@/components/SocialFeed/content/QuorumLogoIcon';
 import { ApexAvatarRing, ApexIcon, APEX_GOLD } from '@/components/ui/ApexAvatarRing';
 import { useApexSubscription, type ApexSubscriptionState } from '@/hooks/useApex';
 import { SkinsModal } from '@/components/skins/SkinsModal';
@@ -130,6 +132,29 @@ interface ProfileModalProps {
   /** Open the current user's own cast feed (their ProfileView). Surfaced as a
    *  "My Casts" row in the Farcaster section. */
   onViewMyCasts?: () => void;
+  /** Re-open the merge/keep-separate chooser. Surfaced as a "Merge profiles" row
+   *  in the Farcaster section so the choice is reachable after first launch.
+   *  Only meaningful when the profiles are currently unmerged (split mode). */
+  onMergeProfiles?: () => void;
+  /** When set + active, the Profile section renders the Farcaster identity's
+   *  bio + account info (with the Farcaster icon on the headings) instead of the
+   *  Quorum ones. Driven by the header's identity switcher (unmerged layout). */
+  farcasterIdentity?: {
+    active: boolean;
+    displayName?: string;
+    bio?: string;
+    username?: string;
+    fid?: number;
+  };
+  /** True when the header shows the identity switcher (unmerged + both profiles).
+   *  Drives the Bio heading's brand icon + the duplicated My Casts button. */
+  dualIdentity?: boolean;
+  /** Called after a Farcaster account is successfully connected/imported, so the
+   *  parent can redirect to the Farcaster pill. */
+  onFarcasterConnected?: () => void;
+  /** Re-enter split mode (unmerge). Surfaced as a "Separate profiles" row in
+   *  the Farcaster section when currently merged. */
+  onUnmergeProfiles?: () => void;
 }
 
 /** The selectable sections of the profile body. 'farcaster' only applies when a
@@ -327,6 +352,11 @@ export default function ProfileModal({
   activeSection,
   hideTabBar = false,
   onViewMyCasts,
+  onMergeProfiles,
+  farcasterIdentity,
+  dualIdentity,
+  onFarcasterConnected,
+  onUnmergeProfiles,
 }: ProfileModalProps) {
   const { theme, isDark, activeSkin } = useTheme();
   const { user, signOut, updateProfile } = useAuth();
@@ -425,6 +455,23 @@ export default function ProfileModal({
   const [farcasterMnemonic, setFarcasterMnemonic] = React.useState('');
   const [farcasterImporting, setFarcasterImporting] = React.useState(false);
   const [farcasterError, setFarcasterError] = React.useState<string | null>(null);
+  // Recovery phrase is hidden by default (treated like a password); the user can
+  // reveal it to double-check the words.
+  const [revealMnemonic, setRevealMnemonic] = React.useState(false);
+  // Paste the recovery phrase from the clipboard (mirrors the onboarding import).
+  const handlePasteFarcasterMnemonic = React.useCallback(async () => {
+    try {
+      const text = await Clipboard.getStringAsync();
+      if (!text || !text.trim()) {
+        setFarcasterError('Clipboard is empty');
+        return;
+      }
+      setFarcasterMnemonic(text.trim());
+      setFarcasterError(null);
+    } catch {
+      setFarcasterError('Failed to read clipboard');
+    }
+  }, []);
 
   // Device management
   const [deviceRegistrations, setDeviceRegistrations] = React.useState<DeviceRegistration[]>([]);
@@ -469,6 +516,18 @@ export default function ProfileModal({
       loadDeviceRegistrations();
     }
   }, [visible, user]);
+
+  // Collapse the Connect-Farcaster import form when leaving Settings. In route
+  // mode `visible` never changes, so the open form would otherwise persist when
+  // the user navigates to another pill and back.
+  React.useEffect(() => {
+    if (activeTab !== 'settings') {
+      setShowFarcasterImport(false);
+      setFarcasterMnemonic('');
+      setFarcasterError(null);
+      setRevealMnemonic(false);
+    }
+  }, [activeTab]);
 
   // Toggle the Hypersnap signer opt-in. Enabling provisions immediately so
   // the user gets feedback here rather than waiting for the feed-mounted
@@ -852,7 +911,10 @@ export default function ProfileModal({
       // Reset state and show success
       setShowFarcasterImport(false);
       setFarcasterMnemonic('');
+      setRevealMnemonic(false);
       Alert.alert('Success', `Connected as @${account.username}`);
+      // Redirect to the Farcaster pill now that it exists.
+      onFarcasterConnected?.();
     } catch (error) {
       setFarcasterError('Failed to import Farcaster account. Please try again.');
     } finally {
@@ -871,6 +933,38 @@ export default function ProfileModal({
       updateProfile({ farcaster: undefined });
     })();
   };
+
+  // Merge profiles — confirm first, then delegate to the parent (which flips the
+  // split-mode pref to merged).
+  const handleMergeProfiles = React.useCallback(() => {
+    if (!onMergeProfiles) return;
+    void (async () => {
+      const ok = await confirm({
+        title: 'Merge profiles',
+        message:
+          'Your name, bio, and picture will be made the same on Quorum and Farcaster (Quorum wins where both are set), and editing will update both at once. Your usernames are never affected. You can un-merge the profiles again later.',
+        confirmLabel: 'Merge',
+      });
+      if (!ok) return;
+      onMergeProfiles();
+    })();
+  }, [confirm, onMergeProfiles]);
+
+  // Unmerge (keep separate) — confirm first, then delegate to the parent (which
+  // flips split mode back on). Purely a display change; no data is altered.
+  const handleUnmergeProfiles = React.useCallback(() => {
+    if (!onUnmergeProfiles) return;
+    void (async () => {
+      const ok = await confirm({
+        title: 'Separate profiles',
+        message:
+          'Your Quorum and Farcaster profiles will be shown and edited separately again. Nothing is deleted or changed.',
+        confirmLabel: 'Separate',
+      });
+      if (!ok) return;
+      onUnmergeProfiles();
+    })();
+  }, [confirm, onUnmergeProfiles]);
 
   const handlePickImage = React.useCallback(async () => {
     if (!user?.address) return;
@@ -1638,6 +1732,9 @@ export default function ProfileModal({
             isApexActive={apexState.isActive}
             nameError={nameError}
             bioError={bioError}
+            farcasterIdentity={farcasterIdentity}
+            onViewMyCasts={onViewMyCasts}
+            dualIdentity={dualIdentity}
           />
         )}
 
@@ -2101,6 +2198,7 @@ export default function ProfileModal({
               syncDisabled={isSyncLoading || isSyncToggling}
               notifications={notifications}
               onToggleNotifications={setNotifications}
+              privacyLevel={user?.privacyLevel}
             />
 
             {/* Appearance */}
@@ -2127,6 +2225,101 @@ export default function ProfileModal({
                 <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
               </TouchableOpacity>
             </View>
+
+            {/* Connect Farcaster — only when NOT connected. Lives in Settings
+                (always reachable) so the connect/re-import path survives after a
+                Disconnect; once connected, all Farcaster config moves to the
+                Farcaster pill. */}
+            {!user?.farcaster && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Farcaster</Text>
+                {!showFarcasterImport ? (
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => setShowFarcasterImport(true)}
+                  >
+                    <IconSymbol name="person.badge.plus" size={20} color={theme.colors.textMain} />
+                    <Text style={styles.actionButtonText}>Connect Farcaster Account</Text>
+                    <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.farcasterImportContainer}>
+                    <Text style={styles.farcasterImportDescription}>
+                      Enter your Farcaster recovery phrase (12 or 24 words) to import your account.
+                    </Text>
+                    {/* Hidden by default (treated like a password). Hidden state
+                        uses a single-line secure field; revealing switches to a
+                        multiline plaintext field so the words can be checked. */}
+                    <TextInput
+                      style={styles.farcasterMnemonicInput}
+                      value={farcasterMnemonic}
+                      onChangeText={(text) => {
+                        setFarcasterMnemonic(text);
+                        setFarcasterError(null);
+                      }}
+                      placeholder="Enter or paste your recovery phrase..."
+                      placeholderTextColor={theme.colors.textMuted}
+                      secureTextEntry={!revealMnemonic}
+                      multiline={revealMnemonic}
+                      numberOfLines={revealMnemonic ? 3 : 1}
+                      textAlignVertical="top"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={!farcasterImporting}
+                    />
+                    <View style={styles.farcasterImportTools}>
+                      <TouchableOpacity
+                        style={styles.farcasterImportToolButton}
+                        onPress={handlePasteFarcasterMnemonic}
+                        disabled={farcasterImporting}
+                      >
+                        <IconSymbol name="doc.on.clipboard" size={16} color={theme.colors.primary} />
+                        <Text style={styles.farcasterImportToolText}>Paste</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.farcasterImportToolButton}
+                        onPress={() => setRevealMnemonic((v) => !v)}
+                        disabled={farcasterImporting}
+                      >
+                        <IconSymbol name={revealMnemonic ? 'eye.slash' : 'eye'} size={16} color={theme.colors.primary} />
+                        <Text style={styles.farcasterImportToolText}>{revealMnemonic ? 'Hide' : 'Show'}</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {farcasterError && (
+                      <View style={styles.farcasterErrorContainer}>
+                        <IconSymbol name="exclamationmark.circle.fill" size={16} color={theme.colors.danger} />
+                        <Text style={styles.farcasterErrorText}>{farcasterError}</Text>
+                      </View>
+                    )}
+                    <View style={styles.farcasterImportActions}>
+                      <TouchableOpacity
+                        style={styles.farcasterCancelButton}
+                        onPress={() => {
+                          setShowFarcasterImport(false);
+                          setFarcasterMnemonic('');
+                          setFarcasterError(null);
+                          setRevealMnemonic(false);
+                        }}
+                        disabled={farcasterImporting}
+                      >
+                        <Text style={styles.farcasterCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.farcasterImportButton, farcasterImporting && styles.farcasterImportButtonDisabled]}
+                        onPress={handleImportFarcaster}
+                        disabled={farcasterImporting}
+                      >
+                        {farcasterImporting ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={styles.farcasterImportButtonText}>Import</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* Account Actions */}
             <AccountRecoverySection
@@ -2294,71 +2487,33 @@ export default function ProfileModal({
                     <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success} />
                   </View>
                 )}
-              </>
-            ) : !showFarcasterImport ? (
-              // Not connected state
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => setShowFarcasterImport(true)}
-              >
-                <IconSymbol name="person.badge.plus" size={20} color={theme.colors.textMain} />
-                <Text style={styles.actionButtonText}>Import Farcaster Account</Text>
-                <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
-              </TouchableOpacity>
-            ) : (
-              // Import state
-              <View style={styles.farcasterImportContainer}>
-                <Text style={styles.farcasterImportDescription}>
-                  Enter your Farcaster recovery phrase (12 or 24 words) to import your account.
-                </Text>
-                <TextInput
-                  style={styles.farcasterMnemonicInput}
-                  value={farcasterMnemonic}
-                  onChangeText={(text) => {
-                    setFarcasterMnemonic(text);
-                    setFarcasterError(null);
-                  }}
-                  placeholder="Enter recovery phrase..."
-                  placeholderTextColor={theme.colors.textMuted}
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!farcasterImporting}
-                />
-                {farcasterError && (
-                  <View style={styles.farcasterErrorContainer}>
-                    <IconSymbol name="exclamationmark.circle.fill" size={16} color={theme.colors.danger} />
-                    <Text style={styles.farcasterErrorText}>{farcasterError}</Text>
-                  </View>
+                {/* Merge profiles — shown when currently unmerged (parent gates
+                    the callback on splitMode). */}
+                {onMergeProfiles && (
+                  <TouchableOpacity style={[styles.actionButton, { alignItems: 'flex-start' }]} onPress={handleMergeProfiles}>
+                    <IconSymbol name="merge" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
+                    <View style={styles.actionButtonContent}>
+                      <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Merge profiles</Text>
+                      <Text style={styles.actionButtonSubtext}>Combine your Quorum and Farcaster profiles into one</Text>
+                    </View>
+                  </TouchableOpacity>
                 )}
-                <View style={styles.farcasterImportActions}>
-                  <TouchableOpacity
-                    style={styles.farcasterCancelButton}
-                    onPress={() => {
-                      setShowFarcasterImport(false);
-                      setFarcasterMnemonic('');
-                      setFarcasterError(null);
-                    }}
-                    disabled={farcasterImporting}
-                  >
-                    <Text style={styles.farcasterCancelText}>Cancel</Text>
+                {/* Keep separate (unmerge) — shown when currently merged. Purely a
+                    display change; no data is altered. */}
+                {onUnmergeProfiles && (
+                  <TouchableOpacity style={[styles.actionButton, { alignItems: 'flex-start' }]} onPress={handleUnmergeProfiles}>
+                    <IconSymbol name="split" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
+                    <View style={styles.actionButtonContent}>
+                      <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Separate profiles</Text>
+                      <Text style={styles.actionButtonSubtext}>Show and edit your Quorum and Farcaster profiles separately</Text>
+                    </View>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.farcasterImportButton, farcasterImporting && styles.farcasterImportButtonDisabled]}
-                    onPress={handleImportFarcaster}
-                    disabled={farcasterImporting}
-                  >
-                    {farcasterImporting ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Text style={styles.farcasterImportButtonText}>Import</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
+                )}
+              </>
+            ) : null}
+            {/* The not-connected / import states live in Settings (Connect
+                Farcaster Account) so they survive a Disconnect — the Farcaster
+                pill only renders while connected. */}
           </View>
         )}
       </ScrollView>
@@ -2872,6 +3027,26 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
       marginBottom: Skin.space(12),
+    },
+    // Brand-icon + title row (identity-aware Bio / Account Info headings). The
+    // row owns the bottom margin so the title's own margin is cancelled.
+    sectionTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(6),
+      marginBottom: Skin.space(12),
+    },
+    // Fixed box so the brand logo (whose SVG sits optically high) centers on the
+    // heading text instead of riding above it.
+    sectionTitleIcon: {
+      width: 16,
+      height: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: Skin.space(1),
+    },
+    sectionTitleNoMargin: {
+      marginBottom: 0,
     },
     bioContainer: {
       backgroundColor: theme.colors.surface2,
@@ -3455,6 +3630,24 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       borderWidth: Skin.border(1),
       borderColor: theme.colors.border,
     },
+    // Paste / Show-Hide tool row under the recovery-phrase input.
+    farcasterImportTools: {
+      flexDirection: 'row',
+      gap: Skin.space(16),
+      marginTop: Skin.space(8),
+    },
+    farcasterImportToolButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(6),
+      paddingVertical: Skin.space(4),
+    },
+    farcasterImportToolText: {
+      fontSize: Skin.font(13),
+      color: theme.colors.primary,
+      fontFamily: theme.fonts.medium.fontFamily,
+      fontWeight: theme.fonts.medium.fontWeight,
+    },
     farcasterErrorContainer: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -3777,6 +3970,9 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
   isApexActive,
   nameError,
   bioError,
+  farcasterIdentity,
+  onViewMyCasts,
+  dualIdentity,
 }: {
   styles: ProfileStyles;
   theme: AppTheme;
@@ -3794,7 +3990,27 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
   /** Inline validation errors (shared byte validators), shown under each field. */
   nameError?: string;
   bioError?: string;
+  /** When active, render the Farcaster identity's bio + account info instead of
+   *  the Quorum ones (driven by the header identity switcher). */
+  farcasterIdentity?: {
+    active: boolean;
+    displayName?: string;
+    bio?: string;
+    username?: string;
+    fid?: number;
+  };
+  /** Open the user's own cast feed — duplicated as a "My Casts" button below the
+   *  bio when the Farcaster identity is selected. */
+  onViewMyCasts?: () => void;
+  /** True only when there are two distinct identities to disambiguate (unmerged
+   *  with both profiles). Drives whether the Bio heading carries a brand icon. */
+  dualIdentity?: boolean;
 }) {
+  // Whether to show Farcaster fields (vs Quorum) in Bio + Account Info.
+  const showFarcaster = !!farcasterIdentity?.active;
+  // Brand icon prefixed to the Bio heading so it's unmistakable which identity's
+  // bio is shown — but only when two identities exist (dual-identity switcher).
+  const HeadingIcon = showFarcaster ? FarcasterLogoIcon : QuorumLogoIcon;
   return (
     <>
       {/* Profile Header — hidden when parent supplies its own */}
@@ -3850,10 +4066,19 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
         </View>
       )}
 
-      {/* Bio Section */}
+      {/* Bio Section — Farcaster or Quorum bio depending on the selected identity */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Bio</Text>
-        {isEditing ? (
+        {dualIdentity ? (
+          <View style={styles.sectionTitleRow}>
+            <View style={styles.sectionTitleIcon}>
+              <HeadingIcon size={16} />
+            </View>
+            <Text style={[styles.sectionTitle, styles.sectionTitleNoMargin]}>Bio</Text>
+          </View>
+        ) : (
+          <Text style={styles.sectionTitle}>Bio</Text>
+        )}
+        {isEditing && !showFarcaster ? (
           <>
             <TextInput
               style={styles.bioInput}
@@ -3875,39 +4100,33 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
         ) : (
           <View style={styles.bioContainer}>
             <Text style={styles.bioText}>
-              {user?.bio || 'No bio yet. Tap Edit to add one.'}
+              {showFarcaster
+                ? (farcasterIdentity?.bio || 'No Farcaster bio yet.')
+                : // Merged (has Farcaster, not the dual-identity switcher): bios are
+                  // meant to be identical after editing, so fall back to the
+                  // Farcaster bio if the Quorum bio is empty.
+                  (user?.bio
+                    || (!dualIdentity && farcasterIdentity?.bio)
+                    || 'No bio yet. Tap Edit to add one.')}
             </Text>
           </View>
         )}
       </View>
 
-      {/* Account Info — a single card with internal dividers between rows */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account Info</Text>
-        <View style={styles.infoCard}>
-          <TouchableOpacity style={styles.infoRow} onPress={onCopyAddress}>
-            <Text style={styles.infoLabel}>Address</Text>
-            <View style={styles.infoValueRow}>
-              <Text style={[styles.infoValue, { maxWidth: undefined }]} numberOfLines={1}>
-                {user?.address ? truncateAddress(user.address) : 'N/A'}
-              </Text>
-              <IconSymbol name="doc.on.doc" size={14} color={theme.colors.textMuted} />
-            </View>
+      {/* My Casts — duplicated here (below the bio) on the Farcaster identity for
+          quick access to the user's own cast feed. Also lives in the Farcaster pill. */}
+      {showFarcaster && onViewMyCasts && (
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.actionButton} onPress={onViewMyCasts}>
+            <IconSymbol name="feather" size={20} color={theme.colors.primary} />
+            <Text style={styles.actionButtonText}>My Casts</Text>
+            <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
           </TouchableOpacity>
-          <View style={[styles.infoRow, !user?.farcaster && styles.infoRowLast]}>
-            <Text style={styles.infoLabel}>Privacy Level</Text>
-            <Text style={styles.infoValue}>
-              {user?.privacyLevel ? user.privacyLevel.charAt(0).toUpperCase() + user.privacyLevel.slice(1) : 'Standard'}
-            </Text>
-          </View>
-          {user?.farcaster && (
-            <View style={[styles.infoRow, styles.infoRowLast]}>
-              <Text style={styles.infoLabel}>Farcaster</Text>
-              <Text style={styles.infoValue}>@{user.farcaster.username}</Text>
-            </View>
-          )}
         </View>
-      </View>
+      )}
+
+      {/* Account Info removed: identity fields (.q / address / @username / FID)
+          now live in the big profile card; Privacy Level moved to Settings. */}
     </>
   );
 });
@@ -3922,6 +4141,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
   syncDisabled,
   notifications,
   onToggleNotifications,
+  privacyLevel,
 }: {
   styles: ProfileStyles;
   theme: AppTheme;
@@ -3932,6 +4152,9 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
   syncDisabled: boolean;
   notifications: boolean;
   onToggleNotifications: (enabled: boolean) => void;
+  /** Read-only display of the account's privacy level (moved here from the old
+   *  Account Info card). */
+  privacyLevel?: string;
 }) {
   return (
     <>
@@ -3977,6 +4200,15 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
             trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
             thumbColor={'#ffffff'}
           />
+        </View>
+        {/* Privacy Level — read-only (moved from the old Account Info card). */}
+        <View style={styles.settingRow}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingLabel}>Privacy Level</Text>
+          </View>
+          <Text style={styles.infoValue}>
+            {privacyLevel ? privacyLevel.charAt(0).toUpperCase() + privacyLevel.slice(1) : 'Standard'}
+          </Text>
         </View>
       </View>
 

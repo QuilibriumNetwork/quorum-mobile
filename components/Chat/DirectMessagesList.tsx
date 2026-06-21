@@ -5,6 +5,7 @@
 
 import type { AppTheme } from '@/theme';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
+import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import type { Conversation } from '@/hooks/chat';
 import React, { useCallback, useMemo } from 'react';
@@ -13,9 +14,6 @@ import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { FlashList } from '@shopify/flash-list';
 import * as Skin from '@/theme/skins/geometry';
-
-// Farcaster logo for non-E2EE indicator
-const FarcasterLogo = require('@/assets/images/farcaster.png');
 
 type DMFilter = 'all' | 'favorites' | 'unknown' | 'muted';
 
@@ -160,7 +158,7 @@ const DMConversationItem = React.memo(function DMConversationItem({
         {hasUnread && <View style={styles.unreadBadge} />}
         {isFarcaster && (
           <View style={styles.farcasterBadge}>
-            <Image source={FarcasterLogo} style={styles.farcasterIcon} />
+            <FarcasterLogoIcon size={8} color="#fff" />
           </View>
         )}
       </View>
@@ -456,16 +454,11 @@ const createStyles = (theme: AppTheme) =>
       width: 18,
       height: 18,
       borderRadius: Skin.radius(9),
-      backgroundColor: '#8B5CF6', // Farcaster purple
+      backgroundColor: '#855DCD', // Farcaster brand purple
       borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    farcasterIcon: {
-      width: 10,
-      height: 10,
-      tintColor: '#fff',
     },
     conversationContent: {
       flex: 1,

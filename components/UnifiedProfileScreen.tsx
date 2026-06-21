@@ -5,18 +5,24 @@ import BuyNameModal from '@/components/qns/BuyNameModal';
 import MarketplaceModal from '@/components/qns/MarketplaceModal';
 import OffersModal from '@/components/qns/OffersModal';
 import type { ResaleListing } from '@/services/api/qnsClient';
-import UnifiedProfileHeader from '@/components/UnifiedProfileHeader';
+import UnifiedProfileHeader, { type IdentityTab } from '@/components/UnifiedProfileHeader';
 import UnifiedProfileEditModal from '@/components/UnifiedProfileEditModal';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { useFarcasterProfile } from '@/hooks/useFarcasterProfile';
+import { updateFarcasterProfile } from '@/services/farcaster/updateProfile';
+import { compressAvatarImage } from '@/services/media/imageAttachment';
+import { capDisplayName, capBio } from '@/hooks/validation/errorTranslator';
 import {
   hasDecidedSplitMode,
   useProfileSplitMode,
 } from '@/services/profile/profilePrefs';
 import { useTheme, type AppTheme } from '@/theme';
 import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
@@ -33,11 +39,13 @@ export default function UnifiedProfileScreen({
   onOpenWarpcastImport,
 }: UnifiedProfileScreenProps) {
   const { theme } = useTheme();
-  const { user, farcasterAuthToken } = useAuth();
+  const { user, farcasterAuthToken, updateProfile } = useAuth();
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const [splitMode] = useProfileSplitMode();
+  const [splitMode, setSplitMode] = useProfileSplitMode();
   const [decisionModalVisible, setDecisionModalVisible] = useState(false);
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
   const [editPickerVisible, setEditPickerVisible] = useState(false);
@@ -83,13 +91,22 @@ export default function UnifiedProfileScreen({
 
   const [activePill, setActivePill] = useState<ProfileSection>('profile');
 
-  // If the active pill becomes unavailable (e.g. Farcaster disconnected while on
-  // the Farcaster pill), fall back to Profile.
+  // Which identity the big profile card shows in the unmerged switcher layout.
+  const [identityTab, setIdentityTab] = useState<IdentityTab>('quorum');
+
+  // Disconnecting Farcaster removes the Farcaster pill + switcher. Derive safe
+  // values for THIS render so there's no one-frame window where the Farcaster
+  // section/identity renders without a Farcaster account (avoids a blank flash).
+  const effectiveActivePill: ProfileSection =
+    !hasFarcaster && activePill === 'farcaster' ? 'profile' : activePill;
+  const effectiveIdentityTab: IdentityTab = !hasFarcaster ? 'quorum' : identityTab;
+
+  // Persist the fallback so the state matches what we render (also resets the
+  // identity tab so reconnecting doesn't silently land on the Farcaster card).
   useEffect(() => {
-    if (!hasFarcaster && activePill === 'farcaster') {
-      setActivePill('profile');
-    }
-  }, [hasFarcaster, activePill]);
+    if (!hasFarcaster && activePill === 'farcaster') setActivePill('profile');
+    if (!hasFarcaster && identityTab === 'farcaster') setIdentityTab('quorum');
+  }, [hasFarcaster, activePill, identityTab]);
 
   // Open the current user's own cast feed (their ProfileView) via the feed tab's
   // existing profileFid deep-link. Surfaced from the Farcaster section's
@@ -109,6 +126,88 @@ export default function UnifiedProfileScreen({
       },
     });
   }, [router, user?.farcaster?.fid, user?.farcaster?.username]);
+
+  // Copy the Quorum address (tappable address line on the Quorum big card).
+  const handleCopyAddress = useCallback(() => {
+    if (!user?.address) return;
+    void Clipboard.setStringAsync(user.address);
+    showToast({ type: 'success', title: 'Address copied' });
+  }, [user?.address, showToast]);
+
+  // Background reconcile of name/bio/pfp across both identities. Per-field rule:
+  // whichever side has content wins; Quorum wins ties; if Quorum is empty, pull
+  // Farcaster's value in. Runs AFTER the display has already merged (optimistic),
+  // so the user never waits on the Farcaster API / image work.
+  const reconcileMergedProfiles = useCallback(async () => {
+    const fcName = farcasterAuthor?.displayName?.trim() || '';
+    const fcBio = farcasterAuthor?.profile?.bio?.text?.trim() || '';
+    const fcPfp = farcasterAuthor?.pfp?.url || '';
+    const qName = user?.displayName?.trim() || '';
+    const qBio = user?.bio?.trim() || '';
+    const qPfp = user?.profileImage || '';
+
+    // --- Pull Farcaster -> Quorum for any field Quorum is missing ---
+    const quorumUpdates: { displayName?: string; bio?: string; profileImage?: string } = {};
+    if (!qName && fcName) quorumUpdates.displayName = fcName;
+    if (!qBio && fcBio) quorumUpdates.bio = fcBio;
+    if (!qPfp && fcPfp) {
+      // Convert the remote FC pfp to a data URI (like the picker) so it displays
+      // AND broadcasts to peers, not just a bare stored URL.
+      try {
+        const compressed = await compressAvatarImage(fcPfp, 512, 512);
+        if (compressed?.dataUri) quorumUpdates.profileImage = compressed.dataUri;
+      } catch {
+        // If the image can't be fetched/compressed, skip the pfp pull; the rest
+        // of the merge still proceeds.
+      }
+    }
+    if (Object.keys(quorumUpdates).length > 0) {
+      updateProfile(quorumUpdates);
+    }
+
+    // --- Push Quorum -> Farcaster for fields Quorum has (Quorum wins) ---
+    if (farcasterAuthToken) {
+      const fcFields: { displayName?: string; bio?: string; pfp?: string } = {};
+      // Only push a field to Farcaster when it would actually change it (Quorum
+      // had content that differs), capped to Farcaster's byte limits.
+      if (qName && capDisplayName(qName) !== fcName) fcFields.displayName = capDisplayName(qName);
+      if (qBio && capBio(qBio) !== fcBio) fcFields.bio = capBio(qBio);
+      // Push the Quorum pfp (data URI) to Farcaster only when Quorum had its own.
+      if (qPfp) fcFields.pfp = qPfp;
+
+      if (Object.keys(fcFields).length > 0) {
+        try {
+          const res = await updateFarcasterProfile(farcasterAuthToken, fcFields);
+          if (!res.ok) {
+            showToast({ type: 'error', title: 'Farcaster not fully updated', message: res.error });
+            return;
+          }
+        } catch {
+          showToast({ type: 'error', title: "Couldn't update Farcaster", message: 'Your profiles are merged; Farcaster will sync on your next edit.' });
+          return;
+        }
+      }
+    } else if (qName || qBio || qPfp) {
+      // No Farcaster token — can't push. Display already merged; warn.
+      showToast({ type: 'info', title: 'Reconnect Farcaster to sync', message: 'Your profiles are merged; Farcaster will update when you reconnect.' });
+      return;
+    }
+
+    // Refresh the Farcaster profile query so My Casts (header + cast rows) picks
+    // up the new name/pfp instead of serving the stale cache until staleTime.
+    const fid = user?.farcaster?.fid;
+    if (fid) void queryClient.invalidateQueries({ queryKey: ['farcaster-profile', fid] });
+
+    showToast({ type: 'success', title: 'Profiles merged' });
+  }, [farcasterAuthor, user?.displayName, user?.bio, user?.profileImage, user?.farcaster?.fid, farcasterAuthToken, updateProfile, showToast, queryClient]);
+
+  // Merge entry (called after ProfileModal's confirm). Optimistic: merge the
+  // display immediately so it feels instant, then reconcile in the background.
+  const handleMergeProfiles = useCallback(() => {
+    setSplitMode(false);
+    showToast({ type: 'info', title: 'Merging…' });
+    void reconcileMergedProfiles();
+  }, [setSplitMode, showToast, reconcileMergedProfiles]);
 
   const handleEditRequest = () => {
     if (!hasFarcaster) {
@@ -136,20 +235,30 @@ export default function UnifiedProfileScreen({
         user={user}
         farcasterProfile={farcasterAuthor}
         splitMode={splitMode}
+        identityTab={effectiveIdentityTab}
+        onIdentityTabChange={setIdentityTab}
         onEditQuorum={() => setEditTarget('quorum')}
         onEditFarcaster={() => setEditTarget('farcaster')}
         onEditUnified={handleEditRequest}
+        onCopyAddress={handleCopyAddress}
       />
 
       <SegmentedPills
         items={pills}
-        activeKey={activePill}
+        activeKey={effectiveActivePill}
         onChange={(key) => setActivePill(key as ProfileSection)}
         variant="solid"
         scrollable
         centerOnSelect
         style={styles.pillRow}
-        contentContainerStyle={styles.pillRowContent}
+        // Center the row only when there are few pills (merged/Quorum-only:
+        // Profile/Premium/Settings always fit). With the 5-pill split layout we
+        // keep left-aligned so the row can scroll without clipping on narrow
+        // screens. flexGrow makes the centered content fill the viewport.
+        contentContainerStyle={[
+          styles.pillRowContent,
+          pills.length <= 3 && styles.pillRowContentCentered,
+        ]}
       />
 
       <View style={styles.content}>
@@ -160,8 +269,26 @@ export default function UnifiedProfileScreen({
           isRouteMode={true}
           hideHeader={true}
           hideTabBar={true}
-          activeSection={activePill}
+          activeSection={effectiveActivePill}
           onViewMyCasts={handleViewMyCasts}
+          // Merge when unmerged; unmerge when merged. ProfileModal confirms first;
+          // here we just flip the split-mode display flag (no data is altered).
+          onMergeProfiles={splitMode ? () => { void handleMergeProfiles(); } : undefined}
+          onUnmergeProfiles={!splitMode ? () => setSplitMode(true) : undefined}
+          // After connecting Farcaster, jump to the Farcaster pill.
+          onFarcasterConnected={() => setActivePill('farcaster')}
+          farcasterIdentity={{
+            // Only drive the Profile section to Farcaster when unmerged AND the
+            // header switcher is on Farcaster.
+            active: splitMode && hasFarcaster && effectiveIdentityTab === 'farcaster',
+            displayName: farcasterAuthor?.displayName || user.farcaster?.username,
+            bio: farcasterAuthor?.profile?.bio?.text,
+            username: user.farcaster?.username,
+            fid: user.farcaster?.fid,
+          }}
+          // The header shows the identity switcher only when unmerged with both
+          // profiles — that's when Bio carries a brand icon.
+          dualIdentity={splitMode && hasFarcaster}
           onOpenMarketplace={() => setMarketplaceModalVisible(true)}
           onOpenAuctions={() => setAuctionsModalVisible(true)}
           onOpenOffers={() => setOffersModalVisible(true)}
@@ -172,6 +299,20 @@ export default function UnifiedProfileScreen({
       <ProfileSplitModeModal
         visible={decisionModalVisible}
         onClose={() => setDecisionModalVisible(false)}
+        onDecision={(split) => {
+          // The modal writes MMKV directly via setProfileSplitMode, which the
+          // parent's useProfileSplitMode only picks up on its next poll (~2s).
+          // Mirror it through the React-state setter so the header/pills update
+          // immediately (idempotent with the modal's write).
+          setSplitMode(split);
+          // If the user chose to MERGE (split === false), run the same field
+          // reconcile + sync as the in-app "Merge profiles" row so the onboarding
+          // path isn't a flag-only flip that bypasses the sync logic.
+          if (!split) {
+            showToast({ type: 'info', title: 'Merging…' });
+            void reconcileMergedProfiles();
+          }
+        }}
       />
 
       {/* Edit target picker (split mode) */}
@@ -306,6 +447,11 @@ function createStyles(theme: AppTheme) {
     },
     pillRowContent: {
       paddingHorizontal: Skin.space(16),
+    },
+    // Applied only with few pills: fill the viewport and center them.
+    pillRowContentCentered: {
+      flexGrow: 1,
+      justifyContent: 'center',
     },
     content: {
       flex: 1,

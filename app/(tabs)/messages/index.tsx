@@ -8,6 +8,7 @@
 import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
+import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context/AuthContext';
 import type { Conversation } from '@/hooks/chat';
@@ -76,10 +77,7 @@ const InboxRow = React.memo(function InboxRow({ item, styles, theme, onPress }: 
         )}
         {item.isFarcaster && (
           <View style={styles.farcasterBadge}>
-            <Image
-              source={require('@/assets/images/farcaster.png')}
-              style={styles.farcasterLogo}
-            />
+            <FarcasterLogoIcon size={8} color="#fff" />
           </View>
         )}
       </View>
@@ -391,14 +389,11 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
       width: 18,
       height: 18,
       borderRadius: Skin.radius(9),
-      backgroundColor: theme.colors.surface1,
+      backgroundColor: '#855DCD', // Farcaster brand purple
+      borderWidth: Skin.border(2),
+      borderColor: theme.colors.surface1,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    farcasterLogo: {
-      width: 14,
-      height: 14,
-      borderRadius: Skin.radius(7),
     },
     rowContent: {
       flex: 1,

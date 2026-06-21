@@ -2,7 +2,8 @@ import { BaseModal } from '@/components/shared';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth, useWebSocket } from '@/context';
-import { useFarcasterProfile } from '@/hooks/useFarcasterProfile';
+import { useFarcasterProfile, type ProfilePage, type ProfileAuthor } from '@/hooks/useFarcasterProfile';
+import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { updateFarcasterProfile } from '@/services/farcaster/updateProfile';
 import { getAllSpaces } from '@/services/config/spaceStorage';
 import { maybeSendUpdateProfileMessage } from '@/services/space/spaceMessageService';
@@ -41,7 +42,8 @@ export default function UnifiedProfileEditModal({
 }: UnifiedProfileEditModalProps) {
   const { theme } = useTheme();
   const { user, farcasterAuthToken, updateProfile } = useAuth();
-  const { enqueueOutbound } = useWebSocket();
+  const { enqueueOutbound, subscribe } = useWebSocket();
+  const queryClient = useQueryClient();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [displayName, setDisplayName] = useState('');
@@ -153,11 +155,27 @@ export default function UnifiedProfileEditModal({
         return envelopes;
       });
     }
+
+    // Broadcast to all DM partners too (identity sync over established DM
+    // sessions). Without this, DM contacts wouldn't see name/bio/avatar changes
+    // made through this editor. Bio gated on the public-profile toggle, matching
+    // the legacy save path. Fire-and-forget; the service dedupes + never throws.
+    void import('@/services/dm/dmProfileService').then(({ broadcastProfileToAllDMs }) =>
+      broadcastProfileToAllDMs(
+        {
+          selfAddress: user.address,
+          displayName: name || undefined,
+          bio: user.isProfilePublic ? (b || undefined) : undefined,
+          userIcon: avatar || undefined,
+        },
+        { enqueueOutbound, subscribe },
+      ),
+    );
   };
 
-  const saveFarcaster = async (): Promise<string[]> => {
+  const saveFarcaster = async (): Promise<{ errors: string[]; pfpUrl?: string }> => {
     if (!farcasterAuthToken) {
-      return ['Farcaster not connected'];
+      return { errors: ['Farcaster not connected'] };
     }
     const name = displayName.trim();
     const b = bio.trim();
@@ -168,13 +186,48 @@ export default function UnifiedProfileEditModal({
     };
     // Only send a new pfp when the avatar differs from what we already had
     // (heuristic: data URI or local file URI indicates user picked a new image)
-    if (avatar && (avatar.startsWith('data:') || avatar.startsWith('file:'))) {
-      fields.pfp = avatar;
+    const pickedNewPfp = !!avatar && (avatar.startsWith('data:') || avatar.startsWith('file:'));
+    if (pickedNewPfp) {
+      fields.pfp = avatar!;
     }
 
     const res = await updateFarcasterProfile(farcasterAuthToken, fields);
-    if (!res.ok) return [res.error ?? 'Unknown error'];
-    return [];
+    if (!res.ok) return { errors: [res.error ?? 'Unknown error'] };
+    // Canonical pfp URL to reflect in the UI: the uploaded URL for a new image,
+    // otherwise whatever the avatar already was (an existing https URL).
+    const pfpUrl = res.uploadedPfpUrl ?? (avatar ?? undefined);
+    return { errors: [], pfpUrl };
+  };
+
+  // Optimistically patch the cached Farcaster profile so the new name/bio/pfp
+  // show immediately, then invalidate to reconcile with the server. Without this
+  // the display reads the stale useFarcasterProfile cache for up to staleTime.
+  // Patches BOTH the page-level author (profile header) AND every own cast's
+  // embedded author (each cast row carries its own author snapshot), so the
+  // cast list updates instantly too.
+  const applyFarcasterOptimistic = (pfpUrl?: string) => {
+    const fid = user?.farcaster?.fid;
+    if (!fid) return;
+    const name = displayName.trim();
+    const b = bio.trim();
+    const patchAuthor = <T extends ProfileAuthor>(author: T): T => ({
+      ...author,
+      displayName: name || author.displayName,
+      profile: { ...author.profile, bio: { text: b } },
+      pfp: pfpUrl ? { ...author.pfp, url: pfpUrl } : author.pfp,
+    });
+    queryClient.setQueryData<InfiniteData<ProfilePage>>(['farcaster-profile', fid], (prev) => {
+      if (!prev?.pages?.length) return prev;
+      const nextPages = prev.pages.map((p) => ({
+        ...p,
+        author: p.author && p.author.fid === fid ? patchAuthor(p.author) : p.author,
+        casts: p.casts.map((c) =>
+          c.author?.fid === fid ? { ...c, author: patchAuthor(c.author) } : c,
+        ),
+      }));
+      return { ...prev, pages: nextPages };
+    });
+    void queryClient.invalidateQueries({ queryKey: ['farcaster-profile', fid] });
   };
 
   const handleSave = async () => {
@@ -200,7 +253,7 @@ export default function UnifiedProfileEditModal({
         await saveQuorum();
       }
       if (farcasterTargeted) {
-        const fcErrors = await saveFarcaster();
+        const { errors: fcErrors, pfpUrl } = await saveFarcaster();
         if (fcErrors.length > 0) {
           Alert.alert(
             'Farcaster update failed',
@@ -209,6 +262,9 @@ export default function UnifiedProfileEditModal({
           setSaving(false);
           return;
         }
+        // Reflect the saved values immediately (the profile query is otherwise
+        // stale for up to staleTime, so the old pfp/name/bio would linger).
+        applyFarcasterOptimistic(pfpUrl);
       }
       onClose();
     } catch (e) {

@@ -9,10 +9,10 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   Dimensions,
   Alert,
 } from 'react-native';
+import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { MessagesList } from './MessagesList';
 import { MessageInput, type MessageInputHandle, type ReplyToMessage } from './MessageInput';
 import { ChatBottomChrome, useChatListBottomInset } from './ChatBottomChrome';
@@ -33,7 +33,6 @@ import * as Skin from '@/theme/skins/geometry';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Farcaster logo
-const FarcasterLogo = require('@/assets/images/farcaster.png');
 
 interface FarcasterDirectMessageViewProps {
   conversation: Conversation;
@@ -266,7 +265,7 @@ export function FarcasterDirectMessageView({
     <View style={styles.container}>
       {/* Security warning banner */}
       <View style={styles.warningBanner}>
-        <Image source={FarcasterLogo} style={styles.warningIcon} />
+        <FarcasterLogoIcon size={14} color="#855DCD" />
         <Text style={styles.warningText}>
           Farcaster messages are not end-to-end encrypted
         </Text>
@@ -329,11 +328,6 @@ const createStyles = (theme: AppTheme) =>
       paddingHorizontal: Skin.space(12),
       gap: Skin.space(8),
       width: SCREEN_WIDTH,
-    },
-    warningIcon: {
-      width: 14,
-      height: 14,
-      tintColor: '#8B5CF6',
     },
     warningText: {
       fontSize: Skin.font(12),

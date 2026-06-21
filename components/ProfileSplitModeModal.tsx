@@ -45,26 +45,26 @@ export default function ProfileSplitModeModal({
           <View style={styles.optionTextWrap}>
             <Text style={styles.optionTitle}>Keep separate</Text>
             <Text style={styles.optionDesc}>
-              Different display name, avatar, and bio per system. You pick which
-              one you're editing each time.
+              Keep a different name, avatar, and bio for each. You pick which one
+              you&apos;re editing each time.
             </Text>
           </View>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.option} onPress={() => choose(false)} activeOpacity={0.7}>
           <View style={styles.optionIcon}>
-            <IconSymbol name="link" size={22} color={theme.colors.accent} />
+            <IconSymbol name="merge" size={22} color={theme.colors.accent} />
           </View>
           <View style={styles.optionTextWrap}>
             <Text style={styles.optionTitle}>Merge</Text>
             <Text style={styles.optionDesc}>
-              Edit display name, avatar, and bio once — changes are applied to
-              both Quorum and Farcaster.
+              Your name, avatar, and bio are made the same on both, and editing
+              updates both at once. Usernames stay separate.
             </Text>
           </View>
         </TouchableOpacity>
 
-        <Text style={styles.footer}>You can change this any time in Settings.</Text>
+        <Text style={styles.footer}>You can change this any time from the Farcaster section of your profile.</Text>
       </View>
     </BaseModal>
   );
