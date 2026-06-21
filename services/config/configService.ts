@@ -7,6 +7,7 @@ import { gcm } from '@noble/ciphers/aes.js';
 import { randomBytes } from '@noble/ciphers/webcrypto.js';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { getQuorumClient } from '../api/quorumClient';
+import { mmkvStorage } from '../offline/storage';
 import { getPrivateKey, getPublicKey } from '../onboarding/secureStorage';
 import { NativeCryptoProvider } from '../crypto/native-provider';
 import {
@@ -571,4 +572,26 @@ export async function setMutedConversations(
   } catch {
     // Config sync is best-effort — the mute change is already saved locally.
   }
+}
+
+// Resolve the muted list for the CURRENT user without the caller needing the
+// address. Used by the notification gate + unread-count paths, which run
+// outside React (no useAuth) and only have a conversationId. Reads the signed-in
+// address from the same MMKV key AuthContext writes (`auth:user`).
+function getCurrentUserAddressFromStorage(): string | null {
+  try {
+    const json = mmkvStorage.getItem('auth:user');
+    if (!json) return null;
+    const u = JSON.parse(json) as { address?: string };
+    return u?.address ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** True when `conversationId` is muted for the currently signed-in user. */
+export function isConversationMutedForCurrentUser(conversationId: string): boolean {
+  const address = getCurrentUserAddressFromStorage();
+  if (!address) return false;
+  return getLocalMutedConversations(address).includes(conversationId);
 }

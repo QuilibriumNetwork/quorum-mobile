@@ -14,6 +14,9 @@ import { useAuth } from '@/context/AuthContext';
 import type { Conversation } from '@/hooks/chat';
 import { useDMMute } from '@/hooks/chat/useDMMute';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
+import { useStorageAdapter } from '@/context/StorageContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@quilibrium/quorum-shared';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { haptics } from '@/utils/haptics';
 import { truncateAddress } from '@/utils/formatAddress';
@@ -31,11 +34,18 @@ import * as Skin from '@/theme/skins/geometry';
 const importNewConversationModal = () => import('@/components/NewConversationModal');
 const NewConversationModal = React.lazy(importNewConversationModal);
 
+// Long-pressing a conversation row opens the same settings sheet as the DM
+// header gear. Lazy so the chunk only loads on first long-press.
+const DMSettingsSheet = React.lazy(() =>
+  import('@/components/Chat/DMSettingsSheet').then((m) => ({ default: m.DMSettingsSheet }))
+);
+
 // Row for the DMs list
 interface InboxItem {
   id: string;
   title: string;
   icon?: string;
+  address?: string;
   timestamp: number;
   unreadCount: number;
   isRepudiable?: boolean;
@@ -64,13 +74,21 @@ interface InboxRowProps {
   styles: ReturnType<typeof createStyles>;
   theme: AppTheme;
   onPress: (item: InboxItem) => void;
+  onLongPress: (item: InboxItem) => void;
 }
 
-const InboxRow = React.memo(function InboxRow({ item, styles, theme, onPress }: InboxRowProps) {
+const InboxRow = React.memo(function InboxRow({ item, styles, theme, onPress, onLongPress }: InboxRowProps) {
   const handlePress = useCallback(() => onPress(item), [item, onPress]);
+  const handleLongPress = useCallback(() => onLongPress(item), [item, onLongPress]);
 
   return (
-    <TouchableOpacity style={styles.row} onPress={handlePress} activeOpacity={0.6}>
+    <TouchableOpacity
+      style={styles.row}
+      onPress={handlePress}
+      onLongPress={handleLongPress}
+      delayLongPress={350}
+      activeOpacity={0.6}
+    >
       <View style={styles.avatarContainer}>
         {isValidAvatarUri(item.icon) ? (
           <Image source={{ uri: item.icon }} style={styles.dmAvatar} />
@@ -146,9 +164,33 @@ export default function MessagesInbox() {
   const listPadding = useFloatingTabBarPadding();
   const styles = useMemo(() => createStyles(theme, isDark, listPadding), [theme, isDark, listPadding]);
 
-  // Muted DMs (config-backed, syncs across devices). `mutedConversations` is a
-  // Set; depending on it keeps the list memo in sync when a mute toggles.
-  const { isMuted, mutedConversations } = useDMMute();
+  // Muted DMs (config-backed, syncs across devices). `isMuted` is keyed on the
+  // muted set, so the list memo re-runs on toggle via its dep on `isMuted`.
+  const { isMuted, toggleMute } = useDMMute();
+
+  const storage = useStorageAdapter();
+  const queryClient = useQueryClient();
+
+  // Long-press → conversation settings sheet for that row.
+  const [settingsItem, setSettingsItem] = useState<InboxItem | null>(null);
+  const handleLongPressItem = useCallback((item: InboxItem) => {
+    // Farcaster DMs don't have the Quorum conversation-settings surface.
+    if (item.isFarcaster) return;
+    haptics.medium();
+    setSettingsItem(item);
+  }, []);
+
+  const handleToggleMuteFromSheet = useCallback(() => {
+    if (settingsItem) toggleMute(settingsItem.id);
+  }, [settingsItem, toggleMute]);
+
+  // Delete the conversation locally (same as the DM-screen sheet does).
+  const handleDeleteFromSheet = useCallback(async () => {
+    if (!settingsItem) return;
+    await storage.deleteConversation(settingsItem.id);
+    queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all('direct') });
+    setSettingsItem(null);
+  }, [settingsItem, storage, queryClient]);
 
   // DMs list
   const items = useMemo<InboxItem[]>(() => {
@@ -164,6 +206,7 @@ export default function MessagesInbox() {
           conv.displayName ||
           (conv.address ? truncateAddress(conv.address, 'long') : 'Conversation'),
         icon: conv.icon,
+        address: conv.address,
         timestamp: conv.timestamp,
         unreadCount: hasUnread ? 1 : 0,
         isRepudiable: conv.isRepudiable,
@@ -184,7 +227,10 @@ export default function MessagesInbox() {
     // Sort by timestamp desc
     filtered.sort((a, b) => b.timestamp - a.timestamp);
     return filtered;
-  }, [conversations, search, isMuted, mutedConversations]);
+    // `isMuted` is a useCallback keyed on the muted set, so its identity changes
+    // on every toggle — that alone re-runs this memo. No separate
+    // `mutedConversations` dep needed.
+  }, [conversations, search, isMuted]);
 
   const handlePressItem = useCallback((item: InboxItem) => {
     haptics.light();
@@ -221,9 +267,15 @@ export default function MessagesInbox() {
 
   const renderItem = useCallback(
     ({ item }: { item: InboxItem }) => (
-      <InboxRow item={item} styles={styles} theme={theme} onPress={handlePressItem} />
+      <InboxRow
+        item={item}
+        styles={styles}
+        theme={theme}
+        onPress={handlePressItem}
+        onLongPress={handleLongPressItem}
+      />
     ),
-    [styles, theme, handlePressItem]
+    [styles, theme, handlePressItem, handleLongPressItem]
   );
 
   const loading = dmsLoading;
@@ -316,6 +368,26 @@ export default function MessagesInbox() {
             visible
             onClose={handleCloseNewConversation}
             onConversationCreated={handleConversationCreated}
+          />
+        </Suspense>
+      )}
+
+      {/* Conversation settings — opened by long-pressing a row. Shows the
+          recipient's pfp + name above the title since there's no other
+          on-screen context for which conversation was hit. */}
+      {settingsItem && (
+        <Suspense fallback={null}>
+          <DMSettingsSheet
+            visible
+            onClose={() => setSettingsItem(null)}
+            conversationId={settingsItem.id}
+            displayName={settingsItem.title}
+            theme={theme}
+            avatarUri={settingsItem.icon}
+            address={settingsItem.address ?? settingsItem.id.split('/')[0]}
+            isMuted={isMuted(settingsItem.id)}
+            onToggleMute={handleToggleMuteFromSheet}
+            onDeleteConversation={handleDeleteFromSheet}
           />
         </Suspense>
       )}

@@ -20,4 +20,5 @@ export {
   // DM mute management (config-backed, syncs across devices)
   getLocalMutedConversations,
   setMutedConversations,
+  isConversationMutedForCurrentUser,
 } from './configService';
