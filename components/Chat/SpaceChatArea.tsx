@@ -47,7 +47,7 @@ import { useSendStickerMessage } from '@/hooks/chat/useSendStickerMessage';
 import { useEditSpaceMessage, canEditMessage } from '@/hooks/chat/useEditSpaceMessage';
 import { usePinMessage, useUnpinMessage, usePinnedMessages, getPinnedMessageIds } from '@/hooks/chat/usePinnedMessages';
 import { useMessageSearch } from '@/hooks/chat/useMessageSearch';
-import { useUserMuting } from '@/hooks/chat/useUserMuting';
+import { useBlockUser } from '@/hooks/chat/useBlockUser';
 import { useIsUserMuted } from '@/hooks/chat/useIsUserMuted';
 import { formatMuteRemaining } from '@/utils/formatMuteRemaining';
 import { pickImage, type ProcessedAttachment } from '@/services/media/imageAttachment';
@@ -188,7 +188,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
   const { submitCast: submitFarcasterCast } = useFarcasterSubmitCast({
     token: farcasterAuthToken ?? undefined,
   });
-  const { filteredMessages: filterMutedMessages } = useUserMuting(spaceId);
+  const { filteredMessages: filterBlockedMessages } = useBlockUser(spaceId);
 
   // Moderation-mute: if the CURRENT user has been muted in this space, their
   // composer is disabled. Reactive (useSyncExternalStore) so a received mute
@@ -318,12 +318,12 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
     out.sort((a, b) => a.timestamp - b.timestamp);
     // Drop 'unsupported' rows (no render branch) so they never reach the list.
     const supported = out.filter((m) => m.renderType !== 'unsupported');
-    return filterMutedMessages(supported);
+    return filterBlockedMessages(supported);
   }, [
     messagesPages,
     effectiveMemberMap,
     user?.address,
-    filterMutedMessages,
+    filterBlockedMessages,
     spaceId,
     channelId,
     pinnedMessages,

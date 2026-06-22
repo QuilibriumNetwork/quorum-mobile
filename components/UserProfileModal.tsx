@@ -1,6 +1,7 @@
 import { BaseModal, ActionRow, ActionRowGroup } from '@/components/shared';
 import { KickUserModal } from '@/components/KickUserModal';
 import { MuteUserModal } from '@/components/MuteUserModal';
+import { BlockUserModal } from '@/components/BlockUserModal';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
@@ -37,8 +38,9 @@ interface UserProfileModalProps {
   onClose: () => void;
   user: UserProfileInfo | null;
   onStartDM?: (userId: string) => void;
-  onMuteUser?: (userId: string) => void;
-  isUserMuted?: boolean;
+  /** Personal block (viewer-side hide of this user's messages, per space). */
+  onBlockUser?: (userId: string) => void;
+  isUserBlocked?: boolean;
   spaceId?: string;
   /** Channel context, required to broadcast a moderation MuteMessage. */
   channelId?: string;
@@ -55,8 +57,8 @@ export default function UserProfileModal({
   onClose,
   user,
   onStartDM,
-  onMuteUser,
-  isUserMuted,
+  onBlockUser,
+  isUserBlocked,
   spaceId,
   channelId,
   roles,
@@ -71,6 +73,7 @@ export default function UserProfileModal({
   const [loadingRoles, setLoadingRoles] = useState<Set<string>>(new Set());
   const [kickVisible, setKickVisible] = useState(false);
   const [muteVisible, setMuteVisible] = useState(false);
+  const [blockVisible, setBlockVisible] = useState(false);
 
   const assignRoleMutation = useAssignRole();
   const removeRoleMutation = useRemoveFromRole();
@@ -329,7 +332,7 @@ export default function UserProfileModal({
         )}
 
         {/* Actions - styled as tappable rows */}
-        {((onStartDM && !isSelf) || (onMuteUser && !isSelf) || canModMute || canKick) && (
+        {((onStartDM && !isSelf) || (onBlockUser && !isSelf) || canModMute || canKick) && (
           <View style={styles.actionsContainer}>
             <ActionRowGroup>
               {onStartDM && !isSelf && (
@@ -342,17 +345,14 @@ export default function UserProfileModal({
                   }}
                 />
               )}
-              {/* Personal block (viewer-side hide). Task D renames this to
-                  "Block"; until then it reads Mute/Unmute. Distinct from the
-                  moderation mute below. */}
-              {onMuteUser && !isSelf && (
+              {/* Personal block (viewer-side hide). Hides this user's messages
+                  from your own stream, only for you, only in this space.
+                  Distinct from the moderation mute below. */}
+              {onBlockUser && !isSelf && (
                 <ActionRow
-                  icon={isUserMuted ? 'bell' : 'bell.slash'}
-                  label={isUserMuted ? 'Unmute' : 'Mute'}
-                  onPress={() => {
-                    onMuteUser(user.userId);
-                    onClose();
-                  }}
+                  icon={isUserBlocked ? 'eye' : 'hand.raised.fill'}
+                  label={isUserBlocked ? 'Unblock' : 'Block'}
+                  onPress={() => setBlockVisible(true)}
                 />
               )}
               {/* Moderation mute (role-gated; silences the user for everyone) */}
@@ -398,6 +398,20 @@ export default function UserProfileModal({
           userIcon={hasValidAvatar ? user.userAvatar : undefined}
           userAddress={user.userId}
           isUnmuting={targetIsModMuted}
+        />
+      )}
+      {onBlockUser && !isSelf && (
+        <BlockUserModal
+          visible={blockVisible}
+          onClose={() => setBlockVisible(false)}
+          onConfirm={() => {
+            onBlockUser(user.userId);
+            onClose();
+          }}
+          userName={user.userName}
+          userIcon={hasValidAvatar ? user.userAvatar : undefined}
+          userAddress={user.userId}
+          isUnblocking={!!isUserBlocked}
         />
       )}
       {confirmDialog}

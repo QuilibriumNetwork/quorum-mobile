@@ -44,7 +44,7 @@ import { DraggableChannelGroup } from '@/components/SpaceSettings/DraggableChann
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useSpaceMembers } from '@/hooks/chat/useSpaces';
 import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
-import { useUserMuting } from '@/hooks/chat/useUserMuting';
+import { useBlockUser } from '@/hooks/chat/useBlockUser';
 import { useDeleteSpace, useLeaveSpace, useUpdateSpace } from '@/hooks/chat/useSpaceSettings';
 import { useSpaceApexConfig, useSetSpaceApexConfig } from '@/hooks/useApex';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
@@ -95,8 +95,8 @@ interface SpaceSettingsModalProps {
   spaceId: string;
   onSpaceDeleted?: () => void;
   onSpaceLeft?: () => void;
-  isUserMuted?: (userId: string) => boolean;
-  onToggleMuteUser?: (userId: string) => void;
+  isUserBlocked?: (userId: string) => boolean;
+  onToggleBlockUser?: (userId: string) => void;
 }
 
 type TabType = 'general' | 'account' | 'members' | 'channels' | 'linked' | 'roles' | 'emojis' | 'stickers' | 'invites' | 'danger';
@@ -499,8 +499,8 @@ export default function SpaceSettingsModal({
   spaceId,
   onSpaceDeleted,
   onSpaceLeft,
-  isUserMuted,
-  onToggleMuteUser,
+  isUserBlocked,
+  onToggleBlockUser,
 }: SpaceSettingsModalProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -518,13 +518,19 @@ export default function SpaceSettingsModal({
   // a message). This is the members-list entry point for viewing a profile,
   // messaging/muting the user, and — for owners — assigning/removing roles.
   const [selectedUserProfile, setSelectedUserProfile] = useState<UserProfileInfo | null>(null);
+  // Blocked-users accordion (collapsed by default so a long block list stays compact).
+  const [blockedExpanded, setBlockedExpanded] = useState(false);
   const startDirectMessage = useStartDirectMessage();
-  // Own the mute logic locally (same hook the channel screen uses) so the
-  // members-list profile modal can Mute/Unmute regardless of whether the
-  // parent passed mute props. Falls back to the parent props if provided.
-  const { toggleMuteUser: localToggleMuteUser, isUserMuted: localIsUserMuted } = useUserMuting(spaceId);
-  const toggleMuteUser = onToggleMuteUser ?? localToggleMuteUser;
-  const isUserMutedFn = isUserMuted ?? localIsUserMuted;
+  // Own the block logic locally (same hook the channel screen uses) so the
+  // members-list profile modal can Block/Unblock regardless of whether the
+  // parent passed block props. Falls back to the parent props if provided.
+  const {
+    blockedUsers,
+    toggleBlockUser: localToggleBlockUser,
+    isUserBlocked: localIsUserBlocked,
+  } = useBlockUser(spaceId);
+  const toggleBlockUser = onToggleBlockUser ?? localToggleBlockUser;
+  const isUserBlockedFn = isUserBlocked ?? localIsUserBlocked;
 
   // Load space data
   const [space, setSpace] = useState<Space | null>(null);
@@ -767,6 +773,22 @@ export default function SpaceSettingsModal({
 
   // Members
   const { data: members = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
+
+  // Blocked addresses for this space, resolved to a display name/avatar via the
+  // member list when available (falls back to the truncated address — a blocked
+  // user may no longer be in the member list). Reads straight from the synced
+  // block config, so the section shows blocked users even when they're absent
+  // from the member list.
+  const blockedMembers = useMemo(() => {
+    return [...blockedUsers].map((address) => {
+      const m = members.find((mem) => mem.address === address);
+      return {
+        address,
+        name: m?.display_name || m?.name || truncateAddress(address),
+        avatar: m?.profile_image,
+      };
+    });
+  }, [blockedUsers, members]);
 
   // Invites
   const generateInviteMutation = useGenerateInvite();
@@ -1649,6 +1671,62 @@ export default function SpaceSettingsModal({
           {members.length} member{members.length !== 1 ? 's' : ''} in this space
         </Text>
 
+        {/* Blocked members — a collapsible accordion at the TOP, shown only when
+            you've blocked someone. Collapsed by default so a long block list
+            (e.g. many spammers) stays compact yet always reachable. Reads from
+            the synced block list, not the member list, so a blocked user is here
+            to unblock even if they've dropped off the member list. */}
+        {blockedMembers.length > 0 && (
+          <View style={styles.blockedSection}>
+            <TouchableOpacity
+              style={styles.blockedHeader}
+              onPress={() => setBlockedExpanded((v) => !v)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.blockedHeaderLabel}>
+                <IconSymbol
+                  name="hand.raised.fill"
+                  size={16}
+                  color={theme.colors.textStrong}
+                />
+                <Text style={styles.blockedSectionTitle}>
+                  Blocked ({blockedMembers.length})
+                </Text>
+              </View>
+              <IconSymbol
+                name={blockedExpanded ? 'chevron.up' : 'chevron.down'}
+                size={14}
+                color={theme.colors.textMuted}
+              />
+            </TouchableOpacity>
+            {blockedExpanded && (
+              <>
+                {blockedMembers.map((b) => (
+                  <View key={b.address} style={styles.memberItem}>
+                    <View style={styles.memberAvatar}>
+                      {b.avatar ? (
+                        <Image source={{ uri: b.avatar }} style={styles.memberAvatarImage} />
+                      ) : (
+                        <DefaultAvatar displayName={b.name} address={b.address} size={44} />
+                      )}
+                    </View>
+                    <View style={styles.memberInfo}>
+                      <Text style={styles.memberName}>{b.name}</Text>
+                      <Text style={styles.memberAddress}>{truncateAddress(b.address)}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.unblockButton}
+                      onPress={() => toggleBlockUser(b.address)}
+                    >
+                      <Text style={styles.unblockButtonText}>Unblock</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+        )}
+
         {members.map((member) => {
           const memberRoles = getMemberRoles(member.address);
           return (
@@ -1703,32 +1781,21 @@ export default function SpaceSettingsModal({
                 <View style={styles.kickedBadge}>
                   <Text style={styles.kickedBadgeText}>Kicked</Text>
                 </View>
-              ) : member.address !== user?.address ? (
+              ) : member.address !== user?.address && isSpaceOwner ? (
                 <View style={styles.memberActions}>
-                  {onToggleMuteUser && (
-                    <TouchableOpacity
-                      style={[styles.muteButton, isUserMuted?.(member.address) && styles.muteButtonActive]}
-                      onPress={() => onToggleMuteUser(member.address)}
-                    >
-                      <IconSymbol
-                        name={isUserMuted?.(member.address) ? 'bell.fill' : 'bell.slash.fill'}
-                        size={12}
-                        color={isUserMuted?.(member.address) ? theme.colors.primary : theme.colors.textMuted}
-                      />
-                    </TouchableOpacity>
-                  )}
-                  {isSpaceOwner && (
-                    <TouchableOpacity
-                      style={styles.kickButton}
-                      onPress={() => setKickTarget({
-                        address: member.address,
-                        displayName: member.display_name || member.name || truncateAddress(member.address),
-                        userIcon: member.profile_image,
-                      })}
-                    >
-                      <Text style={styles.kickButtonText}>Kick</Text>
-                    </TouchableOpacity>
-                  )}
+                  {/* Block/unblock lives in the user profile modal, not here —
+                      tapping a member opens their profile for all per-user
+                      actions. */}
+                  <TouchableOpacity
+                    style={styles.kickButton}
+                    onPress={() => setKickTarget({
+                      address: member.address,
+                      displayName: member.display_name || member.name || truncateAddress(member.address),
+                      userIcon: member.profile_image,
+                    })}
+                  >
+                    <Text style={styles.kickButtonText}>Kick</Text>
+                  </TouchableOpacity>
                 </View>
               ) : null}
             </View>
@@ -1763,8 +1830,8 @@ export default function SpaceSettingsModal({
             setSelectedUserProfile(null);
             startDirectMessage(userId);
           }}
-          onMuteUser={(userId) => toggleMuteUser(userId)}
-          isUserMuted={isUserMutedFn(selectedUserProfile.userId)}
+          onBlockUser={(userId) => toggleBlockUser(userId)}
+          isUserBlocked={isUserBlockedFn(selectedUserProfile.userId)}
         />
       </Suspense>
     )}
@@ -2616,6 +2683,29 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       color: theme.colors.textStrong,
       marginBottom: Skin.space(8),
     },
+    blockedSection: {
+      marginBottom: Skin.space(16),
+      paddingBottom: Skin.space(8),
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.border ?? theme.colors.surface3,
+    },
+    blockedHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: Skin.space(8),
+    },
+    blockedHeaderLabel: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(6),
+    },
+    blockedSectionTitle: {
+      fontSize: Skin.font(15),
+      fontFamily: theme.fonts.bold.fontFamily,
+      fontWeight: theme.fonts.bold.fontWeight,
+      color: theme.colors.textStrong,
+    },
     sectionDescription: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
@@ -3071,17 +3161,6 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       alignItems: 'center' as const,
       gap: Skin.space(8),
     },
-    muteButton: {
-      width: 28,
-      height: 28,
-      borderRadius: Skin.radius(14),
-      backgroundColor: theme.colors.surface4,
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-    },
-    muteButtonActive: {
-      backgroundColor: theme.colors.primary + '20',
-    },
     kickButton: {
       backgroundColor: theme.colors.danger + '20',
       paddingHorizontal: Skin.space(12),
@@ -3093,6 +3172,19 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.danger,
+    },
+    // Unblock is a neutral/positive action — not danger like Kick.
+    unblockButton: {
+      backgroundColor: theme.colors.surface4 ?? theme.colors.surface3,
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(6),
+      borderRadius: Skin.radius(6),
+    },
+    unblockButtonText: {
+      fontSize: Skin.font(12),
+      fontFamily: theme.fonts.medium.fontFamily,
+      fontWeight: theme.fonts.medium.fontWeight,
+      color: theme.colors.textMain,
     },
     // Channel management styles
     channelGroupContainer: {

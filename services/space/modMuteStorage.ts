@@ -3,7 +3,7 @@
  * `user:mute` role silences a user in a space for everyone).
  *
  * This is NOT the personal viewer-side "block" (that hides a user's messages
- * from your own stream only — see hooks/chat/useUserMuting.ts, soon useBlockUser).
+ * from your own stream only — see hooks/chat/useBlockUser.ts).
  * It is the role-gated moderation action: a `MuteMessage` is broadcast, every
  * client validates the sender's permission on receive and records the mute here,
  * then drops the muted user's incoming messages and disables their composer.
