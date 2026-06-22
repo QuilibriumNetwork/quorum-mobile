@@ -21,4 +21,9 @@ export {
   getLocalMutedConversations,
   setMutedConversations,
   isConversationMutedForCurrentUser,
+  // Channel/Space notification mute (config-backed, syncs across devices)
+  getLocalMutedChannels,
+  setMutedChannels,
+  getLocalSpaceMuted,
+  setSpaceMuted,
 } from './configService';

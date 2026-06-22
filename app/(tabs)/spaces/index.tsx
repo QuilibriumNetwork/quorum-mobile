@@ -7,6 +7,7 @@ import { isValidAvatarUri } from '@/utils/validation';
 import { useReplyTracking } from '@/hooks/chat/useReplyTracking';
 import { useMentionTracking } from '@/hooks/chat/useMentionTracking';
 import { useSpaceActivity } from '@/hooks/chat/useSpaceActivity';
+import { useMutedSpaceIds } from '@/hooks/chat/useChannelMute';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { haptics } from '@/utils/haptics';
 import type { Space } from '@quilibrium/quorum-shared';
@@ -31,6 +32,7 @@ interface SpaceItem {
   channelCount: number;
   unreadCount: number;
   timestamp: number;
+  isMuted: boolean;
 }
 
 function formatRelativeTime(timestamp: number): string {
@@ -66,6 +68,11 @@ const SpaceRow = React.memo(function SpaceRow({
           <Image source={{ uri: item.icon }} style={styles.avatar} />
         ) : (
           <SpaceIcon name={item.name} size={48} style={styles.avatar} />
+        )}
+        {item.isMuted && (
+          <View style={styles.mutedBadge}>
+            <IconSymbol name="bell.slash" size={11} color={theme.colors.textSubtle} />
+          </View>
         )}
       </View>
       <View style={styles.rowContent}>
@@ -112,6 +119,12 @@ export default function SpacesIndex() {
   const listPadding = useFloatingTabBarPadding();
   const styles = useMemo(() => createStyles(theme, isDark, listPadding), [theme, isDark, listPadding]);
 
+  const spaceIds = useMemo(
+    () => ((spaces as Space[]) ?? []).map(s => s.spaceId),
+    [spaces],
+  );
+  const mutedSpaceIds = useMutedSpaceIds(spaceIds);
+
   const items = useMemo<SpaceItem[]>(() => {
     const rows: SpaceItem[] = [];
     for (const space of (spaces as Space[]) ?? []) {
@@ -133,6 +146,7 @@ export default function SpacesIndex() {
         channelCount,
         unreadCount: unread,
         timestamp: activity?.timestamp ?? space.modifiedDate ?? space.createdDate ?? 0,
+        isMuted: mutedSpaceIds.has(space.spaceId),
       });
     }
 
@@ -140,7 +154,7 @@ export default function SpacesIndex() {
     const filtered = q ? rows.filter(r => r.name.toLowerCase().includes(q)) : rows;
     filtered.sort((a, b) => b.timestamp - a.timestamp);
     return filtered;
-  }, [spaces, search, getReplyCount, getMentionCount, getActivity]);
+  }, [spaces, search, getReplyCount, getMentionCount, getActivity, mutedSpaceIds]);
 
   const handlePress = useCallback((spaceId: string) => {
     haptics.light();
@@ -311,8 +325,23 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
       paddingVertical: Skin.space(12),
       gap: Skin.space(12),
     },
-    avatarContainer: {},
+    avatarContainer: { position: 'relative' },
     avatar: { width: 48, height: 48, borderRadius: Skin.radius(12) },
+    // Muted-space marker: bell-off chip at the top-left of the space icon,
+    // mirroring the muted-contact badge in the messages list.
+    mutedBadge: {
+      position: 'absolute',
+      top: -2,
+      left: -2,
+      width: 18,
+      height: 18,
+      borderRadius: Skin.radius(9),
+      backgroundColor: theme.colors.surface3,
+      borderWidth: Skin.border(2),
+      borderColor: theme.colors.surface1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     rowContent: { flex: 1, gap: Skin.space(2) },
     rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     rowTitle: { ...theme.textStyles.body, color: theme.colors.textMain, fontWeight: '600', flex: 1, marginRight: Skin.space(8) },

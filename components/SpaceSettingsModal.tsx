@@ -51,12 +51,7 @@ import { useWalletSelection } from '@/hooks/useWalletSelection';
 import type { ApexToken } from '@/services/apex/config';
 import { getErrorMessage } from '@/utils/error';
 import { getSpace, getSpaceKey } from '@/services/config/spaceStorage';
-import {
-  getChannelNotificationsEnabled,
-  getSpaceNotificationsEnabled,
-  setChannelNotificationsEnabled,
-  setSpaceNotificationsEnabled,
-} from '@/services/notifications/notificationPrefs';
+import { useChannelMute } from '@/hooks/chat/useChannelMute';
 // NativeCryptoProvider and getApiConfig imported dynamically in handlePublishToDirectory
 // to avoid module-level import failures on some devices
 import { pickEmoji, pickSticker } from '@/services/media/customAssets';
@@ -541,46 +536,21 @@ export default function SpaceSettingsModal({
     if (visible) loadSpace();
   }, [visible, loadSpace]);
 
-  // Per-space notification preference. Anyone can mute/unmute their
-  // own copy of a space — this is a local user setting, not a
-  // space-wide config. Persisted in MMKV; gates
-  // showMessageNotification at presentation time.
-  const [spaceNotificationsOn, setSpaceNotificationsOn] = useState<boolean>(() =>
-    getSpaceNotificationsEnabled(spaceId),
-  );
-  useEffect(() => {
-    if (visible && spaceId) {
-      setSpaceNotificationsOn(getSpaceNotificationsEnabled(spaceId));
-    }
-  }, [visible, spaceId]);
-  const handleToggleSpaceNotifications = useCallback((next: boolean) => {
-    setSpaceNotificationsOn(next);
-    setSpaceNotificationsEnabled(spaceId, next);
-  }, [spaceId]);
-
-  // Per-channel notification preferences. Map keyed by channelId
-  // mirrors what's in MMKV; we re-read on open so a fresh modal
-  // shows current state. Channel-level mute is independent of the
-  // space-level toggle — if the space is muted nothing notifies
-  // regardless of channel toggle (gating is in
-  // services/notifications/pushReceivedTask.ts).
-  const [channelNotifMap, setChannelNotifMap] = useState<Record<string, boolean>>({});
-  useEffect(() => {
-    if (!visible || !spaceId || !space) return;
-    const next: Record<string, boolean> = {};
-    for (const group of space.groups ?? []) {
-      for (const ch of group.channels ?? []) {
-        next[ch.channelId] = getChannelNotificationsEnabled(spaceId, ch.channelId);
-      }
-    }
-    setChannelNotifMap(next);
-  }, [visible, spaceId, space]);
+  // Per-space / per-channel notification mute. Stored in UserConfig so it syncs
+  // across the user's devices; useChannelMute is the reactive, config-backed
+  // source of truth (and keeps the local MMKV mirror the native gates read in
+  // lockstep). The UI here is phrased as "notifications ON", i.e. NOT muted.
+  const { isSpaceMuted, mutedChannels, toggleSpaceMute, toggleChannelMute } =
+    useChannelMute(spaceId);
+  const spaceNotificationsOn = !isSpaceMuted();
+  const handleToggleSpaceNotifications = useCallback(() => {
+    toggleSpaceMute();
+  }, [toggleSpaceMute]);
   const handleToggleChannelNotifications = useCallback(
-    (channelId: string, next: boolean) => {
-      setChannelNotifMap(prev => ({ ...prev, [channelId]: next }));
-      setChannelNotificationsEnabled(spaceId, channelId, next);
+    (channelId: string) => {
+      toggleChannelMute(channelId);
     },
-    [spaceId],
+    [toggleChannelMute],
   );
 
   // Per-space profile — overrides the user's global profile for this
@@ -1602,7 +1572,10 @@ export default function SpaceSettingsModal({
           </Text>
           {(space?.groups ?? []).map(group => (
             (group.channels ?? []).map(channel => {
-              const channelOn = channelNotifMap[channel.channelId] ?? true;
+              // Per-channel switch reflects only the channel's own mute, so the
+              // user can configure channels independently even while the whole
+              // space is muted (space-off overrides at notify time regardless).
+              const channelOn = !mutedChannels.has(channel.channelId);
               return (
                 <View
                   key={channel.channelId}
@@ -1619,7 +1592,7 @@ export default function SpaceSettingsModal({
                   </Text>
                   <Switch
                     value={channelOn}
-                    onValueChange={(next) => handleToggleChannelNotifications(channel.channelId, next)}
+                    onValueChange={() => handleToggleChannelNotifications(channel.channelId)}
                     trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
                     thumbColor={'#ffffff'}
                   />
