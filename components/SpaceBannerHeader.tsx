@@ -19,6 +19,8 @@ interface SpaceBannerHeaderProps {
   onInvite: () => void;
   onSettings: () => void;
   onDescriptionPress: () => void;
+  /** Whole-space notifications muted — shows a bell-off marker by the name. */
+  isMuted?: boolean;
 }
 
 export function SpaceBannerHeader({
@@ -28,6 +30,7 @@ export function SpaceBannerHeader({
   onInvite,
   onSettings,
   onDescriptionPress,
+  isMuted = false,
 }: SpaceBannerHeaderProps) {
   const { theme, isDark } = useTheme();
 
@@ -93,6 +96,9 @@ export function SpaceBannerHeader({
         <Text style={[styles.spaceName, { color: nameColor }]} numberOfLines={1}>
           {space.spaceName}
         </Text>
+        {isMuted && (
+          <IconSymbol name="bell.slash.fill" size={16} color={nameColor} />
+        )}
       </TouchableOpacity>
     </View>
   );

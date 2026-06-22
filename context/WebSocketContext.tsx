@@ -36,6 +36,7 @@ import type { Conversation } from '@/hooks/chat/useConversations';
 import { incrementReplyCount } from '@/hooks/chat/useReplyTracking';
 import { incrementMentionCount } from '@/hooks/chat/useMentionTracking';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
+import { shouldNotifyForContext } from '@/services/notifications/notificationPrefs';
 import { messagePreview as getSpaceMessagePreview, messageSenderName } from '@/utils/messagePreview';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type {
@@ -2268,8 +2269,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               space?.spaceName || spaceId.substring(0, 8)
             );
 
+            // Muting a channel/space silences its in-app reply/mention badge
+            // too, not just push notifications — same gate as the push path.
+            const notifyForBadge = shouldNotifyForContext({ spaceId, channelId });
+
             // Track replies to current user
             if (
+              notifyForBadge &&
               spaceMessage.replyMetadata?.parentAuthor &&
               spaceMessage.replyMetadata.parentAuthor === fullUserAddrRef.current &&
               ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
@@ -2283,6 +2289,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // messages. @everyone is gated on the sender's mention:everyone
             // permission inside isMentionedWithSettings.
             if (
+              notifyForBadge &&
               fullUserAddrRef.current &&
               ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
               isMentionedWithSettings(spaceMessage, {
@@ -3579,8 +3586,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             space?.spaceName || spaceId.substring(0, 8)
           );
 
+          // Muted channel/space → no in-app badge (same gate as push).
+          const notifyForBadge = shouldNotifyForContext({ spaceId, channelId });
+
           // Track replies
           if (
+            notifyForBadge &&
             spaceMessage.replyMetadata?.parentAuthor &&
             spaceMessage.replyMetadata.parentAuthor === fullUserAddrRef.current &&
             ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
@@ -3592,6 +3603,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // Track @mentions of the current user (same channel-row badge as
           // replies — see the live path for rationale).
           if (
+            notifyForBadge &&
             fullUserAddrRef.current &&
             ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
             isMentionedWithSettings(spaceMessage, {

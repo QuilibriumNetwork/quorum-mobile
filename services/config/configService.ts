@@ -405,6 +405,11 @@ export async function getConfig(address: string): Promise<UserConfig> {
       // silently drop it (the failure mode that hit primaryUsername). The spread
       // above should include it, but mute relies on this round-trip, so list it.
       mutedConversations: (decryptedConfig as any).mutedConversations,
+      // Same round-trip guard for the synced channel/space notification mute
+      // (mutedChannels[spaceId] and notificationSettings[spaceId].isMuted) so an
+      // incoming config can't silently drop a mute toggled on another device.
+      mutedChannels: (decryptedConfig as any).mutedChannels,
+      notificationSettings: (decryptedConfig as any).notificationSettings,
     } as UserConfig;
     saveLocalUserConfig(configWithTimestamp);
 
@@ -594,4 +599,78 @@ export function isConversationMutedForCurrentUser(conversationId: string): boole
   const address = getCurrentUserAddressFromStorage();
   if (!address) return false;
   return getLocalMutedConversations(address).includes(conversationId);
+}
+
+// --- Channel / Space notification mute (synced via UserConfig) ---
+//
+// Per-channel mute lives in `UserConfig.mutedChannels[spaceId]: string[]` and
+// per-space mute in `UserConfig.notificationSettings[spaceId].isMuted` — the same
+// fields desktop uses, so the setting syncs cross-device via the encrypted config
+// blob. Write the field, persist locally, let `saveConfig` carry it, read back
+// from local config.
+//
+// `notificationSettings[spaceId].isMuted` is accessed via `(config as any)` because
+// the pinned shared `NotificationSettings` type does not declare `isMuted` yet; it
+// rides the untyped JSON config blob correctly regardless.
+// TODO: drop the `as any` once the shared NotificationSettings.isMuted type is published + pinned.
+
+export function getLocalMutedChannels(address: string, spaceId: string): string[] {
+  const config = getLocalUserConfig(address);
+  return config?.mutedChannels?.[spaceId] ?? [];
+}
+
+/** Persist the muted-channel list for a space locally and sync outbound. */
+export async function setMutedChannels(
+  address: string,
+  spaceId: string,
+  mutedChannelIds: string[]
+): Promise<void> {
+  const current = getLocalUserConfig(address) ?? getDefaultUserConfig(address);
+  const updated: UserConfig = {
+    ...current,
+    mutedChannels: { ...(current.mutedChannels ?? {}), [spaceId]: mutedChannelIds },
+  };
+  saveLocalUserConfig(updated);
+  try {
+    if (updated.allowSync) {
+      await saveConfig(updated);
+    }
+  } catch {
+    // Best-effort sync — the mute change is already saved locally.
+  }
+}
+
+export function getLocalSpaceMuted(address: string, spaceId: string): boolean {
+  const config = getLocalUserConfig(address);
+  const settings = config?.notificationSettings?.[spaceId] as
+    | { isMuted?: boolean }
+    | undefined;
+  return settings?.isMuted ?? false;
+}
+
+/** Persist the per-space mute flag locally and sync outbound. */
+export async function setSpaceMuted(
+  address: string,
+  spaceId: string,
+  muted: boolean
+): Promise<void> {
+  const current = getLocalUserConfig(address) ?? getDefaultUserConfig(address);
+  const prevSettings = current.notificationSettings ?? {};
+  const updated: UserConfig = {
+    ...current,
+    notificationSettings: {
+      ...prevSettings,
+      // Preserve any existing per-space notification settings; add isMuted, which
+      // the pinned shared type doesn't declare yet (rides the untyped config blob).
+      [spaceId]: { ...(prevSettings[spaceId] ?? {}), isMuted: muted } as any,
+    },
+  };
+  saveLocalUserConfig(updated);
+  try {
+    if (updated.allowSync) {
+      await saveConfig(updated);
+    }
+  } catch {
+    // Best-effort sync — the mute change is already saved locally.
+  }
 }

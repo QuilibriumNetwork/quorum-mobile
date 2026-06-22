@@ -117,6 +117,77 @@ export function setChannelNotificationsEnabled(
   getStore().set(channelKey(spaceId, channelId), enabled);
 }
 
+// --- UserConfig mirror ---
+//
+// The cross-device source of truth for channel/space mute is `UserConfig`
+// (configService + useChannelMute). This MMKV store is a fast local mirror so
+// the non-React notification gates (shouldNotifyForContext, the iOS NSE's
+// HubLogClassifier.swift via the App-Group mirror) keep reading the same keys.
+// The mirror is derived from UserConfig and rewritten on every change.
+//
+// Semantics bridge: UserConfig stores MUTED state; this store uses ENABLED
+// booleans (muted ⟺ enabled === false).
+
+/**
+ * Overwrite this space's mirror keys to match the config-backed muted state.
+ * `mutedChannelIds` are the channels muted in this space; `spaceMuted` is the
+ * whole-space mute flag. Channels NOT in the list are set back to enabled, so
+ * an unmute synced from another device clears the gate too.
+ */
+export function mirrorSpaceMuteState(
+  spaceId: string,
+  mutedChannelIds: string[],
+  spaceMuted: boolean,
+  knownChannelIds?: string[],
+): void {
+  const store = getStore();
+  // Space-level gate (also fed to the server via pushPrefsSync).
+  setSpaceNotificationsEnabled(spaceId, !spaceMuted);
+  const muted = new Set(mutedChannelIds);
+  // Set every muted channel's gate off.
+  for (const channelId of muted) {
+    store.set(channelKey(spaceId, channelId), false);
+  }
+  // Re-enable channels that are no longer muted. We can only re-enable channels
+  // we know about: the explicitly-muted set is covered above; for the rest,
+  // clear any stale `false` keys for this space that aren't in the muted set.
+  const prefix = `${K_CHANNEL_PREFIX}${spaceId}:`;
+  for (const key of store.getAllKeys()) {
+    if (!key.startsWith(prefix)) continue;
+    const channelId = key.slice(prefix.length);
+    if (!muted.has(channelId)) store.set(key, true);
+  }
+  // If the caller passed the full channel list, make sure none are left muted
+  // that shouldn't be (defensive; the loop above already covers existing keys).
+  if (knownChannelIds) {
+    for (const channelId of knownChannelIds) {
+      if (!muted.has(channelId)) store.set(channelKey(spaceId, channelId), true);
+    }
+  }
+}
+
+/**
+ * Read existing device-local mutes so they can be migrated into UserConfig once.
+ * Returns the muted channel ids for the space and whether the space is muted.
+ * Does not clear anything; migration is idempotent.
+ */
+export function readLegacyMutesForSpace(spaceId: string): {
+  mutedChannelIds: string[];
+  spaceMuted: boolean;
+} {
+  const store = getStore();
+  const spaceMuted = store.getBoolean(spaceKey(spaceId)) === false;
+  const prefix = `${K_CHANNEL_PREFIX}${spaceId}:`;
+  const mutedChannelIds: string[] = [];
+  for (const key of store.getAllKeys()) {
+    if (!key.startsWith(prefix)) continue;
+    if (store.getBoolean(key) === false) {
+      mutedChannelIds.push(key.slice(prefix.length));
+    }
+  }
+  return { mutedChannelIds, spaceMuted };
+}
+
 // Resolution
 
 /**

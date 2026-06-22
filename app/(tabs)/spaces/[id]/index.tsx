@@ -5,6 +5,7 @@ import { SpaceDescriptionSheet } from '@/components/SpaceDescriptionSheet';
 import { useChannels } from '@/hooks/chat/useChannels';
 import { useReplyTracking } from '@/hooks/chat/useReplyTracking';
 import { useMentionTracking } from '@/hooks/chat/useMentionTracking';
+import { useChannelMute } from '@/hooks/chat/useChannelMute';
 import { useSpace } from '@/hooks/chat/useSpaces';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
@@ -40,6 +41,8 @@ export default function SpaceChannelsScreen() {
 
   const { data: spaceData, isLoading } = useSpace(spaceId, { enabled: !!spaceId });
   useChannels(spaceId, { enabled: !!spaceId });
+  const { mutedChannels, isSpaceMuted } = useChannelMute(spaceId);
+  const spaceMuted = isSpaceMuted();
   const { getReplyCount } = useReplyTracking();
   const { getMentionCount } = useMentionTracking();
 
@@ -91,6 +94,7 @@ export default function SpaceChannelsScreen() {
         onInvite={() => setInviteVisible(true)}
         onSettings={() => setSettingsVisible(true)}
         onDescriptionPress={() => setDescriptionVisible(true)}
+        isMuted={spaceMuted}
       />
 
       <ScrollView
@@ -103,6 +107,10 @@ export default function SpaceChannelsScreen() {
               const replies = getReplyCount(spaceId, channel.channelId) ?? 0;
               const mentions = getMentionCount(spaceId, channel.channelId) ?? 0;
               const badgeCount = mentions + replies;
+              // Per-row muted treatment fires only for an INDIVIDUALLY muted
+              // channel — a whole-space mute is shown on the space header/icon
+              // instead, so the channel list doesn't read as all-broken.
+              const muted = mutedChannels.has(channel.channelId);
               return (
                 <TouchableOpacity
                   key={channel.channelId}
@@ -119,9 +127,24 @@ export default function SpaceChannelsScreen() {
                     color={resolveChannelIconColor(channel.iconColor, theme.colors.textMuted)}
                     variant={channel.iconVariant ?? 'outline'}
                   />
-                  <Text style={[styles.channelName, badgeCount > 0 && styles.channelNameUnread]} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.channelName,
+                      badgeCount > 0 && styles.channelNameUnread,
+                      muted && styles.channelNameMuted,
+                    ]}
+                    numberOfLines={1}
+                  >
                     {channel.channelName}
                   </Text>
+                  {muted && (
+                    <IconSymbol
+                      name="bell.slash.fill"
+                      size={14}
+                      color={theme.colors.textMuted}
+                      style={styles.channelMuteIcon}
+                    />
+                  )}
                   {badgeCount > 0 && (
                     <View style={styles.unreadBadge}>
                       <Text style={styles.unreadText}>
@@ -218,6 +241,9 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       paddingVertical: Skin.space(8),
       gap: Skin.space(10),
     },
+    channelMuteIcon: {
+      marginLeft: Skin.space(2),
+    },
     channelName: {
       flex: 1,
       ...theme.textStyles.body,
@@ -226,6 +252,11 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     channelNameUnread: {
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
+    },
+    // Muted channel: the NAME reads muted (a solid muted-color token, not opacity,
+    // and not the icon) alongside the bell-off marker.
+    channelNameMuted: {
+      color: theme.colors.textMuted,
     },
     unreadDotSlot: {
       width: 16,
