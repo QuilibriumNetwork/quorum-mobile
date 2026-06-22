@@ -48,6 +48,8 @@ import { useEditSpaceMessage, canEditMessage } from '@/hooks/chat/useEditSpaceMe
 import { usePinMessage, useUnpinMessage, usePinnedMessages, getPinnedMessageIds } from '@/hooks/chat/usePinnedMessages';
 import { useMessageSearch } from '@/hooks/chat/useMessageSearch';
 import { useUserMuting } from '@/hooks/chat/useUserMuting';
+import { useIsUserMuted } from '@/hooks/chat/useIsUserMuted';
+import { formatMuteRemaining } from '@/utils/formatMuteRemaining';
 import { pickImage, type ProcessedAttachment } from '@/services/media/imageAttachment';
 import { haptics } from '@/utils/haptics';
 import { ReportModal } from '@/components/ReportModal';
@@ -126,6 +128,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
 }: SpaceChatAreaProps) {
   const { user, farcasterAuthToken } = useAuth();
 
+
   // Local state — this is the whole point: messageText changes
   // only re-render SpaceChatArea, not the parent HomeScreen
   const [messageText, setMessageText] = useState('');
@@ -186,6 +189,24 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
     token: farcasterAuthToken ?? undefined,
   });
   const { filteredMessages: filterMutedMessages } = useUserMuting(spaceId);
+
+  // Moderation-mute: if the CURRENT user has been muted in this space, their
+  // composer is disabled. Reactive (useSyncExternalStore) so a received mute
+  // disables it live. A timed mute re-enables automatically on expiry via a
+  // one-shot timer that bumps local state when the deadline passes.
+  const { isUserMuted: isModMuted, getMuteRecord: getModMuteRecord } = useIsUserMuted(spaceId);
+  const isSelfModMuted = !!user?.address && isModMuted(user.address);
+  const selfModMuteRecord = user?.address ? getModMuteRecord(user.address) : null;
+  const [, forceMuteRecheck] = useState(0);
+  useEffect(() => {
+    const expiresAt = selfModMuteRecord?.expiresAt;
+    if (!isSelfModMuted || expiresAt === undefined) return;
+    const ms = expiresAt - Date.now();
+    if (ms <= 0) return;
+    // setTimeout caps ~24.8 days; acceptable (app restarts re-evaluate at read).
+    const timer = setTimeout(() => forceMuteRecheck((n) => n + 1), Math.min(ms, 2 ** 31 - 1));
+    return () => clearTimeout(timer);
+  }, [isSelfModMuted, selfModMuteRecord?.expiresAt]);
 
   // Linked Farcaster channels for this space-channel (local user pref).
   // For now we surface casts from the FIRST linked channel only; supporting
@@ -734,7 +755,14 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
       </View>
 
       <ChatBottomChrome tabBarHeight={tabBarHeight} surfaceColor={theme.colors.surface1} isDark={theme.dark}>
-        {!canPost && isReadOnlyChannel ? (
+        {isSelfModMuted ? (
+          <View style={styles.readOnlyBanner}>
+            <IconSymbol name="bell.slash.fill" size={16} color={theme.colors.textMuted} />
+            <Text style={styles.readOnlyBannerText}>
+              {formatMuteRemaining(selfModMuteRecord?.expiresAt)}
+            </Text>
+          </View>
+        ) : !canPost && isReadOnlyChannel ? (
           <View style={styles.readOnlyBanner}>
             <IconSymbol name="lock.fill" size={16} color={theme.colors.textMuted} />
             <Text style={styles.readOnlyBannerText}>You cannot post in this channel</Text>

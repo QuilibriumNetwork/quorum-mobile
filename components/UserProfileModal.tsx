@@ -1,5 +1,6 @@
 import { BaseModal, ActionRow, ActionRowGroup } from '@/components/shared';
 import { KickUserModal } from '@/components/KickUserModal';
+import { MuteUserModal } from '@/components/MuteUserModal';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
@@ -8,7 +9,8 @@ import { useToast } from '@/context/ToastContext';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
-import { useAssignRole, useRemoveFromRole, useSpaces } from '@/hooks/chat';
+import { useAssignRole, useRemoveFromRole, useSpaces, useHasPermission } from '@/hooks/chat';
+import { useIsUserMuted } from '@/hooks/chat/useIsUserMuted';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
@@ -38,6 +40,8 @@ interface UserProfileModalProps {
   onMuteUser?: (userId: string) => void;
   isUserMuted?: boolean;
   spaceId?: string;
+  /** Channel context, required to broadcast a moderation MuteMessage. */
+  channelId?: string;
   roles?: Role[];
   isSpaceOwner?: boolean;
   /** Optional: caller routes into the Farcaster feed profile view when
@@ -54,6 +58,7 @@ export default function UserProfileModal({
   onMuteUser,
   isUserMuted,
   spaceId,
+  channelId,
   roles,
   isSpaceOwner,
   onOpenFarcasterProfile,
@@ -65,6 +70,7 @@ export default function UserProfileModal({
   const insets = useSafeAreaInsets();
   const [loadingRoles, setLoadingRoles] = useState<Set<string>>(new Set());
   const [kickVisible, setKickVisible] = useState(false);
+  const [muteVisible, setMuteVisible] = useState(false);
 
   const assignRoleMutation = useAssignRole();
   const removeRoleMutation = useRemoveFromRole();
@@ -178,15 +184,27 @@ export default function UserProfileModal({
   // Space owners can kick any member other than themselves
   const canKick = !!(isSpaceOwner && spaceId && !isSelf);
 
+  // Moderation mute: gated on the VIEWER holding the `user:mute` role permission
+  // (NOT isSpaceOwner — receivers can't verify ownership, so owners need a role
+  // too; matches the receive-side check). Requires a channel to broadcast on.
+  const viewerCanMute = useHasPermission(spaceId, authUser?.address, 'user:mute');
+  const canModMute = !!(viewerCanMute && spaceId && channelId && !isSelf && user);
+  const { isUserMuted: isModMuted } = useIsUserMuted(spaceId);
+  const targetIsModMuted = !!user && isModMuted(user.userId);
+
   if (!user) return null;
 
   return (
     <BaseModal
       visible={visible}
       onClose={onClose}
-      height={0.55}
+      height={0.75}
     >
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={styles.scrollContent}
+        contentContainerStyle={styles.scrollContentContainer}
+      >
         {/* Profile Header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
@@ -311,7 +329,7 @@ export default function UserProfileModal({
         )}
 
         {/* Actions - styled as tappable rows */}
-        {((onStartDM && !isSelf) || (onMuteUser && !isSelf) || canKick) && (
+        {((onStartDM && !isSelf) || (onMuteUser && !isSelf) || canModMute || canKick) && (
           <View style={styles.actionsContainer}>
             <ActionRowGroup>
               {onStartDM && !isSelf && (
@@ -324,6 +342,9 @@ export default function UserProfileModal({
                   }}
                 />
               )}
+              {/* Personal block (viewer-side hide). Task D renames this to
+                  "Block"; until then it reads Mute/Unmute. Distinct from the
+                  moderation mute below. */}
               {onMuteUser && !isSelf && (
                 <ActionRow
                   icon={isUserMuted ? 'bell' : 'bell.slash'}
@@ -332,6 +353,15 @@ export default function UserProfileModal({
                     onMuteUser(user.userId);
                     onClose();
                   }}
+                />
+              )}
+              {/* Moderation mute (role-gated; silences the user for everyone) */}
+              {canModMute && (
+                <ActionRow
+                  icon="bell.slash.fill"
+                  label={targetIsModMuted ? 'Unmute in Space' : 'Mute in Space'}
+                  destructive
+                  onPress={() => setMuteVisible(true)}
                 />
               )}
               {/* Kick (space owners only) - destructive row */}
@@ -358,6 +388,18 @@ export default function UserProfileModal({
           userAddress={user.userId}
         />
       )}
+      {canModMute && (
+        <MuteUserModal
+          visible={muteVisible}
+          onClose={() => setMuteVisible(false)}
+          spaceId={spaceId!}
+          channelId={channelId!}
+          userName={user.userName}
+          userIcon={hasValidAvatar ? user.userAvatar : undefined}
+          userAddress={user.userId}
+          isUnmuting={targetIsModMuted}
+        />
+      )}
       {confirmDialog}
     </BaseModal>
   );
@@ -368,6 +410,11 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     scrollContent: {
       paddingHorizontal: Skin.space(20),
       paddingTop: Skin.space(8),
+    },
+    // Bottom padding so the last action row (Mute/Kick) always clears the
+    // sheet's bottom edge + nav bar instead of sitting flush against it.
+    scrollContentContainer: {
+      paddingBottom: Skin.space(24),
     },
     profileHeader: {
       alignItems: 'center',

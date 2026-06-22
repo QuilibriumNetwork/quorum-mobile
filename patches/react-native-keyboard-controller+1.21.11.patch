@@ -1,0 +1,22 @@
+diff --git a/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/index.ts b/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/index.ts
+index 48178d9..90b3977 100644
+--- a/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/index.ts
++++ b/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/index.ts
+@@ -166,7 +166,16 @@ function useChatKeyboard(
+       onMove: (e) => {
+         "worklet";
+ 
+-        if (freeze.value) {
++        // Patched (quorum-mobile): ignore SPURIOUS keyboard events with no focused
++        // TextInput (target <= 0). A native <Modal> grabbing/releasing input focus
++        // on mount/unmount emits such an event; this onMove is where the worklet
++        // would `scrollTo` and chase the bogus 0-height event, scrolling the chat
++        // to the top. A real composer lift/dismiss carries the focused input's
++        // positive view tag. Guarded ONLY here (the scrolling worklet) — NOT in
++        // onStart/onEnd, which only do bookkeeping (padding/offset capture) that
++        // the cold-open emoji-panel lift depends on; gating those left `padding`
++        // stale and killed that lift. See patches/.
++        if (freeze.value || e.target <= 0) {
+           return;
+         }
+ 

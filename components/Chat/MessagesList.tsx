@@ -371,6 +371,21 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   // renders from the bottom without needing an inverted array.
   const orderedMessages = messages;
 
+  // Stable identities for FlashList's object/style props. FlashList re-initialises
+  // its scroll anchor when these change identity, so passing fresh inline literals
+  // on every render makes ANY re-render of this component (e.g. a parent opening a
+  // modal) snap the list to the top (y=0 / first message). Memoising them keeps
+  // the scroll position stable across re-renders. The FlashList docs explicitly
+  // warn "Make sure FlashList's props are memoized."
+  const maintainVisibleContentPosition = useMemo(
+    () => ({ startRenderingFromBottom: true }),
+    [],
+  );
+  const flashListContentContainerStyle = useMemo(
+    () => (topInset > 0 ? { paddingTop: topInset } : undefined),
+    [topInset],
+  );
+
   // FlashList's `maintainVisibleContentPosition.autoscrollToBottomThreshold`
   // also fires when an existing cell GROWS at the bottom (e.g. adding a
   // reaction adds a reactions row). That scrolled the user to the bottom on
@@ -1171,16 +1186,13 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         // translucent header on iOS); the bottom is no longer a static
         // paddingBottom (that would double-count with blankSpace).
         renderScrollComponent={ScrollComponent}
-        contentContainerStyle={
-          topInset > 0 ? { paddingTop: topInset } : undefined
-        }
-        maintainVisibleContentPosition={{
-          startRenderingFromBottom: true,
-          // autoscrollToBottomThreshold removed — it also triggered on cell
-          // growth (e.g. reaction added to last message), which yanked the
-          // user to the bottom unexpectedly. Replaced by the lastMessageId
-          // effect above which only scrolls on genuine new bottom messages.
-        }}
+        contentContainerStyle={flashListContentContainerStyle}
+        // Memoised (see above) — a fresh literal here re-anchors the list to the
+        // top on any re-render. autoscrollToBottomThreshold deliberately omitted:
+        // it also fired on cell growth (e.g. a reaction added to the last
+        // message), yanking the user to the bottom; the lastMessageId effect
+        // handles genuine new-message autoscroll instead.
+        maintainVisibleContentPosition={maintainVisibleContentPosition}
         onScroll={(e) => {
           const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
           distanceFromBottomRef.current = Math.max(

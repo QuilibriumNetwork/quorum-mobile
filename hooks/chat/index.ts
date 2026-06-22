@@ -63,6 +63,11 @@ export {
 // User kicking hook
 export { useUserKicking } from './useUserKicking';
 
+// User moderation mute (role-gated; distinct from personal block/useUserMuting)
+export { useModMuteUser } from './useModMuteUser';
+export type { ModMuteParams } from './useModMuteUser';
+export { useIsUserMuted } from './useIsUserMuted';
+
 // Channel management hooks
 export {
   useAddChannel,

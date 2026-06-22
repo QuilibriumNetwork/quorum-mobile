@@ -43,6 +43,7 @@ import type {
   EncryptedWebSocketMessage,
   KickMessage,
   Message,
+  MuteMessage,
   RemoveMessage,
   SealedMessage,
   Space,
@@ -63,6 +64,13 @@ import {
   clearSentEnvelope,
   isSentEnvelope,
 } from '../services/space/spaceMessageService';
+import {
+  hasMuteId,
+  isUserMuted as isModMutedUser,
+  markMuteIdSeen,
+  removeMute as removeModMute,
+  setMute as setModMute,
+} from '../services/space/modMuteStorage';
 import { buildListenHubFrame, buildLogSinceFrame } from '../services/space/hubLogSync';
 import { getHubLastSeq, setHubLastSeq } from '../services/space/hubLogCursor';
 import { getMMKVAdapter } from '../services/storage/mmkvAdapter';
@@ -2001,6 +2009,78 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               return;
             }
 
+            if (contentType === 'mute') {
+              const muteContent = spaceMessage.content as MuteMessage;
+
+              // Receive-side moderation-mute enforcement. Like remove-message we
+              // NEVER trust the sender's client — we re-validate the sender holds
+              // the `user:mute` role before honoring the mute. No isSpaceOwner
+              // bypass: receivers can't verify ownership, so owners must hold a
+              // user:mute role too (matches desktop mute-user-system). Fail-secure:
+              // reject when space data is unavailable.
+              const dropMuteInbox = () => {
+                if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
+                  deleteSpaceInboxMessages(
+                    spaceInboxKey.address,
+                    [message.timestamp],
+                    { publicKey: spaceInboxKey.publicKey, privateKey: spaceInboxKey.privateKey }
+                  ).catch(err => {});
+                }
+              };
+
+              // Self-mute is invalid; duplicate muteId is a replay (no-op).
+              if (
+                !muteContent.targetUserId ||
+                muteContent.targetUserId === muteContent.senderId ||
+                hasMuteId(muteContent.muteId)
+              ) {
+                dropMuteInbox();
+                return;
+              }
+
+              // Fail-secure: no space => can't verify permission => reject.
+              if (!space) {
+                logger.debug('[SpaceMsg] dropped mute — space data unavailable (fail-secure)');
+                dropMuteInbox();
+                return;
+              }
+
+              const muteChannel: Channel | undefined = space.groups
+                ?.find((g) => g.channels.find((c) => c.channelId === channelId))
+                ?.channels.find((c) => c.channelId === channelId);
+              const muteChecker = createChannelPermissionChecker({
+                userAddress: muteContent.senderId,
+                isSpaceOwner: false,
+                space,
+                channel: muteChannel,
+              });
+              if (!muteChecker.canMuteUser()) {
+                logger.debug(
+                  `[SpaceMsg] dropped unauthorized mute from ${muteContent.senderId?.slice(0, 12)} for ${muteContent.targetUserId?.slice(0, 12)}`
+                );
+                dropMuteInbox();
+                return;
+              }
+
+              if (muteContent.action === 'unmute') {
+                removeModMute(spaceId, muteContent.targetUserId);
+                markMuteIdSeen(muteContent.muteId);
+              } else {
+                const now = muteContent.timestamp || Date.now();
+                setModMute({
+                  spaceId,
+                  targetUserId: muteContent.targetUserId,
+                  mutedAt: now,
+                  mutedBy: muteContent.senderId,
+                  lastMuteId: muteContent.muteId,
+                  expiresAt:
+                    muteContent.duration !== undefined ? now + muteContent.duration : undefined,
+                });
+              }
+              dropMuteInbox();
+              return;
+            }
+
             if (contentType === 'update-profile') {
               // Update member profile (display name, icon, bio) in storage and cache.
               // Two changes vs. the previous implementation:
@@ -2099,6 +2179,33 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // opting one in means adding it to PERSISTABLE_TYPES + a render branch.
             if (contentType && !PERSISTABLE_TYPES.has(contentType)) {
               logger.debug(`[SpaceMsg] default-deny dropped unsupported type=${contentType}`);
+              if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
+                deleteSpaceInboxMessages(
+                  spaceInboxKey.address,
+                  [message.timestamp],
+                  { publicKey: spaceInboxKey.publicKey, privateKey: spaceInboxKey.privateKey }
+                ).catch(err => {});
+              }
+              return;
+            }
+
+            // Moderation-mute enforcement (receive-side). Drop incoming postable
+            // content from a user muted in this space — for everyone, matching
+            // desktop. Runs BEFORE storage.saveMessage so a muted user's message
+            // can't resurrect from disk on refetch. A mute that arrives in the
+            // same stream is applied by the 'mute' handler above (earlier inbox
+            // ordering); lazy expiry means a lapsed mute stops dropping.
+            if (
+              (contentType === 'post' ||
+                contentType === 'embed' ||
+                contentType === 'sticker') &&
+              'senderId' in spaceMessage.content &&
+              spaceMessage.content.senderId &&
+              isModMutedUser(spaceId, spaceMessage.content.senderId)
+            ) {
+              logger.debug(
+                `[SpaceMsg] dropped message from muted user ${spaceMessage.content.senderId.slice(0, 12)} in ${spaceId?.slice(0, 12)}`
+              );
               if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
                 deleteSpaceInboxMessages(
                   spaceInboxKey.address,
@@ -3302,6 +3409,58 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             continue;
           }
 
+          if (contentType === 'mute') {
+            // Moderation-mute — same receive-side enforcement as the live path.
+            // Re-validate the sender's user:mute role; no isSpaceOwner bypass;
+            // fail-secure when space data is missing; reject self-mute + replays.
+            const muteContent = spaceMessage.content as MuteMessage;
+
+            if (
+              !muteContent.targetUserId ||
+              muteContent.targetUserId === muteContent.senderId ||
+              hasMuteId(muteContent.muteId)
+            ) {
+              continue;
+            }
+            if (!space) {
+              logger.debug('[BatchMsg] dropped mute — space data unavailable (fail-secure)');
+              continue;
+            }
+
+            const muteChannel: Channel | undefined = space.groups
+              ?.find((g) => g.channels.find((c) => c.channelId === channelId))
+              ?.channels.find((c) => c.channelId === channelId);
+            const muteChecker = createChannelPermissionChecker({
+              userAddress: muteContent.senderId,
+              isSpaceOwner: false,
+              space,
+              channel: muteChannel,
+            });
+            if (!muteChecker.canMuteUser()) {
+              logger.debug(
+                `[BatchMsg] dropped unauthorized mute from ${muteContent.senderId?.slice(0, 12)} for ${muteContent.targetUserId?.slice(0, 12)}`
+              );
+              continue;
+            }
+
+            if (muteContent.action === 'unmute') {
+              removeModMute(spaceId, muteContent.targetUserId);
+              markMuteIdSeen(muteContent.muteId);
+            } else {
+              const now = muteContent.timestamp || Date.now();
+              setModMute({
+                spaceId,
+                targetUserId: muteContent.targetUserId,
+                mutedAt: now,
+                mutedBy: muteContent.senderId,
+                lastMuteId: muteContent.muteId,
+                expiresAt:
+                  muteContent.duration !== undefined ? now + muteContent.duration : undefined,
+              });
+            }
+            continue;
+          }
+
           if (contentType === 'update-profile') {
             // Mirror of the live handler. Must run BEFORE the default-deny:
             // update-profile is an applied type, not persistable, so without this
@@ -3365,6 +3524,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // `continue` earlier.
           if (contentType && !PERSISTABLE_TYPES.has(contentType)) {
             logger.debug(`[BatchMsg] default-deny dropped unsupported type=${contentType}`);
+            continue;
+          }
+
+          // Moderation-mute enforcement (receive-side) — same rule as the live
+          // path. Drop incoming post/embed/sticker from a user muted in this
+          // space before the save so it can't resurrect from disk.
+          if (
+            (contentType === 'post' ||
+              contentType === 'embed' ||
+              contentType === 'sticker') &&
+            'senderId' in spaceMessage.content &&
+            spaceMessage.content.senderId &&
+            isModMutedUser(spaceId, spaceMessage.content.senderId)
+          ) {
+            logger.debug(
+              `[BatchMsg] dropped message from muted user ${spaceMessage.content.senderId.slice(0, 12)} in ${spaceId?.slice(0, 12)}`
+            );
             continue;
           }
 
