@@ -26,4 +26,7 @@ export {
   setMutedChannels,
   getLocalSpaceMuted,
   setSpaceMuted,
+  // Personal block (viewer-side hide, config-backed, syncs across devices)
+  getLocalBlockedUsers,
+  setBlockedUsers,
 } from './configService';

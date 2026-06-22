@@ -7,8 +7,8 @@
  * messages are dropped and their composer is disabled — for everyone.
  *
  * This is the role-gated moderation action, NOT the personal viewer-side hide
- * (that's hooks/chat/useUserMuting.ts → soon useBlockUser). Naming per the
- * mute-and-block-overhaul scheme: Block = personal, Mute = moderation.
+ * (that's hooks/chat/useBlockUser.ts). Naming scheme: Block = personal,
+ * Mute = moderation.
  *
  * The hook mirrors useDeleteSpaceMessage (another control-message sender):
  * sendMuteMessage → enqueueOutbound([wsEnvelope]). We also write the local mute

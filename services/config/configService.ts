@@ -410,6 +410,8 @@ export async function getConfig(address: string): Promise<UserConfig> {
       // incoming config can't silently drop a mute toggled on another device.
       mutedChannels: (decryptedConfig as any).mutedChannels,
       notificationSettings: (decryptedConfig as any).notificationSettings,
+      // Synced personal block list (per-space viewer-side hide).
+      blockedUsers: (decryptedConfig as any).blockedUsers,
     } as UserConfig;
     saveLocalUserConfig(configWithTimestamp);
 
@@ -672,5 +674,44 @@ export async function setSpaceMuted(
     }
   } catch {
     // Best-effort sync — the mute change is already saved locally.
+  }
+}
+
+// --- Personal "Block" (viewer-side hide, synced via UserConfig) ---
+//
+// Blocking a user hides all of their messages from YOUR own rendered stream,
+// per space. Purely viewer-side: no moderation effect, no permission, doesn't
+// touch the user for anyone else — distinct from the role-gated moderation mute.
+// State lives in `UserConfig.blockedUsers[spaceId]: string[]` (the same field
+// desktop uses) so it syncs cross-device via the config blob.
+//
+// Accessed via `(config as any).blockedUsers` because the field isn't in the
+// pinned shared UserConfig type yet (lands typed in a later shared publish).
+// TODO: drop the `as any` once the shared blockedUsers type is published + pinned.
+
+export function getLocalBlockedUsers(address: string, spaceId: string): string[] {
+  const config = getLocalUserConfig(address);
+  return ((config as any)?.blockedUsers as Record<string, string[]> | undefined)?.[spaceId] ?? [];
+}
+
+/** Persist the per-space blocked-users list locally and sync outbound. */
+export async function setBlockedUsers(
+  address: string,
+  spaceId: string,
+  blockedUserIds: string[]
+): Promise<void> {
+  const current = getLocalUserConfig(address) ?? getDefaultUserConfig(address);
+  const prevBlocked = ((current as any).blockedUsers as Record<string, string[]> | undefined) ?? {};
+  const updated: UserConfig = {
+    ...current,
+    blockedUsers: { ...prevBlocked, [spaceId]: blockedUserIds },
+  } as any;
+  saveLocalUserConfig(updated);
+  try {
+    if (updated.allowSync) {
+      await saveConfig(updated);
+    }
+  } catch {
+    // Best-effort sync — the block change is already saved locally.
   }
 }

@@ -63,7 +63,7 @@ export {
 // User kicking hook
 export { useUserKicking } from './useUserKicking';
 
-// User moderation mute (role-gated; distinct from personal block/useUserMuting)
+// User moderation mute (role-gated; distinct from personal block/useBlockUser)
 export { useModMuteUser } from './useModMuteUser';
 export type { ModMuteParams } from './useModMuteUser';
 export { useIsUserMuted } from './useIsUserMuted';
@@ -102,8 +102,8 @@ export { useDMMute } from './useDMMute';
 // Search
 export { useMessageSearch } from './useMessageSearch';
 
-// User muting in spaces
-export { useUserMuting } from './useUserMuting';
+// Personal block (viewer-side hide of a user's messages in a space)
+export { useBlockUser } from './useBlockUser';
 
 // Reply tracking
 export { useReplyTracking } from './useReplyTracking';

@@ -10,7 +10,7 @@ import { useHasPermission, useRoles } from '@/hooks/chat/useRoleManagement';
 import { useReplyTracking, setActiveChannel, clearActiveChannel } from '@/hooks/chat/useReplyTracking';
 import { useMentionTracking } from '@/hooks/chat/useMentionTracking';
 import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
-import { useUserMuting } from '@/hooks/chat/useUserMuting';
+import { useBlockUser } from '@/hooks/chat/useBlockUser';
 import { useSpace, useSpaceMembers } from '@/hooks/chat/useSpaces';
 import { useBookmarks } from '@/hooks/useUserConfig';
 import { getSpaceKey } from '@/services/config/spaceStorage';
@@ -71,7 +71,7 @@ export default function SpaceChannelChat() {
 
   const { bookmarks, addBookmark, removeBookmark, isBookmarked } = useBookmarks();
   const startDirectMessage = useStartDirectMessage();
-  const { toggleMuteUser, isUserMuted } = useUserMuting(spaceId);
+  const { toggleBlockUser, isUserBlocked } = useBlockUser(spaceId);
 
   const isSpaceOwner = useMemo(() => {
     if (!spaceId) return false;
@@ -340,8 +340,8 @@ export default function SpaceChannelChat() {
               setSelectedUserProfile(null);
               startDirectMessage(userId);
             }}
-            onMuteUser={(userId) => toggleMuteUser(userId)}
-            isUserMuted={isUserMuted(selectedUserProfile.userId)}
+            onBlockUser={(userId) => toggleBlockUser(userId)}
+            isUserBlocked={isUserBlocked(selectedUserProfile.userId)}
             onOpenFarcasterProfile={({ fid, username }) => {
               setSelectedUserProfile(null);
               router.push({
