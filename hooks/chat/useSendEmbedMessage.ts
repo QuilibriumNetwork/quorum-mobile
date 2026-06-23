@@ -22,6 +22,8 @@ export interface UseSendEmbedMessageParams {
    *  (and therefore notifies the mentioned user). */
   spaceRoles?: Array<{ roleId: string; roleTag: string }>;
   spaceChannels?: Array<{ channelId: string; channelName: string }>;
+  /** Sender has mention:everyone — gates @everyone in an image caption. */
+  allowEveryone?: boolean;
 }
 
 export function useSendEmbedMessage() {
@@ -50,6 +52,7 @@ export function useSendEmbedMessage() {
         text: params.text,
         spaceRoles: params.spaceRoles,
         spaceChannels: params.spaceChannels,
+        allowEveryone: params.allowEveryone,
       });
 
       // Send via WebSocket

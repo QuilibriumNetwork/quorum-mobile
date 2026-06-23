@@ -12,7 +12,7 @@
 import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
 import { Text, Image, StyleSheet, TextStyle, View } from 'react-native';
-import type { Emoji, SpaceMember, Channel } from '@quilibrium/quorum-shared';
+import type { Emoji, SpaceMember, Channel, Role } from '@quilibrium/quorum-shared';
 import { getEmojiByName } from '@/data/emojiNames';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
@@ -23,6 +23,9 @@ interface MentionableTextProps {
   text: string;
   customEmojis: Emoji[];
   members?: SpaceMember[];
+  /** Space roles, so a plain (non-markdown) message resolves `@roleTag` to a
+   *  styled mention pill instead of leaving it as raw text. */
+  roles?: Role[];
   channels?: Channel[];
   currentUserId?: string;
   style?: TextStyle;
@@ -74,6 +77,7 @@ function MentionableTextBase({
   text: rawText,
   customEmojis,
   members = [],
+  roles = [],
   channels = [],
   currentUserId,
   style,
@@ -132,6 +136,16 @@ function MentionableTextBase({
     });
     return map;
   }, [members]);
+
+  // Role lookup by lowercased roleTag, so `@roleTag` resolves to a pill in the
+  // plain (non-markdown) render path the way the markdown renderer already does.
+  const roleMap = useMemo(() => {
+    const map: Record<string, Role> = {};
+    roles.forEach((r) => {
+      if (r.roleTag) map[r.roleTag.toLowerCase()] = r;
+    });
+    return map;
+  }, [roles]);
 
   // Create channel lookup map sorted by name length (longest first) for greedy matching
   const sortedChannels = useMemo(() => {
@@ -192,6 +206,20 @@ function MentionableTextBase({
             displayName: member.display_name || member.name || member.address,
             isSelf: member.address === currentUserId,
           },
+        });
+        continue;
+      }
+      // Not a member — is it a role? `@roleTag` (group 3) resolves to a styled
+      // mention pill (display name = the role tag), matching the markdown path
+      // and desktop (one accent color for all mention types, not the role color).
+      const role = match[3] ? roleMap[name] : undefined;
+      if (role) {
+        matches.push({
+          type: 'mention',
+          start: match.index,
+          end: match.index + match[0].length,
+          content: match[0],
+          data: { userId: `role:${role.roleId}`, displayName: role.roleTag, isSelf: false },
         });
       }
     }
@@ -373,7 +401,7 @@ function MentionableTextBase({
     }
 
     return result;
-  }, [text, emojiMap, memberMap, sortedChannels, currentUserId]);
+  }, [text, emojiMap, memberMap, roleMap, sortedChannels, currentUserId]);
 
   // Check if we have any special content
   const hasSpecialContent = parts.some(
@@ -430,12 +458,15 @@ function MentionableTextBase({
       {parts.map((part, index) => {
         if (part.type === 'mention') {
           const isEveryone = part.userId === 'everyone';
+          // Role mentions are styled like a mention but not tappable (the
+          // userId is a `role:<id>` sentinel, not a user address).
+          const isRole = part.userId?.startsWith('role:') ?? false;
           const mStyle = isEveryone
             ? defaultMentionStyle
             : part.isSelf
             ? selfMentionStyle
             : defaultMentionStyle;
-          if (!isEveryone && onMentionPress && part.userId) {
+          if (!isEveryone && !isRole && onMentionPress && part.userId) {
             return (
               <Text
                 key={`mention-${index}`}

@@ -433,6 +433,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         originalCreatedDate: originalMessage?.timestamp ?? Date.now(),
         spaceRoles: spaceData?.roles?.map((r) => ({ roleId: r.roleId, roleTag: r.roleTag })),
         spaceChannels: channelsData?.map((c) => ({ channelId: c.channelId, channelName: c.channelName })),
+        allowEveryone: canMentionEveryone,
       });
       setMessageText('');
       setEditingMessage(null);
@@ -464,6 +465,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         text: messageText.trim() || undefined,
         spaceRoles: spaceData?.roles?.map((r) => ({ roleId: r.roleId, roleTag: r.roleTag })),
         spaceChannels: channelsData?.map((c) => ({ channelId: c.channelId, channelName: c.channelName })),
+        allowEveryone: canMentionEveryone,
       }, {
         onSettled: refocusInput,
       });

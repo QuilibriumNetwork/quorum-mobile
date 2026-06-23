@@ -70,6 +70,7 @@ function MessageRendererBase({
         enableTranslate={enableTranslate}
         customEmojis={customEmojis}
         members={members}
+        roles={roles}
         channels={channels}
         currentUserId={currentUserId}
         style={style}
@@ -90,6 +91,7 @@ function MessageRendererBase({
         enableTranslate={enableTranslate}
         customEmojis={customEmojis}
         members={members}
+        roles={roles}
         channels={channels}
         currentUserId={currentUserId}
         style={style}

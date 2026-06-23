@@ -772,6 +772,8 @@ export interface SendEditMessageParams {
    *  edited text (so an edit that adds/changes a mention still notifies). */
   spaceRoles?: Array<{ roleId: string; roleTag: string }>;
   spaceChannels?: Array<{ channelId: string; channelName: string }>;
+  /** Sender may use @everyone (has mention:everyone) — gates @everyone in edits. */
+  allowEveryone?: boolean;
 }
 
 /**
@@ -780,7 +782,7 @@ export interface SendEditMessageParams {
 export async function sendEditMessage(
   params: SendEditMessageParams
 ): Promise<SendGenericMessageResult> {
-  const { spaceId, channelId, originalMessageId, editedText, senderAddress, spaceRoles, spaceChannels } = params;
+  const { spaceId, channelId, originalMessageId, editedText, senderAddress, spaceRoles, spaceChannels, allowEveryone } = params;
 
   const editedAt = Date.now();
   const editNonce = generateNonce();
@@ -799,7 +801,7 @@ export async function sendEditMessage(
     channelId,
     senderAddress,
     content,
-    mentions: extractMentionsFromText(editedText, { spaceRoles, spaceChannels }),
+    mentions: extractMentionsFromText(editedText, { spaceRoles, spaceChannels, allowEveryone }),
   });
 }
 
@@ -1043,6 +1045,8 @@ export interface SendEmbedMessageParams {
    *  caption (so an image caption that mentions someone still notifies). */
   spaceRoles?: Array<{ roleId: string; roleTag: string }>;
   spaceChannels?: Array<{ channelId: string; channelName: string }>;
+  /** Sender may use @everyone (has mention:everyone) — gates @everyone in captions. */
+  allowEveryone?: boolean;
 }
 
 /**
@@ -1081,6 +1085,7 @@ export async function sendEmbedMessage(
     text,
     spaceRoles,
     spaceChannels,
+    allowEveryone,
   } = params;
 
   const content = buildPostWithEmbeddedMedia(senderAddress, imageUrl, thumbnailUrl, text, repliesToMessageId);
@@ -1089,7 +1094,7 @@ export async function sendEmbedMessage(
     channelId,
     senderAddress,
     content,
-    mentions: text ? extractMentionsFromText(text, { spaceRoles, spaceChannels }) : undefined,
+    mentions: text ? extractMentionsFromText(text, { spaceRoles, spaceChannels, allowEveryone }) : undefined,
   });
 }
 

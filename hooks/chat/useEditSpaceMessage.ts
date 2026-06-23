@@ -23,6 +23,8 @@ export interface UseEditSpaceMessageParams {
    *  populates message.mentions (and therefore notifies the mentioned user). */
   spaceRoles?: Array<{ roleId: string; roleTag: string }>;
   spaceChannels?: Array<{ channelId: string; channelName: string }>;
+  /** Sender has mention:everyone — gates @everyone in an edited message. */
+  allowEveryone?: boolean;
 }
 
 export function canEditMessage(message: { userId: string; timestamp: number }, currentUserId?: string): boolean {
@@ -61,6 +63,7 @@ export function useEditSpaceMessage() {
         senderAddress: user.address,
         spaceRoles: params.spaceRoles,
         spaceChannels: params.spaceChannels,
+        allowEveryone: params.allowEveryone,
       });
 
       // Send via WebSocket
