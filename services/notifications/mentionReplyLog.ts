@@ -57,6 +57,9 @@ export interface MentionReplyEntry {
   threadId?: string;
   senderId: string;
   senderName?: string;
+  /** Resolved display name only (no address fallback). Drives the author prefix
+   *  on the row — absent for unsynced senders so no raw hash is shown. */
+  senderDisplayName?: string;
   preview: MessagePreview;
   /** ms epoch — sort order + read-state comparison. */
   createdAt: number;

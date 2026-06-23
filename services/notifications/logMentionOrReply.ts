@@ -125,6 +125,11 @@ export async function logMentionOrReply(
     ctx.userAddress ?? undefined,
     senderId && senderMember ? { [senderId]: senderMember } : undefined
   );
+  // A RESOLVED display name only (no address fallback) — the row shows the
+  // author prefix solely when we have a real name, so unsynced senders don't
+  // surface a raw "Qm..." hash. `messageSenderName` would fall back to a short
+  // address, so we read the member fields directly here instead.
+  const senderDisplayName = senderMember?.display_name || senderMember?.name || undefined;
 
   const entry: MentionReplyEntry = {
     id: `${ctx.spaceId}:${ctx.channelId}:${message.messageId}`,
@@ -136,6 +141,7 @@ export async function logMentionOrReply(
     threadId: message.threadId,
     senderId,
     senderName,
+    senderDisplayName,
     preview: messagePreview(message),
     createdAt: message.createdDate || Date.now(),
   };

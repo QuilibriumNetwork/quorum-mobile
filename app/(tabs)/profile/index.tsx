@@ -22,7 +22,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
-import { useOtaUpdate } from '@/hooks/useOtaUpdate';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import {
   clearNotificationLog,
   markNotificationsSeen,
@@ -94,6 +94,7 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { openMiniapp } = useMiniappOverlay();
   const [refreshing, setRefreshing] = useState(false);
+  const { confirm, confirmDialog } = useConfirmDialog();
   // Source filter. Pills only render when there's a Farcaster feed to filter
   // against (see below), so single-source users never see a pointless filter.
   const [sourceFilter, setSourceFilter] = useState<'all' | 'quorum' | 'farcaster'>('all');
@@ -203,11 +204,18 @@ export default function NotificationsScreen() {
                   {quorumLocation(item).channel}
                 </Text>
               </Text>
-              {!!item.raw?.quorum?.preview?.text && (
-                <Text style={styles.quorumMessage} numberOfLines={QUORUM_PREVIEW_LINES}>
-                  {item.raw.quorum.preview.text}
-                </Text>
-              )}
+              {(() => {
+                const q = item.raw?.quorum;
+                const author = q?.senderDisplayName?.trim();
+                const text = q?.preview?.text;
+                if (!author && !text) return null;
+                return (
+                  <Text style={styles.quorumMessage} numberOfLines={QUORUM_PREVIEW_LINES}>
+                    {author ? <Text style={styles.quorumAuthor}>{author}: </Text> : null}
+                    {text}
+                  </Text>
+                );
+              })()}
               <Text style={styles.time}>{formatTime(item.timestamp)}</Text>
             </View>
           ) : (
@@ -243,13 +251,6 @@ export default function NotificationsScreen() {
     [styles, theme.colors.primary, theme.colors.textMuted, handlePress, handleDelete],
   );
 
-  // OTA bolt: shown in the in-screen header's right slot when an
-  // update is available. Same affordance as before, just hoisted out
-  // of the native Stack header into the same in-screen row layout
-  // that spaces + messages use.
-  const ota = useOtaUpdate();
-  const showOta = ota.isUpdateAvailable || ota.isUpdatePending;
-
   // Pills only earn their space when there's actually a Farcaster feed to filter
   // against — a user with no Farcaster (or no Farcaster items) sees a single
   // Quorum list and no filter chrome.
@@ -272,18 +273,29 @@ export default function NotificationsScreen() {
     return out;
   }, [quorumItems, farcasterFeedItems, activeFilter]);
 
-  // Secondary "Clear all" — empties the inbox (deletes the Quorum log + the chat
-  // log) and marks the tab seen. Named "Clear all" (not "Mark all read") because
-  // it removes the rows, not just their unread state. The list otherwise
-  // persists as history; per-channel bubbles clear on channel open (Level 2).
-  const handleClearAll = useCallback(() => {
+  // "Clear all" — empties the inbox (deletes the Quorum log + the chat log) and
+  // marks the tab seen. Named "Clear all" (not "Mark all read") because it
+  // removes the rows, not just their unread state. Destructive + irreversible,
+  // so it asks for confirmation first. The list otherwise persists as history;
+  // per-channel bubbles clear on channel open (Level 2).
+  const handleClearAll = useCallback(async () => {
+    const ok = await confirm({
+      title: 'Clear all notifications?',
+      message:
+        'This permanently removes every notification shown here. This cannot be undone.',
+      confirmLabel: 'Clear all',
+      cancelLabel: 'Cancel',
+      // Non-destructive styling (ConfirmDialog defaults to the red 'danger').
+      variant: 'primary',
+    });
+    if (!ok) return;
     clearMentionReplyLog();
     clearNotificationLog();
     markNotificationsSeen();
     // Advance the Level-1 watermark to now so mentions arriving right after the
     // clear are compared against the clear time, not a stale tab-open time.
     markQuorumTabSeen();
-  }, []);
+  }, [confirm]);
 
   return (
     <FloatingTabScreen surfaceColor={theme.colors.surface1} isDark={isDark} style={{ paddingTop: insets.top }}>
@@ -294,32 +306,27 @@ export default function NotificationsScreen() {
       <View style={styles.header}>
         <Text style={styles.heading}>Notifications</Text>
         <View style={styles.headerSlotRight}>
-          {showOta ? (
-            <TouchableOpacity
-              onPress={() => { void ota.applyUpdate(); }}
-              hitSlop={8}
-              style={styles.headerIconButton}
-              accessibilityLabel="Apply update"
-            >
-              <IconSymbol name="bolt.fill" color="#0A84FF" size={20} />
+          {items.length > 0 && (
+            <TouchableOpacity onPress={handleClearAll} hitSlop={8}>
+              <Text style={styles.clearAllLabel}>Clear all</Text>
             </TouchableOpacity>
-          ) : null}
+          )}
         </View>
       </View>
       {showFilterPills && (
-        <View style={styles.filterRow}>
-          <SegmentedPills
-            items={[
-              { key: 'all', label: 'All' },
-              { key: 'quorum', label: 'Quorum' },
-              { key: 'farcaster', label: 'Farcaster' },
-            ]}
-            activeKey={activeFilter}
-            onChange={(k) => setSourceFilter(k as 'all' | 'quorum' | 'farcaster')}
-            itemRole="button"
-            scrollable={false}
-          />
-        </View>
+        <SegmentedPills
+          style={styles.filterRow}
+          variant="solid"
+          scrollable={false}
+          itemRole="button"
+          items={[
+            { key: 'all', label: 'All' },
+            { key: 'quorum', label: 'Quorum' },
+            { key: 'farcaster', label: 'Farcaster' },
+          ]}
+          activeKey={activeFilter}
+          onChange={(k) => setSourceFilter(k as 'all' | 'quorum' | 'farcaster')}
+        />
       )}
       {farcasterError && farcasterEnabled && (
         // Inline banner — visible whether or not chat notifications are
@@ -332,15 +339,6 @@ export default function NotificationsScreen() {
           <Text style={styles.errorText} numberOfLines={3}>
             Couldn't load Farcaster notifications: {farcasterError.message}
           </Text>
-        </View>
-      )}
-      {items.length > 0 && (
-        <View style={styles.clearRow}>
-          <TouchableOpacity onPress={handleClearAll} hitSlop={8}>
-            <Text style={{ color: theme.colors.primary, fontSize: Skin.font(13), fontWeight: '600' }}>
-              Clear all
-            </Text>
-          </TouchableOpacity>
         </View>
       )}
       {items.length === 0 && !isLoading ? (
@@ -386,6 +384,7 @@ export default function NotificationsScreen() {
           }
         />
       )}
+      {confirmDialog}
     </FloatingTabScreen>
   );
 }
@@ -408,6 +407,11 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
       justifyContent: 'flex-end' as const,
+    },
+    clearAllLabel: {
+      color: theme.colors.primary,
+      fontSize: Skin.font(14),
+      fontWeight: '600',
     },
     heading: {
       ...theme.textStyles.title3,
@@ -493,9 +497,15 @@ const createStyles = (theme: AppTheme) =>
     },
     quorumMessage: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      // Subtle (not the faintest muted) so the message reads clearly while the
+      // time below stays muted — gives the row two distinct contrast levels.
+      color: theme.colors.textSubtle,
       lineHeight: Skin.font(18),
       marginTop: Skin.space(2),
+    },
+    quorumAuthor: {
+      color: theme.colors.textSubtle,
+      fontWeight: '600',
     },
     sectionHeader: {
       paddingHorizontal: Skin.space(16),
@@ -544,8 +554,10 @@ const createStyles = (theme: AppTheme) =>
       paddingVertical: Skin.space(8),
     },
     filterRow: {
-      paddingHorizontal: Skin.space(16),
-      paddingTop: Skin.space(4),
+      // Match the DM-list filter spacing convention (12h) for consistency, with
+      // extra breathing room between the header and the pills.
+      paddingHorizontal: Skin.space(12),
+      paddingTop: Skin.space(20),
       paddingBottom: Skin.space(8),
     },
     errorText: {
