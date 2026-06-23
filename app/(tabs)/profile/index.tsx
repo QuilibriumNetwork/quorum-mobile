@@ -35,19 +35,34 @@ import {
 } from '@/hooks/useUnifiedNotifications';
 import * as Skin from '@/theme/skins/geometry';
 
-/** Leading icon (IconSymbol name) for a Quorum mention/reply row, by kind. */
+// Max preview lines for a Quorum row's message. The panel is a triage surface
+// (tap through to read in full), so cap it: long replies don't dominate the list.
+const QUORUM_PREVIEW_LINES = 2;
+
+/** Leading icon (IconSymbol name) for a Quorum mention/reply row, by kind.
+ *  Mirrors the composer + space-settings iconography so the inbox reads
+ *  consistently: @everyone = bullhorn (composer autocomplete), @role = shield
+ *  (Roles tab + role pills), @you = at, reply = reply arrow. */
 function quorumRowIcon(entry: UnifiedNotification): IconSymbolName {
   switch (entry.raw?.quorum?.kind) {
     case 'reply':
       return 'arrowshape.turn.up.left.fill';
     case 'mention-everyone':
-      return 'speaker.wave.2.fill';
+      return 'bullhorn';
     case 'mention-roles':
-      return 'person.2.fill';
+      return 'shield';
     case 'mention-you':
     default:
       return 'at';
   }
+}
+
+/** Location parts for a Quorum row — space (loud) + channel breadcrumb (muted). */
+function quorumLocation(entry: UnifiedNotification): { space: string; channel: string } {
+  const q = entry.raw?.quorum;
+  const space = q?.spaceName?.trim() || 'Space';
+  const channel = q?.channelName ? `#${q.channelName}` : '#channel';
+  return { space, channel: q?.threadId ? `${channel} › Thread` : channel };
 }
 
 function formatTime(ts: number): string {
@@ -172,29 +187,43 @@ export default function NotificationsScreen() {
               <IconSymbol name="bell.fill" color={theme.colors.primary} size={18} />
             </View>
           )}
-          <View style={styles.body}>
-            <View style={styles.titleRow}>
-              <Text style={styles.title} numberOfLines={1}>
-                {item.title}
+          {item.source === 'quorum' ? (
+            // Location-first layout: lead with "Space › #channel" (loud), then
+            // the message preview, then the time. The mention type is conveyed
+            // by the leading icon, so no redundant "X mentioned you" title.
+            <View style={styles.body}>
+              <Text style={styles.locationLine} numberOfLines={1}>
+                {quorumLocation(item).space}
+                <Text style={styles.locationChannel}>
+                  {'  '}
+                  {quorumLocation(item).channel}
+                </Text>
               </Text>
-              {item.source === 'farcaster' && (
-                <View style={styles.sourceTag}>
-                  <Text style={styles.sourceTagLabel}>Farcaster</Text>
-                </View>
+              {!!item.raw?.quorum?.preview?.text && (
+                <Text style={styles.quorumMessage} numberOfLines={QUORUM_PREVIEW_LINES}>
+                  {item.raw.quorum.preview.text}
+                </Text>
               )}
-              {item.source === 'quorum' && (
-                <View style={styles.sourceTagSpace}>
-                  <Text style={styles.sourceTagSpaceLabel} numberOfLines={1}>
-                    {item.raw?.quorum?.spaceName || 'Space'}
-                  </Text>
-                </View>
-              )}
+              <Text style={styles.time}>{formatTime(item.timestamp)}</Text>
             </View>
-            {!!item.body && (
-              <Text style={styles.subtitle} numberOfLines={2}>{item.body}</Text>
-            )}
-            <Text style={styles.time}>{formatTime(item.timestamp)}</Text>
-          </View>
+          ) : (
+            <View style={styles.body}>
+              <View style={styles.titleRow}>
+                <Text style={styles.title} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                {item.source === 'farcaster' && (
+                  <View style={styles.sourceTag}>
+                    <Text style={styles.sourceTagLabel}>Farcaster</Text>
+                  </View>
+                )}
+              </View>
+              {!!item.body && (
+                <Text style={styles.subtitle} numberOfLines={2}>{item.body}</Text>
+              )}
+              <Text style={styles.time}>{formatTime(item.timestamp)}</Text>
+            </View>
+          )}
           {showTrash && (
             <TouchableOpacity
               onPress={() => handleDelete(item)}
@@ -230,10 +259,11 @@ export default function NotificationsScreen() {
     return out;
   }, [quorumItems, farcasterFeedItems]);
 
-  // Secondary "Mark all read" — clears the Quorum inbox log and marks the tab
-  // seen (Level 1). Per the two-level model this is the explicit reset path;
-  // per-channel bubbles still clear on channel open (Level 2, Phase 3).
-  const handleMarkAllRead = useCallback(() => {
+  // Secondary "Clear all" — empties the inbox (deletes the Quorum log + the chat
+  // log) and marks the tab seen. Named "Clear all" (not "Mark all read") because
+  // it removes the rows, not just their unread state. The list otherwise
+  // persists as history; per-channel bubbles clear on channel open (Level 2).
+  const handleClearAll = useCallback(() => {
     clearMentionReplyLog();
     clearNotificationLog();
     markNotificationsSeen();
@@ -278,9 +308,9 @@ export default function NotificationsScreen() {
       )}
       {items.length > 0 && (
         <View style={styles.clearRow}>
-          <TouchableOpacity onPress={handleMarkAllRead} hitSlop={8}>
+          <TouchableOpacity onPress={handleClearAll} hitSlop={8}>
             <Text style={{ color: theme.colors.primary, fontSize: Skin.font(13), fontWeight: '600' }}>
-              Mark all read
+              Clear all
             </Text>
           </TouchableOpacity>
         </View>
@@ -422,17 +452,22 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
       color: '#8B5CF6',
     },
-    sourceTagSpace: {
-      paddingHorizontal: Skin.space(6),
-      paddingVertical: Skin.space(2),
-      borderRadius: Skin.radius(4),
-      backgroundColor: theme.colors.primary + '22',
-      maxWidth: 120,
-    },
-    sourceTagSpaceLabel: {
-      fontSize: Skin.font(10),
+    // Quorum location-first row: loud space name, muted channel, then message.
+    locationLine: {
+      fontSize: Skin.font(15),
       fontWeight: '700',
-      color: theme.colors.primary,
+      color: theme.colors.textMain,
+    },
+    locationChannel: {
+      fontSize: Skin.font(14),
+      fontWeight: '400',
+      color: theme.colors.textMuted,
+    },
+    quorumMessage: {
+      fontSize: Skin.font(14),
+      color: theme.colors.textMuted,
+      lineHeight: Skin.font(18),
+      marginTop: Skin.space(2),
     },
     sectionHeader: {
       paddingHorizontal: Skin.space(16),
