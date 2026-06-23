@@ -24,7 +24,7 @@
  */
 
 import React from 'react';
-import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { useTheme, type AppTheme } from '@/theme';
@@ -47,7 +47,7 @@ export interface ActionRowProps {
   leading?: React.ReactNode;
   /** Internal — set by ActionRowGroup to drop the divider on the last row. */
   isLast?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 /** Resolve the label/icon tint from the row's state. */
@@ -105,7 +105,7 @@ export function ActionRow(props: ActionRowProps) {
 
 export interface ActionRowGroupProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 /**
