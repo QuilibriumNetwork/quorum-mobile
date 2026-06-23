@@ -52,6 +52,7 @@ import type { ApexToken } from '@/services/apex/config';
 import { getErrorMessage } from '@/utils/error';
 import { getSpace, getSpaceKey } from '@/services/config/spaceStorage';
 import { useChannelMute } from '@/hooks/chat/useChannelMute';
+import { useSpaceNotificationTypes } from '@/hooks/chat/useSpaceNotificationTypes';
 // NativeCryptoProvider and getApiConfig imported dynamically in handlePublishToDirectory
 // to avoid module-level import failures on some devices
 import { pickEmoji, pickSticker } from '@/services/media/customAssets';
@@ -549,6 +550,8 @@ export default function SpaceSettingsModal({
   const { isSpaceMuted, mutedChannels, toggleSpaceMute, toggleChannelMute } =
     useChannelMute(spaceId);
   const spaceNotificationsOn = !isSpaceMuted();
+  // Per-space choice of WHICH mention/reply types notify (synced via UserConfig).
+  const { isEnabled: isTypeEnabled, toggleType } = useSpaceNotificationTypes(spaceId);
   const handleToggleSpaceNotifications = useCallback(() => {
     toggleSpaceMute();
   }, [toggleSpaceMute]);
@@ -1579,6 +1582,45 @@ export default function SpaceSettingsModal({
           trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
           thumbColor={'#ffffff'}
         />
+      </View>
+
+      {/* Which notification TYPES fire in this space. Independent of the on/off
+          toggle above (space-off still overrides at notify time); these pick
+          what counts as notifiable when the space is on. Synced via UserConfig,
+          matching desktop's @you / @everyone / @roles / Replies multiselect. */}
+      <View style={{ marginTop: Skin.space(8), opacity: spaceNotificationsOn ? 1 : 0.5 }}>
+        <Text style={[styles.sectionDescription, { marginBottom: Skin.space(4) }]}>
+          Notify me about
+        </Text>
+        {([
+          { type: 'mention-you' as const, label: 'Mentions of me', hint: 'When someone @mentions you directly' },
+          { type: 'mention-roles' as const, label: 'Mentions of my roles', hint: 'When someone @mentions a role you have' },
+          { type: 'mention-everyone' as const, label: '@everyone', hint: 'When someone notifies the whole space' },
+          { type: 'reply' as const, label: 'Replies to me', hint: 'When someone replies to your messages' },
+        ]).map(({ type, label, hint }) => (
+          <View
+            key={type}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingVertical: Skin.space(6),
+            }}
+          >
+            <View style={{ flex: 1, paddingRight: Skin.space(12) }}>
+              <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(14) }}>{label}</Text>
+              <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12), marginTop: Skin.space(1) }}>
+                {hint}
+              </Text>
+            </View>
+            <Switch
+              value={isTypeEnabled(type)}
+              onValueChange={() => toggleType(type)}
+              trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+              thumbColor={'#ffffff'}
+            />
+          </View>
+        ))}
       </View>
 
       {/* Per-channel mute. Listed under the space toggle so users can

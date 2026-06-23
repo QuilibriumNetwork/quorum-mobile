@@ -677,6 +677,76 @@ export async function setSpaceMuted(
   }
 }
 
+// --- Per-space notification TYPE settings (synced via UserConfig) ---
+//
+// Which mention/reply types notify the user, per space. Lives in
+// `UserConfig.notificationSettings[spaceId].enabledNotificationTypes` — the same
+// field desktop uses (SpaceNotificationTypeId[]), so it syncs cross-device via
+// the encrypted config blob. Accessed via `as any` because the pinned shared
+// `NotificationSettings` type (in user.ts) doesn't declare
+// `enabledNotificationTypes` — the richer `SpaceNotificationSettings` shape rides
+// the untyped JSON blob correctly. Shares the per-space object with isMuted.
+// TODO: drop the `as any` once the shared type is published + pinned.
+
+export type SpaceNotificationTypeId =
+  | 'mention-you'
+  | 'mention-everyone'
+  | 'mention-roles'
+  | 'reply';
+
+/** All four types enabled — the desktop default when a space has no saved settings. */
+export const DEFAULT_NOTIFICATION_TYPES: SpaceNotificationTypeId[] = [
+  'mention-you',
+  'mention-everyone',
+  'mention-roles',
+  'reply',
+];
+
+/**
+ * Enabled notification types for a space. Returns the all-enabled default when
+ * the space has no saved settings (matches desktop's getDefaultNotificationSettings).
+ */
+export function getLocalNotificationTypes(
+  address: string,
+  spaceId: string
+): SpaceNotificationTypeId[] {
+  const config = getLocalUserConfig(address);
+  const settings = config?.notificationSettings?.[spaceId] as
+    | { enabledNotificationTypes?: SpaceNotificationTypeId[] }
+    | undefined;
+  return settings?.enabledNotificationTypes ?? DEFAULT_NOTIFICATION_TYPES;
+}
+
+/** Persist the enabled notification types for a space locally and sync outbound. */
+export async function setNotificationTypes(
+  address: string,
+  spaceId: string,
+  enabledNotificationTypes: SpaceNotificationTypeId[]
+): Promise<void> {
+  const current = getLocalUserConfig(address) ?? getDefaultUserConfig(address);
+  const prevSettings = current.notificationSettings ?? {};
+  const updated: UserConfig = {
+    ...current,
+    notificationSettings: {
+      ...prevSettings,
+      // Preserve isMuted + spaceId; add/overwrite enabledNotificationTypes.
+      [spaceId]: {
+        ...(prevSettings[spaceId] ?? {}),
+        spaceId,
+        enabledNotificationTypes,
+      } as any,
+    },
+  };
+  saveLocalUserConfig(updated);
+  try {
+    if (updated.allowSync) {
+      await saveConfig(updated);
+    }
+  } catch {
+    // Best-effort sync — the change is already saved locally.
+  }
+}
+
 // --- Personal "Block" (viewer-side hide, synced via UserConfig) ---
 //
 // Blocking a user hides all of their messages from YOUR own rendered stream,

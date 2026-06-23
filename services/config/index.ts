@@ -26,6 +26,11 @@ export {
   setMutedChannels,
   getLocalSpaceMuted,
   setSpaceMuted,
+  // Per-space notification TYPE settings (config-backed, syncs across devices)
+  getLocalNotificationTypes,
+  setNotificationTypes,
+  DEFAULT_NOTIFICATION_TYPES,
+  type SpaceNotificationTypeId,
   // Personal block (viewer-side hide, config-backed, syncs across devices)
   getLocalBlockedUsers,
   setBlockedUsers,

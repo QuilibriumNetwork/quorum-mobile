@@ -27,6 +27,7 @@ import {
   type MentionReplyKind,
 } from './mentionReplyLog';
 import { getActiveChannelKey } from '@/hooks/chat/useReplyTracking';
+import { getLocalNotificationTypes } from '@/services/config';
 import { messagePreview, messageSenderName } from '@/utils/messagePreview';
 
 export interface LogMentionOrReplyCtx {
@@ -74,8 +75,14 @@ function classify(
   const sender = senderIdOf(message);
   if (sender === me) return null; // never self-notify
 
+  // The user's per-space choice of which types notify them (you/everyone/
+  // roles/reply), synced via UserConfig. Defaults to all enabled. A type the
+  // user disabled produces no inbox entry and no badge.
+  const enabled = getLocalNotificationTypes(me, ctx.spaceId);
+
   // Reply to one of my messages.
   if (
+    enabled.includes('reply') &&
     message.replyMetadata?.parentAuthor &&
     message.replyMetadata.parentAuthor === me
   ) {
@@ -84,6 +91,7 @@ function classify(
 
   const userRoles = getUserRoles(me, ctx.space).map((r) => r.roleId);
   const check = (type: 'mention-you' | 'mention-everyone' | 'mention-roles') =>
+    enabled.includes(type) &&
     isMentionedWithSettings(message, {
       userAddress: me,
       enabledTypes: [type],
