@@ -4,8 +4,7 @@ import { SpaceIcon } from '@/components/ui/SpaceIcon';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useSpaces } from '@/hooks/chat/useSpaces';
 import { isValidAvatarUri } from '@/utils/validation';
-import { useReplyTracking } from '@/hooks/chat/useReplyTracking';
-import { useMentionTracking } from '@/hooks/chat/useMentionTracking';
+import { useChannelMentionUnread } from '@/services/notifications/mentionReplyLog';
 import { useSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { useMutedSpaceIds } from '@/hooks/chat/useChannelMute';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
@@ -103,8 +102,7 @@ export default function SpacesIndex() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { data: spaces, isLoading, refetch } = useSpaces();
-  const { getReplyCount } = useReplyTracking();
-  const { getMentionCount } = useMentionTracking();
+  const { getUnreadCount } = useChannelMentionUnread();
   const { getActivity } = useSpaceActivity();
 
   const [search, setSearch] = useState('');
@@ -133,8 +131,7 @@ export default function SpacesIndex() {
       for (const group of space.groups ?? []) {
         for (const ch of group.channels ?? []) {
           channelCount++;
-          unread += (getReplyCount(space.spaceId, ch.channelId) ?? 0)
-            + (getMentionCount(space.spaceId, ch.channelId) ?? 0);
+          unread += getUnreadCount(space.spaceId, ch.channelId);
         }
       }
       const activity = getActivity(space.spaceId);
@@ -154,7 +151,7 @@ export default function SpacesIndex() {
     const filtered = q ? rows.filter(r => r.name.toLowerCase().includes(q)) : rows;
     filtered.sort((a, b) => b.timestamp - a.timestamp);
     return filtered;
-  }, [spaces, search, getReplyCount, getMentionCount, getActivity, mutedSpaceIds]);
+  }, [spaces, search, getUnreadCount, getActivity, mutedSpaceIds]);
 
   const handlePress = useCallback((spaceId: string) => {
     haptics.light();

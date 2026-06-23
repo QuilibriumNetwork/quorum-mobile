@@ -7,8 +7,8 @@ import { useAuth } from '@/context/AuthContext';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { useChannels } from '@/hooks/chat/useChannels';
 import { useHasPermission, useRoles } from '@/hooks/chat/useRoleManagement';
-import { useReplyTracking, setActiveChannel, clearActiveChannel } from '@/hooks/chat/useReplyTracking';
-import { useMentionTracking } from '@/hooks/chat/useMentionTracking';
+import { setActiveChannel, clearActiveChannel } from '@/hooks/chat/useReplyTracking';
+import { markChannelMentionsRead } from '@/services/notifications/mentionReplyLog';
 import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
 import { useBlockUser } from '@/hooks/chat/useBlockUser';
 import { useSpace, useSpaceMembers } from '@/hooks/chat/useSpaces';
@@ -134,20 +134,16 @@ export default function SpaceChannelChat() {
 
   const draftsRef = useRef<Map<string, string>>(new Map());
 
-  // Reply-count badge: clear whenever this channel becomes the active
-  // route, and mark it as the active channel so further replies that
-  // land while we're here don't re-bump the badge. Both halves are
-  // necessary — without the active marker the WebSocket increment
-  // would race the clear and leave the count stuck at 1.
-  const { clearReplyCount } = useReplyTracking();
-  const { clearMentionCount } = useMentionTracking();
+  // Mentions/replies bubble (Level 2 of the two-level read-state model):
+  // mark this channel read on open so its per-space bubble clears, and mark it
+  // the active channel so mentions that LAND while we're viewing are also kept
+  // read (the WS writer re-marks the active channel — see logMentionOrReply).
   React.useEffect(() => {
     if (!spaceId || !channelId) return;
-    clearReplyCount(spaceId, channelId);
-    clearMentionCount(spaceId, channelId);
+    markChannelMentionsRead(spaceId, channelId);
     setActiveChannel(spaceId, channelId);
     return () => clearActiveChannel(spaceId, channelId);
-  }, [spaceId, channelId, clearReplyCount, clearMentionCount]);
+  }, [spaceId, channelId]);
 
   // Self-heal: kick off a hub-log catch-up whenever the user opens this
   // channel. The on-connect orchestrator only sees spaces that existed

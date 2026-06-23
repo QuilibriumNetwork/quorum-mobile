@@ -3,8 +3,7 @@ import { ChannelStatusGlyphs } from '@/components/Chat/ChannelStatusGlyphs';
 import { SpaceBannerHeader } from '@/components/SpaceBannerHeader';
 import { SpaceDescriptionSheet } from '@/components/SpaceDescriptionSheet';
 import { useChannels } from '@/hooks/chat/useChannels';
-import { useReplyTracking } from '@/hooks/chat/useReplyTracking';
-import { useMentionTracking } from '@/hooks/chat/useMentionTracking';
+import { useChannelMentionUnread } from '@/services/notifications/mentionReplyLog';
 import { useChannelMute } from '@/hooks/chat/useChannelMute';
 import { useSpace } from '@/hooks/chat/useSpaces';
 import { useTheme, type AppTheme } from '@/theme';
@@ -43,8 +42,9 @@ export default function SpaceChannelsScreen() {
   useChannels(spaceId, { enabled: !!spaceId });
   const { mutedChannels, isSpaceMuted } = useChannelMute(spaceId);
   const spaceMuted = isSpaceMuted();
-  const { getReplyCount } = useReplyTracking();
-  const { getMentionCount } = useMentionTracking();
+  // Channel mentions/replies bubble (Level 2) derived from the read-state log —
+  // the single source of truth that replaced the old integer counters.
+  const { getUnreadCount } = useChannelMentionUnread();
 
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [inviteVisible, setInviteVisible] = useState(false);
@@ -104,9 +104,7 @@ export default function SpaceChannelsScreen() {
           <View key={`group-${groupIndex}`} style={styles.groupSection}>
             <Text style={styles.groupTitle} numberOfLines={1}>{group.groupName.toUpperCase()}</Text>
             {group.channels.map((channel) => {
-              const replies = getReplyCount(spaceId, channel.channelId) ?? 0;
-              const mentions = getMentionCount(spaceId, channel.channelId) ?? 0;
-              const badgeCount = mentions + replies;
+              const badgeCount = getUnreadCount(spaceId, channel.channelId);
               // Per-row muted treatment fires only for an INDIVIDUALLY muted
               // channel — a whole-space mute is shown on the space header/icon
               // instead, so the channel list doesn't read as all-broken.

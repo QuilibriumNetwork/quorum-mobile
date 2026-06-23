@@ -24,6 +24,7 @@ import {
   type NotificationLogEntry,
 } from '@/services/notifications/notificationLog';
 import {
+  getQuorumTabUnreadCount,
   useMentionReplyLog,
   type MentionReplyEntry,
 } from '@/services/notifications/mentionReplyLog';
@@ -383,20 +384,26 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
   }, [quorumItems, farcasterFeedItems]);
 
   const unreadCount = useMemo(() => {
-    // `items` is already filtered to exclude muted DMs (see above), so the
-    // badge count derived here inherits that exclusion — no separate mute check.
-    // Prefer the server's per-notification isUnread for Farcaster items
-    // (it survives mark-all-read calls from the web client), fall back
-    // to lastSeen for chat items where we don't have a server flag.
+    // Tab badge (Level 1). Three sources, each with its own "seen" model:
+    //  - Quorum: entries newer than the last tab-open (getQuorumTabUnreadCount).
+    //    Decoupled from per-channel read state so opening the tab clears the
+    //    badge without marking channel mentions read.
+    //  - Farcaster: prefer the server isUnread flag (survives web mark-all-read),
+    //    else fall back to the chat-log lastSeen.
+    //  - chat (background pings): lastSeen.
+    // muted-DM exclusion is inherited from the already-filtered section arrays.
     const lastSeen = getLastSeenTimestamp();
-    return items.reduce((n, e) => {
+    const farcasterAndChat = farcasterFeedItems.reduce((n, e) => {
       if (e.source === 'farcaster') {
         const isUnread = e.raw?.farcaster?.isUnread;
         if (typeof isUnread === 'boolean') return isUnread ? n + 1 : n;
       }
       return e.timestamp > lastSeen ? n + 1 : n;
     }, 0);
-  }, [items]);
+    return getQuorumTabUnreadCount() + farcasterAndChat;
+    // quorumItems in deps so the count recomputes when the log/seen-state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [farcasterFeedItems, quorumItems]);
 
   return {
     items,

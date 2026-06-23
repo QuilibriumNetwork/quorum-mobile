@@ -13,9 +13,7 @@ import {
   canManageReadOnlyChannel,
   createChannelPermissionChecker,
   createRNWebSocketClient,
-  getUserRoles,
   int64ToBytes,
-  isMentionedWithSettings,
   logger,
   queryKeys,
 } from '@quilibrium/quorum-shared';
@@ -33,8 +31,6 @@ import React, {
 import { Alert, AppState, AppStateStatus, InteractionManager } from 'react-native';
 
 import type { Conversation } from '@/hooks/chat/useConversations';
-import { incrementReplyCount } from '@/hooks/chat/useReplyTracking';
-import { incrementMentionCount } from '@/hooks/chat/useMentionTracking';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { logMentionOrReply } from '@/services/notifications/logMentionOrReply';
 import { shouldNotifyForContext } from '@/services/notifications/notificationPrefs';
@@ -2274,34 +2270,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // too, not just push notifications — same gate as the push path.
             const notifyForBadge = shouldNotifyForContext({ spaceId, channelId });
 
-            // Track replies to current user
-            if (
-              notifyForBadge &&
-              spaceMessage.replyMetadata?.parentAuthor &&
-              spaceMessage.replyMetadata.parentAuthor === fullUserAddrRef.current &&
-              ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
-              fullUserAddrRef.current
-            ) {
-              incrementReplyCount(fullUserAddrRef.current, `${spaceId}:${channelId}`);
-            }
-
-            // Track @mentions of the current user (feeds the same channel-row
-            // badge as replies — desktop sums them into one count). Skip own
-            // messages. @everyone is gated on the sender's mention:everyone
-            // permission inside isMentionedWithSettings.
-            if (
-              notifyForBadge &&
-              fullUserAddrRef.current &&
-              ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
-              isMentionedWithSettings(spaceMessage, {
-                userAddress: fullUserAddrRef.current,
-                enabledTypes: ['mention-you', 'mention-everyone', 'mention-roles'],
-                userRoles: getUserRoles(fullUserAddrRef.current, space ?? undefined).map((r) => r.roleId),
-                space: space ?? undefined,
-              })
-            ) {
-              incrementMentionCount(fullUserAddrRef.current, `${spaceId}:${channelId}`);
-            }
+            // Mentions/replies are detected + persisted by logMentionOrReply
+            // below (which also drives the channel bubble via the read-state
+            // log). The old integer counters were retired in favor of that
+            // single source of truth.
 
             // Track last space activity for inbox sorting + preview
             {
@@ -3586,32 +3558,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // Muted channel/space → no in-app badge (same gate as push).
           const notifyForBadge = shouldNotifyForContext({ spaceId, channelId });
 
-          // Track replies
-          if (
-            notifyForBadge &&
-            spaceMessage.replyMetadata?.parentAuthor &&
-            spaceMessage.replyMetadata.parentAuthor === fullUserAddrRef.current &&
-            ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
-            fullUserAddrRef.current
-          ) {
-            incrementReplyCount(fullUserAddrRef.current, `${spaceId}:${channelId}`);
-          }
-
-          // Track @mentions of the current user (same channel-row badge as
-          // replies — see the live path for rationale).
-          if (
-            notifyForBadge &&
-            fullUserAddrRef.current &&
-            ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
-            isMentionedWithSettings(spaceMessage, {
-              userAddress: fullUserAddrRef.current,
-              enabledTypes: ['mention-you', 'mention-everyone', 'mention-roles'],
-              userRoles: getUserRoles(fullUserAddrRef.current, space ?? undefined).map((r) => r.roleId),
-              space: space ?? undefined,
-            })
-          ) {
-            incrementMentionCount(fullUserAddrRef.current, `${spaceId}:${channelId}`);
-          }
+          // Mentions/replies persisted by logMentionOrReply below (catch-up
+          // path) — same single source of truth as the live path.
 
           // Track last space activity for inbox sorting + preview
           {

@@ -22,9 +22,11 @@ import {
 } from '@quilibrium/quorum-shared';
 import {
   appendMentionReplyLog,
+  markChannelMentionsRead,
   type MentionReplyEntry,
   type MentionReplyKind,
 } from './mentionReplyLog';
+import { getActiveChannelKey } from '@/hooks/chat/useReplyTracking';
 import { messagePreview, messageSenderName } from '@/utils/messagePreview';
 
 export interface LogMentionOrReplyCtx {
@@ -129,4 +131,12 @@ export async function logMentionOrReply(
     createdAt: message.createdDate || Date.now(),
   };
   appendMentionReplyLog(entry);
+
+  // If the user is already viewing this channel, keep the entry read (Level 2):
+  // it still appears in the inbox, but it must not bump the channel bubble or
+  // the unread emphasis. Mirrors the old active-channel suppression on the
+  // integer counters.
+  if (getActiveChannelKey() === `${ctx.spaceId}:${ctx.channelId}`) {
+    markChannelMentionsRead(ctx.spaceId, ctx.channelId, entry.createdAt);
+  }
 }

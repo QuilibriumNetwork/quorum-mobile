@@ -105,9 +105,8 @@ export { useMessageSearch } from './useMessageSearch';
 // Personal block (viewer-side hide of a user's messages in a space)
 export { useBlockUser } from './useBlockUser';
 
-// Reply tracking
-export { useReplyTracking } from './useReplyTracking';
-export { useMentionTracking } from './useMentionTracking';
+// Active-channel marker (reply/mention counters retired — see useReplyTracking)
+export { setActiveChannel, clearActiveChannel, getActiveChannelKey } from './useReplyTracking';
 
 // Encryption hooks
 export {

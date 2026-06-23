@@ -27,7 +27,7 @@ import {
   markNotificationsSeen,
   removeNotificationLogEntry,
 } from '@/services/notifications/notificationLog';
-import { clearMentionReplyLog } from '@/services/notifications/mentionReplyLog';
+import { clearMentionReplyLog, markQuorumTabSeen } from '@/services/notifications/mentionReplyLog';
 import { markAllFarcasterNotificationsRead } from '@/services/farcasterClient';
 import {
   useUnifiedNotifications,
@@ -89,6 +89,10 @@ export default function NotificationsScreen() {
   // side doesn't block our local clear.
   useEffect(() => {
     markNotificationsSeen();
+    // Level 1 — mark the Quorum section seen so the tab badge clears on open.
+    // This does NOT mark per-channel mentions read (Level 2 clears on channel
+    // open), per the two-level read-state model.
+    markQuorumTabSeen();
     if (farcasterAuthToken) {
       markAllFarcasterNotificationsRead(farcasterAuthToken).catch(() => {
         /* ignore — local seen state is still cleared */
