@@ -1574,8 +1574,9 @@ export default function SpaceSettingsModal({
       {/* Master space on/off — its own card row. */}
       <ActionRowGroup style={styles.notifGroup}>
         <ActionRow
+          icon="bell"
           label="Space notifications"
-          sublabel="Notify me when messages are posted in this space"
+          sublabel="Notify me in this space"
           trailing={
             <Switch
               value={spaceNotificationsOn}
@@ -1596,13 +1597,14 @@ export default function SpaceSettingsModal({
       <Text style={styles.notifGroupTitle}>Notify me about</Text>
       <ActionRowGroup style={[styles.notifGroup, { opacity: spaceNotificationsOn ? 1 : 0.5 }]}>
         {([
-          { type: 'mention-you' as const, label: 'Mentions of me', hint: 'When someone @mentions you directly' },
-          { type: 'mention-everyone' as const, label: '@everyone', hint: 'When someone notifies the whole space' },
-          { type: 'mention-roles' as const, label: 'Mentions of my roles', hint: 'When someone @mentions a role you have' },
-          { type: 'reply' as const, label: 'Replies to me', hint: 'When someone replies to your messages' },
-        ]).map(({ type, label, hint }) => (
+          { type: 'mention-you' as const, icon: 'at', label: 'Mentions of me', hint: 'You’re @mentioned directly' },
+          { type: 'mention-everyone' as const, icon: 'bullhorn', label: '@everyone', hint: 'The whole space is notified' },
+          { type: 'mention-roles' as const, icon: 'shield', label: 'Mentions of my roles', hint: 'A role you have is @mentioned' },
+          { type: 'reply' as const, icon: 'arrowshape.turn.up.left', label: 'Replies to me', hint: 'Someone replies to you' },
+        ]).map(({ type, icon, label, hint }) => (
           <ActionRow
             key={type}
+            icon={icon}
             label={label}
             sublabel={hint}
             trailing={
@@ -1636,7 +1638,18 @@ export default function SpaceSettingsModal({
                 return (
                   <ActionRow
                     key={channel.channelId}
-                    label={`# ${channel.channelName}`}
+                    // Channel's own icon + color (default hashtag/outline), matching
+                    // the channel list. `leading` (not `icon`) so the channel's
+                    // custom color is preserved instead of the row tint.
+                    leading={
+                      <IconSymbol
+                        name={(channel.icon || 'hashtag') as IconSymbolName}
+                        size={20}
+                        color={resolveChannelIconColor(channel.iconColor, theme.colors.textMuted)}
+                        variant={channel.iconVariant ?? 'outline'}
+                      />
+                    }
+                    label={channel.channelName}
                     trailing={
                       <Switch
                         value={channelOn}
@@ -2711,16 +2724,18 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       color: theme.colors.textStrong,
       marginBottom: Skin.space(8),
     },
-    // Bold subheadings above the grouped-card notification settings ("Notify me
-    // about", "Channels") — louder than the old muted sectionDescription, one
-    // notch below the 17px sectionTitle so the hierarchy reads clearly.
+    // Sub-group labels above the grouped cards ("Notify me about", "Channels").
+    // Intentionally LIGHTER than the 17px bold "Notifications" section title —
+    // the muted uppercase iOS-settings convention — so they read as subordinate
+    // to the top-level space toggle rather than equal-weight siblings.
     notifGroupTitle: {
-      fontSize: Skin.font(15),
-      fontFamily: theme.fonts.bold.fontFamily,
-      fontWeight: theme.fonts.bold.fontWeight,
-      color: theme.colors.textMain,
+      ...theme.textStyles.footnote,
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
       marginTop: Skin.space(16),
       marginBottom: Skin.space(8),
+      marginHorizontal: Skin.space(8),
     },
     // Spacing between consecutive ActionRowGroup cards in the notifications area.
     notifGroup: {
