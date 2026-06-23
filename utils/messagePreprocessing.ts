@@ -34,6 +34,9 @@ export interface PreprocessOptions {
   members?: SpaceMember[];
   roles?: Role[];
   channels?: Channel[];
+  /** Whether this message's `@everyone` was authorized (mentions.everyone set AND
+   *  sender holds mention:everyone). When false, `@everyone` stays plain text. */
+  everyoneAuthorized?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,23 +88,31 @@ function isInProtectedRegion(index: number, regions: Region[]): boolean {
  * Also tolerates the legacy bare `@address` format already in storage from
  * older mobile clients (matched against the member map by address/name).
  */
-export function processMentions(text: string, members: SpaceMember[] = []): string {
+export function processMentions(
+  text: string,
+  members: SpaceMember[] = [],
+  everyoneAuthorized = false,
+): string {
   let processed = text;
 
-  // @everyone first (cheap, no map needed).
-  const everyoneRegex = /@everyone\b/gi;
-  const everyoneMatches = Array.from(processed.matchAll(everyoneRegex));
-  const validEveryone = everyoneMatches.filter(
-    (match) =>
-      !isInProtectedRegion(match.index!, getProtectedRegions(processed)) &&
-      hasWordBoundaries(processed, match)
-  );
-  for (let i = validEveryone.length - 1; i >= 0; i--) {
-    const match = validEveryone[i];
-    processed =
-      processed.substring(0, match.index) +
-      '<<<MENTION_EVERYONE>>>' +
-      processed.substring(match.index! + match[0].length);
+  // @everyone → token ONLY when the sender was authorized (mentions.everyone set
+  // AND sender holds mention:everyone — decided by the caller). An unauthorized
+  // or spoofed @everyone stays plain text, matching the notification trust rule.
+  if (everyoneAuthorized) {
+    const everyoneRegex = /@everyone\b/gi;
+    const everyoneMatches = Array.from(processed.matchAll(everyoneRegex));
+    const validEveryone = everyoneMatches.filter(
+      (match) =>
+        !isInProtectedRegion(match.index!, getProtectedRegions(processed)) &&
+        hasWordBoundaries(processed, match)
+    );
+    for (let i = validEveryone.length - 1; i >= 0; i--) {
+      const match = validEveryone[i];
+      processed =
+        processed.substring(0, match.index) +
+        '<<<MENTION_EVERYONE>>>' +
+        processed.substring(match.index! + match[0].length);
+    }
   }
 
   // Canonical user mentions: @<address>
@@ -310,7 +321,7 @@ export function prepareMessageContent(text: string, opts: PreprocessOptions = {}
   // per line, so a stray `\r` left on a line breaks block detection (only the
   // last line of a blockquote/list survives). Collapse everything to `\n`.
   let processed = text.replace(/\r\n?/g, '\n');
-  processed = processMentions(processed, opts.members);
+  processed = processMentions(processed, opts.members, opts.everyoneAuthorized);
   processed = processRoleMentions(processed, opts.roles);
   processed = processChannelMentions(processed, opts.channels);
   processed = processURLs(processed);

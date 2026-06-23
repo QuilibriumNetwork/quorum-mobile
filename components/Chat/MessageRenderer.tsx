@@ -29,6 +29,9 @@ interface MessageRendererProps {
   channels?: Channel[];
   /** Space roles, for resolving @role mention pills. */
   roles?: Role[];
+  /** Whether this message's @everyone was authorized (mentions.everyone set AND
+   *  sender holds mention:everyone). When false, @everyone renders as plain text. */
+  everyoneAuthorized?: boolean;
   currentUserId?: string;
   style?: TextStyle;
   theme?: AppTheme;
@@ -45,6 +48,7 @@ function MessageRendererBase({
   members = [],
   channels = [],
   roles = [],
+  everyoneAuthorized = false,
   currentUserId,
   style,
   theme,
@@ -60,8 +64,8 @@ function MessageRendererBase({
   // mangle an `@<address>` into emphasis/code.
   const prepared = useMemo(() => {
     if (!isMarkdown) return '';
-    return prepareMessageContent(text, { members, roles, channels });
-  }, [isMarkdown, text, members, roles, channels]);
+    return prepareMessageContent(text, { members, roles, channels, everyoneAuthorized });
+  }, [isMarkdown, text, members, roles, channels, everyoneAuthorized]);
 
   if (!isMarkdown) {
     return (
@@ -71,6 +75,7 @@ function MessageRendererBase({
         customEmojis={customEmojis}
         members={members}
         roles={roles}
+        everyoneAuthorized={everyoneAuthorized}
         channels={channels}
         currentUserId={currentUserId}
         style={style}
@@ -92,6 +97,7 @@ function MessageRendererBase({
         customEmojis={customEmojis}
         members={members}
         roles={roles}
+        everyoneAuthorized={everyoneAuthorized}
         channels={channels}
         currentUserId={currentUserId}
         style={style}

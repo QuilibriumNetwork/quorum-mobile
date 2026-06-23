@@ -26,6 +26,10 @@ interface MentionableTextProps {
   /** Space roles, so a plain (non-markdown) message resolves `@roleTag` to a
    *  styled mention pill instead of leaving it as raw text. */
   roles?: Role[];
+  /** Whether this message's `@everyone` was authorized (mentions.everyone set AND
+   *  the sender holds mention:everyone). When false, `@everyone` renders as plain
+   *  text — same trust rule the notification path enforces. */
+  everyoneAuthorized?: boolean;
   channels?: Channel[];
   currentUserId?: string;
   style?: TextStyle;
@@ -78,6 +82,7 @@ function MentionableTextBase({
   customEmojis,
   members = [],
   roles = [],
+  everyoneAuthorized = false,
   channels = [],
   currentUserId,
   style,
@@ -184,13 +189,19 @@ function MentionableTextBase({
     let match: RegExpExecArray | null;
     while ((match = MENTION_REGEX.exec(text)) !== null) {
       if (match[2] === 'everyone') {
-        matches.push({
-          type: 'mention',
-          start: match.index,
-          end: match.index + match[0].length,
-          content: match[0],
-          data: { userId: 'everyone', displayName: 'everyone', isSelf: false },
-        });
+        // Only style @everyone when the sender was actually authorized to use it
+        // (mentions.everyone set AND sender holds mention:everyone — computed by
+        // the caller). An unauthorized/spoofed @everyone renders as plain text,
+        // matching how the notification path already refuses to honor it.
+        if (everyoneAuthorized) {
+          matches.push({
+            type: 'mention',
+            start: match.index,
+            end: match.index + match[0].length,
+            content: match[0],
+            data: { userId: 'everyone', displayName: 'everyone', isSelf: false },
+          });
+        }
         continue;
       }
       const name = (match[1] || match[3] || '').toLowerCase();
@@ -401,7 +412,7 @@ function MentionableTextBase({
     }
 
     return result;
-  }, [text, emojiMap, memberMap, roleMap, sortedChannels, currentUserId]);
+  }, [text, emojiMap, memberMap, roleMap, everyoneAuthorized, sortedChannels, currentUserId]);
 
   // Check if we have any special content
   const hasSpecialContent = parts.some(
