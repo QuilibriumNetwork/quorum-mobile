@@ -16,6 +16,7 @@ import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
+import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
@@ -93,6 +94,9 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { openMiniapp } = useMiniappOverlay();
   const [refreshing, setRefreshing] = useState(false);
+  // Source filter. Pills only render when there's a Farcaster feed to filter
+  // against (see below), so single-source users never see a pointless filter.
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'quorum' | 'farcaster'>('all');
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   // Mark seen on mount and again whenever the feed grows while the user
@@ -246,18 +250,27 @@ export default function NotificationsScreen() {
   const ota = useOtaUpdate();
   const showOta = ota.isUpdateAvailable || ota.isUpdatePending;
 
+  // Pills only earn their space when there's actually a Farcaster feed to filter
+  // against — a user with no Farcaster (or no Farcaster items) sees a single
+  // Quorum list and no filter chrome.
+  const showFilterPills = farcasterFeedItems.length > 0 && quorumItems.length > 0;
+  // If the pills disappear (e.g. last Farcaster item ages out), don't leave the
+  // view stuck on a now-hidden filter.
+  const activeFilter = showFilterPills ? sourceFilter : 'all';
+
   // Two sections: Quorum mentions/replies, then Farcaster activity. Empty
-  // sections are dropped so we never render a lone header.
+  // sections are dropped so we never render a lone header. The source filter
+  // hides the non-selected section.
   const sections = useMemo(() => {
     const out: { key: string; title: string; data: UnifiedNotification[] }[] = [];
-    if (quorumItems.length) {
+    if (quorumItems.length && activeFilter !== 'farcaster') {
       out.push({ key: 'quorum', title: 'Mentions & replies', data: quorumItems });
     }
-    if (farcasterFeedItems.length) {
+    if (farcasterFeedItems.length && activeFilter !== 'quorum') {
       out.push({ key: 'farcaster', title: 'Farcaster', data: farcasterFeedItems });
     }
     return out;
-  }, [quorumItems, farcasterFeedItems]);
+  }, [quorumItems, farcasterFeedItems, activeFilter]);
 
   // Secondary "Clear all" — empties the inbox (deletes the Quorum log + the chat
   // log) and marks the tab seen. Named "Clear all" (not "Mark all read") because
@@ -293,6 +306,21 @@ export default function NotificationsScreen() {
           ) : null}
         </View>
       </View>
+      {showFilterPills && (
+        <View style={styles.filterRow}>
+          <SegmentedPills
+            items={[
+              { key: 'all', label: 'All' },
+              { key: 'quorum', label: 'Quorum' },
+              { key: 'farcaster', label: 'Farcaster' },
+            ]}
+            activeKey={activeFilter}
+            onChange={(k) => setSourceFilter(k as 'all' | 'quorum' | 'farcaster')}
+            itemRole="button"
+            scrollable={false}
+          />
+        </View>
+      )}
       {farcasterError && farcasterEnabled && (
         // Inline banner — visible whether or not chat notifications are
         // present. This is the only way the user can tell that their
@@ -514,6 +542,11 @@ const createStyles = (theme: AppTheme) =>
       justifyContent: 'flex-end',
       paddingHorizontal: Skin.space(16),
       paddingVertical: Skin.space(8),
+    },
+    filterRow: {
+      paddingHorizontal: Skin.space(16),
+      paddingTop: Skin.space(4),
+      paddingBottom: Skin.space(8),
     },
     errorText: {
       flex: 1,
