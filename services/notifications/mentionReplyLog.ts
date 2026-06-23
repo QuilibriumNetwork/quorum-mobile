@@ -19,7 +19,7 @@
  */
 
 import { createMMKV, type MMKV } from 'react-native-mmkv';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MessagePreview } from '@/utils/messagePreview';
 import { coerceMessagePreview } from '@/utils/messagePreview';
 
@@ -209,11 +209,23 @@ export function useChannelMentionUnread(): {
       listeners.delete(listener);
     };
   }, []);
-  const getUnreadCount = useCallback(
-    (spaceId: string, channelId: string) => getUnreadCountForChannel(spaceId, channelId),
+  // Parse the log + read-map ONCE per mutation and build a per-channel count
+  // map. Callers (spaces list iterates every channel of every space) then do an
+  // O(1) lookup instead of re-parsing the whole log per channel.
+  const counts = useMemo(() => {
+    const readMap = loadChannelReadMap();
+    const out: Record<string, number> = {};
+    for (const e of getMentionReplyLog()) {
+      const key = channelKey(e.spaceId, e.channelId);
+      if (e.createdAt > (readMap[key] ?? 0)) out[key] = (out[key] ?? 0) + 1;
+    }
+    return out;
     // version drives recomputation on every mutation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [version]
+  }, [version]);
+  const getUnreadCount = useCallback(
+    (spaceId: string, channelId: string) => counts[channelKey(spaceId, channelId)] ?? 0,
+    [counts]
   );
   return { getUnreadCount };
 }

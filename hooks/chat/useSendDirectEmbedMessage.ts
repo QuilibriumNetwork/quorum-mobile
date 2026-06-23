@@ -14,6 +14,7 @@ import { getDeviceKeyset } from '@/services/onboarding/secureStorage';
 import { deriveAddress } from '@/services/onboarding/keyService';
 import { queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope, type EmbedMessage } from '@quilibrium/quorum-shared';
 import type { Message } from '@quilibrium/quorum-shared';
+import type { MessagePreview } from '@/utils/messagePreview';
 
 export interface SendDirectEmbedMessageParams {
   conversationId: string;
@@ -301,9 +302,14 @@ export function useSendDirectEmbedMessage() {
 
       const conversation = await storage.getConversation(conversationId);
       if (conversation) {
-        // Use text if present, otherwise show image indicator
+        // Typed preview (icon + text, no emoji) so the sender's own DM row
+        // matches the receive-side preview. Caption text wins over the generic
+        // "Image" label, but the kind stays 'image' for the leading icon.
         const content = message.content as EmbedMessage & { text?: string };
-        const preview = content.text ? `📷 ${content.text}` : '📷 Image';
+        const preview: MessagePreview = {
+          kind: content.videoUrl ? 'video' : 'image',
+          text: content.text || (content.videoUrl ? 'Video' : 'Image'),
+        };
         await storage.saveConversation({
           ...conversation,
           timestamp: message.createdDate,

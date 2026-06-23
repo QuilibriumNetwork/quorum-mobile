@@ -235,6 +235,9 @@ export default function NotificationsScreen() {
     clearMentionReplyLog();
     clearNotificationLog();
     markNotificationsSeen();
+    // Advance the Level-1 watermark to now so mentions arriving right after the
+    // clear are compared against the clear time, not a stale tab-open time.
+    markQuorumTabSeen();
   }, []);
 
   return (

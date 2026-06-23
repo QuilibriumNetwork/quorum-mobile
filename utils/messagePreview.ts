@@ -151,9 +151,13 @@ export function coerceMessagePreview(value: unknown): MessagePreview {
   }
   if (typeof value === 'object') {
     const obj = value as Record<string, unknown>;
-    // Already-typed preview.
-    if (typeof obj.kind === 'string' && typeof obj.text === 'string') {
-      return obj as unknown as MessagePreview;
+    // Already-typed preview. `text` may be absent (JSON.stringify drops an
+    // undefined value), so accept a string `kind` alone and default the text.
+    if (typeof obj.kind === 'string') {
+      return {
+        kind: obj.kind as MessagePreviewKind,
+        text: typeof obj.text === 'string' ? obj.text : '',
+      };
     }
     // Legacy raw-content object — derive via the normal path.
     if ('type' in obj || 'text' in obj || 'videoUrl' in obj || 'reaction' in obj) {

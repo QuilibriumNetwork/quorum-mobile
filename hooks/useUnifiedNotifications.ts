@@ -356,14 +356,15 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
     return !(convId && mutedConversations.has(convId));
   };
 
-  // Section 1 — Quorum mentions/replies, newest-first.
+  // Section 1 — Quorum mentions/replies, newest-first. These carry no
+  // conversationId (they're space channel mentions, not DMs), so the muted-DM
+  // filter doesn't apply; channel/space mute is already enforced upstream at
+  // log-write time via shouldNotifyForContext.
   const quorumItems = useMemo(() => {
-    const mapped = quorumEntries.map(quorumToUnified).filter(notMutedDM);
+    const mapped = quorumEntries.map(quorumToUnified);
     mapped.sort((a, b) => b.timestamp - a.timestamp);
     return mapped;
-    // notMutedDM closes over mutedConversations.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quorumEntries, mutedConversations]);
+  }, [quorumEntries]);
 
   // Section 2 — Farcaster activity + background chat pings, newest-first.
   const farcasterFeedItems = useMemo(() => {
