@@ -36,6 +36,7 @@ import type { Conversation } from '@/hooks/chat/useConversations';
 import { incrementReplyCount } from '@/hooks/chat/useReplyTracking';
 import { incrementMentionCount } from '@/hooks/chat/useMentionTracking';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
+import { logMentionOrReply } from '@/services/notifications/logMentionOrReply';
 import { shouldNotifyForContext } from '@/services/notifications/notificationPrefs';
 import { messagePreview as getSpaceMessagePreview, messageSenderName } from '@/utils/messagePreview';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -2320,6 +2321,22 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               });
             }
 
+            // Persist mentions/replies into the notifications inbox log (the
+            // Quorum section of the Notifications tab). Same detection as the
+            // badge counters above; this just keeps the full row. Fire-and-forget
+            // so it never blocks message processing.
+            void logMentionOrReply(spaceMessage, {
+              spaceId,
+              channelId,
+              userAddress: fullUserAddrRef.current,
+              space: space ?? undefined,
+              channelName: space?.groups
+                ?.flatMap((g) => g.channels)
+                .find((c) => c.channelId === channelId)?.channelName,
+              notifyForBadge,
+              getSpaceMember: (sid, mid) => storage.getSpaceMember(sid, mid),
+            });
+
             // Update React Query cache. If there's no existing cache (the
             // query was unmounted and gc'd, or hasn't mounted yet), leave
             // it alone — the message is already on disk via saveMessage()
@@ -3613,6 +3630,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               channelId,
             });
           }
+
+          // Persist mentions/replies into the notifications inbox log — catch-up
+          // path. Same helper as the live path; the log dedups by message id so
+          // a message seen on both paths produces ONE row.
+          void logMentionOrReply(spaceMessage, {
+            spaceId,
+            channelId,
+            userAddress: fullUserAddrRef.current,
+            space: space ?? undefined,
+            channelName: space?.groups
+              ?.flatMap((g) => g.channels)
+              .find((c) => c.channelId === channelId)?.channelName,
+            notifyForBadge,
+            getSpaceMember: (sid, mid) => storage.getSpaceMember(sid, mid),
+          });
 
           queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
             // No existing cache — leave it alone (saveMessage above wrote
