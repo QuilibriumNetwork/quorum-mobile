@@ -184,7 +184,9 @@ export default function NotificationsScreen() {
               )}
               {item.source === 'quorum' && (
                 <View style={styles.sourceTagSpace}>
-                  <Text style={styles.sourceTagSpaceLabel}>Space</Text>
+                  <Text style={styles.sourceTagSpaceLabel} numberOfLines={1}>
+                    {item.raw?.quorum?.spaceName || 'Space'}
+                  </Text>
                 </View>
               )}
             </View>
@@ -425,6 +427,7 @@ const createStyles = (theme: AppTheme) =>
       paddingVertical: Skin.space(2),
       borderRadius: Skin.radius(4),
       backgroundColor: theme.colors.primary + '22',
+      maxWidth: 120,
     },
     sourceTagSpaceLabel: {
       fontSize: Skin.font(10),

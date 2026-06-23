@@ -50,6 +50,7 @@ export interface MentionReplyEntry {
   id: string;
   kind: MentionReplyKind;
   spaceId: string;
+  spaceName?: string;
   channelId: string;
   channelName?: string;
   /** Set when the mention/reply happened inside a thread, for the breadcrumb. */

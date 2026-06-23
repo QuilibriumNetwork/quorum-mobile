@@ -530,15 +530,19 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     setAutocompleteQuery('');
   }, [value, cursorPosition, onChangeText]);
 
-  // Insert a role mention — stored as @<roleId> (angle-bracket wrapped UUID),
-  // matching desktop's processRoleMentions wire format. Resolves to the role
-  // name pill on render via the roles prop.
+  // Insert a role mention as `@roleTag` (NO angle brackets). This is the wire
+  // format the shared extractMentionsFromText understands — it matches @roleTag
+  // against spaceRoles by tag and populates mentions.roleIds, which is what
+  // drives role-mention notifications. (The earlier @<roleId> form matched
+  // neither the user-mention CID regex nor the role-tag regex, so role mentions
+  // were silently dropped from the wire and never notified.) Matches desktop's
+  // MessageComposer, which also inserts `@${roleTag}`.
   const handleSelectRole = useCallback((role: Role) => {
     const textUpToCursor = value.slice(0, cursorPosition);
     const lastAtIndex = textUpToCursor.lastIndexOf('@');
     const textAfterCursor = value.slice(cursorPosition);
 
-    const newText = value.slice(0, lastAtIndex) + `@<${role.roleId}> ` + textAfterCursor;
+    const newText = value.slice(0, lastAtIndex) + `@${role.roleTag} ` + textAfterCursor;
     onChangeText(newText);
     setAutocompleteType(null);
     setAutocompleteQuery('');

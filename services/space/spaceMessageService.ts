@@ -100,6 +100,13 @@ export interface SendSpaceMessageParams {
   spaceRoles?: Array<{ roleId: string; roleTag: string }>;
   /** Space channels, used to extract channel mentions from the message text */
   spaceChannels?: Array<{ channelId: string; channelName: string }>;
+  /**
+   * Whether the sender may use @everyone (has the mention:everyone permission).
+   * Computed at the call site (where the Space object lives) and passed to
+   * extractMentionsFromText as `allowEveryone` — without it `mentions.everyone`
+   * is never set and @everyone never notifies anyone.
+   */
+  allowEveryone?: boolean;
 }
 
 export interface SendSpaceMessageResult {
@@ -256,7 +263,7 @@ function hexToNumberArray(hex: string): number[] {
 export async function sendSpaceMessage(
   params: SendSpaceMessageParams
 ): Promise<SendSpaceMessageResult> {
-  const { spaceId, channelId, text, senderAddress, repliesToMessageId, replyToAuthorAddress, spaceRoles, spaceChannels } = params;
+  const { spaceId, channelId, text, senderAddress, repliesToMessageId, replyToAuthorAddress, spaceRoles, spaceChannels, allowEveryone } = params;
 
   const cryptoProvider = new NativeCryptoProvider();
   const timestamp = Date.now();
@@ -304,7 +311,7 @@ export async function sendSpaceMessage(
     lastModifiedHash: '',
     content: messageContent,
     reactions: [],
-    mentions: extractMentionsFromText(text, { spaceRoles, spaceChannels }),
+    mentions: extractMentionsFromText(text, { spaceRoles, spaceChannels, allowEveryone }),
     publicKey: inboxKey.publicKey,
     // Add reply metadata if this is a reply (used for display and notifications)
     ...(repliesToMessageId && replyToAuthorAddress
@@ -563,7 +570,7 @@ export function createOptimisticMessage(
   params: SendSpaceMessageParams,
   tempMessageId: string
 ): Message {
-  const { spaceId, channelId, text, senderAddress, repliesToMessageId, replyToAuthorAddress, spaceRoles, spaceChannels } = params;
+  const { spaceId, channelId, text, senderAddress, repliesToMessageId, replyToAuthorAddress, spaceRoles, spaceChannels, allowEveryone } = params;
   const timestamp = Date.now();
 
   return {
@@ -582,7 +589,7 @@ export function createOptimisticMessage(
       repliesToMessageId,
     },
     reactions: [],
-    mentions: extractMentionsFromText(text, { spaceRoles, spaceChannels }),
+    mentions: extractMentionsFromText(text, { spaceRoles, spaceChannels, allowEveryone }),
     sendStatus: 'sending',
     // Add reply metadata if this is a reply (for display purposes)
     ...(repliesToMessageId && replyToAuthorAddress

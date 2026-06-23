@@ -122,6 +122,7 @@ export async function logMentionOrReply(
     id: `${ctx.spaceId}:${ctx.channelId}:${message.messageId}`,
     kind,
     spaceId: ctx.spaceId,
+    spaceName: ctx.space?.spaceName,
     channelId: ctx.channelId,
     channelName: ctx.channelName,
     threadId: message.threadId,

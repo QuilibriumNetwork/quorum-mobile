@@ -54,7 +54,7 @@ import { pickImage, type ProcessedAttachment } from '@/services/media/imageAttac
 import { haptics } from '@/utils/haptics';
 import { ReportModal } from '@/components/ReportModal';
 import type { Channel, Emoji, Message, Space, SpaceMember, Sticker } from '@quilibrium/quorum-shared';
-import { logger } from '@quilibrium/quorum-shared';import type { Bookmark } from '@quilibrium/quorum-shared';
+import { hasPermission, logger } from '@quilibrium/quorum-shared';import type { Bookmark } from '@quilibrium/quorum-shared';
 import * as Skin from '@/theme/skins/geometry';
 
 interface SpaceChatAreaProps {
@@ -349,6 +349,15 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
   const channelsRef = useRef(channels);
   channelsRef.current = channels;
 
+  // Whether the current user may use @everyone (has mention:everyone). Passed to
+  // the send path as allowEveryone so extractMentionsFromText sets
+  // mentions.everyone — without it @everyone never notifies anyone. Mirrors the
+  // composer's autocomplete gate (MessageInput.canMentionEveryone).
+  const canMentionEveryone = useMemo(() => {
+    if (!user?.address || !spaceData) return false;
+    return hasPermission(user.address, 'mention:everyone', spaceData);
+  }, [user?.address, spaceData]);
+
   const selectedChannelData = channels.find(c => c.id === channelId);
 
   // Draft management: save draft when channelId changes or unmount
@@ -471,6 +480,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         replyToAuthorAddress: replyToMessage?.authorId,
         spaceRoles: spaceData?.roles?.map((r) => ({ roleId: r.roleId, roleTag: r.roleTag })),
         spaceChannels: channelsData?.map((c) => ({ channelId: c.channelId, channelName: c.channelName })),
+        allowEveryone: canMentionEveryone,
       }, {
         onSettled: refocusInput,
       });
@@ -501,7 +511,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
       setAlsoReplyOnFarcaster(false);
       replyCastHashRef.current = null;
     }
-  }, [messageText, spaceId, channelId, sendMessageMutation, sendEmbedMutation, pendingAttachment, replyToMessage, editingMessage, editSpaceMessageMutation, draftsRef, alsoReplyOnFarcaster, isCastReply, farcasterAuthToken, spaceData, channelsData]);
+  }, [messageText, spaceId, channelId, sendMessageMutation, sendEmbedMutation, pendingAttachment, replyToMessage, editingMessage, editSpaceMessageMutation, draftsRef, alsoReplyOnFarcaster, isCastReply, farcasterAuthToken, spaceData, channelsData, canMentionEveryone]);
 
   const handleAttachmentPress = useCallback(async () => {
     const result = await pickImage('library');

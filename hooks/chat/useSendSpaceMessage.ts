@@ -25,6 +25,8 @@ export interface UseSendSpaceMessageParams {
   replyToAuthorAddress?: string;
   spaceRoles?: Array<{ roleId: string; roleTag: string }>;
   spaceChannels?: Array<{ channelId: string; channelName: string }>;
+  /** Sender has the mention:everyone permission (gates @everyone extraction). */
+  allowEveryone?: boolean;
 }
 
 export function useSendSpaceMessage() {
@@ -51,6 +53,7 @@ export function useSendSpaceMessage() {
         replyToAuthorAddress: params.replyToAuthorAddress,
         spaceRoles: params.spaceRoles,
         spaceChannels: params.spaceChannels,
+        allowEveryone: params.allowEveryone,
       });
 
       // Send via WebSocket
@@ -84,6 +87,7 @@ export function useSendSpaceMessage() {
           replyToAuthorAddress: params.replyToAuthorAddress,
           spaceRoles: params.spaceRoles,
           spaceChannels: params.spaceChannels,
+          allowEveryone: params.allowEveryone,
         },
         tempId
       );
