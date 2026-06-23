@@ -23,12 +23,17 @@ import {
   useNotificationLog,
   type NotificationLogEntry,
 } from '@/services/notifications/notificationLog';
+import {
+  getQuorumTabUnreadCount,
+  useMentionReplyLog,
+  type MentionReplyEntry,
+} from '@/services/notifications/mentionReplyLog';
 import type {
   FarcasterNotification,
   FarcasterNotificationType,
 } from '@/services/farcasterClient';
 
-export type UnifiedNotificationSource = 'chat' | 'farcaster';
+export type UnifiedNotificationSource = 'chat' | 'farcaster' | 'quorum';
 
 export interface UnifiedNotification {
   id: string;
@@ -44,7 +49,11 @@ export interface UnifiedNotification {
     | { type: 'cast'; castHash: string; username?: string }
     | { type: 'frame'; url: string };
   /** Original objects in case a renderer wants more detail. */
-  raw?: { chat?: NotificationLogEntry; farcaster?: FarcasterNotification };
+  raw?: {
+    chat?: NotificationLogEntry;
+    farcaster?: FarcasterNotification;
+    quorum?: MentionReplyEntry;
+  };
 }
 
 function actorName(n: FarcasterNotification): string {
@@ -262,8 +271,48 @@ function chatToUnified(e: NotificationLogEntry): UnifiedNotification {
   };
 }
 
+function quorumTitle(e: MentionReplyEntry): string {
+  const who = e.senderName || 'Someone';
+  switch (e.kind) {
+    case 'mention-you':
+      return `${who} mentioned you`;
+    case 'mention-everyone':
+      return `${who} mentioned @everyone`;
+    case 'mention-roles':
+      return `${who} mentioned a role you have`;
+    case 'reply':
+      return `${who} replied to you`;
+    default:
+      return who;
+  }
+}
+
+/** Channel breadcrumb + message preview text, e.g. "#general · hey there". */
+function quorumBody(e: MentionReplyEntry): string {
+  const channel = e.channelName ? `#${e.channelName}` : '#channel';
+  const crumb = e.threadId ? `${channel} › Thread` : channel;
+  const text = e.preview?.text?.trim();
+  return text ? `${crumb} · ${text}` : crumb;
+}
+
+function quorumToUnified(e: MentionReplyEntry): UnifiedNotification {
+  return {
+    id: `quorum:${e.id}`,
+    source: 'quorum',
+    timestamp: e.createdAt,
+    title: quorumTitle(e),
+    body: quorumBody(e),
+    link: { type: 'message', spaceId: e.spaceId, channelId: e.channelId },
+    raw: { quorum: e },
+  };
+}
+
 export interface UnifiedNotificationsResult {
   items: UnifiedNotification[];
+  /** Quorum mentions/replies, newest-first — the "Mentions & replies" section. */
+  quorumItems: UnifiedNotification[];
+  /** Farcaster activity (+ background chat pings), newest-first. */
+  farcasterFeedItems: UnifiedNotification[];
   unreadCount: number;
   isLoading: boolean;
   isFetchingMore: boolean;
@@ -280,6 +329,7 @@ export interface UnifiedNotificationsResult {
 export function useUnifiedNotifications(): UnifiedNotificationsResult {
   const { farcasterAuthToken } = useAuth();
   const { entries: chatEntries } = useNotificationLog();
+  const { entries: quorumEntries } = useMentionReplyLog();
   const farcasterQuery = useFarcasterNotifications(farcasterAuthToken ?? undefined);
   // Supplementary auth-free source (hypersnap/haatz). Blended in and
   // deduped against the official feed so notifications still show when the
@@ -299,40 +349,67 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
     return blendFarcasterSources(official, haatz);
   }, [farcasterQuery.data?.pages, haatzQuery.data]);
 
-  const items = useMemo(() => {
-    const merged: UnifiedNotification[] = [
+  // Drop muted DMs from the attention feed — consistent with the badge + push
+  // suppression. The conversation stays reachable via the messages tab.
+  const notMutedDM = (e: UnifiedNotification) => {
+    const convId = e.link?.type === 'message' ? e.link.conversationId : undefined;
+    return !(convId && mutedConversations.has(convId));
+  };
+
+  // Section 1 — Quorum mentions/replies, newest-first. These carry no
+  // conversationId (they're space channel mentions, not DMs), so the muted-DM
+  // filter doesn't apply; channel/space mute is already enforced upstream at
+  // log-write time via shouldNotifyForContext.
+  const quorumItems = useMemo(() => {
+    const mapped = quorumEntries.map(quorumToUnified);
+    mapped.sort((a, b) => b.timestamp - a.timestamp);
+    return mapped;
+  }, [quorumEntries]);
+
+  // Section 2 — Farcaster activity + background chat pings, newest-first.
+  const farcasterFeedItems = useMemo(() => {
+    const mapped: UnifiedNotification[] = [
       ...chatEntries.map(chatToUnified),
       ...farcasterItems.map(farcasterToUnified),
-    ];
-    // Drop muted DMs from the attention feed entirely — consistent with the
-    // badge + push suppression. The conversation stays reachable via the
-    // messages tab (its unread dot is intentionally kept).
-    const visible = merged.filter((e) => {
-      const convId = e.link?.type === 'message' ? e.link.conversationId : undefined;
-      return !(convId && mutedConversations.has(convId));
-    });
-    visible.sort((a, b) => b.timestamp - a.timestamp);
-    return visible;
+    ].filter(notMutedDM);
+    mapped.sort((a, b) => b.timestamp - a.timestamp);
+    return mapped;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatEntries, farcasterItems, mutedConversations]);
 
+  // Merged view kept for the tab badge / unread count.
+  const items = useMemo(() => {
+    const merged = [...quorumItems, ...farcasterFeedItems];
+    merged.sort((a, b) => b.timestamp - a.timestamp);
+    return merged;
+  }, [quorumItems, farcasterFeedItems]);
+
   const unreadCount = useMemo(() => {
-    // `items` is already filtered to exclude muted DMs (see above), so the
-    // badge count derived here inherits that exclusion — no separate mute check.
-    // Prefer the server's per-notification isUnread for Farcaster items
-    // (it survives mark-all-read calls from the web client), fall back
-    // to lastSeen for chat items where we don't have a server flag.
+    // Tab badge (Level 1). Three sources, each with its own "seen" model:
+    //  - Quorum: entries newer than the last tab-open (getQuorumTabUnreadCount).
+    //    Decoupled from per-channel read state so opening the tab clears the
+    //    badge without marking channel mentions read.
+    //  - Farcaster: prefer the server isUnread flag (survives web mark-all-read),
+    //    else fall back to the chat-log lastSeen.
+    //  - chat (background pings): lastSeen.
+    // muted-DM exclusion is inherited from the already-filtered section arrays.
     const lastSeen = getLastSeenTimestamp();
-    return items.reduce((n, e) => {
+    const farcasterAndChat = farcasterFeedItems.reduce((n, e) => {
       if (e.source === 'farcaster') {
         const isUnread = e.raw?.farcaster?.isUnread;
         if (typeof isUnread === 'boolean') return isUnread ? n + 1 : n;
       }
       return e.timestamp > lastSeen ? n + 1 : n;
     }, 0);
-  }, [items]);
+    return getQuorumTabUnreadCount() + farcasterAndChat;
+    // quorumItems in deps so the count recomputes when the log/seen-state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [farcasterFeedItems, quorumItems]);
 
   return {
     items,
+    quorumItems,
+    farcasterFeedItems,
     unreadCount,
     isLoading: farcasterQuery.isLoading || haatzQuery.isLoading,
     isFetchingMore: farcasterQuery.isFetchingNextPage,

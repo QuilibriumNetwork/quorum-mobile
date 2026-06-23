@@ -23,7 +23,7 @@ import { EditHistoryModal } from './EditHistoryModal';
 import { ReactionDetailsModal } from './ReactionDetailsModal';
 import { SpaceCallBubble } from './SpaceCallBubble';
 import type { DisplayMessage, DisplayReaction } from './types';
-import { logger, type Emoji, type Sticker, type SpaceMember, type Channel, type Role } from '@quilibrium/quorum-shared';
+import { hasPermission, logger, type Emoji, type Sticker, type SpaceMember, type Channel, type Role, type Space } from '@quilibrium/quorum-shared';
 import * as Skin from '@/theme/skins/geometry';
 // MESSAGE_IMAGE_MAX_WIDTH computed inside the component via useWindowDimensions
 
@@ -322,6 +322,21 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
 }, ref) {
   const { width: screenWidth } = useWindowDimensions();
   const MESSAGE_IMAGE_MAX_WIDTH = screenWidth - 84;
+
+  // @everyone is only rendered as a styled pill when the SENDER actually held
+  // mention:everyone (role-based, no owner bypass) AND the wire flag is set —
+  // the same trust rule the notification path enforces. Otherwise it's plain
+  // text, so a spoofed/unauthorized @everyone can't fake an all-call pill.
+  const everyoneSpaceShim = useMemo(() => ({ roles } as unknown as Space), [roles]);
+  const isEveryoneAuthorized = useCallback(
+    (msg: DisplayMessage): boolean => {
+      const everyoneFlag = !!msg.originalMessage?.mentions?.everyone;
+      if (!everyoneFlag) return false;
+      const senderId = msg.originalMessage?.content?.senderId ?? msg.userId;
+      return hasPermission(senderId, 'mention:everyone', everyoneSpaceShim);
+    },
+    [everyoneSpaceShim]
+  );
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
@@ -870,6 +885,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   members={members}
                   channels={channels}
                   roles={roles}
+                  everyoneAuthorized={isEveryoneAuthorized(item)}
                   currentUserId={currentUserId}
                   style={styles.messageText}
                   theme={theme}
@@ -884,7 +900,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, renderAvatar, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress]
+    [styles, renderReactions, renderAvatar, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress]
   );
 
   // Render sticker message
@@ -1017,6 +1033,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                     members={members}
                     channels={channels}
                     roles={roles}
+                    everyoneAuthorized={isEveryoneAuthorized(item)}
                     currentUserId={currentUserId}
                     style={styles.messageText}
                     theme={theme}
@@ -1036,6 +1053,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   members={members}
                   channels={channels}
                   roles={roles}
+                  everyoneAuthorized={isEveryoneAuthorized(item)}
                   currentUserId={currentUserId}
                   style={styles.messageText}
                   theme={theme}
@@ -1082,7 +1100,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, scrollToMessageWithHighlight, customEmojis, members, channels, roles, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress]
+    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress]
   );
 
   const renderCast = useCallback(

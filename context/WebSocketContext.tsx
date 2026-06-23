@@ -13,9 +13,7 @@ import {
   canManageReadOnlyChannel,
   createChannelPermissionChecker,
   createRNWebSocketClient,
-  getUserRoles,
   int64ToBytes,
-  isMentionedWithSettings,
   logger,
   queryKeys,
 } from '@quilibrium/quorum-shared';
@@ -33,9 +31,8 @@ import React, {
 import { Alert, AppState, AppStateStatus, InteractionManager } from 'react-native';
 
 import type { Conversation } from '@/hooks/chat/useConversations';
-import { incrementReplyCount } from '@/hooks/chat/useReplyTracking';
-import { incrementMentionCount } from '@/hooks/chat/useMentionTracking';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
+import { logMentionOrReply } from '@/services/notifications/logMentionOrReply';
 import { shouldNotifyForContext } from '@/services/notifications/notificationPrefs';
 import { messagePreview as getSpaceMessagePreview, messageSenderName } from '@/utils/messagePreview';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -2273,34 +2270,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // too, not just push notifications — same gate as the push path.
             const notifyForBadge = shouldNotifyForContext({ spaceId, channelId });
 
-            // Track replies to current user
-            if (
-              notifyForBadge &&
-              spaceMessage.replyMetadata?.parentAuthor &&
-              spaceMessage.replyMetadata.parentAuthor === fullUserAddrRef.current &&
-              ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
-              fullUserAddrRef.current
-            ) {
-              incrementReplyCount(fullUserAddrRef.current, `${spaceId}:${channelId}`);
-            }
-
-            // Track @mentions of the current user (feeds the same channel-row
-            // badge as replies — desktop sums them into one count). Skip own
-            // messages. @everyone is gated on the sender's mention:everyone
-            // permission inside isMentionedWithSettings.
-            if (
-              notifyForBadge &&
-              fullUserAddrRef.current &&
-              ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
-              isMentionedWithSettings(spaceMessage, {
-                userAddress: fullUserAddrRef.current,
-                enabledTypes: ['mention-you', 'mention-everyone', 'mention-roles'],
-                userRoles: getUserRoles(fullUserAddrRef.current, space ?? undefined).map((r) => r.roleId),
-                space: space ?? undefined,
-              })
-            ) {
-              incrementMentionCount(fullUserAddrRef.current, `${spaceId}:${channelId}`);
-            }
+            // Mentions/replies are detected + persisted by logMentionOrReply
+            // below (which also drives the channel bubble via the read-state
+            // log). The old integer counters were retired in favor of that
+            // single source of truth.
 
             // Track last space activity for inbox sorting + preview
             {
@@ -2319,6 +2292,22 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 channelId,
               });
             }
+
+            // Persist mentions/replies into the notifications inbox log (the
+            // Quorum section of the Notifications tab). Same detection as the
+            // badge counters above; this just keeps the full row. Fire-and-forget
+            // so it never blocks message processing.
+            void logMentionOrReply(spaceMessage, {
+              spaceId,
+              channelId,
+              userAddress: fullUserAddrRef.current,
+              space: space ?? undefined,
+              channelName: space?.groups
+                ?.flatMap((g) => g.channels)
+                .find((c) => c.channelId === channelId)?.channelName,
+              notifyForBadge,
+              getSpaceMember: (sid, mid) => storage.getSpaceMember(sid, mid),
+            });
 
             // Update React Query cache. If there's no existing cache (the
             // query was unmounted and gc'd, or hasn't mounted yet), leave
@@ -2687,29 +2676,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         const existingConversation = await storage.getConversation(conversationId);
         // Get sender display name for preview
         const senderDisplayName = userProfileFromEnvelope?.displayName || existingConversation?.displayName || senderAddress.substring(0, 8);
-        // Determine preview text based on message type
-        const getMessagePreview = (msg: Message): string => {
-          const contentType = msg.content?.type;
-          if (contentType === 'embed') {
-            return '📷 Image';
-          } else if (contentType === 'sticker') {
-            return '🎨 Sticker';
-          } else if (contentType === 'call-event') {
-            const c = msg.content as any;
-            const icon = c.mediaType === 'video' ? '📹' : '📞';
-            if (c.event === 'completed') return `${icon} Call`;
-            if (c.event === 'missed') return `${icon} Missed call`;
-            return `${icon} Call`;
-          } else if (contentType === 'post' || contentType === 'event') {
-            const textContent = ('text' in msg.content ? msg.content.text : undefined);
-            if (Array.isArray(textContent)) {
-              return textContent.join('');
-            }
-            return textContent || '';
-          }
-          return '';
-        };
-        const messagePreview = getMessagePreview(decryptedMessage);
+        // Typed preview (icon + text, no emoji) — single source of truth in
+        // utils/messagePreview, which now also handles call-event.
+        const messagePreview = getSpaceMessagePreview(decryptedMessage);
         if (!existingConversation) {
           const newConversation: Conversation = {
             conversationId,
@@ -3589,32 +3558,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // Muted channel/space → no in-app badge (same gate as push).
           const notifyForBadge = shouldNotifyForContext({ spaceId, channelId });
 
-          // Track replies
-          if (
-            notifyForBadge &&
-            spaceMessage.replyMetadata?.parentAuthor &&
-            spaceMessage.replyMetadata.parentAuthor === fullUserAddrRef.current &&
-            ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
-            fullUserAddrRef.current
-          ) {
-            incrementReplyCount(fullUserAddrRef.current, `${spaceId}:${channelId}`);
-          }
-
-          // Track @mentions of the current user (same channel-row badge as
-          // replies — see the live path for rationale).
-          if (
-            notifyForBadge &&
-            fullUserAddrRef.current &&
-            ('senderId' in spaceMessage.content ? spaceMessage.content.senderId : undefined) !== fullUserAddrRef.current &&
-            isMentionedWithSettings(spaceMessage, {
-              userAddress: fullUserAddrRef.current,
-              enabledTypes: ['mention-you', 'mention-everyone', 'mention-roles'],
-              userRoles: getUserRoles(fullUserAddrRef.current, space ?? undefined).map((r) => r.roleId),
-              space: space ?? undefined,
-            })
-          ) {
-            incrementMentionCount(fullUserAddrRef.current, `${spaceId}:${channelId}`);
-          }
+          // Mentions/replies persisted by logMentionOrReply below (catch-up
+          // path) — same single source of truth as the live path.
 
           // Track last space activity for inbox sorting + preview
           {
@@ -3633,6 +3578,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               channelId,
             });
           }
+
+          // Persist mentions/replies into the notifications inbox log — catch-up
+          // path. Same helper as the live path; the log dedups by message id so
+          // a message seen on both paths produces ONE row.
+          void logMentionOrReply(spaceMessage, {
+            spaceId,
+            channelId,
+            userAddress: fullUserAddrRef.current,
+            space: space ?? undefined,
+            channelName: space?.groups
+              ?.flatMap((g) => g.channels)
+              .find((c) => c.channelId === channelId)?.channelName,
+            notifyForBadge,
+            getSpaceMember: (sid, mid) => storage.getSpaceMember(sid, mid),
+          });
 
           queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
             // No existing cache — leave it alone (saveMessage above wrote
@@ -3780,24 +3740,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         const existingConversation = await storage.getConversation(conversationId);
         const senderDisplayName = msgResult.user_profile?.display_name || existingConversation?.displayName || resolvedSenderAddress.substring(0, 8);
         const senderIcon = msgResult.user_profile?.user_icon || existingConversation?.icon || '';
-        const getMessagePreview = (msg: Message): string => {
-          const ct = msg.content?.type;
-          if (ct === 'embed') return '📷 Image';
-          if (ct === 'sticker') return '🎨 Sticker';
-          if (ct === 'call-event') {
-            const c = msg.content as any;
-            const icon = c.mediaType === 'video' ? '📹' : '📞';
-            if (c.event === 'completed') return `${icon} Call`;
-            if (c.event === 'missed') return `${icon} Missed call`;
-            return `${icon} Call`;
-          }
-          if (ct === 'post' || ct === 'event') {
-            const textContent = ('text' in msg.content ? msg.content.text : undefined);
-            return Array.isArray(textContent) ? textContent.join('') : textContent || '';
-          }
-          return '';
-        };
-        const messagePreview = getMessagePreview(decryptedMessage);
+        // Typed preview (icon + text, no emoji) — see the live DM path above.
+        const messagePreview = getSpaceMessagePreview(decryptedMessage);
 
         if (!existingConversation) {
           const newConversation: Conversation = {

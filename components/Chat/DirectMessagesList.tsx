@@ -8,6 +8,7 @@ import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import type { Conversation } from '@/hooks/chat';
+import { coerceMessagePreview, previewKindIcon } from '@/utils/messagePreview';
 import React, { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Alert, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
@@ -181,33 +182,35 @@ const DMConversationItem = React.memo(function DMConversationItem({
             {formatRelativeTime(item.timestamp)}
           </Text>
         </View>
-        {item.lastMessagePreview && (
-          <Text
-            style={[styles.messagePreview, hasUnread && styles.messagePreviewUnread]}
-            numberOfLines={1}
-          >
-            {item.lastMessageSenderName ? (
-              <Text style={styles.previewSender}>
-                {truncateName(item.lastMessageSenderName)}:{' '}
-              </Text>
-            ) : null}
-            {(() => {
-              const preview = item.lastMessagePreview;
-              if (typeof preview === 'string') {
-                return preview;
-              }
-              if (typeof preview === 'object' && preview !== null) {
-                const obj = preview as any;
-                if (obj.type === 'embed') return '📷 Image';
-                if (obj.type === 'sticker') return '🎨 Sticker';
-                const text = obj.text;
-                if (Array.isArray(text)) return text.join('');
-                return text || '';
-              }
-              return '';
-            })()}
-          </Text>
-        )}
+        {item.lastMessagePreview != null && (() => {
+          // Coerce any shape (typed preview, legacy emoji string, raw object)
+          // to {kind,text}; render the kind's icon inline before the text so
+          // we stay emoji-free and consistent with the spaces inbox.
+          const preview = coerceMessagePreview(item.lastMessagePreview);
+          const iconName = previewKindIcon(preview.kind);
+          const previewColor = hasUnread
+            ? styles.messagePreviewUnread.color
+            : styles.messagePreview.color;
+          return (
+            <Text
+              style={[styles.messagePreview, hasUnread && styles.messagePreviewUnread]}
+              numberOfLines={1}
+            >
+              {item.lastMessageSenderName ? (
+                <Text style={styles.previewSender}>
+                  {truncateName(item.lastMessageSenderName)}:{' '}
+                </Text>
+              ) : null}
+              {iconName ? (
+                <>
+                  <IconSymbol name={iconName} size={13} color={previewColor as string} />
+                  {' '}
+                </>
+              ) : null}
+              {preview.text}
+            </Text>
+          );
+        })()}
       </View>
     </TouchableOpacity>
   );

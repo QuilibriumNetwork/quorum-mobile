@@ -24,7 +24,7 @@
  */
 
 import React from 'react';
-import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { useTheme, type AppTheme } from '@/theme';
@@ -47,7 +47,7 @@ export interface ActionRowProps {
   leading?: React.ReactNode;
   /** Internal — set by ActionRowGroup to drop the divider on the last row. */
   isLast?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 /** Resolve the label/icon tint from the row's state. */
@@ -65,9 +65,21 @@ export function ActionRow(props: ActionRowProps) {
 
   const interactive = !!props.onPress && !props.disabled;
 
+  // Single-line rows center the leading glyph (aligned with the one line);
+  // multi-line rows (with a sublabel) TOP-align it so it pairs with the TITLE,
+  // not the gap between title and sublabel — the standard iOS/Material pattern.
+  // Single-line behavior is unchanged from before.
+  const multiline = !!props.sublabel;
+  const leadingNudge = multiline ? styles.leadingTopNudge : undefined;
+
   return (
     <TouchableOpacity
-      style={[styles.row, props.isLast && styles.rowLast, props.style]}
+      style={[
+        styles.row,
+        multiline && styles.rowMultiline,
+        props.isLast && styles.rowLast,
+        props.style,
+      ]}
       onPress={props.onPress}
       activeOpacity={interactive ? 0.6 : 1}
       disabled={!interactive}
@@ -76,17 +88,21 @@ export function ActionRow(props: ActionRowProps) {
       accessibilityState={{ disabled: !!props.disabled }}
     >
       {props.leading ? (
-        props.leading
+        // Top-nudge a custom leading node too (channel icon, avatar) so it lines
+        // up with the title on multi-line rows.
+        multiline ? <View style={leadingNudge}>{props.leading}</View> : props.leading
       ) : props.icon ? (
         // icon name is validated by IconSymbol's mapping at runtime; the strict
         // union type is too narrow for a generic wrapper.
-        <IconSymbol name={props.icon as IconSymbolName} size={20} color={color} />
+        <IconSymbol name={props.icon as IconSymbolName} size={20} color={color} style={leadingNudge} />
       ) : (
         <View style={styles.iconSpacer} />
       )}
 
       <View style={styles.labelColumn}>
-        <Text style={[styles.label, { color }]}>{props.label}</Text>
+        <Text style={[styles.label, { color }]} numberOfLines={1}>
+          {props.label}
+        </Text>
         {props.sublabel ? (
           <Text style={styles.sublabel} numberOfLines={1}>
             {props.sublabel}
@@ -95,9 +111,16 @@ export function ActionRow(props: ActionRowProps) {
       </View>
 
       {props.trailing === 'chevron' ? (
-        <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+        <IconSymbol
+          name="chevron.right"
+          size={16}
+          color={theme.colors.textMuted}
+          style={multiline ? styles.trailingCenter : undefined}
+        />
       ) : props.trailing ? (
-        props.trailing
+        // Keep the trailing control (Switch, chevron…) vertically centered even
+        // when the row top-aligns its leading icon + text for a sublabel.
+        multiline ? <View style={styles.trailingCenter}>{props.trailing}</View> : props.trailing
       ) : null}
     </TouchableOpacity>
   );
@@ -105,7 +128,7 @@ export function ActionRow(props: ActionRowProps) {
 
 export interface ActionRowGroupProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 /**
@@ -148,11 +171,25 @@ const createRowStyles = (theme: AppTheme) =>
       borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface4,
     },
+    rowMultiline: {
+      // Top-align leading icon + text column for two-line rows (icon pairs with
+      // the title). The trailing control is re-centered via `trailingCenter`.
+      alignItems: 'flex-start',
+    },
     rowLast: {
       borderBottomWidth: 0,
     },
     iconSpacer: {
       width: 20,
+    },
+    // Optical nudge so a 20px glyph sits on the title's text line (not the very
+    // cap top) when the row is top-aligned.
+    leadingTopNudge: {
+      marginTop: Skin.space(2),
+    },
+    // Re-center a trailing control against the full row height on multi-line rows.
+    trailingCenter: {
+      alignSelf: 'center',
     },
     labelColumn: {
       flex: 1,

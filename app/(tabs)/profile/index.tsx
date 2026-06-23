@@ -10,29 +10,61 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
+import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
-import { useOtaUpdate } from '@/hooks/useOtaUpdate';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import {
   clearNotificationLog,
   markNotificationsSeen,
   removeNotificationLogEntry,
 } from '@/services/notifications/notificationLog';
+import { clearMentionReplyLog, markQuorumTabSeen } from '@/services/notifications/mentionReplyLog';
 import { markAllFarcasterNotificationsRead } from '@/services/farcasterClient';
 import {
   useUnifiedNotifications,
   type UnifiedNotification,
 } from '@/hooks/useUnifiedNotifications';
 import * as Skin from '@/theme/skins/geometry';
+
+// Max preview lines for a Quorum row's message. The panel is a triage surface
+// (tap through to read in full), so cap it: long replies don't dominate the list.
+const QUORUM_PREVIEW_LINES = 2;
+
+/** Leading icon (IconSymbol name) for a Quorum mention/reply row, by kind.
+ *  Mirrors the composer + space-settings iconography so the inbox reads
+ *  consistently: @everyone = bullhorn (composer autocomplete), @role = shield
+ *  (Roles tab + role pills), @you = at, reply = reply arrow. */
+function quorumRowIcon(entry: UnifiedNotification): IconSymbolName {
+  switch (entry.raw?.quorum?.kind) {
+    case 'reply':
+      return 'arrowshape.turn.up.left.fill';
+    case 'mention-everyone':
+      return 'bullhorn';
+    case 'mention-roles':
+      return 'shield';
+    case 'mention-you':
+    default:
+      return 'at';
+  }
+}
+
+/** Location parts for a Quorum row — space (loud) + channel breadcrumb (muted). */
+function quorumLocation(entry: UnifiedNotification): { space: string; channel: string } {
+  const q = entry.raw?.quorum;
+  const space = q?.spaceName?.trim() || 'Space';
+  const channel = q?.channelName ? `#${q.channelName}` : '#channel';
+  return { space, channel: q?.threadId ? `${channel} › Thread` : channel };
+}
 
 function formatTime(ts: number): string {
   const now = Date.now();
@@ -49,6 +81,8 @@ export default function NotificationsScreen() {
   const { farcasterAuthToken } = useAuth();
   const {
     items,
+    quorumItems,
+    farcasterFeedItems,
     isLoading,
     isFetchingMore,
     hasMore,
@@ -60,6 +94,10 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { openMiniapp } = useMiniappOverlay();
   const [refreshing, setRefreshing] = useState(false);
+  const { confirm, confirmDialog } = useConfirmDialog();
+  // Source filter. Pills only render when there's a Farcaster feed to filter
+  // against (see below), so single-source users never see a pointless filter.
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'quorum' | 'farcaster'>('all');
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   // Mark seen on mount and again whenever the feed grows while the user
@@ -71,6 +109,10 @@ export default function NotificationsScreen() {
   // side doesn't block our local clear.
   useEffect(() => {
     markNotificationsSeen();
+    // Level 1 — mark the Quorum section seen so the tab badge clears on open.
+    // This does NOT mark per-channel mentions read (Level 2 clears on channel
+    // open), per the two-level read-state model.
+    markQuorumTabSeen();
     if (farcasterAuthToken) {
       markAllFarcasterNotificationsRead(farcasterAuthToken).catch(() => {
         /* ignore — local seen state is still cleared */
@@ -141,27 +183,59 @@ export default function NotificationsScreen() {
             <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
           ) : item.source === 'farcaster' ? (
             <DefaultAvatar displayName={item.title} address={item.id} size={36} />
+          ) : item.source === 'quorum' ? (
+            <View style={styles.iconWrap}>
+              <IconSymbol name={quorumRowIcon(item)} color={theme.colors.primary} size={18} />
+            </View>
           ) : (
             <View style={styles.iconWrap}>
               <IconSymbol name="bell.fill" color={theme.colors.primary} size={18} />
             </View>
           )}
-          <View style={styles.body}>
-            <View style={styles.titleRow}>
-              <Text style={styles.title} numberOfLines={1}>
-                {item.title}
+          {item.source === 'quorum' ? (
+            // Location-first layout: lead with "Space › #channel" (loud), then
+            // the message preview, then the time. The mention type is conveyed
+            // by the leading icon, so no redundant "X mentioned you" title.
+            <View style={styles.body}>
+              <Text style={styles.locationLine} numberOfLines={1}>
+                {quorumLocation(item).space}
+                <Text style={styles.locationChannel}>
+                  {'  '}
+                  {quorumLocation(item).channel}
+                </Text>
               </Text>
-              {item.source === 'farcaster' && (
-                <View style={styles.sourceTag}>
-                  <Text style={styles.sourceTagLabel}>Farcaster</Text>
-                </View>
-              )}
+              {(() => {
+                const q = item.raw?.quorum;
+                const author = q?.senderDisplayName?.trim();
+                const text = q?.preview?.text;
+                if (!author && !text) return null;
+                return (
+                  <Text style={styles.quorumMessage} numberOfLines={QUORUM_PREVIEW_LINES}>
+                    {author ? <Text style={styles.quorumAuthor}>{author}: </Text> : null}
+                    {text}
+                  </Text>
+                );
+              })()}
+              <Text style={styles.time}>{formatTime(item.timestamp)}</Text>
             </View>
-            {!!item.body && (
-              <Text style={styles.subtitle} numberOfLines={2}>{item.body}</Text>
-            )}
-            <Text style={styles.time}>{formatTime(item.timestamp)}</Text>
-          </View>
+          ) : (
+            <View style={styles.body}>
+              <View style={styles.titleRow}>
+                <Text style={styles.title} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                {item.source === 'farcaster' && (
+                  <View style={styles.sourceTag}>
+                    <Text style={styles.sourceTagLabel}>Farcaster</Text>
+                  </View>
+                )}
+              </View>
+              {!!item.body && (
+                <Text style={styles.subtitle} numberOfLines={2}>{item.body}</Text>
+              )}
+              <Text style={styles.time}>{formatTime(item.timestamp)}</Text>
+            </View>
+          )}
           {showTrash && (
             <TouchableOpacity
               onPress={() => handleDelete(item)}
@@ -177,18 +251,51 @@ export default function NotificationsScreen() {
     [styles, theme.colors.primary, theme.colors.textMuted, handlePress, handleDelete],
   );
 
-  // OTA bolt: shown in the in-screen header's right slot when an
-  // update is available. Same affordance as before, just hoisted out
-  // of the native Stack header into the same in-screen row layout
-  // that spaces + messages use.
-  const ota = useOtaUpdate();
-  const showOta = ota.isUpdateAvailable || ota.isUpdatePending;
+  // Pills only earn their space when there's actually a Farcaster feed to filter
+  // against — a user with no Farcaster (or no Farcaster items) sees a single
+  // Quorum list and no filter chrome.
+  const showFilterPills = farcasterFeedItems.length > 0 && quorumItems.length > 0;
+  // If the pills disappear (e.g. last Farcaster item ages out), don't leave the
+  // view stuck on a now-hidden filter.
+  const activeFilter = showFilterPills ? sourceFilter : 'all';
 
-  // "Clear chat" used to live in the header. With the header slots taken
-  // by navigation actions, expose the clear action as a small inline link
-  // above the list when it's relevant. Farcaster items aren't dismissable
-  // (server-owned), so the link only appears when there's chat to clear.
-  const hasChat = items.some(i => i.source === 'chat');
+  // Two sections: Quorum mentions/replies, then Farcaster activity. Empty
+  // sections are dropped so we never render a lone header. The source filter
+  // hides the non-selected section.
+  const sections = useMemo(() => {
+    const out: { key: string; title: string; data: UnifiedNotification[] }[] = [];
+    if (quorumItems.length && activeFilter !== 'farcaster') {
+      out.push({ key: 'quorum', title: 'Mentions & replies', data: quorumItems });
+    }
+    if (farcasterFeedItems.length && activeFilter !== 'quorum') {
+      out.push({ key: 'farcaster', title: 'Farcaster', data: farcasterFeedItems });
+    }
+    return out;
+  }, [quorumItems, farcasterFeedItems, activeFilter]);
+
+  // "Clear all" — empties the inbox (deletes the Quorum log + the chat log) and
+  // marks the tab seen. Named "Clear all" (not "Mark all read") because it
+  // removes the rows, not just their unread state. Destructive + irreversible,
+  // so it asks for confirmation first. The list otherwise persists as history;
+  // per-channel bubbles clear on channel open (Level 2).
+  const handleClearAll = useCallback(async () => {
+    const ok = await confirm({
+      title: 'Clear all notifications?',
+      message:
+        'This permanently removes every notification shown here. This cannot be undone.',
+      confirmLabel: 'Clear all',
+      cancelLabel: 'Cancel',
+      // Non-destructive styling (ConfirmDialog defaults to the red 'danger').
+      variant: 'primary',
+    });
+    if (!ok) return;
+    clearMentionReplyLog();
+    clearNotificationLog();
+    markNotificationsSeen();
+    // Advance the Level-1 watermark to now so mentions arriving right after the
+    // clear are compared against the clear time, not a stale tab-open time.
+    markQuorumTabSeen();
+  }, [confirm]);
 
   return (
     <FloatingTabScreen surfaceColor={theme.colors.surface1} isDark={isDark} style={{ paddingTop: insets.top }}>
@@ -199,18 +306,28 @@ export default function NotificationsScreen() {
       <View style={styles.header}>
         <Text style={styles.heading}>Notifications</Text>
         <View style={styles.headerSlotRight}>
-          {showOta ? (
-            <TouchableOpacity
-              onPress={() => { void ota.applyUpdate(); }}
-              hitSlop={8}
-              style={styles.headerIconButton}
-              accessibilityLabel="Apply update"
-            >
-              <IconSymbol name="bolt.fill" color="#0A84FF" size={20} />
+          {items.length > 0 && (
+            <TouchableOpacity onPress={handleClearAll} hitSlop={8}>
+              <Text style={styles.clearAllLabel}>Clear all</Text>
             </TouchableOpacity>
-          ) : null}
+          )}
         </View>
       </View>
+      {showFilterPills && (
+        <SegmentedPills
+          style={styles.filterRow}
+          variant="solid"
+          scrollable={false}
+          itemRole="button"
+          items={[
+            { key: 'all', label: 'All' },
+            { key: 'quorum', label: 'Quorum' },
+            { key: 'farcaster', label: 'Farcaster' },
+          ]}
+          activeKey={activeFilter}
+          onChange={(k) => setSourceFilter(k as 'all' | 'quorum' | 'farcaster')}
+        />
+      )}
       {farcasterError && farcasterEnabled && (
         // Inline banner — visible whether or not chat notifications are
         // present. This is the only way the user can tell that their
@@ -224,15 +341,6 @@ export default function NotificationsScreen() {
           </Text>
         </View>
       )}
-      {hasChat && (
-        <View style={styles.clearRow}>
-          <TouchableOpacity onPress={clearNotificationLog} hitSlop={8}>
-            <Text style={{ color: theme.colors.primary, fontSize: Skin.font(13), fontWeight: '600' }}>
-              Clear chat notifications
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
       {items.length === 0 && !isLoading ? (
         <View style={styles.empty}>
           <IconSymbol name="bell" color={theme.colors.textMuted} size={42} />
@@ -244,10 +352,16 @@ export default function NotificationsScreen() {
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={items}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          renderSectionHeader={({ section }) => (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionHeaderLabel}>{section.title}</Text>
+            </View>
+          )}
+          stickySectionHeadersEnabled={false}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
           contentContainerStyle={{ paddingBottom: listPadding }}
           refreshControl={
@@ -270,6 +384,7 @@ export default function NotificationsScreen() {
           }
         />
       )}
+      {confirmDialog}
     </FloatingTabScreen>
   );
 }
@@ -292,6 +407,11 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
       justifyContent: 'flex-end' as const,
+    },
+    clearAllLabel: {
+      color: theme.colors.primary,
+      fontSize: Skin.font(14),
+      fontWeight: '600',
     },
     heading: {
       ...theme.textStyles.title3,
@@ -364,6 +484,42 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
       color: '#8B5CF6',
     },
+    // Quorum location-first row: loud space name, muted channel, then message.
+    locationLine: {
+      fontSize: Skin.font(15),
+      fontWeight: '700',
+      color: theme.colors.textMain,
+    },
+    locationChannel: {
+      fontSize: Skin.font(14),
+      fontWeight: '400',
+      color: theme.colors.textMuted,
+    },
+    quorumMessage: {
+      fontSize: Skin.font(14),
+      // Subtle (not the faintest muted) so the message reads clearly while the
+      // time below stays muted — gives the row two distinct contrast levels.
+      color: theme.colors.textSubtle,
+      lineHeight: Skin.font(18),
+      marginTop: Skin.space(2),
+    },
+    quorumAuthor: {
+      color: theme.colors.textSubtle,
+      fontWeight: '600',
+    },
+    sectionHeader: {
+      paddingHorizontal: Skin.space(16),
+      paddingTop: Skin.space(14),
+      paddingBottom: Skin.space(6),
+      backgroundColor: theme.colors.surface1,
+    },
+    sectionHeaderLabel: {
+      fontSize: Skin.font(12),
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
+      color: theme.colors.textMuted,
+    },
     subtitle: {
       fontSize: Skin.font(14),
       color: theme.colors.textMuted,
@@ -396,6 +552,13 @@ const createStyles = (theme: AppTheme) =>
       justifyContent: 'flex-end',
       paddingHorizontal: Skin.space(16),
       paddingVertical: Skin.space(8),
+    },
+    filterRow: {
+      // Match the DM-list filter spacing convention (12h) for consistency, with
+      // extra breathing room between the header and the pills.
+      paddingHorizontal: Skin.space(12),
+      paddingTop: Skin.space(20),
+      paddingBottom: Skin.space(8),
     },
     errorText: {
       flex: 1,

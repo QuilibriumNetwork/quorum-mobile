@@ -9,7 +9,8 @@ import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
+import { coerceMessagePreview, previewKindIcon } from '@/utils/messagePreview';
 import { useAuth } from '@/context/AuthContext';
 import type { Conversation } from '@/hooks/chat';
 import { useDMMute } from '@/hooks/chat/useDMMute';
@@ -52,6 +53,8 @@ interface InboxItem {
   isFarcaster?: boolean;
   isMuted?: boolean;
   subtitle?: string;
+  /** IconSymbol name for a media/event preview (image, call, etc.). */
+  subtitleIcon?: IconSymbolName;
   subtitlePrefix?: string;
   placeholder?: boolean;
 }
@@ -124,7 +127,13 @@ const InboxRow = React.memo(function InboxRow({ item, styles, theme, onPress, on
             {item.subtitlePrefix ? (
               <Text style={styles.subtitlePrefix}>{item.subtitlePrefix}: </Text>
             ) : null}
-            {item.subtitle ?? 'No messages yet'}
+            {item.subtitleIcon ? (
+              <>
+                <IconSymbol name={item.subtitleIcon} size={13} color={theme.colors.textMuted} />
+                {' '}
+              </>
+            ) : null}
+            {item.subtitle ?? (item.subtitleIcon ? '' : 'No messages yet')}
           </Text>
           {item.unreadCount > 0 && (
             <View style={styles.unreadBadge}>
@@ -198,8 +207,14 @@ export default function MessagesInbox() {
 
     for (const conv of (conversations as Conversation[]) ?? []) {
       const hasUnread = conv.lastReadTimestamp ? conv.timestamp > conv.lastReadTimestamp : false;
-      const preview = conv.lastMessagePreview;
       const senderName = conv.lastMessageSenderName;
+      // Coerce any preview shape (typed, legacy string, raw object) to
+      // {kind,text}; an empty text with no icon means "no message yet".
+      const preview =
+        conv.lastMessagePreview != null ? coerceMessagePreview(conv.lastMessagePreview) : undefined;
+      const previewText = preview?.text || undefined;
+      const previewIcon = preview ? previewKindIcon(preview.kind) : undefined;
+      const hasPreview = !!(previewText || previewIcon);
       rows.push({
         id: conv.conversationId,
         title:
@@ -212,9 +227,10 @@ export default function MessagesInbox() {
         isRepudiable: conv.isRepudiable,
         isFarcaster: conv.source === 'farcaster',
         isMuted: isMuted(conv.conversationId),
-        subtitle: preview || undefined,
-        subtitlePrefix: preview && senderName ? senderName : undefined,
-        placeholder: !preview,
+        subtitle: previewText,
+        subtitleIcon: previewIcon,
+        subtitlePrefix: hasPreview && senderName ? senderName : undefined,
+        placeholder: !hasPreview,
       });
     }
 

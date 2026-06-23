@@ -17,7 +17,7 @@
 import { KickUserModal } from '@/components/KickUserModal';
 import SpaceChannelBindingPicker from '@/components/SpaceChannelBindingPicker';
 import ShareInviteSheet from '@/components/ShareInviteSheet';
-import { BaseModal, TypeToConfirmModal } from '@/components/shared';
+import { ActionRow, ActionRowGroup, BaseModal, TypeToConfirmModal } from '@/components/shared';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
@@ -52,6 +52,7 @@ import type { ApexToken } from '@/services/apex/config';
 import { getErrorMessage } from '@/utils/error';
 import { getSpace, getSpaceKey } from '@/services/config/spaceStorage';
 import { useChannelMute } from '@/hooks/chat/useChannelMute';
+import { useSpaceNotificationTypes } from '@/hooks/chat/useSpaceNotificationTypes';
 // NativeCryptoProvider and getApiConfig imported dynamically in handlePublishToDirectory
 // to avoid module-level import failures on some devices
 import { pickEmoji, pickSticker } from '@/services/media/customAssets';
@@ -549,6 +550,8 @@ export default function SpaceSettingsModal({
   const { isSpaceMuted, mutedChannels, toggleSpaceMute, toggleChannelMute } =
     useChannelMute(spaceId);
   const spaceNotificationsOn = !isSpaceMuted();
+  // Per-space choice of WHICH mention/reply types notify (synced via UserConfig).
+  const { isEnabled: isTypeEnabled, toggleType } = useSpaceNotificationTypes(spaceId);
   const handleToggleSpaceNotifications = useCallback(() => {
     toggleSpaceMute();
   }, [toggleSpaceMute]);
@@ -1567,19 +1570,54 @@ export default function SpaceSettingsModal({
       <View style={styles.divider} />
 
       <Text style={styles.sectionTitle}>Notifications</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Skin.space(4) }}>
-        <View style={{ flex: 1, paddingRight: Skin.space(12) }}>
-          <Text style={styles.sectionDescription}>
-            Notify me when messages are posted in this space.
-          </Text>
-        </View>
-        <Switch
-          value={spaceNotificationsOn}
-          onValueChange={handleToggleSpaceNotifications}
-          trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-          thumbColor={'#ffffff'}
+
+      {/* Master space on/off — its own card row. */}
+      <ActionRowGroup style={styles.notifGroup}>
+        <ActionRow
+          icon="bell"
+          label="Space notifications"
+          sublabel="Notify me in this space"
+          trailing={
+            <Switch
+              value={spaceNotificationsOn}
+              onValueChange={handleToggleSpaceNotifications}
+              trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+              thumbColor={'#ffffff'}
+            />
+          }
         />
-      </View>
+      </ActionRowGroup>
+
+      {/* Which notification TYPES fire in this space. Independent of the on/off
+          toggle above (space-off still overrides at notify time); these pick
+          what counts as notifiable when the space is on. Synced via UserConfig.
+          Order + types mirror desktop (@you, @everyone, @roles, Replies); the
+          mobile wording is intentionally clearer — desktop should be updated to
+          match (see follow-up). */}
+      <Text style={styles.notifGroupTitle}>Notify me about</Text>
+      <ActionRowGroup style={[styles.notifGroup, { opacity: spaceNotificationsOn ? 1 : 0.5 }]}>
+        {([
+          { type: 'mention-you' as const, icon: 'at', label: 'Mentions of me', hint: 'You’re @mentioned directly' },
+          { type: 'mention-everyone' as const, icon: 'bullhorn', label: '@everyone', hint: 'The whole space is notified' },
+          { type: 'mention-roles' as const, icon: 'shield', label: 'Mentions of my roles', hint: 'A role you have is @mentioned' },
+          { type: 'reply' as const, icon: 'arrowshape.turn.up.left', label: 'Replies to me', hint: 'Someone replies to you' },
+        ]).map(({ type, icon, label, hint }) => (
+          <ActionRow
+            key={type}
+            icon={icon}
+            label={label}
+            sublabel={hint}
+            trailing={
+              <Switch
+                value={isTypeEnabled(type)}
+                onValueChange={() => toggleType(type)}
+                trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+                thumbColor={'#ffffff'}
+              />
+            }
+          />
+        ))}
+      </ActionRowGroup>
 
       {/* Per-channel mute. Listed under the space toggle so users can
           turn the space on but silence specific noisy channels (or
@@ -1588,41 +1626,44 @@ export default function SpaceSettingsModal({
           really only matters when the space is on, but we keep them
           interactive either way to make the data model obvious). */}
       {(space?.groups ?? []).some(g => (g.channels ?? []).length > 0) && (
-        <View style={{ marginTop: Skin.space(8) }}>
-          <Text style={[styles.sectionDescription, { marginBottom: Skin.space(8), opacity: spaceNotificationsOn ? 1 : 0.5 }]}>
-            Channels
-          </Text>
-          {(space?.groups ?? []).map(group => (
-            (group.channels ?? []).map(channel => {
-              // Per-channel switch reflects only the channel's own mute, so the
-              // user can configure channels independently even while the whole
-              // space is muted (space-off overrides at notify time regardless).
-              const channelOn = !mutedChannels.has(channel.channelId);
-              return (
-                <View
-                  key={channel.channelId}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    paddingVertical: Skin.space(6),
-                    opacity: spaceNotificationsOn ? 1 : 0.5,
-                  }}
-                >
-                  <Text style={{ flex: 1, color: theme.colors.textMain, fontSize: Skin.font(14), paddingRight: Skin.space(12) }}>
-                    # {channel.channelName}
-                  </Text>
-                  <Switch
-                    value={channelOn}
-                    onValueChange={() => handleToggleChannelNotifications(channel.channelId)}
-                    trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-                    thumbColor={'#ffffff'}
+        <>
+          <Text style={styles.notifGroupTitle}>Channels</Text>
+          <ActionRowGroup style={[styles.notifGroup, { opacity: spaceNotificationsOn ? 1 : 0.5 }]}>
+            {(space?.groups ?? []).flatMap(group =>
+              (group.channels ?? []).map(channel => {
+                // Per-channel switch reflects only the channel's own mute, so the
+                // user can configure channels independently even while the whole
+                // space is muted (space-off overrides at notify time regardless).
+                const channelOn = !mutedChannels.has(channel.channelId);
+                return (
+                  <ActionRow
+                    key={channel.channelId}
+                    // Channel's own icon + color (default hashtag/outline), matching
+                    // the channel list. `leading` (not `icon`) so the channel's
+                    // custom color is preserved instead of the row tint.
+                    leading={
+                      <IconSymbol
+                        name={(channel.icon || 'hashtag') as IconSymbolName}
+                        size={20}
+                        color={resolveChannelIconColor(channel.iconColor, theme.colors.textMuted)}
+                        variant={channel.iconVariant ?? 'outline'}
+                      />
+                    }
+                    label={channel.channelName}
+                    trailing={
+                      <Switch
+                        value={channelOn}
+                        onValueChange={() => handleToggleChannelNotifications(channel.channelId)}
+                        trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+                        thumbColor={'#ffffff'}
+                      />
+                    }
                   />
-                </View>
-              );
-            })
-          ))}
-        </View>
+                );
+              })
+            )}
+          </ActionRowGroup>
+        </>
       )}
 
       {/* Leave space button (for non-owners) */}
@@ -2682,6 +2723,23 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textStrong,
       marginBottom: Skin.space(8),
+    },
+    // Sub-group labels above the grouped cards ("Notify me about", "Channels").
+    // Intentionally LIGHTER than the 17px bold "Notifications" section title —
+    // the muted uppercase iOS-settings convention — so they read as subordinate
+    // to the top-level space toggle rather than equal-weight siblings.
+    notifGroupTitle: {
+      ...theme.textStyles.footnote,
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginTop: Skin.space(16),
+      marginBottom: Skin.space(8),
+      marginHorizontal: Skin.space(8),
+    },
+    // Spacing between consecutive ActionRowGroup cards in the notifications area.
+    notifGroup: {
+      marginBottom: Skin.space(4),
     },
     blockedSection: {
       marginBottom: Skin.space(16),
