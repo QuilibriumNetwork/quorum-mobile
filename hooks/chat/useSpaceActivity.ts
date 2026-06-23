@@ -9,10 +9,13 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { createMMKV } from 'react-native-mmkv';
+import { coerceMessagePreview, type MessagePreview } from '@/utils/messagePreview';
 
 export interface SpaceActivity {
   timestamp: number;
-  preview?: string;
+  /** Typed preview of the last message. Legacy rows stored a raw string and are
+   *  coerced on read (see loadActivity). */
+  preview?: MessagePreview;
   senderName?: string;
   channelId?: string;
 }
@@ -24,7 +27,16 @@ function loadActivity(): Record<string, SpaceActivity> {
   const raw = storage.getString(STORAGE_KEY);
   if (!raw) return {};
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw) as Record<string, SpaceActivity>;
+    // Coerce legacy string previews (possibly emoji-prefixed) to the typed
+    // shape on read so old MMKV rows render without emoji and never crash.
+    for (const key of Object.keys(parsed)) {
+      const entry = parsed[key];
+      if (entry && entry.preview !== undefined) {
+        entry.preview = coerceMessagePreview(entry.preview);
+      }
+    }
+    return parsed;
   } catch {
     return {};
   }

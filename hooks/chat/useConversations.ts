@@ -5,13 +5,16 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useStorageAdapter } from '@/context/StorageContext';
 import { queryKeys, Conversation as BaseConversation, logger } from '@quilibrium/quorum-shared';
+import type { MessagePreview } from '@/utils/messagePreview';
 
 const log = logger.scope('[Conversations]');
 
 // Extended Conversation type with mobile-specific fields
 export type Conversation = BaseConversation & {
-  // Message preview fields
-  lastMessagePreview?: string;
+  // Message preview fields. Quorum DMs store the typed {kind,text} preview;
+  // the Farcaster path still sets a plain string. Renderers coerce either via
+  // coerceMessagePreview(). Legacy MMKV rows may also hold a raw string.
+  lastMessagePreview?: MessagePreview | string;
   lastMessageSenderName?: string;
   // Source indicator (farcaster vs quorum)
   source?: 'quorum' | 'farcaster';

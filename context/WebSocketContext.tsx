@@ -2687,29 +2687,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         const existingConversation = await storage.getConversation(conversationId);
         // Get sender display name for preview
         const senderDisplayName = userProfileFromEnvelope?.displayName || existingConversation?.displayName || senderAddress.substring(0, 8);
-        // Determine preview text based on message type
-        const getMessagePreview = (msg: Message): string => {
-          const contentType = msg.content?.type;
-          if (contentType === 'embed') {
-            return '📷 Image';
-          } else if (contentType === 'sticker') {
-            return '🎨 Sticker';
-          } else if (contentType === 'call-event') {
-            const c = msg.content as any;
-            const icon = c.mediaType === 'video' ? '📹' : '📞';
-            if (c.event === 'completed') return `${icon} Call`;
-            if (c.event === 'missed') return `${icon} Missed call`;
-            return `${icon} Call`;
-          } else if (contentType === 'post' || contentType === 'event') {
-            const textContent = ('text' in msg.content ? msg.content.text : undefined);
-            if (Array.isArray(textContent)) {
-              return textContent.join('');
-            }
-            return textContent || '';
-          }
-          return '';
-        };
-        const messagePreview = getMessagePreview(decryptedMessage);
+        // Typed preview (icon + text, no emoji) — single source of truth in
+        // utils/messagePreview, which now also handles call-event.
+        const messagePreview = getSpaceMessagePreview(decryptedMessage);
         if (!existingConversation) {
           const newConversation: Conversation = {
             conversationId,
@@ -3780,24 +3760,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         const existingConversation = await storage.getConversation(conversationId);
         const senderDisplayName = msgResult.user_profile?.display_name || existingConversation?.displayName || resolvedSenderAddress.substring(0, 8);
         const senderIcon = msgResult.user_profile?.user_icon || existingConversation?.icon || '';
-        const getMessagePreview = (msg: Message): string => {
-          const ct = msg.content?.type;
-          if (ct === 'embed') return '📷 Image';
-          if (ct === 'sticker') return '🎨 Sticker';
-          if (ct === 'call-event') {
-            const c = msg.content as any;
-            const icon = c.mediaType === 'video' ? '📹' : '📞';
-            if (c.event === 'completed') return `${icon} Call`;
-            if (c.event === 'missed') return `${icon} Missed call`;
-            return `${icon} Call`;
-          }
-          if (ct === 'post' || ct === 'event') {
-            const textContent = ('text' in msg.content ? msg.content.text : undefined);
-            return Array.isArray(textContent) ? textContent.join('') : textContent || '';
-          }
-          return '';
-        };
-        const messagePreview = getMessagePreview(decryptedMessage);
+        // Typed preview (icon + text, no emoji) — see the live DM path above.
+        const messagePreview = getSpaceMessagePreview(decryptedMessage);
 
         if (!existingConversation) {
           const newConversation: Conversation = {
