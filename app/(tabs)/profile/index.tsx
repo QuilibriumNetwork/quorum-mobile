@@ -10,7 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,7 +19,7 @@ import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useOtaUpdate } from '@/hooks/useOtaUpdate';
 import {
@@ -27,12 +27,28 @@ import {
   markNotificationsSeen,
   removeNotificationLogEntry,
 } from '@/services/notifications/notificationLog';
+import { clearMentionReplyLog } from '@/services/notifications/mentionReplyLog';
 import { markAllFarcasterNotificationsRead } from '@/services/farcasterClient';
 import {
   useUnifiedNotifications,
   type UnifiedNotification,
 } from '@/hooks/useUnifiedNotifications';
 import * as Skin from '@/theme/skins/geometry';
+
+/** Leading icon (IconSymbol name) for a Quorum mention/reply row, by kind. */
+function quorumRowIcon(entry: UnifiedNotification): IconSymbolName {
+  switch (entry.raw?.quorum?.kind) {
+    case 'reply':
+      return 'arrowshape.turn.up.left.fill';
+    case 'mention-everyone':
+      return 'speaker.wave.2.fill';
+    case 'mention-roles':
+      return 'person.2.fill';
+    case 'mention-you':
+    default:
+      return 'at';
+  }
+}
 
 function formatTime(ts: number): string {
   const now = Date.now();
@@ -49,6 +65,8 @@ export default function NotificationsScreen() {
   const { farcasterAuthToken } = useAuth();
   const {
     items,
+    quorumItems,
+    farcasterFeedItems,
     isLoading,
     isFetchingMore,
     hasMore,
@@ -141,6 +159,10 @@ export default function NotificationsScreen() {
             <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
           ) : item.source === 'farcaster' ? (
             <DefaultAvatar displayName={item.title} address={item.id} size={36} />
+          ) : item.source === 'quorum' ? (
+            <View style={styles.iconWrap}>
+              <IconSymbol name={quorumRowIcon(item)} color={theme.colors.primary} size={18} />
+            </View>
           ) : (
             <View style={styles.iconWrap}>
               <IconSymbol name="bell.fill" color={theme.colors.primary} size={18} />
@@ -154,6 +176,11 @@ export default function NotificationsScreen() {
               {item.source === 'farcaster' && (
                 <View style={styles.sourceTag}>
                   <Text style={styles.sourceTagLabel}>Farcaster</Text>
+                </View>
+              )}
+              {item.source === 'quorum' && (
+                <View style={styles.sourceTagSpace}>
+                  <Text style={styles.sourceTagSpaceLabel}>Space</Text>
                 </View>
               )}
             </View>
@@ -184,11 +211,27 @@ export default function NotificationsScreen() {
   const ota = useOtaUpdate();
   const showOta = ota.isUpdateAvailable || ota.isUpdatePending;
 
-  // "Clear chat" used to live in the header. With the header slots taken
-  // by navigation actions, expose the clear action as a small inline link
-  // above the list when it's relevant. Farcaster items aren't dismissable
-  // (server-owned), so the link only appears when there's chat to clear.
-  const hasChat = items.some(i => i.source === 'chat');
+  // Two sections: Quorum mentions/replies, then Farcaster activity. Empty
+  // sections are dropped so we never render a lone header.
+  const sections = useMemo(() => {
+    const out: { key: string; title: string; data: UnifiedNotification[] }[] = [];
+    if (quorumItems.length) {
+      out.push({ key: 'quorum', title: 'Mentions & replies', data: quorumItems });
+    }
+    if (farcasterFeedItems.length) {
+      out.push({ key: 'farcaster', title: 'Farcaster', data: farcasterFeedItems });
+    }
+    return out;
+  }, [quorumItems, farcasterFeedItems]);
+
+  // Secondary "Mark all read" — clears the Quorum inbox log and marks the tab
+  // seen (Level 1). Per the two-level model this is the explicit reset path;
+  // per-channel bubbles still clear on channel open (Level 2, Phase 3).
+  const handleMarkAllRead = useCallback(() => {
+    clearMentionReplyLog();
+    clearNotificationLog();
+    markNotificationsSeen();
+  }, []);
 
   return (
     <FloatingTabScreen surfaceColor={theme.colors.surface1} isDark={isDark} style={{ paddingTop: insets.top }}>
@@ -224,11 +267,11 @@ export default function NotificationsScreen() {
           </Text>
         </View>
       )}
-      {hasChat && (
+      {items.length > 0 && (
         <View style={styles.clearRow}>
-          <TouchableOpacity onPress={clearNotificationLog} hitSlop={8}>
+          <TouchableOpacity onPress={handleMarkAllRead} hitSlop={8}>
             <Text style={{ color: theme.colors.primary, fontSize: Skin.font(13), fontWeight: '600' }}>
-              Clear chat notifications
+              Mark all read
             </Text>
           </TouchableOpacity>
         </View>
@@ -244,10 +287,16 @@ export default function NotificationsScreen() {
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={items}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          renderSectionHeader={({ section }) => (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionHeaderLabel}>{section.title}</Text>
+            </View>
+          )}
+          stickySectionHeadersEnabled={false}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
           contentContainerStyle={{ paddingBottom: listPadding }}
           refreshControl={
@@ -363,6 +412,30 @@ const createStyles = (theme: AppTheme) =>
       fontSize: Skin.font(10),
       fontWeight: '700',
       color: '#8B5CF6',
+    },
+    sourceTagSpace: {
+      paddingHorizontal: Skin.space(6),
+      paddingVertical: Skin.space(2),
+      borderRadius: Skin.radius(4),
+      backgroundColor: theme.colors.primary + '22',
+    },
+    sourceTagSpaceLabel: {
+      fontSize: Skin.font(10),
+      fontWeight: '700',
+      color: theme.colors.primary,
+    },
+    sectionHeader: {
+      paddingHorizontal: Skin.space(16),
+      paddingTop: Skin.space(14),
+      paddingBottom: Skin.space(6),
+      backgroundColor: theme.colors.surface1,
+    },
+    sectionHeaderLabel: {
+      fontSize: Skin.font(12),
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
+      color: theme.colors.textMuted,
     },
     subtitle: {
       fontSize: Skin.font(14),
