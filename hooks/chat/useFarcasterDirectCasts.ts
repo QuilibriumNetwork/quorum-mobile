@@ -66,7 +66,10 @@ function toUnifiedConversation(fc: DirectCastConversation, currentUserFid?: numb
   return {
     conversationId: `farcaster:${fc.conversationId}`,
     type: fc.isGroup ? 'group' : 'direct',
-    timestamp: fc.lastMessage?.serverTimestamp ?? Date.now(),
+    // Fall back to 0 (sorts to the bottom), never Date.now() — a conversation
+    // with a missing/last-message-less timestamp must not float to the top of
+    // the inbox as if it were the most recent activity.
+    timestamp: fc.lastMessage?.serverTimestamp ?? 0,
     address: `fid:${counterParty?.fid ?? 0}`,
     icon: iconUrl ?? '',
     displayName: fc.name ?? counterParty?.displayName ?? counterParty?.username ?? 'Unknown',
