@@ -1,5 +1,6 @@
 import { logger } from '@quilibrium/quorum-shared';
 import { reportFarcasterAuthFailure } from './farcaster/authTokenEvents';
+import { stripImageMetadata } from '../utils/stripImageMetadata';
 
 const FARCASTER_BASE_URL = 'https://client.farcaster.xyz';
 
@@ -836,8 +837,11 @@ export async function uploadImageToCloudflare({
   name = 'direct-cast-image',
   mimeType = 'image/jpeg',
 }: UploadImageParams): Promise<string | undefined> {
+  // Strip EXIF (e.g. GPS location) before the image leaves the device.
+  const safeUri = await stripImageMetadata(uri, mimeType);
+
   const file = {
-    uri,
+    uri: safeUri,
     type: mimeType,
     name,
   };
@@ -1005,9 +1009,12 @@ export async function uploadImageForCast(
   // CDN URL we hand to the cast embed comes from step 2.
   const { url: uploadUrl } = await generateImageUploadUrl(token);
 
+  // Strip EXIF (e.g. GPS location) before the image leaves the device.
+  const safeUri = await stripImageMetadata(localUri, mimeType);
+
   const formData = new FormData();
   formData.append('file', {
-    uri: localUri,
+    uri: safeUri,
     type: mimeType,
     name: `image_${Date.now()}.${mimeType.split('/')[1] || 'jpg'}`,
   } as unknown as Blob);
