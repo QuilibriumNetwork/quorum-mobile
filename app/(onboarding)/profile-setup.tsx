@@ -66,6 +66,7 @@ export default function ProfileSetupScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
+      exif: false,
     });
 
     if (!result.canceled && result.assets[0]) {
@@ -83,6 +84,7 @@ export default function ProfileSetupScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
+      exif: false,
     });
 
     if (!result.canceled && result.assets[0]) {
