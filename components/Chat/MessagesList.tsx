@@ -352,6 +352,10 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
+  // True when the reaction picker was opened directly from the (already-dimmed)
+  // action sheet, so the picker can show its backdrop instantly and avoid a
+  // flash during the handoff.
+  const [reactionPickerFromActionSheet, setReactionPickerFromActionSheet] = useState(false);
   const [actionSheetMessageId, setActionSheetMessageId] = useState<string | null>(null);
   const [editHistoryMessage, setEditHistoryMessage] = useState<DisplayMessage | null>(null);
   // Long-press on a reaction badge opens this modal with pill-filterable
@@ -614,6 +618,8 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     if (onReply || onDelete) {
       setActionSheetMessageId(messageId);
     } else {
+      // Direct open (no action sheet) — fade the backdrop in normally.
+      setReactionPickerFromActionSheet(false);
       setReactionPickerMessageId(messageId);
     }
   }, [onReply, onDelete]);
@@ -645,7 +651,10 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   }, [actionSheetMessage, onReply]);
 
   const handleReactFromActionSheet = useCallback(() => {
-    // Move the message ID to the reaction picker
+    // Hand off from the action sheet to the reaction picker. The action sheet
+    // is already dimming the screen; flag the picker to show its backdrop
+    // instantly so there's no undimmed flash between the two modals.
+    setReactionPickerFromActionSheet(true);
     setReactionPickerMessageId(actionSheetMessageId);
     setActionSheetMessageId(null);
   }, [actionSheetMessageId]);
@@ -1254,10 +1263,14 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     />
     <EmojiPicker
       visible={!!reactionPickerMessageId}
-      onClose={() => setReactionPickerMessageId(null)}
+      onClose={() => {
+        setReactionPickerMessageId(null);
+        setReactionPickerFromActionSheet(false);
+      }}
       onSelectEmoji={handleSelectReaction}
       theme={theme}
       customEmojis={customEmojis}
+      instantBackdrop={reactionPickerFromActionSheet}
     />
     <MessageActionSheet
       visible={!!actionSheetMessageId}
