@@ -134,8 +134,9 @@ export function HexInputView({
       </View>
 
       {/* Buttons ride above the keyboard so Import Account stays tappable
-          while the key field is focused. */}
-      <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
+          while the key field is focused. marginTop:auto pins them to the
+          bottom with a clear gap above. */}
+      <KeyboardStickyView style={styles.stickyFooter} offset={{ closed: 0, opened: insets.bottom }}>
         <View style={styles.footer}>
           <View style={styles.buttons}>
             <Button variant="secondary" onPress={onBack} style={styles.backButton}>
@@ -275,8 +276,10 @@ const createStyles = (theme: AppTheme, insets: { bottom: number }) =>
       marginLeft: Skin.space(12),
       lineHeight: Skin.font(20),
     },
-    footer: {
+    stickyFooter: {
       marginTop: 'auto',
+    },
+    footer: {
       paddingBottom: insets.bottom + Skin.space(8),
     },
     buttons: {

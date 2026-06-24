@@ -95,8 +95,9 @@ export function MnemonicInputView({
       />
 
       {/* Buttons ride above the keyboard so Import Account stays tappable
-          while the phrase field is focused. */}
-      <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
+          while the phrase field is focused. marginTop:auto pins them to the
+          bottom with a clear gap above. */}
+      <KeyboardStickyView style={styles.stickyFooter} offset={{ closed: 0, opened: insets.bottom }}>
         <View style={styles.footer}>
           <Text style={[styles.hint, valid && { color: theme.colors.success }, words.length > 0 && !valid && { color: theme.colors.danger }]}>
             {hint || ' '}
@@ -159,8 +160,11 @@ const createStyles = (theme: AppTheme, insets: { bottom: number }) =>
       flex: 1,
     },
     phraseInput: {
-      flex: 1,
-      minHeight: 140,
+      // Sized to comfortably hold a 24-word phrase, but NOT flex:1 — letting it
+      // fill the whole screen pushed it flush against the sticky buttons, so
+      // the buttons (same-ish bg) blended in. A fixed height leaves a visible
+      // gap above the footer.
+      height: 180,
       backgroundColor: theme.colors.surface3,
       borderRadius: Skin.radius(12),
       borderWidth: Skin.border(1),
@@ -176,6 +180,9 @@ const createStyles = (theme: AppTheme, insets: { bottom: number }) =>
     },
     phraseInputValid: {
       borderColor: theme.colors.success,
+    },
+    stickyFooter: {
+      marginTop: 'auto',
     },
     footer: {
       paddingTop: Skin.space(16),
