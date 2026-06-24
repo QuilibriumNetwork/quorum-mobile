@@ -4907,9 +4907,13 @@ const FeedPostCard = React.memo(function FeedPostCard({
       <Pressable onPress={navigateToThread} style={styles.postHeader}>
         <TouchableOpacity onPress={navigateToProfile} style={styles.avatarContainer}>
           <ApexAvatarRing active={authorIsApex} size={44}>
-            <Image
+            {/* expo-image: off-thread decode + cache so avatars don't stall scroll. */}
+            <ExpoImage
               source={post.authorAvatar ? { uri: post.authorAvatar } : AVATAR_FALLBACK}
               style={styles.avatar}
+              cachePolicy="memory-disk"
+              recyclingKey={post.authorAvatar ?? `fallback-${post.authorFid}`}
+              transition={0}
             />
           </ApexAvatarRing>
           {!isFollowing && post.authorFid > 0 && (
@@ -5607,6 +5611,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   const handleDeleteCast = useCallback((castHash: string) => {
     void optimistic.deleteCast(castHash);
   }, [optimistic.deleteCast]);
+
+  // Stable ref so FeedPostCard's memo survives extraData (like/recast) changes.
+  const handleFeedImagePress = useCallback((images: string[], index: number) => {
+    setFeedViewerState({ images, index });
+  }, []);
 
   const {
     data: farcasterItems,
@@ -6518,6 +6527,19 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               // accurate slot positions without measuring during scroll.
               extraData={likeStates}
               keyExtractor={(item) => item.id}
+              // Recycle cells within same-shape pools so a video row isn't
+              // reused as a text row (lighter rebind on scroll).
+              getItemType={(item) =>
+                activeFilter === 'media'
+                  ? 'media-grid'
+                  : item.isProposal
+                    ? 'proposal'
+                    : item.videos.length > 0
+                      ? 'video'
+                      : item.mediaUrls.length > 0
+                        ? 'image'
+                        : 'text'
+              }
               showsVerticalScrollIndicator={false}
               // Let taps reach buttons (e.g. the proposal "Post vote") while a
               // text input's keyboard is open, instead of being swallowed to
@@ -6771,7 +6793,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                       onOpenChannel={openChannel}
                       onMentionPress={handleMentionPress}
                       onLinkPress={openMiniApp}
-                      onImagePress={(images, index) => setFeedViewerState({ images, index })}
+                      onImagePress={handleFeedImagePress}
                       onLikeToggle={handleLikeToggle}
                       onOpenShareSheet={handleOpenShareSheet}
                       onFollow={handleFollow}
