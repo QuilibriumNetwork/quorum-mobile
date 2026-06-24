@@ -221,7 +221,13 @@ export default function UserProfileModal({
           {user.primaryUsername && (
             <Text style={styles.username}>@{user.primaryUsername}</Text>
           )}
-          <TouchableOpacity onPress={handleCopyAddress} style={styles.addressRow}>
+          <TouchableOpacity
+            onPress={handleCopyAddress}
+            style={styles.addressRow}
+            accessibilityRole="button"
+            accessibilityLabel="Copy address"
+            hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+          >
             <Text style={styles.userId}>{truncateAddress(user.userId)}</Text>
             <IconSymbol name="doc.on.doc" size={12} color={theme.colors.textMuted} />
           </TouchableOpacity>
@@ -466,6 +472,10 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: Skin.space(6),
+      // Padding enlarges the tap target so the copy action is comfortably
+      // hittable on Android (the row is otherwise just text + a 12px icon).
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(8),
     },
     farcasterRow: {
       flexDirection: 'row',

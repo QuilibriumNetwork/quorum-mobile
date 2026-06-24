@@ -22,26 +22,41 @@ interface NewConversationModalProps {
   onConversationCreated: (conversationId: string) => void;
 }
 
-// Validate address format: Base58 multihash (Qm...) or username (@...)
+// Base58 multihash format (starts with Qm, 46 chars total for CIDv0).
+// Also accept other valid Base58 characters for flexibility.
+const BASE58_ADDRESS_REGEX =
+  /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{32,}$/;
+
+// QNS username: alphanumeric + underscores, with an optional leading @.
+// Anything that isn't a full Base58 address is treated as a username candidate
+// so a bare name (e.g. "cassie") resolves via QNS without needing the @ prefix.
+const USERNAME_REGEX = /^[a-zA-Z0-9_]{1,}$/;
+
+// Strip an optional leading @ from a (trimmed) input.
+function stripAtPrefix(input: string): string {
+  return input.startsWith('@') ? input.slice(1) : input;
+}
+
+// Check if input is a username (vs a full Base58 address).
+// A bare name without @ counts as a username as long as it isn't a 32+ char
+// Base58 address.
+function isUsername(address: string): boolean {
+  const trimmed = address.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('@')) return true;
+  return !BASE58_ADDRESS_REGEX.test(trimmed);
+}
+
+// Validate address format: Base58 multihash (Qm...) or username (with/without @).
 function isValidAddress(address: string): boolean {
   if (!address) return false;
   const trimmed = address.trim();
 
-  // Username format: @username (alphanumeric, underscores, min 1 char after @)
-  if (trimmed.startsWith('@')) {
-    const username = trimmed.slice(1);
-    return /^[a-zA-Z0-9_]{1,}$/.test(username);
+  if (isUsername(trimmed)) {
+    return USERNAME_REGEX.test(stripAtPrefix(trimmed));
   }
 
-  // Base58 multihash format (starts with Qm, 46 chars total for CIDv0)
-  // Also accept other valid Base58 characters for flexibility
-  const base58Regex = /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{32,}$/;
-  return base58Regex.test(trimmed);
-}
-
-// Check if input is a username
-function isUsername(address: string): boolean {
-  return address.trim().startsWith('@');
+  return BASE58_ADDRESS_REGEX.test(trimmed);
 }
 
 export default function NewConversationModal({
@@ -59,11 +74,12 @@ export default function NewConversationModal({
   const [error, setError] = useState<string | null>(null);
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
 
-  // Extract username for QNS lookup (without @ prefix)
+  // Extract username for QNS lookup (without @ prefix). A bare name resolves
+  // too, so the @ is optional (issue #50).
   const usernameToResolve = useMemo(() => {
     const trimmed = address.trim();
-    if (trimmed.startsWith('@') && trimmed.length > 1) {
-      return trimmed.slice(1);
+    if (isUsername(trimmed)) {
+      return stripAtPrefix(trimmed);
     }
     return '';
   }, [address]);
@@ -103,7 +119,7 @@ export default function NewConversationModal({
   // If it's a username and we have a resolved address, use that
   const normalizedAddress = useMemo(() => {
     const trimmed = address.trim();
-    if (trimmed.startsWith('@') && resolvedAddress) {
+    if (isUsername(trimmed) && resolvedAddress) {
       return resolvedAddress;
     }
     return trimmed;
@@ -111,7 +127,7 @@ export default function NewConversationModal({
 
   // Check if conversation already exists
   const existingConversation = useMemo(() => {
-    if (!normalizedAddress || normalizedAddress.startsWith('@')) return undefined;
+    if (!normalizedAddress || isUsername(normalizedAddress)) return undefined;
     const searchAddress = normalizedAddress.toLowerCase();
     return existingConversations.find(
       c => c.address?.toLowerCase() === searchAddress
@@ -134,8 +150,8 @@ export default function NewConversationModal({
     setError(null);
 
     try {
-      // For @usernames, use the resolved Qm address
-      const targetAddress = address.trim().startsWith('@') && resolvedAddress
+      // For usernames (with or without @), use the resolved Qm address
+      const targetAddress = isUsername(address.trim()) && resolvedAddress
         ? resolvedAddress
         : address.trim();
 
