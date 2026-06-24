@@ -118,6 +118,10 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       paddingBottom: insets.bottom + 16,
     },
     footer: {
+      // Opaque background so the footer masks scroll content when it lifts
+      // above the keyboard (otherwise the content shows through under the
+      // buttons). paddingTop gives a clear gap above the buttons.
+      paddingTop: Skin.space(12),
       paddingHorizontal: Skin.space(24),
       paddingBottom: insets.bottom + 16,
       backgroundColor: isDark ? theme.colors.surface0 : theme.colors.surface1,

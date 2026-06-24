@@ -4,13 +4,12 @@
 
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
-import { KeyboardStickyView } from 'react-native-keyboard-controller';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme, type AppTheme } from '@/theme';
 import { Button } from '@/components/ui/Button';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { OnboardingLayout } from './OnboardingLayout';
 import * as Skin from '@/theme/skins/geometry';
 
 interface HexInputViewProps {
@@ -30,7 +29,6 @@ export function HexInputView({
   error,
 }: HexInputViewProps) {
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
   const styles = createStyles(theme);
 
   const [hexInput, setHexInput] = useState('');
@@ -69,7 +67,25 @@ export function HexInputView({
   const validationMessage = getValidationMessage();
 
   return (
-    <View style={styles.container}>
+    <OnboardingLayout
+      currentStep="account-setup"
+      footer={
+        <View style={styles.buttons}>
+          <Button variant="secondary" onPress={onBack} style={styles.backButton}>
+            Back
+          </Button>
+          <Button
+            variant="primary"
+            onPress={handleSubmit}
+            disabled={!isValid || isLoading}
+            loading={isLoading}
+            style={styles.submitButton}
+          >
+            Import Account
+          </Button>
+        </View>
+      }
+    >
       <View style={styles.header}>
         <Text style={styles.title}>Import Private Key</Text>
         <Text style={styles.subtitle}>
@@ -132,37 +148,12 @@ export function HexInputView({
           Never share your private key. Anyone with this key has full access to your account.
         </Text>
       </View>
-
-      {/* Buttons ride above the keyboard so Import Account stays tappable
-          while the key field is focused. marginTop:auto pins them to the
-          bottom with a clear gap above. */}
-      <KeyboardStickyView style={styles.stickyFooter} offset={{ closed: 0, opened: insets.bottom }}>
-        <View style={styles.footer}>
-          <View style={styles.buttons}>
-            <Button variant="secondary" onPress={onBack} style={styles.backButton}>
-              Back
-            </Button>
-            <Button
-              variant="primary"
-              onPress={handleSubmit}
-              disabled={!isValid || isLoading}
-              loading={isLoading}
-              style={styles.submitButton}
-            >
-              Import Account
-            </Button>
-          </View>
-        </View>
-      </KeyboardStickyView>
-    </View>
+    </OnboardingLayout>
   );
 }
 
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-    },
     header: {
       marginBottom: Skin.space(24),
     },
@@ -266,7 +257,6 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: (theme.colors.warning ?? '#f59e0b') + '15',
       borderRadius: Skin.radius(12),
       padding: Skin.space(16),
-      marginBottom: Skin.space(24),
     },
     warningText: {
       flex: 1,
@@ -275,13 +265,6 @@ const createStyles = (theme: AppTheme) =>
       fontFamily: theme.fonts.regular.fontFamily,
       marginLeft: Skin.space(12),
       lineHeight: Skin.font(20),
-    },
-    stickyFooter: {
-      marginTop: 'auto',
-    },
-    footer: {
-      // Bottom safe-area inset comes from OnboardingLayout's content padding.
-      paddingBottom: Skin.space(8),
     },
     buttons: {
       flexDirection: 'row',

@@ -6,11 +6,10 @@
 
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
-import { KeyboardStickyView } from 'react-native-keyboard-controller';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type AppTheme } from '@/theme';
 import { Button } from '@/components/ui/Button';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { OnboardingLayout } from './OnboardingLayout';
 import { validateMnemonic } from '@/services/onboarding/keyService';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -30,7 +29,6 @@ export function MnemonicInputView({
   error,
 }: MnemonicInputViewProps) {
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
   const styles = createStyles(theme);
 
   const [phrase, setPhrase] = useState('');
@@ -60,7 +58,30 @@ export function MnemonicInputView({
   };
 
   return (
-    <View style={styles.container}>
+    <OnboardingLayout
+      currentStep="account-setup"
+      footer={
+        <>
+          <Text style={[styles.hint, valid && { color: theme.colors.success }, words.length > 0 && !valid && { color: theme.colors.danger }]}>
+            {hint || ' '}
+          </Text>
+          <View style={styles.buttons}>
+            <Button variant="secondary" onPress={onBack} style={styles.backButton}>
+              Back
+            </Button>
+            <Button
+              variant="primary"
+              onPress={handleSubmit}
+              disabled={!valid || isLoading}
+              loading={isLoading}
+              style={styles.submitButton}
+            >
+              Import Account
+            </Button>
+          </View>
+        </>
+      }
+    >
       <View style={styles.header}>
         <Text style={styles.title}>Enter Recovery Phrase</Text>
         <Text style={styles.subtitle}>
@@ -93,41 +114,12 @@ export function MnemonicInputView({
         textAlignVertical="top"
         returnKeyType="done"
       />
-
-      {/* Buttons ride above the keyboard so Import Account stays tappable
-          while the phrase field is focused. marginTop:auto pins them to the
-          bottom with a clear gap above. */}
-      <KeyboardStickyView style={styles.stickyFooter} offset={{ closed: 0, opened: insets.bottom }}>
-        <View style={styles.footer}>
-          <Text style={[styles.hint, valid && { color: theme.colors.success }, words.length > 0 && !valid && { color: theme.colors.danger }]}>
-            {hint || ' '}
-          </Text>
-
-          <View style={styles.buttons}>
-            <Button variant="secondary" onPress={onBack} style={styles.backButton}>
-              Back
-            </Button>
-            <Button
-              variant="primary"
-              onPress={handleSubmit}
-              disabled={!valid || isLoading}
-              loading={isLoading}
-              style={styles.submitButton}
-            >
-              Import Account
-            </Button>
-          </View>
-        </View>
-      </KeyboardStickyView>
-    </View>
+    </OnboardingLayout>
   );
 }
 
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-    },
     header: {
       marginBottom: Skin.space(16),
     },
@@ -160,10 +152,7 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
     },
     phraseInput: {
-      // Sized to comfortably hold a 24-word phrase, but NOT flex:1 — letting it
-      // fill the whole screen pushed it flush against the sticky buttons, so
-      // the buttons (same-ish bg) blended in. A fixed height leaves a visible
-      // gap above the footer.
+      // Fixed height (not flex:1) so it doesn't push flush against the footer.
       height: 180,
       backgroundColor: theme.colors.surface3,
       borderRadius: Skin.radius(12),
@@ -180,15 +169,6 @@ const createStyles = (theme: AppTheme) =>
     },
     phraseInputValid: {
       borderColor: theme.colors.success,
-    },
-    stickyFooter: {
-      marginTop: 'auto',
-    },
-    footer: {
-      // Bottom safe-area inset is supplied by OnboardingLayout's content
-      // padding; keep only a small visual gap here to avoid double-insetting.
-      paddingTop: Skin.space(16),
-      paddingBottom: Skin.space(8),
     },
     hint: {
       fontSize: Skin.font(13),
