@@ -13,6 +13,7 @@ import { useTheme, type AppTheme } from '@/theme';
 import { useOnboarding } from '@/context';
 import { OnboardingLayout, StepNavigation } from '@/components/onboarding';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { Button } from '@/components/ui/Button';
 import {
   deriveFarcasterKeys,
@@ -187,7 +188,7 @@ export default function FarcasterSetupScreen() {
     >
       <View style={styles.header}>
         <View style={styles.iconContainer}>
-          <IconSymbol name="person.2.fill" size={32} color={theme.colors.primary} />
+          <FarcasterLogoIcon size={32} color={theme.colors.primary} />
         </View>
         <Text style={styles.title}>Import Farcaster</Text>
         <Text style={styles.subtitle}>
