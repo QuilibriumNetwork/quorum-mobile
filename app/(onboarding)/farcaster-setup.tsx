@@ -169,7 +169,22 @@ export default function FarcasterSetupScreen() {
   };
 
   return (
-    <OnboardingLayout currentStep="farcaster-setup">
+    <OnboardingLayout
+      currentStep="farcaster-setup"
+      footer={
+        <StepNavigation
+          onBack={goBack}
+          onNext={handleSubmit}
+          onSkip={skipFarcaster}
+          showSkip={true}
+          skipLabel="Skip for now"
+          showBack={true}
+          nextLabel="Import"
+          nextDisabled={!isComplete || isSubmitting}
+          isLoading={isSubmitting}
+        />
+      }
+    >
       <View style={styles.header}>
         <View style={styles.iconContainer}>
           <IconSymbol name="person.2.fill" size={32} color={theme.colors.primary} />
@@ -276,18 +291,6 @@ export default function FarcasterSetupScreen() {
           </View>
         </>
       )}
-
-      <StepNavigation
-        onBack={goBack}
-        onNext={handleSubmit}
-        onSkip={skipFarcaster}
-        showSkip={true}
-        skipLabel="Skip for now"
-        showBack={true}
-        nextLabel="Import"
-        nextDisabled={!isComplete || isSubmitting}
-        isLoading={isSubmitting}
-      />
     </OnboardingLayout>
   );
 }

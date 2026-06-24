@@ -4,6 +4,8 @@
 
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme, type AppTheme } from '@/theme';
@@ -28,7 +30,8 @@ export function HexInputView({
   error,
 }: HexInputViewProps) {
   const { theme } = useTheme();
-  const styles = createStyles(theme);
+  const insets = useSafeAreaInsets();
+  const styles = createStyles(theme, insets);
 
   const [hexInput, setHexInput] = useState('');
 
@@ -130,27 +133,31 @@ export function HexInputView({
         </Text>
       </View>
 
-      <View style={styles.footer}>
-        <View style={styles.buttons}>
-          <Button variant="secondary" onPress={onBack} style={styles.backButton}>
-            Back
-          </Button>
-          <Button
-            variant="primary"
-            onPress={handleSubmit}
-            disabled={!isValid || isLoading}
-            loading={isLoading}
-            style={styles.submitButton}
-          >
-            Import Account
-          </Button>
+      {/* Buttons ride above the keyboard so Import Account stays tappable
+          while the key field is focused. */}
+      <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
+        <View style={styles.footer}>
+          <View style={styles.buttons}>
+            <Button variant="secondary" onPress={onBack} style={styles.backButton}>
+              Back
+            </Button>
+            <Button
+              variant="primary"
+              onPress={handleSubmit}
+              disabled={!isValid || isLoading}
+              loading={isLoading}
+              style={styles.submitButton}
+            >
+              Import Account
+            </Button>
+          </View>
         </View>
-      </View>
+      </KeyboardStickyView>
     </View>
   );
 }
 
-const createStyles = (theme: AppTheme) =>
+const createStyles = (theme: AppTheme, insets: { bottom: number }) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -270,6 +277,7 @@ const createStyles = (theme: AppTheme) =>
     },
     footer: {
       marginTop: 'auto',
+      paddingBottom: insets.bottom + Skin.space(8),
     },
     buttons: {
       flexDirection: 'row',

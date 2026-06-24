@@ -7,7 +7,7 @@ import {
   View,
   StyleSheet,
 } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
@@ -20,6 +20,9 @@ interface OnboardingLayoutProps {
   currentStep: OnboardingStep;
   showStepIndicator?: boolean;
   scrollable?: boolean;
+  /** Bottom action row (e.g. StepNavigation). Pinned and lifted above the
+   *  keyboard so the primary button stays tappable while typing. */
+  footer?: React.ReactNode;
 }
 
 export function OnboardingLayout({
@@ -27,6 +30,7 @@ export function OnboardingLayout({
   currentStep,
   showStepIndicator = true,
   scrollable = true,
+  footer,
 }: OnboardingLayoutProps) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -42,26 +46,39 @@ export function OnboardingLayout({
     </View>
   );
 
+  // Footer rides above the keyboard so Back/Continue stay reachable while a
+  // field is focused.
+  const footerNode = footer ? (
+    <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
+      <View style={styles.footer}>{footer}</View>
+    </KeyboardStickyView>
+  ) : null;
+
   if (!scrollable) {
-    return <View style={styles.container}>{content}</View>;
+    return (
+      <View style={styles.container}>
+        {content}
+        {footerNode}
+      </View>
+    );
   }
 
-  // KeyboardAwareScrollView (react-native-keyboard-controller) auto-scrolls the
-  // focused input above the keyboard on BOTH platforms and works correctly
-  // under edge-to-edge — unlike the previous KeyboardAvoidingView, which was a
-  // no-op on Android (behavior=undefined), letting the keyboard cover the
-  // Farcaster seed-phrase fields during onboarding (issue #27). Same library
-  // the chat composer already uses.
+  // KeyboardAwareScrollView auto-scrolls the focused field above the keyboard on
+  // both platforms (and under edge-to-edge), replacing a KeyboardAvoidingView
+  // that was a no-op on Android. Footer is pinned outside the scroll.
   return (
-    <KeyboardAwareScrollView
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-      bottomOffset={Skin.space(24)}
-    >
-      {content}
-    </KeyboardAwareScrollView>
+    <View style={styles.container}>
+      <KeyboardAwareScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bottomOffset={Skin.space(24)}
+      >
+        {content}
+      </KeyboardAwareScrollView>
+      {footerNode}
+    </View>
   );
 }
 
@@ -71,14 +88,21 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flex: 1,
       backgroundColor: isDark ? theme.colors.surface0 : theme.colors.surface1,
     },
+    scroll: {
+      flex: 1,
+    },
     scrollContent: {
       flexGrow: 1,
     },
     content: {
       flex: 1,
       paddingTop: insets.top + 16,
-      paddingBottom: insets.bottom + 16,
       paddingHorizontal: Skin.space(24),
+    },
+    footer: {
+      paddingHorizontal: Skin.space(24),
+      paddingBottom: insets.bottom + 16,
+      backgroundColor: isDark ? theme.colors.surface0 : theme.colors.surface1,
     },
   });
 

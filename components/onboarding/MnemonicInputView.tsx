@@ -6,6 +6,8 @@
 
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type AppTheme } from '@/theme';
 import { Button } from '@/components/ui/Button';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -28,7 +30,8 @@ export function MnemonicInputView({
   error,
 }: MnemonicInputViewProps) {
   const { theme } = useTheme();
-  const styles = createStyles(theme);
+  const insets = useSafeAreaInsets();
+  const styles = createStyles(theme, insets);
 
   const [phrase, setPhrase] = useState('');
 
@@ -91,31 +94,35 @@ export function MnemonicInputView({
         returnKeyType="done"
       />
 
-      <View style={styles.footer}>
-        <Text style={[styles.hint, valid && { color: theme.colors.success }, words.length > 0 && !valid && { color: theme.colors.danger }]}>
-          {hint || ' '}
-        </Text>
+      {/* Buttons ride above the keyboard so Import Account stays tappable
+          while the phrase field is focused. */}
+      <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
+        <View style={styles.footer}>
+          <Text style={[styles.hint, valid && { color: theme.colors.success }, words.length > 0 && !valid && { color: theme.colors.danger }]}>
+            {hint || ' '}
+          </Text>
 
-        <View style={styles.buttons}>
-          <Button variant="secondary" onPress={onBack} style={styles.backButton}>
-            Back
-          </Button>
-          <Button
-            variant="primary"
-            onPress={handleSubmit}
-            disabled={!valid || isLoading}
-            loading={isLoading}
-            style={styles.submitButton}
-          >
-            Import Account
-          </Button>
+          <View style={styles.buttons}>
+            <Button variant="secondary" onPress={onBack} style={styles.backButton}>
+              Back
+            </Button>
+            <Button
+              variant="primary"
+              onPress={handleSubmit}
+              disabled={!valid || isLoading}
+              loading={isLoading}
+              style={styles.submitButton}
+            >
+              Import Account
+            </Button>
+          </View>
         </View>
-      </View>
+      </KeyboardStickyView>
     </View>
   );
 }
 
-const createStyles = (theme: AppTheme) =>
+const createStyles = (theme: AppTheme, insets: { bottom: number }) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -172,6 +179,7 @@ const createStyles = (theme: AppTheme) =>
     },
     footer: {
       paddingTop: Skin.space(16),
+      paddingBottom: insets.bottom + Skin.space(8),
     },
     hint: {
       fontSize: Skin.font(13),

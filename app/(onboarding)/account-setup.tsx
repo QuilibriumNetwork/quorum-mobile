@@ -112,7 +112,9 @@ export default function AccountSetupScreen() {
   // Import via mnemonic
   if (viewMode === 'import-mnemonic') {
     return (
-      <OnboardingLayout currentStep="account-setup">
+      // scrollable=false: the view owns a KeyboardStickyView footer, which must
+      // pin at screen level (not inside a scroll).
+      <OnboardingLayout currentStep="account-setup" scrollable={false}>
         <MnemonicInputView
           onSubmit={handleImportMnemonic}
           onBack={() => setViewMode('choose')}
@@ -126,7 +128,7 @@ export default function AccountSetupScreen() {
   // Import via hex
   if (viewMode === 'import-hex') {
     return (
-      <OnboardingLayout currentStep="account-setup">
+      <OnboardingLayout currentStep="account-setup" scrollable={false}>
         <HexInputView
           onSubmit={handleImportHex}
           onBack={() => setViewMode('choose')}
