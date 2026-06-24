@@ -14,7 +14,7 @@ import { useOnboarding } from '@/context';
 import type { PrivacyLevel } from '@/context/OnboardingContext';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -84,7 +84,17 @@ export default function PrivacySetupScreen() {
   }, [selectedLevel, goToStep]);
 
   return (
-    <OnboardingLayout currentStep="privacy-setup">
+    <OnboardingLayout
+      currentStep="privacy-setup"
+      footer={
+        <StepNavigation
+          onBack={goBack}
+          onNext={handleContinue}
+          nextLabel="Continue"
+          nextDisabled={!selectedLevel}
+        />
+      }
+    >
       <View style={styles.header}>
         <View style={styles.iconContainer}>
           <IconSymbol name="hand.raised.fill" size={32} color={theme.colors.primary} />
@@ -95,8 +105,7 @@ export default function PrivacySetupScreen() {
         </Text>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.options}>
+      <View style={styles.options}>
           {PRIVACY_OPTIONS.map((option) => {
             const isSelected = selectedLevel === option.level;
 
@@ -170,15 +179,7 @@ export default function PrivacySetupScreen() {
               </TouchableOpacity>
             );
           })}
-        </View>
-      </ScrollView>
-
-      <StepNavigation
-        onBack={goBack}
-        onNext={handleContinue}
-        nextLabel="Continue"
-        nextDisabled={!selectedLevel}
-      />
+      </View>
     </OnboardingLayout>
   );
 }
@@ -213,9 +214,6 @@ const createStyles = (theme: AppTheme) =>
       textAlign: 'center',
       lineHeight: Skin.font(20),
       paddingHorizontal: Skin.space(16),
-    },
-    scrollView: {
-      flex: 1,
     },
     options: {
       gap: Skin.space(12),

@@ -4,6 +4,8 @@
 
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme, type AppTheme } from '@/theme';
@@ -28,6 +30,7 @@ export function HexInputView({
   error,
 }: HexInputViewProps) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = createStyles(theme);
 
   const [hexInput, setHexInput] = useState('');
@@ -130,22 +133,27 @@ export function HexInputView({
         </Text>
       </View>
 
-      <View style={styles.footer}>
-        <View style={styles.buttons}>
-          <Button variant="secondary" onPress={onBack} style={styles.backButton}>
-            Back
-          </Button>
-          <Button
-            variant="primary"
-            onPress={handleSubmit}
-            disabled={!isValid || isLoading}
-            loading={isLoading}
-            style={styles.submitButton}
-          >
-            Import Account
-          </Button>
+      {/* Buttons ride above the keyboard so Import Account stays tappable
+          while the key field is focused. marginTop:auto pins them to the
+          bottom with a clear gap above. */}
+      <KeyboardStickyView style={styles.stickyFooter} offset={{ closed: 0, opened: insets.bottom }}>
+        <View style={styles.footer}>
+          <View style={styles.buttons}>
+            <Button variant="secondary" onPress={onBack} style={styles.backButton}>
+              Back
+            </Button>
+            <Button
+              variant="primary"
+              onPress={handleSubmit}
+              disabled={!isValid || isLoading}
+              loading={isLoading}
+              style={styles.submitButton}
+            >
+              Import Account
+            </Button>
+          </View>
         </View>
-      </View>
+      </KeyboardStickyView>
     </View>
   );
 }
@@ -268,8 +276,12 @@ const createStyles = (theme: AppTheme) =>
       marginLeft: Skin.space(12),
       lineHeight: Skin.font(20),
     },
-    footer: {
+    stickyFooter: {
       marginTop: 'auto',
+    },
+    footer: {
+      // Bottom safe-area inset comes from OnboardingLayout's content padding.
+      paddingBottom: Skin.space(8),
     },
     buttons: {
       flexDirection: 'row',
