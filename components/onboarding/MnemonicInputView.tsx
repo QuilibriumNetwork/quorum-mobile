@@ -31,7 +31,7 @@ export function MnemonicInputView({
 }: MnemonicInputViewProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const styles = createStyles(theme, insets);
+  const styles = createStyles(theme);
 
   const [phrase, setPhrase] = useState('');
 
@@ -123,7 +123,7 @@ export function MnemonicInputView({
   );
 }
 
-const createStyles = (theme: AppTheme, insets: { bottom: number }) =>
+const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -185,8 +185,10 @@ const createStyles = (theme: AppTheme, insets: { bottom: number }) =>
       marginTop: 'auto',
     },
     footer: {
+      // Bottom safe-area inset is supplied by OnboardingLayout's content
+      // padding; keep only a small visual gap here to avoid double-insetting.
       paddingTop: Skin.space(16),
-      paddingBottom: insets.bottom + Skin.space(8),
+      paddingBottom: Skin.space(8),
     },
     hint: {
       fontSize: Skin.font(13),

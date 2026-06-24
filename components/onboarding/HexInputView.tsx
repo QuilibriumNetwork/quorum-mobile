@@ -31,7 +31,7 @@ export function HexInputView({
 }: HexInputViewProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const styles = createStyles(theme, insets);
+  const styles = createStyles(theme);
 
   const [hexInput, setHexInput] = useState('');
 
@@ -158,7 +158,7 @@ export function HexInputView({
   );
 }
 
-const createStyles = (theme: AppTheme, insets: { bottom: number }) =>
+const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -280,7 +280,8 @@ const createStyles = (theme: AppTheme, insets: { bottom: number }) =>
       marginTop: 'auto',
     },
     footer: {
-      paddingBottom: insets.bottom + Skin.space(8),
+      // Bottom safe-area inset comes from OnboardingLayout's content padding.
+      paddingBottom: Skin.space(8),
     },
     buttons: {
       flexDirection: 'row',

@@ -38,7 +38,9 @@ export function OnboardingLayout({
   const styles = createStyles(theme, isDark, insets);
 
   const content = (
-    <View style={styles.content}>
+    // Without a footer, the children own the bottom of the screen, so they need
+    // the safe-area inset themselves; with a footer, the footer carries it.
+    <View style={[styles.content, !footer && styles.contentBottomInset]}>
       {showStepIndicator && currentStep !== 'complete' && (
         <StepIndicator currentStep={currentStep} />
       )}
@@ -98,6 +100,9 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flex: 1,
       paddingTop: insets.top + 16,
       paddingHorizontal: Skin.space(24),
+    },
+    contentBottomInset: {
+      paddingBottom: insets.bottom + 16,
     },
     footer: {
       paddingHorizontal: Skin.space(24),
