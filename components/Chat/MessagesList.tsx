@@ -106,6 +106,10 @@ interface MessagesListProps {
    *  message rests above the floating composer + tab bar instead of being
    *  hidden behind them. Older messages still scroll behind the composer. */
   bottomInset?: number;
+  /** True for a 1:1 direct-message conversation. Used to hide the redundant
+   *  reaction count of "1" — in a 2-person chat a single reaction count adds
+   *  no information (issue #29). In spaces the count is always shown. */
+  isDM?: boolean;
 }
 
 export interface MessagesListHandle {
@@ -143,6 +147,7 @@ const ReactionBadge = React.memo(function ReactionBadge({
   styles,
   onToggle,
   onShowDetails,
+  hideCountWhenSingle = false,
 }: {
   reaction: DisplayReaction;
   messageId: string;
@@ -150,7 +155,11 @@ const ReactionBadge = React.memo(function ReactionBadge({
   styles: MessageStyles;
   onToggle: (messageId: string, emoji: string, hasReacted: boolean) => void;
   onShowDetails: (messageId: string) => void;
+  /** In a 1:1 DM, a reaction count of 1 is redundant (only one other person
+   *  could have reacted), so hide the number and show just the emoji (#29). */
+  hideCountWhenSingle?: boolean;
 }) {
+  const showCount = !(hideCountWhenSingle && reaction.count <= 1);
   const handlePress = useCallback(() => {
     onToggle(messageId, reaction.emoji, reaction.hasReacted);
   }, [onToggle, messageId, reaction.emoji, reaction.hasReacted]);
@@ -182,14 +191,16 @@ const ReactionBadge = React.memo(function ReactionBadge({
       ) : (
         <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
       )}
-      <Text
-        style={[
-          styles.reactionCount,
-          reaction.hasReacted && styles.reactionCountActive,
-        ]}
-      >
-        {reaction.count}
-      </Text>
+      {showCount && (
+        <Text
+          style={[
+            styles.reactionCount,
+            reaction.hasReacted && styles.reactionCountActive,
+          ]}
+        >
+          {reaction.count}
+        </Text>
+      )}
     </TouchableOpacity>
   );
 });
@@ -319,6 +330,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   channelId,
   topInset = 0,
   bottomInset = 0,
+  isDM = false,
 }, ref) {
   const { width: screenWidth } = useWindowDimensions();
   const MESSAGE_IMAGE_MAX_WIDTH = screenWidth - 84;
@@ -703,12 +715,13 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               styles={styles}
               onToggle={handleToggleReaction}
               onShowDetails={handleShowReactionDetails}
+              hideCountWhenSingle={isDM}
             />
           ))}
         </View>
       );
     },
-    [styles, handleToggleReaction, handleShowReactionDetails, customEmojiMap]
+    [styles, handleToggleReaction, handleShowReactionDetails, customEmojiMap, isDM]
   );
 
   // Render system message (join/leave/kick)
