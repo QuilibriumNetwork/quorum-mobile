@@ -288,6 +288,7 @@ export function FarcasterDirectMessageView({
         onReply={handleReply}
         onOpenFarcasterCast={onOpenFarcasterCast}
         onLinkPress={onLinkPress}
+        isDM
       />
 
       <ChatBottomChrome tabBarHeight={tabBarHeight} surfaceColor={theme.colors.surface1} isDark={theme.dark}>

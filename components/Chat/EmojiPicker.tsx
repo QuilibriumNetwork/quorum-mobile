@@ -6,14 +6,16 @@
  */
 
 import type { AppTheme } from '@/theme';
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Modal, Pressable, TextInput, Image, Keyboard, Platform } from 'react-native';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, StyleSheet, Modal, Pressable, TextInput, Image, Keyboard, Platform, Animated, Dimensions } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import type { Emoji } from '@quilibrium/quorum-shared';
 import { useEmojiFrecency } from '@/hooks/useEmojiFrecency';
 import { EMOJI_KEYWORDS, searchEmojis } from '@/data/emojiData';
 import * as Skin from '@/theme/skins/geometry';
-import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 // Custom emoji type for the picker (includes isCustom flag for rendering)
 type PickerEmoji = {
@@ -273,6 +275,32 @@ export function EmojiPicker({
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const styles = createStyles(theme, keyboardHeight);
 
+  // Backdrop + panel are animated independently (like BaseModal): the backdrop
+  // fades over the whole screen while only the panel slides up from the bottom.
+  // The native Modal itself uses animationType="none" so it never slides the
+  // backdrop with the content (issue #57). `rendered` keeps the Modal mounted
+  // through the close animation.
+  const [rendered, setRendered] = useState(visible);
+  const backdropAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setRendered(true);
+      Animated.parallel([
+        Animated.timing(backdropAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 24, stiffness: 240, mass: 0.8 }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(backdropAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: SCREEN_HEIGHT, duration: 200, useNativeDriver: true }),
+      ]).start(({ finished }) => {
+        if (finished) setRendered(false);
+      });
+    }
+  }, [visible, backdropAnim, slideAnim]);
+
   // Refresh recent emojis when picker becomes visible
   useEffect(() => {
     if (visible) {
@@ -386,15 +414,25 @@ export function EmojiPicker({
     return [...matchedCustom, ...matchedStandard];
   }, [searchQuery, displayEmojis, customPickerEmojis]);
 
-  if (!visible) return null;
+  // Embedded hosts (e.g. audio-space overlay) keep rendering whenever visible;
+  // the Modal branch keeps itself mounted through the close animation via
+  // `rendered`.
+  if (embedded && !visible) return null;
+  if (!embedded && !rendered && !visible) return null;
 
   const panel = (
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Emoji</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>✕</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Close emoji picker"
+            >
+              <IconSymbol name="xmark" size={18} color={theme.colors.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -409,29 +447,42 @@ export function EmojiPicker({
             />
           </View>
 
-          {/* Category tabs */}
+          {/* Category tabs — continuous color band with a floating active pill,
+              matching the composer's inline emoji panel (no divider borders). */}
           {!searchQuery && (
-            <SegmentedPills
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
               style={styles.categoryTabs}
               contentContainerStyle={styles.categoryTabsContent}
-              pillShape="rect"
-              emojiSize={22}
-              items={categories.map<SegmentedPillItem>(([key, category]) => ({
-                key,
-                accessibilityLabel: category.name,
-                ...(typeof category.icon === 'string'
-                  ? { emoji: category.icon }
-                  : { leading: category.icon }),
-              }))}
-              activeKey={selectedCategory}
-              onChange={(key) => setSelectedCategory(key as CategoryKey)}
-            />
+              keyboardShouldPersistTaps="always"
+            >
+              {categories.map(([key, category]) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[
+                    styles.categoryTab,
+                    selectedCategory === key && styles.categoryTabActive,
+                  ]}
+                  onPress={() => setSelectedCategory(key as CategoryKey)}
+                  accessibilityRole="button"
+                  accessibilityLabel={category.name}
+                >
+                  {typeof category.icon === 'string' ? (
+                    <Text style={styles.categoryTabEmoji}>{category.icon}</Text>
+                  ) : (
+                    category.icon
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           )}
 
           {/* Emoji grid */}
           <ScrollView
             style={styles.emojiGrid}
             contentContainerStyle={styles.emojiGridContent}
+            keyboardShouldPersistTaps="always"
           >
             {filteredEmojis.length === 0 ? (
               <Text style={styles.emptyText}>
@@ -470,14 +521,18 @@ export function EmojiPicker({
 
   return (
     <Modal
-      visible={visible}
+      visible={rendered}
       transparent
-      animationType="slide"
+      animationType="none"
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        {panel}
+        <Animated.View style={[styles.backdrop, { opacity: backdropAnim }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        </Animated.View>
+        <Animated.View style={{ transform: [{ translateY: slideAnim }] }}>
+          {panel}
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -493,9 +548,13 @@ const createStyles = (theme: AppTheme, keyboardHeight: number) => StyleSheet.cre
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   container: {
-    backgroundColor: theme.colors.surface1 ?? theme.colors.background,
+    // Same surface family as the composer's emoji panel so the reaction picker
+    // reads as the same component in both light/dark schemes.
+    backgroundColor: theme.colors.composerPillBg,
     borderTopLeftRadius: Skin.radius(16),
     borderTopRightRadius: Skin.radius(16),
+    // Clip the search row / category band to the rounded top corners.
+    overflow: 'hidden',
     // Match the visual size of the MessageActionSheet that precedes
     // this picker. The action sheet has no explicit cap and grows to
     // fit ~7-9 rows (Reply, React, Quick React, Edit, Pin, Delete,
@@ -512,8 +571,8 @@ const createStyles = (theme: AppTheme, keyboardHeight: number) => StyleSheet.cre
     alignItems: 'center',
     paddingHorizontal: Skin.space(16),
     paddingVertical: Skin.space(12),
-    borderBottomWidth: Skin.border(1),
-    borderBottomColor: theme.colors.border ?? theme.colors.surface3,
+    // No bottom border — separation comes from the category band's color step
+    // below, matching the composer panel (issue #57).
   },
   headerTitle: {
     fontSize: Skin.font(18),
@@ -523,13 +582,10 @@ const createStyles = (theme: AppTheme, keyboardHeight: number) => StyleSheet.cre
   closeButton: {
     padding: Skin.space(4),
   },
-  closeButtonText: {
-    fontSize: Skin.font(20),
-    color: theme.colors.textMuted,
-  },
   searchContainer: {
     paddingHorizontal: Skin.space(16),
-    paddingVertical: Skin.space(8),
+    paddingTop: Skin.space(4),
+    paddingBottom: Skin.space(8),
   },
   searchInput: {
     backgroundColor: theme.colors.surface2 ?? theme.colors.surface3,
@@ -540,12 +596,30 @@ const createStyles = (theme: AppTheme, keyboardHeight: number) => StyleSheet.cre
     color: theme.colors.textMain,
   },
   categoryTabs: {
-    maxHeight: 44,
-    borderBottomWidth: Skin.border(1),
-    borderBottomColor: theme.colors.border ?? theme.colors.surface3,
+    // Continuous color band (no divider borders), a subtle step off the panel
+    // surface — same treatment as the composer's inline emoji panel.
+    maxHeight: 48,
+    backgroundColor: theme.colors.composerPanelBand,
   },
   categoryTabsContent: {
-    paddingHorizontal: Skin.space(8),
+    paddingHorizontal: Skin.space(6),
+    paddingVertical: Skin.space(6),
+    alignItems: 'center',
+  },
+  categoryTab: {
+    paddingHorizontal: Skin.space(9),
+    paddingVertical: Skin.space(5),
+    marginHorizontal: Skin.space(2),
+    borderRadius: Skin.radius(10),
+  },
+  categoryTabActive: {
+    // Floating pill one step above the band, matching the composer panel.
+    backgroundColor: theme.colors.composerPanelBandActive,
+  },
+  categoryTabEmoji: {
+    fontSize: Skin.font(20),
+    // Explicit line-height so the glyph box is tall enough on Android.
+    lineHeight: Skin.font(26),
   },
   emojiGrid: {
     flex: 1,

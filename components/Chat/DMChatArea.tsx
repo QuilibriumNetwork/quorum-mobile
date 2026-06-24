@@ -484,6 +484,7 @@ export const DMChatArea = React.memo(function DMChatArea({
         onBookmark={handleBookmarkMessage}
         isBookmarked={isBookmarked}
         onReport={handleReportMessage}
+        isDM
       />
 
       <ChatBottomChrome tabBarHeight={tabBarHeight} surfaceColor={theme.colors.surface1} isDark={theme.dark}>

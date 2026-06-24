@@ -4190,17 +4190,10 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
             thumbColor={allowSync ? '#ffffff' : '#f4f3f4'}
           />
         </View>
-        <View style={styles.settingRow}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingLabel}>Show Online Status</Text>
-            <Text style={styles.settingDescription}>Let others see when you&apos;re active</Text>
-          </View>
-          <Switch
-            value={true}
-            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-            thumbColor={'#ffffff'}
-          />
-        </View>
+        {/* "Show Online Status" toggle removed: there is no presence/online-status
+            feature behind it, so the control was a non-functional decoration
+            (hardcoded on, no handler). Re-add a real toggle here if/when presence
+            ships. (issue #58) */}
         {/* Privacy Level — read-only (moved from the old Account Info card). */}
         <View style={styles.settingRow}>
           <View style={styles.settingLeft}>
