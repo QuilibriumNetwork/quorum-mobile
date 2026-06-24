@@ -7,7 +7,8 @@ import {
   View,
   StyleSheet,
 } from 'react-native';
-import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
+import { KeyboardStickyView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
@@ -37,6 +38,18 @@ export function OnboardingLayout({
 
   const styles = createStyles(theme, isDark, insets);
 
+  // Keyboard height (the library reports it negative-going: 0 -> -kbHeight).
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+
+  // A spacer at the bottom of the scroll content that grows by the keyboard
+  // height. This GROWS the scrollable area (rather than relying on
+  // KeyboardAwareScrollView's offset math, which doesn't scroll when content
+  // only marginally overflows — issue kirillzyusko/react-native-keyboard-controller#1394),
+  // so a focused field can always be scrolled into view.
+  const keyboardSpacerStyle = useAnimatedStyle(() => ({
+    height: Math.max(0, -keyboardHeight.value),
+  }));
+
   const content = (
     // Without a footer, the children own the bottom of the screen, so they need
     // the safe-area inset themselves; with a footer, the footer carries it.
@@ -65,20 +78,20 @@ export function OnboardingLayout({
     );
   }
 
-  // KeyboardAwareScrollView auto-scrolls the focused field above the keyboard on
-  // both platforms (and under edge-to-edge), replacing a KeyboardAvoidingView
-  // that was a no-op on Android. Footer is pinned outside the scroll.
+  // Plain scroll + a keyboard-height spacer: the scroll area grows with the
+  // keyboard so the focused field reliably scrolls into view on the first
+  // focus (unlike KeyboardAwareScrollView's offset approach — see #1394).
   return (
     <View style={styles.container}>
-      <KeyboardAwareScrollView
+      <Animated.ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        bottomOffset={Skin.space(24)}
       >
         {content}
-      </KeyboardAwareScrollView>
+        <Animated.View style={keyboardSpacerStyle} />
+      </Animated.ScrollView>
       {footerNode}
     </View>
   );
@@ -97,7 +110,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexGrow: 1,
     },
     content: {
-      flex: 1,
+      flexGrow: 1,
       paddingTop: insets.top + 16,
       paddingHorizontal: Skin.space(24),
     },
