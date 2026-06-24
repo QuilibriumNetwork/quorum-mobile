@@ -98,9 +98,20 @@ export default function NameDetailModal({
     Alert.alert('Primary Set', `@${name} is now your primary username.`);
   };
 
-  const handleMakeResolvable = async () => {
-    if (!user?.quilibriumAddress || !user?.publicKey || !nameRecord?.ownership?.one_time_key || !nameRecord?.ownership?.verification_key) {
+  /**
+   * Update (set or clear) the public resolve key for this name.
+   * Passing `resolveKey: undefined` makes the name private (unresolvable);
+   * passing the user's ed448 public key makes it publicly resolvable.
+   * The signature is over (name, nameType, timestamp, nonce) in both
+   * directions, so the same signing flow covers resolve and unresolve.
+   */
+  const submitResolveKeyUpdate = async (makeResolvable: boolean) => {
+    if (!user?.quilibriumAddress || !nameRecord?.ownership?.one_time_key || !nameRecord?.ownership?.verification_key) {
       Alert.alert('Error', 'Could not retrieve ownership information.');
+      return;
+    }
+    if (makeResolvable && !user?.publicKey) {
+      Alert.alert('Error', 'Could not retrieve your public key.');
       return;
     }
 
@@ -132,13 +143,20 @@ export default function NameDetailModal({
       updateResolveKey({
         name,
         nameType,
-        resolveKey: user.publicKey, // ed448 public key as hex (57 bytes / 114 hex chars)
+        // Omit the resolve key to make the name private; include the ed448
+        // public key (57 bytes / 114 hex chars) to make it resolvable.
+        resolveKey: makeResolvable ? user.publicKey : undefined,
         signature,
         timestamp,
         nonce,
       }, {
         onSuccess: () => {
-          Alert.alert('Success', `@${name} is now publicly resolvable.`);
+          Alert.alert(
+            'Success',
+            makeResolvable
+              ? `@${name} is now publicly resolvable.`
+              : `@${name} is now private and no longer resolvable.`
+          );
           onRefresh?.();
         },
         onError: (err) => {
@@ -146,8 +164,21 @@ export default function NameDetailModal({
         },
       });
     } catch (err) {
-      Alert.alert('Error', 'Failed to make name resolvable');
+      Alert.alert('Error', makeResolvable ? 'Failed to make name resolvable' : 'Failed to make name private');
     }
+  };
+
+  const handleMakeResolvable = () => submitResolveKeyUpdate(true);
+
+  const handleMakePrivate = () => {
+    Alert.alert(
+      'Make Private',
+      `Stop resolving @${name}? Others will no longer be able to find your address by this name. You keep ownership and can make it resolvable again at any time.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Make Private', style: 'destructive', onPress: () => submitResolveKeyUpdate(false) },
+      ]
+    );
   };
 
   const handleCancelListing = () => {
@@ -402,6 +433,26 @@ export default function NameDetailModal({
               <View style={styles.actionContent}>
                 <Text style={styles.actionText}>Make Resolvable</Text>
                 <Text style={styles.actionSubtext}>Allow others to find your address by name</Text>
+              </View>
+              {isUpdatingResolveKey ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              ) : (
+                <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* Make Private (stop resolving) — only when currently resolvable */}
+          {isResolvable && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleMakePrivate}
+              disabled={isUpdatingResolveKey}
+            >
+              <IconSymbol name="lock.fill" size={18} color={theme.colors.textMuted} />
+              <View style={styles.actionContent}>
+                <Text style={styles.actionText}>Make Private</Text>
+                <Text style={styles.actionSubtext}>Stop resolving this name (you keep ownership)</Text>
               </View>
               {isUpdatingResolveKey ? (
                 <ActivityIndicator size="small" color={theme.colors.primary} />

@@ -188,52 +188,57 @@ export function InviteLinkCard({
 
   return (
     <View style={styles.container}>
-      {/* Space Icon */}
-      <View style={styles.iconContainer}>
-        {spaceInfo.iconUrl ? (
-          <Image source={{ uri: spaceInfo.iconUrl }} style={styles.icon} />
-        ) : (
-          <SpaceIcon name={spaceInfo.spaceName} size={44} style={styles.icon} />
-        )}
+      {/* Card row: icon + info + join button */}
+      <View style={styles.cardRow}>
+        {/* Space Icon */}
+        <View style={styles.iconContainer}>
+          {spaceInfo.iconUrl ? (
+            <Image source={{ uri: spaceInfo.iconUrl }} style={styles.icon} />
+          ) : (
+            <SpaceIcon name={spaceInfo.spaceName} size={44} style={styles.icon} />
+          )}
+        </View>
+
+        {/* Space Info */}
+        <View style={styles.infoContainer}>
+          <Text style={styles.spaceName} numberOfLines={1}>
+            {spaceInfo.spaceName}
+          </Text>
+          {description && (
+            <Text style={styles.description} numberOfLines={2}>
+              {description}
+            </Text>
+          )}
+        </View>
+
+        {/* Join Button */}
+        <TouchableOpacity
+          style={[
+            styles.joinButton,
+            buttonState.disabled && styles.joinButtonDisabled,
+            isAlreadyMember && styles.joinButtonJoined,
+          ]}
+          onPress={handleJoin}
+          disabled={buttonState.disabled}
+        >
+          {joinMutation.isPending ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text
+              style={[
+                styles.joinButtonText,
+                buttonState.disabled && styles.joinButtonTextDisabled,
+              ]}
+            >
+              {buttonState.text}
+            </Text>
+          )}
+        </TouchableOpacity>
       </View>
 
-      {/* Space Info */}
-      <View style={styles.infoContainer}>
-        <Text style={styles.spaceName} numberOfLines={1}>
-          {spaceInfo.spaceName}
-        </Text>
-        {description && (
-          <Text style={styles.description} numberOfLines={2}>
-            {description}
-          </Text>
-        )}
-      </View>
-
-      {/* Join Button */}
-      <TouchableOpacity
-        style={[
-          styles.joinButton,
-          buttonState.disabled && styles.joinButtonDisabled,
-          isAlreadyMember && styles.joinButtonJoined,
-        ]}
-        onPress={handleJoin}
-        disabled={buttonState.disabled}
-      >
-        {joinMutation.isPending ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text
-            style={[
-              styles.joinButtonText,
-              buttonState.disabled && styles.joinButtonTextDisabled,
-            ]}
-          >
-            {buttonState.text}
-          </Text>
-        )}
-      </TouchableOpacity>
-
-      {/* Join Error */}
+      {/* Join Error — in normal flow below the row so the card grows to fit it
+          (was absolutely positioned and clipped when the invite was the last
+          message; see issue #20). */}
       {joinMutation.error && (
         <View style={styles.joinErrorContainer}>
           <Text style={styles.joinErrorText}>
@@ -250,8 +255,6 @@ export function InviteLinkCard({
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
-      flexDirection: 'row',
-      alignItems: 'center',
       backgroundColor: theme.colors.surface3,
       borderRadius: Skin.radius(12),
       borderWidth: Skin.border(1),
@@ -259,6 +262,10 @@ const createStyles = (theme: AppTheme) =>
       padding: Skin.space(12),
       marginTop: Skin.space(8),
       maxWidth: 400,
+    },
+    cardRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
     },
     iconContainer: {
       marginRight: Skin.space(12),
@@ -323,10 +330,7 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.warning ?? '#f59e0b',
     },
     joinErrorContainer: {
-      position: 'absolute',
-      bottom: -24,
-      left: 0,
-      right: 0,
+      marginTop: Skin.space(8),
     },
     joinErrorText: {
       fontSize: Skin.font(12),
