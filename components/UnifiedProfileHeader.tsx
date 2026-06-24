@@ -126,10 +126,12 @@ export default function UnifiedProfileHeader({
 
       <View style={styles.handlesRow}>
         {user.farcaster?.username && (
-          <Text style={styles.handleText}>@{user.farcaster.username}</Text>
+          <Text style={styles.handleText} numberOfLines={1}>
+            @{user.farcaster.username}
+          </Text>
         )}
         {user.primaryUsername && (
-          <Text style={[styles.handleText, { color: theme.colors.accent }]}>
+          <Text style={[styles.handleText, { color: theme.colors.accent }]} numberOfLines={1}>
             {user.primaryUsername}.q
           </Text>
         )}
@@ -139,6 +141,7 @@ export default function UnifiedProfileHeader({
         onPress={onCopyAddress}
         accessibilityRole="button"
         accessibilityLabel="Copy address"
+        hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
       >
         <Text style={styles.addressText}>{truncateAddress(user.address, 'medium')}</Text>
         <IconSymbol name="doc.on.doc" size={13} color={theme.colors.textMuted} />
@@ -201,7 +204,9 @@ function BigProfileCard({
 
       {/* Quorum: .q name */}
       {qname ? (
-        <Text style={[styles.handleText, { color: theme.colors.accent }]}>{qname}</Text>
+        <Text style={[styles.handleText, { color: theme.colors.accent }]} numberOfLines={1}>
+          {qname}
+        </Text>
       ) : null}
 
       {/* Quorum: tappable address + copy icon */}
@@ -211,6 +216,7 @@ function BigProfileCard({
           onPress={onCopyAddress}
           accessibilityRole="button"
           accessibilityLabel="Copy address"
+          hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
         >
           <Text style={styles.addressText}>{truncateAddress(address, 'medium')}</Text>
           <IconSymbol name="doc.on.doc" size={13} color={theme.colors.textMuted} />
@@ -219,7 +225,9 @@ function BigProfileCard({
 
       {/* Farcaster: @username */}
       {username ? (
-        <Text style={styles.handleText}>{username}</Text>
+        <Text style={styles.handleText} numberOfLines={1}>
+          {username}
+        </Text>
       ) : null}
 
       {/* Farcaster: FID — same size/style as the username line */}
@@ -260,7 +268,7 @@ function QuorumOnlyHeader({
         {displayName}
       </Text>
       {user.primaryUsername ? (
-        <Text style={[styles.handleText, { color: theme.colors.accent }]}>
+        <Text style={[styles.handleText, { color: theme.colors.accent }]} numberOfLines={1}>
           {user.primaryUsername}.q
         </Text>
       ) : null}
@@ -269,6 +277,7 @@ function QuorumOnlyHeader({
         onPress={onCopyAddress}
         accessibilityRole="button"
         accessibilityLabel="Copy address"
+        hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
       >
         <Text style={styles.addressText}>{truncateAddress(user.address, 'medium')}</Text>
         <IconSymbol name="doc.on.doc" size={13} color={theme.colors.textMuted} />
@@ -324,6 +333,9 @@ function createStyles(theme: AppTheme) {
     handleText: {
       fontSize: Skin.font(14),
       color: theme.colors.textMuted,
+      // Allow a very long handle to shrink + ellipsize instead of overflowing
+      // the card or pushing a sibling handle off-screen (see issue #61).
+      flexShrink: 1,
     },
     addressText: {
       fontSize: Skin.font(13),
@@ -359,6 +371,10 @@ function createStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: Skin.space(6),
+      // Padding enlarges the tap target so the copy action is comfortably
+      // hittable on Android (the row is otherwise just text + a 13px icon).
+      paddingVertical: Skin.space(8),
+      paddingHorizontal: Skin.space(8),
     },
   });
 }
