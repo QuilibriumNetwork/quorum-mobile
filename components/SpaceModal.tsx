@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { View, Text, TextInput, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TextInput, StyleSheet, ActivityIndicator, Image, ScrollView } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BaseModal } from '@/components/shared';
@@ -219,7 +219,12 @@ export default function SpaceModal({
   );
 
   const renderCreateTab = () => (
-    <View style={styles.tabContent}>
+    <ScrollView
+      style={styles.tabContent}
+      contentContainerStyle={styles.tabContentScroll}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
       {/* Space Name */}
       <View style={styles.inputSection}>
         <Text style={styles.label}>Space Name</Text>
@@ -308,11 +313,16 @@ export default function SpaceModal({
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 
   const renderJoinTab = () => (
-    <View style={styles.tabContent}>
+    <ScrollView
+      style={styles.tabContent}
+      contentContainerStyle={styles.tabContentScroll}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
       {/* Validated Space Preview */}
       {validatedSpace && (
         <View style={styles.spacePreview}>
@@ -422,7 +432,7 @@ export default function SpaceModal({
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 
   return (
@@ -467,6 +477,13 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     },
     tabContent: {
       flex: 1,
+    },
+    // flexGrow keeps the content filling the sheet on normal phones (so the
+    // actions stay pinned to the bottom via marginTop:'auto'), while letting
+    // it scroll when content + keyboard exceed the sheet height on tall /
+    // foldable screens (issue #7).
+    tabContentScroll: {
+      flexGrow: 1,
     },
     inputSection: {
       marginBottom: Skin.space(16),
