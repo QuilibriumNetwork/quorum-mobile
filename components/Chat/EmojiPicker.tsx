@@ -257,12 +257,6 @@ interface EmojiPickerProps {
   /** Render inline (no Modal/backdrop) for hosts that already own a modal —
    *  e.g. the audio-space overlay, where a second Modal can't be shown. */
   embedded?: boolean;
-  /** Show the backdrop at full opacity instantly on open (no fade). Used when
-   *  the picker is opened directly from another already-dimmed modal (the
-   *  message action sheet) so there's no undimmed frame between the two
-   *  backdrops — otherwise the screen flashes during the handoff. The panel
-   *  still slides in normally. */
-  instantBackdrop?: boolean;
 }
 
 export function EmojiPicker({
@@ -272,7 +266,6 @@ export function EmojiPicker({
   theme,
   customEmojis = [],
   embedded = false,
-  instantBackdrop = false,
 }: EmojiPickerProps) {
   const { recentEmojis, trackEmoji, refreshRecent } = useEmojiFrecency();
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>(
@@ -294,16 +287,8 @@ export function EmojiPicker({
   useEffect(() => {
     if (visible) {
       setRendered(true);
-      // Opened from the already-dimmed action sheet: snap the backdrop to full
-      // opacity so it covers the exact frame the action sheet's backdrop leaves
-      // (no undimmed flash). A fresh open fades the backdrop in normally.
-      if (instantBackdrop) {
-        backdropAnim.setValue(1);
-      }
       Animated.parallel([
-        ...(instantBackdrop
-          ? []
-          : [Animated.timing(backdropAnim, { toValue: 1, duration: 200, useNativeDriver: true })]),
+        Animated.timing(backdropAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
         Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 24, stiffness: 240, mass: 0.8 }),
       ]).start();
     } else {
@@ -314,7 +299,7 @@ export function EmojiPicker({
         if (finished) setRendered(false);
       });
     }
-  }, [visible, backdropAnim, slideAnim, instantBackdrop]);
+  }, [visible, backdropAnim, slideAnim]);
 
   // Refresh recent emojis when picker becomes visible
   useEffect(() => {
