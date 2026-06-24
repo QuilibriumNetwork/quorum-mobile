@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme, type AppTheme } from '@/theme';
@@ -248,25 +248,27 @@ export default function FarcasterSetupScreen() {
               <Text style={[styles.wordCountTextSmall, wordCount === 24 && styles.wordCountTextActive]}>24</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-            <View style={styles.wordGrid}>
-              {words.map((word, index) => (
-                <View key={index} style={styles.wordInputContainer}>
-                  <Text style={styles.wordNumber}>{index + 1}</Text>
-                  <TextInput
-                    style={styles.wordInput}
-                    value={word}
-                    onChangeText={text => handleWordChange(index, text)}
-                    placeholder="word"
-                    placeholderTextColor={theme.colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    editable={!isSubmitting}
-                  />
-                </View>
-              ))}
-            </View>
-          </ScrollView>
+          {/* No inner ScrollView — OnboardingLayout's KeyboardAwareScrollView
+              owns scrolling, so the grid is a plain View (avoids nested
+              vertical scrolls and lets a focused word scroll above the
+              keyboard). */}
+          <View style={styles.wordGrid}>
+            {words.map((word, index) => (
+              <View key={index} style={styles.wordInputContainer}>
+                <Text style={styles.wordNumber}>{index + 1}</Text>
+                <TextInput
+                  style={styles.wordInput}
+                  value={word}
+                  onChangeText={text => handleWordChange(index, text)}
+                  placeholder="word"
+                  placeholderTextColor={theme.colors.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isSubmitting}
+                />
+              </View>
+            ))}
+          </View>
           <View style={styles.footer}>
             <Text style={styles.progressText}>
               {filledCount} of {wordCount} words entered
@@ -347,9 +349,6 @@ const createStyles = (theme: AppTheme) =>
     },
     wordCountTextActive: {
       color: theme.colors.textStrong,
-    },
-    scrollView: {
-      flex: 1,
     },
     wordGrid: {
       flexDirection: 'row',

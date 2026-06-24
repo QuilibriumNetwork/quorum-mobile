@@ -6,10 +6,8 @@ import React from 'react';
 import {
   View,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
@@ -44,25 +42,26 @@ export function OnboardingLayout({
     </View>
   );
 
+  if (!scrollable) {
+    return <View style={styles.container}>{content}</View>;
+  }
+
+  // KeyboardAwareScrollView (react-native-keyboard-controller) auto-scrolls the
+  // focused input above the keyboard on BOTH platforms and works correctly
+  // under edge-to-edge — unlike the previous KeyboardAvoidingView, which was a
+  // no-op on Android (behavior=undefined), letting the keyboard cover the
+  // Farcaster seed-phrase fields during onboarding (issue #27). Same library
+  // the chat composer already uses.
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScrollView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      bottomOffset={Skin.space(24)}
     >
-      {scrollable ? (
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {content}
-        </ScrollView>
-      ) : (
-        content
-      )}
-    </KeyboardAvoidingView>
+      {content}
+    </KeyboardAwareScrollView>
   );
 }
 
@@ -71,9 +70,6 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     container: {
       flex: 1,
       backgroundColor: isDark ? theme.colors.surface0 : theme.colors.surface1,
-    },
-    scrollView: {
-      flex: 1,
     },
     scrollContent: {
       flexGrow: 1,
