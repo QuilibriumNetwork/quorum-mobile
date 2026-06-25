@@ -805,6 +805,9 @@ export default function SpaceSettingsModal({
   const [isRepudiable, setIsRepudiable] = useState(true);
   // Default false, matching desktop (keeping edit history is opt-in).
   const [saveEditHistory, setSaveEditHistory] = useState(false);
+  // Inline save confirmation for the General tab. Inline (not a toast) because
+  // this sits inside a native modal, mirroring the Apex section above.
+  const [generalSaved, setGeneralSaved] = useState(false);
 
   // Initialize form when space loads
   useEffect(() => {
@@ -921,10 +924,17 @@ export default function SpaceSettingsModal({
       // Reload space
       const updated = getSpace(spaceId);
       setSpace(updated);
+      setGeneralSaved(true);
     } catch (error) {
       Alert.alert('Error', 'Failed to save changes');
     }
   }, [spaceId, spaceName, description, iconUrl, bannerUrl, isRepudiable, saveEditHistory, nameError, descriptionError, updateSpaceMutation]);
+
+  // Clear the "Saved" confirmation as soon as the user edits something again,
+  // so it never lingers next to a now-stale form.
+  useEffect(() => {
+    if (hasGeneralChanges) setGeneralSaved(false);
+  }, [hasGeneralChanges]);
 
   const handlePickIcon = useCallback(async () => {
     const result = await pickImage('library');
@@ -1459,6 +1469,19 @@ export default function SpaceSettingsModal({
           <Text style={styles.saveButtonText}>Save Changes</Text>
         )}
       </TouchableOpacity>
+
+      {generalSaved && !updateSpaceMutation.isPending && (
+        <Text
+          style={{
+            fontSize: Skin.font(13),
+            textAlign: 'center',
+            marginTop: Skin.space(8),
+            color: theme.colors.success ?? '#22c55e',
+          }}
+        >
+          Changes saved.
+        </Text>
+      )}
 
       {/* Quorum Apex — owner-only (the General tab is owner-gated) */}
       <ApexConfigSection spaceAddress={spaceId} theme={theme} styles={styles} />
