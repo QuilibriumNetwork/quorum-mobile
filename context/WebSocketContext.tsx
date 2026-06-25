@@ -2421,6 +2421,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         let conversationId = '';
         let decryptedMessage: Message;
 
+        // Session-authenticated sender, captured before the self-sync rewrite
+        // below repoints conversationId to the partner. Used for remove-message auth.
+        let authenticatedDmSender = '';
+
         // Track user profile info (display name, icon) from InitializationEnvelope
         let userProfileFromEnvelope: { displayName?: string; userIcon?: string } | undefined;
 
@@ -2444,6 +2448,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }
 
             conversationId = sessionResult.conversationId;
+            authenticatedDmSender = conversationId.split('/')[0]; // init path never self-sync-rewrites
             userProfileFromEnvelope = sessionResult.userProfile;
 
             // The message should now be properly decrypted plaintext JSON
@@ -2669,6 +2674,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // the conversation should be with the actual recipient (channelId), not ourselves.
           // This matches desktop behavior in MessageService.ts lines 2082-2086
           const senderAddress = conversationId.split('/')[0];
+          authenticatedDmSender = senderAddress; // before the rewrite below
           if (senderAddress === user?.address && decryptedMessage.channelId) {
             const actualRecipient = decryptedMessage.channelId;
             conversationId = `${actualRecipient}/${actualRecipient}`;
@@ -2683,6 +2689,42 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // parse branches above (new-session + subsequent-message) since both
         // converge here. Best-effort: delete from server so it doesn't replay.
         if (await applyDmProfileUpdate(decryptedMessage, senderAddress)) {
+          getDeviceKeyset().then(dk => {
+            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
+          });
+          return;
+        }
+
+        // remove-message on the fallback path (defensive — the batch path folds
+        // these; without this a control message reaching here is a ghost post).
+        if (decryptedMessage.content?.type === 'remove-message') {
+          const removeContent = decryptedMessage.content as RemoveMessage;
+          const targetMsg = await storage.getMessage({
+            spaceId: senderAddress,
+            channelId: senderAddress,
+            messageId: removeContent.removeMessageId,
+          });
+          // Auth: deleter must be the target's author, judged by the
+          // session-authenticated sender, not the spoofable payload senderId.
+          const authorized = removeContent.senderId === authenticatedDmSender &&
+            (!targetMsg || targetMsg.content?.senderId === authenticatedDmSender);
+          if (authorized && targetMsg) {
+            const key = queryKeys.messages.infinite(senderAddress, senderAddress);
+            queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {
+              if (!old) return old;
+              return { ...old, pages: old.pages.map((page) => ({
+                ...page,
+                messages: page.messages.filter((m) => m.messageId !== removeContent.removeMessageId),
+              })) };
+            });
+            await storage.deleteMessage(removeContent.removeMessageId);
+            scheduleConversationRefresh(conversationId);
+          } else if (!authorized) {
+            logger.debug(
+              `[DM-fallback] dropped unauthorized remove-message from ${removeContent.senderId?.slice(0, 12)} for ${removeContent.removeMessageId?.slice(0, 12)}`
+            );
+          }
+          // Best-effort: clear the control message from the inbox.
           getDeviceKeyset().then(dk => {
             if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
           });
@@ -3864,14 +3906,73 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           if (originalReactionMsg) {
             const conversationKeypair = encryptionStateStorage.getConversationInboxKeypairByAddress(originalReactionMsg.inboxAddress);
             if (conversationKeypair?.signingPrivateKey && conversationKeypair?.signingPublicKey) {
+              // Hex-encode the byte-array keypair to match the signing-key shape
+              // (same as the post path below).
               const signingKey = {
-                publicKey: conversationKeypair.signingPublicKey,
-                privateKey: conversationKeypair.signingPrivateKey,
+                publicKey: bytesToHex(conversationKeypair.signingPublicKey),
+                privateKey: bytesToHex(conversationKeypair.signingPrivateKey),
               };
-              deleteInboxMessages(originalReactionMsg.inboxAddress, [originalReactionMsg.timestamp], signingKey).catch(() => {});
+              deleteConversationInboxMessages(originalReactionMsg.inboxAddress, [originalReactionMsg.timestamp], signingKey).catch(() => {});
             } else {
               getDeviceKeyset().then(dk => {
                 if (dk) deleteInboxMessages(originalReactionMsg.inboxAddress, [originalReactionMsg.timestamp], dk).catch(() => {});
+              });
+            }
+          }
+          continue;
+        }
+
+        // remove-message: delete-for-everyone control message. Fold it (don't
+        // persist as a ghost post), authorizing per the check below.
+        if (dmContentType === 'remove-message') {
+          const removeContent = decryptedMessage.content as RemoveMessage;
+          const targetMsg = await storage.getMessage({
+            spaceId: resolvedSenderAddress,
+            channelId: resolvedSenderAddress,
+            messageId: removeContent.removeMessageId,
+          });
+
+          // Auth: deleter must be the target's author. "Deleter" is the
+          // session-authenticated sender (pre-self-sync `senderAddress`), NOT
+          // the spoofable payload `senderId` — else a peer could claim your
+          // address and delete a message you wrote. Pre-self-sync keeps your own
+          // echo authorized (it's you, deleting your own message).
+          const authenticatedSender = senderAddress;
+          const authorized = removeContent.senderId === authenticatedSender &&
+            (!targetMsg || targetMsg.content?.senderId === authenticatedSender);
+
+          if (authorized && targetMsg) {
+            queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
+              if (!old) return old;
+              return { ...old, pages: old.pages.map(page => ({
+                ...page,
+                messages: page.messages.filter(msg => msg.messageId !== removeContent.removeMessageId),
+              })) };
+            });
+            await storage.deleteMessage(removeContent.removeMessageId);
+            // Refresh the conversation row so its lastMessagePreview isn't stale
+            // when the deleted message was the latest. Matches the fallback path.
+            scheduleConversationRefresh(conversationId);
+          } else if (!authorized) {
+            logger.debug(
+              `[DM] dropped unauthorized remove-message from ${removeContent.senderId?.slice(0, 12)} for ${removeContent.removeMessageId?.slice(0, 12)}`
+            );
+          }
+
+          // Best-effort: delete processed control message from inbox (same as
+          // the reaction branch / the post path below).
+          const originalRemoveMsg = batch.find(m => m.timestamp === msgResult.timestamp);
+          if (originalRemoveMsg) {
+            const conversationKeypair = encryptionStateStorage.getConversationInboxKeypairByAddress(originalRemoveMsg.inboxAddress);
+            if (conversationKeypair?.signingPrivateKey && conversationKeypair?.signingPublicKey) {
+              const signingKey = {
+                publicKey: bytesToHex(conversationKeypair.signingPublicKey),
+                privateKey: bytesToHex(conversationKeypair.signingPrivateKey),
+              };
+              deleteConversationInboxMessages(originalRemoveMsg.inboxAddress, [originalRemoveMsg.timestamp], signingKey).catch(() => {});
+            } else {
+              getDeviceKeyset().then(dk => {
+                if (dk) deleteInboxMessages(originalRemoveMsg.inboxAddress, [originalRemoveMsg.timestamp], dk).catch(() => {});
               });
             }
           }
