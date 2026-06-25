@@ -251,6 +251,9 @@ export function MessageActionSheet({
                   onPress={handleReply}
                 />
               )}
+              {messageText && (
+                <ActionRow icon="doc.on.doc" label="Copy Text" onPress={handleCopyText} />
+              )}
               {canEdit && onEdit && (
                 <ActionRow icon="pencil" label="Edit Message" onPress={handleEdit} />
               )}
@@ -261,12 +264,8 @@ export function MessageActionSheet({
                   onPress={handleViewEditHistory}
                 />
               )}
-              {canPin && (onPin || onUnpin) && (
-                <ActionRow
-                  icon={isPinned ? 'pin.slash' : 'pin.fill'}
-                  label={isPinned ? 'Unpin Message' : 'Pin Message'}
-                  onPress={handlePin}
-                />
+              {canTranslate && (
+                <ActionRow icon="globe" label="Translate" onPress={handleTranslate} />
               )}
               {onBookmark && (
                 <ActionRow
@@ -275,13 +274,13 @@ export function MessageActionSheet({
                   onPress={handleBookmark}
                 />
               )}
-              {messageText && (
-                <ActionRow icon="doc.on.doc" label="Copy Text" onPress={handleCopyText} />
+              {canPin && (onPin || onUnpin) && (
+                <ActionRow
+                  icon={isPinned ? 'pin.slash' : 'pin'}
+                  label={isPinned ? 'Unpin Message' : 'Pin Message'}
+                  onPress={handlePin}
+                />
               )}
-              {canTranslate && (
-                <ActionRow icon="globe" label="Translate" onPress={handleTranslate} />
-              )}
-              <ActionRow icon="face.smiling" label="Add Reaction" onPress={handleReact} />
               {onReport && (
                 <ActionRow icon="flag" label="Report" destructive onPress={handleReport} />
               )}

@@ -10,6 +10,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context';
 import { useStorageAdapter } from '@/context/StorageContext';
 import { queryKeys, type Message } from '@quilibrium/quorum-shared';
+import { buildLocalEdits } from '@/utils/editHistory';
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -40,6 +41,13 @@ export function useEditDirectMessage() {
         throw new Error('Messages can only be edited within 15 minutes of sending');
       }
 
+      // Honor the conversation's "Save Edit History" setting, matching
+      // desktop (MessageEditTextarea.tsx / MessageService.ts): when OFF, drop
+      // prior versions (edits: []) instead of accumulating. Default false to
+      // match desktop's default everywhere — keeping history is opt-in.
+      const conversation = await storage.getConversation(params.conversationId);
+      const saveEditHistory = conversation?.saveEditHistory ?? false;
+
       // For DMs, editing is local-only (the encrypted message was already sent)
       // We update the local message in storage
       const key = queryKeys.messages.infinite(params.recipientAddress, params.recipientAddress);
@@ -57,14 +65,7 @@ export function useEditDirectMessage() {
                 ...msg.content,
                 text: params.newText,
               } as Message['content'],
-              edits: [
-                ...(msg.edits || []),
-                {
-                  text: params.newText,
-                  modifiedDate: Date.now(),
-                  lastModifiedHash: '',
-                },
-              ],
+              edits: buildLocalEdits(msg.edits, params.newText, Date.now(), saveEditHistory),
             };
             await storage.saveMessage(
               updatedMsg,
@@ -91,6 +92,11 @@ export function useEditDirectMessage() {
       // Snapshot previous value
       const previousData = queryClient.getQueryData<InfiniteMessagesData>(key);
 
+      // Same "Save Edit History" gate as the storage write, so the optimistic
+      // cache and persisted message don't diverge (default false → desktop).
+      const conversation = await storage.getConversation(params.conversationId);
+      const saveEditHistory = conversation?.saveEditHistory ?? false;
+
       // Optimistically update the message text in cache
       queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {
         if (!old) return old;
@@ -108,14 +114,7 @@ export function useEditDirectMessage() {
                     ...m.content,
                     text: params.newText,
                   },
-                  edits: [
-                    ...(m.edits || []),
-                    {
-                      text: params.newText,
-                      modifiedDate: Date.now(),
-                      lastModifiedHash: '',
-                    },
-                  ],
+                  edits: buildLocalEdits(m.edits, params.newText, Date.now(), saveEditHistory),
                 };
               }
               return m;

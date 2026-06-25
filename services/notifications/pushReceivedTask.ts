@@ -20,6 +20,7 @@ import {
   getChannelNotificationsEnabled,
 } from './notificationPrefs';
 import { getSpaceByHubAddress } from '@/services/config/spaceStorage';
+import { isConversationMutedForCurrentUser } from '@/services/config/configService';
 
 // AuthContext stores the user object under this key in MMKV. Inlined
 // here to avoid a circular import — the constant is small and stable.
@@ -80,6 +81,43 @@ if (!taskDefined) {
     }
 
     const hubAddress = inferred.hub_address ?? inferred.hub;
+
+    // Per-DM mute — suppress the native banner for a muted conversation
+    // when the app is woken in the background/killed. The foreground path
+    // (showMessageNotification) already gates on the same mute state; this
+    // closes the background gap. Mirrors the per-space / per-channel gates
+    // below: resolve the routing key locally, check the synced mute list,
+    // bail before checkForNewMessages renders anything.
+    //
+    // The push payload carries only the conversation-specific inbox_address
+    // (E2E: the server can't know the conversationId). Resolve it the same
+    // way the deep-link router does (NotificationService 'inbox' case), via
+    // the per-DM inbox keypair record. MMKV-backed and synchronous, so it
+    // works in this background task.
+    //
+    // Fail open: if the inbox can't be resolved (brand-new / never-decrypted
+    // conversation) we do NOT suppress — better a stray banner than a
+    // silently dropped message.
+    const inboxAddress = inferred.inbox_address ?? inferred.inbox;
+    if (inferred.type === 'inbox' && inboxAddress) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const cryptoMod = require('@/services/crypto/encryption-state-storage');
+        const encryptionStateStorage = cryptoMod.encryptionStateStorage as {
+          getConversationInboxKeypairByAddress: (
+            addr: string,
+          ) => { conversationId?: string } | null;
+        };
+        const kp = encryptionStateStorage.getConversationInboxKeypairByAddress(inboxAddress);
+        const conversationId = kp?.conversationId;
+        if (conversationId && isConversationMutedForCurrentUser(conversationId)) {
+          return;
+        }
+      } catch {
+        // Lookup failed — fall through and let the normal flow render the
+        // notification rather than risk swallowing a real one.
+      }
+    }
 
     // Per-space mute — anyone can opt out of an entire space.
     // Hub-log pushes carry hub_address; resolve to spaceId locally to

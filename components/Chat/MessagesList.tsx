@@ -1279,7 +1279,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       onBookmark={actionSheetMessage?.renderType === 'cast' ? undefined : (onBookmark ? handleBookmarkFromActionSheet : undefined)}
       isBookmarked={actionSheetMessage && actionSheetMessage.renderType !== 'cast' && isBookmarked ? isBookmarked(actionSheetMessage.id) : false}
       onViewEditHistory={actionSheetMessage?.renderType === 'cast' ? undefined : handleViewEditHistory}
-      hasEditHistory={actionSheetMessage?.renderType !== 'cast' && (actionSheetMessage?.isEdited ?? false)}
+      hasEditHistory={actionSheetMessage?.renderType !== 'cast' && (actionSheetMessage?.hasEditHistory ?? false)}
       messageText={actionSheetMessage?.content}
       onReport={onReport ? handleReportFromActionSheet : undefined}
       theme={theme}

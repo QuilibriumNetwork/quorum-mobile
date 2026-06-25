@@ -25,8 +25,12 @@ interface DMSettingsSheetProps {
   avatarUri?: string;
   address?: string;
   onDeleteConversation?: () => void;
+  /** The "Always sign messages" (repudiability) control is NOT surfaced yet —
+   *  making it functional needs the send-path signing gate + per-message
+   *  composer lock button ported from desktop. Tracked separately; until then
+   *  these props stay optional/unused so a future wire-up is a one-liner. */
   isRepudiable?: boolean;
-  onToggleRepudiable?: (value: boolean) => void;
+  onToggleRepudiable?: (isRepudiable: boolean) => void;
   saveEditHistory?: boolean;
   onToggleEditHistory?: (value: boolean) => void;
   isMuted?: boolean;
@@ -117,8 +121,12 @@ export function DMSettingsSheet({
           </Text>
         </View>
 
-        {onToggleMute && (
-          <ActionRowGroup style={styles.group}>
+        {/* One card, flat list of rows — the canonical ActionRowGroup pattern
+            (see MessageActionSheet and the modal-row audit). The group handles
+            dividers between rows and drops the last one; no arbitrary
+            sub-grouping. */}
+        <ActionRowGroup style={styles.group}>
+          {onToggleMute && (
             <ActionRow
               icon="bell.slash"
               label="Mute Conversation"
@@ -130,41 +138,22 @@ export function DMSettingsSheet({
                 />
               }
             />
-          </ActionRowGroup>
-        )}
-
-        {(onToggleRepudiable || onToggleEditHistory) && (
-          <ActionRowGroup style={styles.group}>
-            {onToggleRepudiable && (
-              <ActionRow
-                label="Repudiable Messages"
-                sublabel="Messages can't be proven as yours"
-                trailing={
-                  <Switch
-                    value={isRepudiable ?? false}
-                    onValueChange={onToggleRepudiable}
-                    trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
-                  />
-                }
-              />
-            )}
-            {onToggleEditHistory && (
-              <ActionRow
-                label="Save Edit History"
-                sublabel="Keep previous versions of edits"
-                trailing={
-                  <Switch
-                    value={saveEditHistory ?? true}
-                    onValueChange={onToggleEditHistory}
-                    trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
-                  />
-                }
-              />
-            )}
-          </ActionRowGroup>
-        )}
-
-        <ActionRowGroup style={styles.group}>
+          )}
+          {onToggleEditHistory && (
+            <ActionRow
+              icon="clock.arrow.circlepath"
+              label="Save Edit History"
+              sublabel="Keep previous versions of edits"
+              trailing={
+                <Switch
+                  // Default OFF, matching desktop (keeping history is opt-in).
+                  value={saveEditHistory ?? false}
+                  onValueChange={onToggleEditHistory}
+                  trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                />
+              }
+            />
+          )}
           <ActionRow
             icon="arrow.triangle.2.circlepath"
             label="Fix Encryption"

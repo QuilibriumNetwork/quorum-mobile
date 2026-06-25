@@ -35,6 +35,7 @@ import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { logMentionOrReply } from '@/services/notifications/logMentionOrReply';
 import { shouldNotifyForContext } from '@/services/notifications/notificationPrefs';
 import { messagePreview as getSpaceMessagePreview, messageSenderName } from '@/utils/messagePreview';
+import { applyReceivedEdit } from '@/utils/editHistory';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type {
   Channel,
@@ -1872,7 +1873,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
             if (contentType === 'edit-message') {
               // Update existing message with edit
-              const editContent = spaceMessage.content as { originalMessageId: string; editedText: string | string[]; editedAt: number };
+              const editContent = spaceMessage.content as { originalMessageId: string; editedText: string | string[]; editedAt: number; editNonce?: string };
+
+              // Honor the space's "Save Edit History" setting, matching desktop:
+              // when OFF, don't retain prior versions (edits: []). Default false.
+              const saveEditHistory = space?.saveEditHistory ?? false;
 
               queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
                 if (!old) return old;
@@ -1882,21 +1887,22 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     ...page,
                     messages: page.messages.map((msg) => {
                       if (msg.messageId === editContent.originalMessageId && msg.content.type === 'post') {
+                        const applied = applyReceivedEdit(msg, {
+                          newText: editContent.editedText,
+                          editedAt: editContent.editedAt,
+                          editNonce: editContent.editNonce,
+                          saveEditHistory,
+                        });
+                        if (!applied.changed) return msg;
                         return {
                           ...msg,
-                          modifiedDate: editContent.editedAt,
+                          modifiedDate: applied.modifiedDate,
+                          lastModifiedHash: applied.lastModifiedHash,
                           content: {
                             ...msg.content,
                             text: editContent.editedText,
                           },
-                          edits: [
-                            ...(msg.edits || []),
-                            {
-                              text: editContent.editedText,
-                              modifiedDate: editContent.editedAt,
-                              lastModifiedHash: '',
-                            },
-                          ],
+                          edits: applied.edits,
                         };
                       }
                       return msg;
@@ -1910,13 +1916,24 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // query refetches from MMKV.
               const existingMsg = await storage.getMessage({ spaceId, channelId, messageId: editContent.originalMessageId });
               if (existingMsg && existingMsg.content.type === 'post') {
-                const updated: Message = {
-                  ...existingMsg,
-                  modifiedDate: editContent.editedAt,
-                  content: { ...existingMsg.content, text: editContent.editedText },
-                  edits: [...(existingMsg.edits || []), { text: editContent.editedText, modifiedDate: editContent.editedAt, lastModifiedHash: '' }],
-                };
-                await storage.saveMessage(updated, updated.createdDate, '', '', '', '');
+                const applied = applyReceivedEdit(existingMsg, {
+                  newText: editContent.editedText,
+                  editedAt: editContent.editedAt,
+                  editNonce: editContent.editNonce,
+                  saveEditHistory,
+                });
+                // Skip the write when the edit was already applied — a replayed
+                // edit-message must not clobber stored history.
+                if (applied.changed) {
+                  const updated: Message = {
+                    ...existingMsg,
+                    modifiedDate: applied.modifiedDate,
+                    lastModifiedHash: applied.lastModifiedHash,
+                    content: { ...existingMsg.content, text: editContent.editedText },
+                    edits: applied.edits,
+                  };
+                  await storage.saveMessage(updated, updated.createdDate, '', '', '', '');
+                }
               }
               // Delete edit-message from inbox after processing
               if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
@@ -3314,14 +3331,27 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           }
 
           if (contentType === 'edit-message') {
-            const editContent = spaceMessage.content as { originalMessageId: string; editedText: string | string[]; editedAt: number };
+            const editContent = spaceMessage.content as { originalMessageId: string; editedText: string | string[]; editedAt: number; editNonce?: string };
+            // Honor the space's "Save Edit History" setting, matching desktop:
+            // when OFF, don't retain prior versions (edits: []). Default false.
+            const saveEditHistory = space?.saveEditHistory ?? false;
             const applyEdit = (msg: Message): Message => {
               if (msg.content.type !== 'post') return msg;
+              const applied = applyReceivedEdit(msg, {
+                newText: editContent.editedText,
+                editedAt: editContent.editedAt,
+                editNonce: editContent.editNonce,
+                saveEditHistory,
+              });
+              // Replayed edit already applied → leave the message untouched so a
+              // duplicate delivery can't wipe stored history.
+              if (!applied.changed) return msg;
               return {
                 ...msg,
-                modifiedDate: editContent.editedAt,
+                modifiedDate: applied.modifiedDate,
+                lastModifiedHash: applied.lastModifiedHash,
                 content: { ...msg.content, text: editContent.editedText },
-                edits: [...(msg.edits || []), { text: editContent.editedText, modifiedDate: editContent.editedAt, lastModifiedHash: '' }],
+                edits: applied.edits,
               };
             };
             queueCacheTransform(messagesKey, editContent.originalMessageId, applyEdit);

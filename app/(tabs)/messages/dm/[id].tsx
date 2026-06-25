@@ -216,6 +216,28 @@ export default function DMChatScreen() {
     toggleMute(conversationId);
   }, [conversationId, toggleMute]);
 
+  // Persist a per-conversation setting onto the stored Conversation, then
+  // invalidate both the detail (drives the settings toggles) and the list query.
+  const updateConversationSetting = useCallback(
+    async (patch: Partial<Conversation>) => {
+      if (!conversationId) return;
+      const stored = await storage.getConversation(conversationId);
+      if (!stored) return;
+      await storage.saveConversation({ ...stored, ...patch });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.detail(conversationId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all('direct') });
+    },
+    [conversationId, storage, queryClient]
+  );
+
+  // The edit hooks (useEditDirectMessage) read conversation.saveEditHistory and,
+  // when off, drop prior versions instead of accumulating — matching desktop
+  // (default false).
+  const handleToggleEditHistory = useCallback(
+    (value: boolean) => updateConversationSetting({ saveEditHistory: value }),
+    [updateConversationSetting]
+  );
+
   // Delete this conversation locally (DMs are E2E-encrypted, so this only
   // removes it from this device). The confirm lives in DMSettingsSheet; this
   // is the previously-unwired effect. Refresh the conversation list and leave
@@ -414,8 +436,8 @@ export default function DMChatScreen() {
             displayName={title}
             theme={theme}
             onDeleteConversation={handleDeleteConversation}
-            isRepudiable={conversation.isRepudiable}
             saveEditHistory={conversation.saveEditHistory}
+            onToggleEditHistory={handleToggleEditHistory}
             isMuted={conversationMuted}
             onToggleMute={handleToggleMute}
           />

@@ -803,6 +803,11 @@ export default function SpaceSettingsModal({
   const [iconUrl, setIconUrl] = useState('');
   const [bannerUrl, setBannerUrl] = useState('');
   const [isRepudiable, setIsRepudiable] = useState(true);
+  // Default false, matching desktop (keeping edit history is opt-in).
+  const [saveEditHistory, setSaveEditHistory] = useState(false);
+  // Inline save confirmation for the General tab. Inline (not a toast) because
+  // this sits inside a native modal, mirroring the Apex section above.
+  const [generalSaved, setGeneralSaved] = useState(false);
 
   // Initialize form when space loads
   useEffect(() => {
@@ -812,6 +817,7 @@ export default function SpaceSettingsModal({
       setIconUrl(space.iconUrl || '');
       setBannerUrl(space.bannerUrl || '');
       setIsRepudiable(space.isRepudiable);
+      setSaveEditHistory(space.saveEditHistory ?? false);
     }
   }, [space]);
 
@@ -885,9 +891,10 @@ export default function SpaceSettingsModal({
       description.trim() !== (space.description || '') ||
       iconUrl !== (space.iconUrl || '') ||
       bannerUrl !== (space.bannerUrl || '') ||
-      isRepudiable !== space.isRepudiable
+      isRepudiable !== space.isRepudiable ||
+      saveEditHistory !== (space.saveEditHistory ?? false)
     );
-  }, [space, spaceName, description, iconUrl, bannerUrl, isRepudiable]);
+  }, [space, spaceName, description, iconUrl, bannerUrl, isRepudiable, saveEditHistory]);
 
   // Handlers
   const handleClose = useCallback(() => {
@@ -912,14 +919,22 @@ export default function SpaceSettingsModal({
         iconUrl: iconUrl || undefined,
         bannerUrl: bannerUrl || undefined,
         isRepudiable,
+        saveEditHistory,
       });
       // Reload space
       const updated = getSpace(spaceId);
       setSpace(updated);
+      setGeneralSaved(true);
     } catch (error) {
       Alert.alert('Error', 'Failed to save changes');
     }
-  }, [spaceId, spaceName, description, iconUrl, bannerUrl, isRepudiable, nameError, descriptionError, updateSpaceMutation]);
+  }, [spaceId, spaceName, description, iconUrl, bannerUrl, isRepudiable, saveEditHistory, nameError, descriptionError, updateSpaceMutation]);
+
+  // Clear the "Saved" confirmation as soon as the user edits something again,
+  // so it never lingers next to a now-stale form.
+  useEffect(() => {
+    if (hasGeneralChanges) setGeneralSaved(false);
+  }, [hasGeneralChanges]);
 
   const handlePickIcon = useCallback(async () => {
     const result = await pickImage('library');
@@ -1421,6 +1436,22 @@ export default function SpaceSettingsModal({
         />
       </View>
 
+      {/* Save edit history toggle */}
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleInfo}>
+          <Text style={styles.toggleLabel}>Save Edit History</Text>
+          <Text style={styles.toggleDescription}>
+            When enabled, previous versions of edited messages are kept and can be viewed. When disabled, only the latest version is shown.
+          </Text>
+        </View>
+        <Switch
+          value={saveEditHistory}
+          onValueChange={setSaveEditHistory}
+          trackColor={{ false: theme.colors.surface4, true: theme.colors.primary }}
+          thumbColor="#fff"
+        />
+      </View>
+
       {/* Save button at bottom of scroll content */}
       <TouchableOpacity
         style={[
@@ -1438,6 +1469,19 @@ export default function SpaceSettingsModal({
           <Text style={styles.saveButtonText}>Save Changes</Text>
         )}
       </TouchableOpacity>
+
+      {generalSaved && !updateSpaceMutation.isPending && (
+        <Text
+          style={{
+            fontSize: Skin.font(13),
+            textAlign: 'center',
+            marginTop: Skin.space(8),
+            color: theme.colors.success ?? '#22c55e',
+          }}
+        >
+          Changes saved.
+        </Text>
+      )}
 
       {/* Quorum Apex — owner-only (the General tab is owner-gated) */}
       <ApexConfigSection spaceAddress={spaceId} theme={theme} styles={styles} />
