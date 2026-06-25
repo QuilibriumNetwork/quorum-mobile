@@ -121,8 +121,12 @@ export function DMSettingsSheet({
           </Text>
         </View>
 
-        {onToggleMute && (
-          <ActionRowGroup style={styles.group}>
+        {/* One card, flat list of rows — the canonical ActionRowGroup pattern
+            (see MessageActionSheet and the modal-row audit). The group handles
+            dividers between rows and drops the last one; no arbitrary
+            sub-grouping. */}
+        <ActionRowGroup style={styles.group}>
+          {onToggleMute && (
             <ActionRow
               icon="bell.slash"
               label="Mute Conversation"
@@ -134,11 +138,8 @@ export function DMSettingsSheet({
                 />
               }
             />
-          </ActionRowGroup>
-        )}
-
-        {onToggleEditHistory && (
-          <ActionRowGroup style={styles.group}>
+          )}
+          {onToggleEditHistory && (
             <ActionRow
               icon="clock.arrow.circlepath"
               label="Save Edit History"
@@ -152,10 +153,7 @@ export function DMSettingsSheet({
                 />
               }
             />
-          </ActionRowGroup>
-        )}
-
-        <ActionRowGroup style={styles.group}>
+          )}
           <ActionRow
             icon="arrow.triangle.2.circlepath"
             label="Fix Encryption"
