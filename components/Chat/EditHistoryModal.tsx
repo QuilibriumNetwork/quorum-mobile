@@ -148,7 +148,12 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.textStrong,
     },
     scrollView: {
-      flex: 1,
+      // No flex:1 here — the container sizes to its content (capped at
+      // maxHeight 70%), so a flex child would collapse to 0 height and the
+      // body would render blank. Letting the ScrollView size to content makes
+      // it grow with the entries and scroll only once it hits the cap.
+      flexGrow: 0,
+      flexShrink: 1,
     },
     scrollContent: {
       padding: Skin.space(16),
