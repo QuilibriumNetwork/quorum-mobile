@@ -383,29 +383,14 @@ export function useRemoveDirectReaction() {
 }
 
 /**
- * Send an encrypted reaction message via WebSocket
- * Reuses the same encryption infrastructure as text messages
+ * Encrypt + seal + enqueue a DM control message (reaction, remove-reaction,
+ * remove-message, …). Requires an established session.
  */
-async function sendEncryptedReaction(
+export async function sendEncryptedControlMessage(
   conversationId: string,
   recipientAddress: string,
   message: Message,
-  recipientInfo:
-    | {
-        identityKey: number[];
-        signedPreKey: number[];
-        inboxAddress: string;
-        inboxEncryptionKey: number[];
-      }
-    | undefined,
   enqueueOutbound: (prepareMessage: () => Promise<string[]>) => void,
-  deviceKeyset: {
-    identityPublicKey: number[];
-    inboxAddress: string;
-    inboxEncryptionPublicKey: number[];
-  },
-  userAddress: string,
-  displayName?: string
 ): Promise<void> {
   const { NativeCryptoProvider } = await import('@/services/crypto/native-provider');
   const cryptoProvider = new NativeCryptoProvider();
@@ -413,7 +398,6 @@ async function sendEncryptedReaction(
   enqueueOutbound(async () => {
     const outbounds: string[] = [];
 
-    // Use existing session - reactions should only be sent in established conversations
     const latestState = encryptionStateStorage.getLatestState(conversationId);
     if (!latestState) {
       throw new Error('No encryption session found for conversation');
@@ -428,7 +412,6 @@ async function sendEncryptedReaction(
       throw new Error('Encryption state not found');
     }
 
-    // Encrypt the reaction message
     const encrypted = await encryptWithExistingSession(
       conversationId,
       latestState.inboxId,
@@ -462,11 +445,39 @@ async function sendEncryptedReaction(
 
       outbounds.push(JSON.stringify(sealedMessage));
     } else {
-      throw new Error('No sendingInbox available for sending reaction');
+      throw new Error('No sendingInbox available for sending control message');
     }
 
     return outbounds;
   });
+}
+
+/**
+ * Thin wrapper over sendEncryptedControlMessage, kept for the reaction call
+ * sites' signature (the extra args were never used by the transport).
+ */
+async function sendEncryptedReaction(
+  conversationId: string,
+  recipientAddress: string,
+  message: Message,
+  _recipientInfo:
+    | {
+        identityKey: number[];
+        signedPreKey: number[];
+        inboxAddress: string;
+        inboxEncryptionKey: number[];
+      }
+    | undefined,
+  enqueueOutbound: (prepareMessage: () => Promise<string[]>) => void,
+  _deviceKeyset: {
+    identityPublicKey: number[];
+    inboxAddress: string;
+    inboxEncryptionPublicKey: number[];
+  },
+  _userAddress: string,
+  _displayName?: string
+): Promise<void> {
+  await sendEncryptedControlMessage(conversationId, recipientAddress, message, enqueueOutbound);
 }
 
 /**
