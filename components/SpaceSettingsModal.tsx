@@ -803,6 +803,8 @@ export default function SpaceSettingsModal({
   const [iconUrl, setIconUrl] = useState('');
   const [bannerUrl, setBannerUrl] = useState('');
   const [isRepudiable, setIsRepudiable] = useState(true);
+  // Default false, matching desktop (keeping edit history is opt-in).
+  const [saveEditHistory, setSaveEditHistory] = useState(false);
 
   // Initialize form when space loads
   useEffect(() => {
@@ -812,6 +814,7 @@ export default function SpaceSettingsModal({
       setIconUrl(space.iconUrl || '');
       setBannerUrl(space.bannerUrl || '');
       setIsRepudiable(space.isRepudiable);
+      setSaveEditHistory(space.saveEditHistory ?? false);
     }
   }, [space]);
 
@@ -885,9 +888,10 @@ export default function SpaceSettingsModal({
       description.trim() !== (space.description || '') ||
       iconUrl !== (space.iconUrl || '') ||
       bannerUrl !== (space.bannerUrl || '') ||
-      isRepudiable !== space.isRepudiable
+      isRepudiable !== space.isRepudiable ||
+      saveEditHistory !== (space.saveEditHistory ?? false)
     );
-  }, [space, spaceName, description, iconUrl, bannerUrl, isRepudiable]);
+  }, [space, spaceName, description, iconUrl, bannerUrl, isRepudiable, saveEditHistory]);
 
   // Handlers
   const handleClose = useCallback(() => {
@@ -912,6 +916,7 @@ export default function SpaceSettingsModal({
         iconUrl: iconUrl || undefined,
         bannerUrl: bannerUrl || undefined,
         isRepudiable,
+        saveEditHistory,
       });
       // Reload space
       const updated = getSpace(spaceId);
@@ -919,7 +924,7 @@ export default function SpaceSettingsModal({
     } catch (error) {
       Alert.alert('Error', 'Failed to save changes');
     }
-  }, [spaceId, spaceName, description, iconUrl, bannerUrl, isRepudiable, nameError, descriptionError, updateSpaceMutation]);
+  }, [spaceId, spaceName, description, iconUrl, bannerUrl, isRepudiable, saveEditHistory, nameError, descriptionError, updateSpaceMutation]);
 
   const handlePickIcon = useCallback(async () => {
     const result = await pickImage('library');
@@ -1416,6 +1421,22 @@ export default function SpaceSettingsModal({
         <Switch
           value={!isRepudiable}
           onValueChange={(value) => setIsRepudiable(!value)}
+          trackColor={{ false: theme.colors.surface4, true: theme.colors.primary }}
+          thumbColor="#fff"
+        />
+      </View>
+
+      {/* Save edit history toggle */}
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleInfo}>
+          <Text style={styles.toggleLabel}>Save Edit History</Text>
+          <Text style={styles.toggleDescription}>
+            When enabled, previous versions of edited messages are kept and can be viewed. When disabled, only the latest version is shown.
+          </Text>
+        </View>
+        <Switch
+          value={saveEditHistory}
+          onValueChange={setSaveEditHistory}
           trackColor={{ false: theme.colors.surface4, true: theme.colors.primary }}
           thumbColor="#fff"
         />
