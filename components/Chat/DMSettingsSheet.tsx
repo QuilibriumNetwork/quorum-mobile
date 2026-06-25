@@ -140,6 +140,7 @@ export function DMSettingsSheet({
         {onToggleEditHistory && (
           <ActionRowGroup style={styles.group}>
             <ActionRow
+              icon="clock.arrow.circlepath"
               label="Save Edit History"
               sublabel="Keep previous versions of edits"
               trailing={
