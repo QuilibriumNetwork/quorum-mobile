@@ -93,8 +93,11 @@ export const EditHistoryModal = React.memo(function EditHistoryModal({
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {timeline.map((entry, i) => (
-              <View key={`${entry.date}-${entry.index}`} style={styles.editEntry}>
+            {timeline.map((entry) => (
+              <View
+                key={`${entry.date}-${entry.index}`}
+                style={[styles.editCard, entry.isOriginal && styles.originalCard]}
+              >
                 <View style={styles.editHeader}>
                   <Text style={styles.editLabel}>
                     {entry.isOriginal ? 'Original' : `Edit #${entry.index}`}
@@ -104,7 +107,6 @@ export const EditHistoryModal = React.memo(function EditHistoryModal({
                   </Text>
                 </View>
                 <Text style={styles.editText}>{entry.text}</Text>
-                {i < timeline.length - 1 && <View style={styles.divider} />}
               </View>
             ))}
           </ScrollView>
@@ -138,8 +140,6 @@ const createStyles = (theme: AppTheme) =>
       justifyContent: 'space-between',
       paddingHorizontal: Skin.space(20),
       paddingVertical: Skin.space(16),
-      borderBottomWidth: Skin.border(1),
-      borderBottomColor: theme.colors.border ?? theme.colors.surface3,
     },
     headerTitle: {
       fontSize: Skin.font(18),
@@ -156,10 +156,20 @@ const createStyles = (theme: AppTheme) =>
       flexShrink: 1,
     },
     scrollContent: {
-      padding: Skin.space(16),
+      paddingHorizontal: Skin.space(16),
+      paddingTop: Skin.space(4),
+      paddingBottom: Skin.space(16),
+      gap: Skin.space(10),
     },
-    editEntry: {
-      marginBottom: Skin.space(4),
+    editCard: {
+      backgroundColor: theme.colors.surface3,
+      borderRadius: Skin.radius(12),
+      padding: Skin.space(12),
+    },
+    // The Original message is highlighted with a subtle accent-tinted
+    // background so it reads as the baseline the edits diverge from.
+    originalCard: {
+      backgroundColor: theme.colors.accentSoft,
     },
     editHeader: {
       flexDirection: 'row',
@@ -183,11 +193,6 @@ const createStyles = (theme: AppTheme) =>
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
       lineHeight: Skin.font(22),
-    },
-    divider: {
-      height: 1,
-      backgroundColor: theme.colors.border ?? theme.colors.surface3,
-      marginVertical: Skin.space(12),
     },
   });
 
