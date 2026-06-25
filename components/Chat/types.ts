@@ -106,6 +106,10 @@ export interface DisplayMessage {
   // Edit info
   isEdited?: boolean;
   editedAt?: number;
+  // True only when prior versions are actually retained (saveEditHistory on).
+  // `isEdited` shows the "(edited)" marker on ANY edit; this gates the
+  // "View Edit History" action, which has nothing to show without stored edits.
+  hasEditHistory?: boolean;
   // Reply info
   isReply?: boolean;
   replyToMessageId?: string;
@@ -473,10 +477,18 @@ export function toDisplayMessage(
     displayMessage.reactions = toDisplayReactions(message.reactions, currentUserId);
   }
 
-  // Add edit info
+  // Add edit info. The "(edited)" marker must show on ANY edit, independent of
+  // whether prior versions are retained: a message whose saveEditHistory is off
+  // still bumps modifiedDate past createdDate but carries an empty edits array.
+  // Driving isEdited off edits.length alone would hide the marker for every
+  // history-off edit. hasEditHistory stays tied to the actual stored edits.
   if (message.edits && message.edits.length > 0) {
     displayMessage.isEdited = true;
+    displayMessage.hasEditHistory = true;
     displayMessage.editedAt = message.edits[message.edits.length - 1].modifiedDate;
+  } else if (message.modifiedDate > message.createdDate) {
+    displayMessage.isEdited = true;
+    displayMessage.editedAt = message.modifiedDate;
   }
 
   // Add reply info

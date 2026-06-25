@@ -10,6 +10,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context';
 import { useStorageAdapter } from '@/context/StorageContext';
 import { queryKeys, type Message } from '@quilibrium/quorum-shared';
+import { buildLocalEdits } from '@/utils/editHistory';
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -64,16 +65,7 @@ export function useEditDirectMessage() {
                 ...msg.content,
                 text: params.newText,
               } as Message['content'],
-              edits: saveEditHistory
-                ? [
-                    ...(msg.edits || []),
-                    {
-                      text: params.newText,
-                      modifiedDate: Date.now(),
-                      lastModifiedHash: '',
-                    },
-                  ]
-                : [],
+              edits: buildLocalEdits(msg.edits, params.newText, Date.now(), saveEditHistory),
             };
             await storage.saveMessage(
               updatedMsg,
@@ -122,16 +114,7 @@ export function useEditDirectMessage() {
                     ...m.content,
                     text: params.newText,
                   },
-                  edits: saveEditHistory
-                    ? [
-                        ...(m.edits || []),
-                        {
-                          text: params.newText,
-                          modifiedDate: Date.now(),
-                          lastModifiedHash: '',
-                        },
-                      ]
-                    : [],
+                  edits: buildLocalEdits(m.edits, params.newText, Date.now(), saveEditHistory),
                 };
               }
               return m;

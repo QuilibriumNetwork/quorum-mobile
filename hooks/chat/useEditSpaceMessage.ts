@@ -9,6 +9,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth, useWebSocket } from '@/context';
 import { sendEditMessage } from '@/services/space/spaceMessageService';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
+import { buildLocalEdits } from '@/utils/editHistory';
 import type { Message, GetMessagesResult } from '@quilibrium/quorum-shared';
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
@@ -122,16 +123,7 @@ export function useEditSpaceMessage() {
                       ...m.content,
                       text: params.newText,
                     },
-                    edits: saveEditHistory
-                      ? [
-                          ...(m.edits || []),
-                          {
-                            text: params.newText,
-                            modifiedDate: editedAt,
-                            lastModifiedHash: '',
-                          },
-                        ]
-                      : [],
+                    edits: buildLocalEdits(m.edits, params.newText, editedAt, saveEditHistory),
                   };
                 }
                 return m;
@@ -150,12 +142,7 @@ export function useEditSpaceMessage() {
           ...previousStored,
           modifiedDate: editedAt,
           content: { ...previousStored.content, text: params.newText },
-          edits: saveEditHistory
-            ? [
-                ...(previousStored.edits || []),
-                { text: params.newText, modifiedDate: editedAt, lastModifiedHash: '' },
-              ]
-            : [],
+          edits: buildLocalEdits(previousStored.edits, params.newText, editedAt, saveEditHistory),
         };
         await adapter.saveMessage(updated, updated.createdDate, '', '', '', '');
       }
