@@ -348,10 +348,27 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
   }));
 
   return (
-    <Reanimated.View
-      style={[styles.outerWrapper, { bottom: bottomOffset }, hideStyle]}
-      pointerEvents={panelOpen ? 'none' : 'box-none'}
-    >
+    <>
+      {/* Safe-area fill: the bar floats `insets.bottom` above the screen edge so
+          its rows clear the home indicator / app-switcher. That strip below the
+          bar is otherwise transparent, letting scrolled content show through (iOS,
+          and any Android with a bottom inset). Paint it the same solid bar color so
+          the bottom edge reads as one continuous surface. Shares hideStyle so it
+          fades out in lockstep with the bar when a composer panel owns the bottom. */}
+      {insets.bottom > 0 && (
+        <Reanimated.View
+          pointerEvents="none"
+          style={[
+            styles.safeAreaFill,
+            { height: insets.bottom, backgroundColor: isDark ? '#000000' : '#ffffff' },
+            hideStyle,
+          ]}
+        />
+      )}
+      <Reanimated.View
+        style={[styles.outerWrapper, { bottom: bottomOffset }, hideStyle]}
+        pointerEvents={panelOpen ? 'none' : 'box-none'}
+      >
       <Animated.View
         style={[
           styles.pill,
@@ -466,6 +483,7 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
         </Animated.View>
       </Animated.View>
     </Reanimated.View>
+    </>
   );
 }
 
@@ -476,6 +494,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: H_MARGIN,
     right: H_MARGIN,
+  },
+  safeAreaFill: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   pill: {
     overflow: 'hidden',
