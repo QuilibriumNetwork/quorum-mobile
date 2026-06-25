@@ -92,6 +92,15 @@ export function useEditSpaceMessage() {
         messageId: params.messageId,
       });
 
+      // Honor the space's "Save Edit History" setting, matching desktop
+      // (MessageService.ts): when OFF, drop prior versions (edits: []) instead
+      // of accumulating. Default false to match desktop — keeping history is
+      // opt-in. The receive path (WebSocketContext edit-message blocks) applies
+      // the same gate so the sender's own echoed edit and edits from others
+      // stay consistent.
+      const space = await adapter.getSpace(params.spaceId);
+      const saveEditHistory = space?.saveEditHistory ?? false;
+
       const editedAt = Date.now();
 
       // Optimistically update the message text in cache
@@ -113,14 +122,16 @@ export function useEditSpaceMessage() {
                       ...m.content,
                       text: params.newText,
                     },
-                    edits: [
-                      ...(m.edits || []),
-                      {
-                        text: params.newText,
-                        modifiedDate: editedAt,
-                        lastModifiedHash: '',
-                      },
-                    ],
+                    edits: saveEditHistory
+                      ? [
+                          ...(m.edits || []),
+                          {
+                            text: params.newText,
+                            modifiedDate: editedAt,
+                            lastModifiedHash: '',
+                          },
+                        ]
+                      : [],
                   };
                 }
                 return m;
@@ -139,10 +150,12 @@ export function useEditSpaceMessage() {
           ...previousStored,
           modifiedDate: editedAt,
           content: { ...previousStored.content, text: params.newText },
-          edits: [
-            ...(previousStored.edits || []),
-            { text: params.newText, modifiedDate: editedAt, lastModifiedHash: '' },
-          ],
+          edits: saveEditHistory
+            ? [
+                ...(previousStored.edits || []),
+                { text: params.newText, modifiedDate: editedAt, lastModifiedHash: '' },
+              ]
+            : [],
         };
         await adapter.saveMessage(updated, updated.createdDate, '', '', '', '');
       }

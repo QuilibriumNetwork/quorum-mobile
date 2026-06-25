@@ -1874,6 +1874,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // Update existing message with edit
               const editContent = spaceMessage.content as { originalMessageId: string; editedText: string | string[]; editedAt: number };
 
+              // Honor the space's "Save Edit History" setting, matching desktop:
+              // when OFF, don't retain prior versions (edits: []). Default false.
+              const saveEditHistory = space?.saveEditHistory ?? false;
+
               queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
                 if (!old) return old;
                 return {
@@ -1889,14 +1893,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                             ...msg.content,
                             text: editContent.editedText,
                           },
-                          edits: [
-                            ...(msg.edits || []),
-                            {
-                              text: editContent.editedText,
-                              modifiedDate: editContent.editedAt,
-                              lastModifiedHash: '',
-                            },
-                          ],
+                          edits: saveEditHistory
+                            ? [
+                                ...(msg.edits || []),
+                                {
+                                  text: editContent.editedText,
+                                  modifiedDate: editContent.editedAt,
+                                  lastModifiedHash: '',
+                                },
+                              ]
+                            : [],
                         };
                       }
                       return msg;
@@ -1914,7 +1920,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   ...existingMsg,
                   modifiedDate: editContent.editedAt,
                   content: { ...existingMsg.content, text: editContent.editedText },
-                  edits: [...(existingMsg.edits || []), { text: editContent.editedText, modifiedDate: editContent.editedAt, lastModifiedHash: '' }],
+                  edits: saveEditHistory
+                    ? [...(existingMsg.edits || []), { text: editContent.editedText, modifiedDate: editContent.editedAt, lastModifiedHash: '' }]
+                    : [],
                 };
                 await storage.saveMessage(updated, updated.createdDate, '', '', '', '');
               }
@@ -3315,13 +3323,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
           if (contentType === 'edit-message') {
             const editContent = spaceMessage.content as { originalMessageId: string; editedText: string | string[]; editedAt: number };
+            // Honor the space's "Save Edit History" setting, matching desktop:
+            // when OFF, don't retain prior versions (edits: []). Default false.
+            const saveEditHistory = space?.saveEditHistory ?? false;
             const applyEdit = (msg: Message): Message => {
               if (msg.content.type !== 'post') return msg;
               return {
                 ...msg,
                 modifiedDate: editContent.editedAt,
                 content: { ...msg.content, text: editContent.editedText },
-                edits: [...(msg.edits || []), { text: editContent.editedText, modifiedDate: editContent.editedAt, lastModifiedHash: '' }],
+                edits: saveEditHistory
+                  ? [...(msg.edits || []), { text: editContent.editedText, modifiedDate: editContent.editedAt, lastModifiedHash: '' }]
+                  : [],
               };
             };
             queueCacheTransform(messagesKey, editContent.originalMessageId, applyEdit);
