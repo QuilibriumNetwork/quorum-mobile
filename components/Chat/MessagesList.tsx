@@ -1539,11 +1539,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   unsignedWarning: {
     marginLeft: Skin.space(6),
-    // Pin to the text line so the icon never grows the baseline-aligned header
-    // row (which would push the message body down). Height matches the 12pt glyph.
-    height: Skin.font(12),
-    justifyContent: 'center',
-    alignSelf: 'flex-end',
+    alignSelf: 'center',
+    // Nudge down 1px to sit level with the name/time text. transform (not
+    // margin) so centering doesn't cancel it out.
+    transform: [{ translateY: 1 }],
   },
   // Reply indicator
   replyIndicator: {
