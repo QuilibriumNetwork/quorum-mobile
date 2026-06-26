@@ -465,9 +465,16 @@ export function useSendDirectMessage() {
       const key = queryKeys.messages.infinite(recipientAddress, recipientAddress);
 
       // The returned message has a different ID than the optimistic one
-      // Use the optimistic message ID but update the status
+      // Use the optimistic message ID but update the status. Carry the real
+      // signature/publicKey across (optimistic msg has neither) so signed
+      // messages don't render the unsigned-warning icon.
       const sentMessage: Message = context?.optimisticMessage
-        ? { ...context.optimisticMessage, sendStatus: 'sent' as const }
+        ? {
+            ...context.optimisticMessage,
+            sendStatus: 'sent' as const,
+            signature: message.signature,
+            publicKey: message.publicKey,
+          }
         : message;
 
       // Update cache with sent status
