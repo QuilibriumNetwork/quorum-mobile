@@ -669,6 +669,20 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   // when the input is empty. Emoji toggle always stays.
   const isComposing = value.trim().length > 0;
 
+  // Brief feedback pill shown above the composer when the signing lock is tapped.
+  const [signingHint, setSigningHint] = useState<string | null>(null);
+  const signingHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (signingHintTimer.current) clearTimeout(signingHintTimer.current);
+  }, []);
+  const handleToggleSigning = useCallback(() => {
+    onToggleSkipSigning?.();
+    // skipSigning is the value BEFORE the toggle, so invert it for the new state.
+    setSigningHint(skipSigning ? 'Messages will be signed' : "Messages won't be signed");
+    if (signingHintTimer.current) clearTimeout(signingHintTimer.current);
+    signingHintTimer.current = setTimeout(() => setSigningHint(null), 1800);
+  }, [onToggleSkipSigning, skipSigning]);
+
   // --- Composer focus/compose micro-animations ---------------------------
   // Two driven progress values so the transitions are smooth instead of
   // snapping:
@@ -934,6 +948,20 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
           + attachment preview + autocomplete anchor + pill). Measured so the
           chat list can lift to clear the composer exactly in every state. */}
       <View onLayout={handleFootprintLayout}>
+      {/* Brief signing-state feedback when the lock is tapped. */}
+      {signingHint && (
+        <View style={styles.signingHintRow} pointerEvents="none">
+          <View style={styles.signingHintPill}>
+            <IconSymbol
+              name={skipSigning ? 'lock.open' : 'lock'}
+              size={13}
+              color={theme.colors.textSubtle}
+              strokeWidth={1.5}
+            />
+            <Text style={styles.signingHintText}>{signingHint}</Text>
+          </View>
+        </View>
+      )}
       {/* Edit mode preview */}
       {editingMessage && (
         <View style={styles.editContainer}>
@@ -1122,24 +1150,6 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
               strokeWidth={1.5}
             />
           </TouchableOpacity>
-          {/* Per-message signing lock — only when the conversation/space allows
-              opt-out. Closed lock = signed (default), open = repudiable. */}
-          {signingOptional && (
-            <TouchableOpacity
-              style={styles.inputIconButton}
-              onPress={onToggleSkipSigning}
-              disabled={disabled}
-              accessibilityRole="button"
-              accessibilityLabel={skipSigning ? 'Message signing off (unsigned)' : 'Message signing on (signed)'}
-            >
-              <IconSymbol
-                name={skipSigning ? 'lock.open' : 'lock.fill'}
-                color={skipSigning ? theme.colors.textMuted : theme.colors.primary}
-                size={24}
-                strokeWidth={1.5}
-              />
-            </TouchableOpacity>
-          )}
         </View>
 
         <TextInput
@@ -1169,6 +1179,27 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
         />
 
         <View style={styles.rightButtons}>
+          {/* Per-message signing lock — only when the conversation/space allows
+              opt-out. Collapses while composing like the attach button. Outline
+              lock = signed (default), open = repudiable. */}
+          {signingOptional && (
+            <Reanimated.View style={[styles.attachContainer, attachAnimatedStyle]}>
+              <TouchableOpacity
+                style={styles.inputIconButton}
+                onPress={handleToggleSigning}
+                disabled={disabled || isComposing}
+                accessibilityRole="button"
+                accessibilityLabel={skipSigning ? 'Message signing off (unsigned)' : 'Message signing on (signed)'}
+              >
+                <IconSymbol
+                  name={skipSigning ? 'lock.open' : 'lock'}
+                  color={skipSigning ? theme.colors.textMuted : theme.colors.primary}
+                  size={25}
+                  strokeWidth={1.5}
+                />
+              </TouchableOpacity>
+            </Reanimated.View>
+          )}
           {/* Attach slides right + fades out while composing to give the text
               room; it slides back when the input is cleared. Kept mounted (not
               conditionally unmounted) so it can animate in both directions, with
@@ -1421,6 +1452,26 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   inputIconButton: {
     padding: Skin.space(6),
+  },
+  signingHintRow: {
+    alignItems: 'center',
+    paddingBottom: Skin.space(6),
+  },
+  signingHintPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Skin.space(6),
+    paddingVertical: Skin.space(5),
+    paddingHorizontal: Skin.space(10),
+    borderRadius: Skin.radius(14),
+    backgroundColor: theme.colors.composerPillBg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.composerPillBorder,
+  },
+  signingHintText: {
+    fontSize: Skin.font(12),
+    color: theme.colors.textSubtle,
+    fontFamily: theme.fonts.medium?.fontFamily || theme.fonts.regular.fontFamily,
   },
   // Clips the paperclip as its width animates to 0 while composing, so the
   // icon slides out cleanly instead of overflowing the collapsing container.

@@ -7,6 +7,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, with
 import { ChatKeyboardScrollView } from './ChatKeyboardScrollView';
 import BrowserLink from '@/components/BrowserLink';
 import { haptics } from '@/utils/haptics';
+import { useToast } from '@/context/ToastContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
@@ -350,6 +351,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     [everyoneSpaceShim]
   );
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { showToast } = useToast();
   const [viewerImage, setViewerImage] = useState<string | null>(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
   const [actionSheetMessageId, setActionSheetMessageId] = useState<string | null>(null);
@@ -700,6 +702,39 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   }, [actionSheetMessage]);
 
   // Render reactions row
+  // Warning shown on any unsigned message (matches desktop). Tap reveals the
+  // explanation via a toast — the mobile equivalent of desktop's touch-tooltip.
+  // Its own onPress consumes the tap so it doesn't fight the row's long-press.
+  const renderUnsignedWarning = useCallback(
+    (item: DisplayMessage) => {
+      if (item.renderType === 'system' || item.renderType === 'error') return null;
+      if (item.originalMessage?.signature) return null;
+      if (item.sendStatus === 'sending' || item.sendStatus === 'failed') return null;
+      return (
+        <TouchableOpacity
+          onPress={() =>
+            showToast({
+              type: 'info',
+              title: 'Unsigned message',
+              message: 'Message does not have a valid signature, this may not be from the sender.',
+            })
+          }
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Unsigned message"
+          style={styles.unsignedWarning}
+        >
+          <IconSymbol
+            name="exclamationmark.triangle.fill"
+            size={12}
+            color={theme.colors.warning ?? '#f59e0b'}
+          />
+        </TouchableOpacity>
+      );
+    },
+    [showToast, styles, theme]
+  );
+
   const renderReactions = useCallback(
     (reactions: DisplayReaction[], messageId: string) => {
       if (!reactions || reactions.length === 0) return null;
@@ -868,6 +903,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               <View style={styles.messageHeader}>
                 <Text style={styles.messageUser} numberOfLines={1}>{item.userName}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
+                {renderUnsignedWarning(item)}
               </View>
               {imageUrl && (
                 <View style={styles.embedImageContainer}>
@@ -913,7 +949,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, renderAvatar, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress]
+    [styles, renderReactions, renderAvatar, renderUnsignedWarning, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress]
   );
 
   // Render sticker message
@@ -933,6 +969,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               <View style={styles.messageHeader}>
                 <Text style={styles.messageUser} numberOfLines={1}>{item.userName}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
+                {renderUnsignedWarning(item)}
               </View>
               {sticker ? (
                 <View style={styles.stickerContainer}>
@@ -953,7 +990,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, stickerMap, renderAvatar, handleMessageLongPress, highlightedMessageId, highlightAnimStyle]
+    [styles, renderReactions, stickerMap, renderAvatar, renderUnsignedWarning, handleMessageLongPress, highlightedMessageId, highlightAnimStyle]
   );
 
   // Helper to get reply preview from parent message
@@ -1018,6 +1055,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                 {item.isEdited && (
                   <Text style={styles.editedIndicator}>(edited)</Text>
                 )}
+                {renderUnsignedWarning(item)}
                 {isSending && (
                   <ActivityIndicator
                     size="small"
@@ -1113,7 +1151,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress]
+    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedWarning, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress]
   );
 
   const renderCast = useCallback(
@@ -1498,6 +1536,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: Skin.font(11),
     fontFamily: theme.fonts.regular.fontFamily,
     marginLeft: Skin.space(6),
+  },
+  unsignedWarning: {
+    marginLeft: Skin.space(6),
+    alignSelf: 'center',
   },
   // Reply indicator
   replyIndicator: {
