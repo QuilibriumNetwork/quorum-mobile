@@ -1,4 +1,5 @@
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
+import { truncateAddress } from '@/utils/formatAddress';
 import ComposeChannelPickerModal from '@/components/ComposeChannelPickerModal';
 import { InviteLinkCard, containsInviteLink } from '@/components/Chat/InviteLinkCard';
 import type { ComposeCastOptions, ComposeCastResult } from '@/services/miniapp';
@@ -716,7 +717,7 @@ function ShareToChatModal({
                           }
                           label={
                             conv.displayName ||
-                            (isFarcaster ? conv.farcasterUsername : conv.address?.slice(0, 12) + '...') ||
+                            (isFarcaster ? conv.farcasterUsername : truncateAddress(conv.address)) ||
                             'Unknown'
                           }
                           sublabel={showHandle ? `@${conv.farcasterUsername}` : undefined}

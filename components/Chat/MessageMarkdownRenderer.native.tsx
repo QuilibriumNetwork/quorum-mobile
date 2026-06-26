@@ -28,6 +28,7 @@ import {
   shouldUseScrollContainer,
 } from '@quilibrium/quorum-shared';
 import { getEmojiByName } from '@/data/emojiNames';
+import { truncateAddress } from '@/utils/formatAddress';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { haptics } from '@/utils/haptics';
 import * as Skin from '@/theme/skins/geometry';
@@ -350,7 +351,7 @@ function MessageMarkdownRendererBase({
             return <Spoiler key={key} content={node.content} styles={styles} />;
           case 'mention_user': {
             const member = memberByAddress[node.address];
-            const display = member?.display_name || member?.name || truncate(node.address);
+            const display = member?.display_name || member?.name || truncateAddress(node.address);
             if (onMentionPress) {
               return (
                 <Text
@@ -569,11 +570,6 @@ const CodeBlock = React.memo(function CodeBlock({
 // ---------------------------------------------------------------------------
 // Helpers + styles
 // ---------------------------------------------------------------------------
-
-function truncate(address: string): string {
-  if (address.length <= 12) return address;
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
-}
 
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({

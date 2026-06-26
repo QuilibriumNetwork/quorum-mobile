@@ -1,10 +1,26 @@
-import { Dimensions } from 'react-native';
+// Address/name truncation helpers for display.
+//
+// The actual address slicing is delegated to the canonical, Qm-aware
+// `formatAddress` in @quilibrium/quorum-shared so a given preset renders
+// IDENTICALLY on desktop and mobile. The old device-width `scaleFactor`
+// (which scaled leading chars by phone size, not by the label's container)
+// has been dropped for true cross-platform parity.
+//
+// `formatAddress(address, start, end)` keeps the constant `Qm` CIDv0 prefix
+// visible but counts `start` AFTER it, so `start`/`end` are meaningful entropy
+// chars. See the shared helper's docstring for the full rationale.
+import { formatAddress } from '@quilibrium/quorum-shared';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Re-export the canonical helper so call sites can use it directly.
+export { formatAddress };
 
-// Scale factor: iPhone 15 Pro is 393pt wide. Larger screens get more chars.
-const BASE_WIDTH = 393;
-const scaleFactor = Math.min(SCREEN_WIDTH / BASE_WIDTH, 1.5);
+// Fixed start/end pairs per mode, frozen from the old phone (scaleFactor ≈ 1.0)
+// values and matching desktop's presets.
+const MODES = {
+  short: [4, 3],
+  medium: [6, 4],
+  long: [8, 6],
+} as const;
 
 export function truncateAddress(
   address: string | undefined,
@@ -13,33 +29,11 @@ export function truncateAddress(
   if (!address) return 'Unknown';
   if (address.startsWith('@')) return address;
 
-  const lengths = {
-    short:  { start: Math.round(4 * scaleFactor), end: 3 },
-    medium: { start: Math.round(6 * scaleFactor), end: 4 },
-    long:   { start: Math.round(8 * scaleFactor), end: 6 },
-  };
-
-  const { start, end } = lengths[mode];
-  const minFull = start + end + 3;
-
-  if (address.length <= minFull) return address;
-  return `${address.slice(0, start)}\u2026${address.slice(-end)}`;
+  const [start, end] = MODES[mode];
+  return formatAddress(address, start, end);
 }
 
-/**
- * Format address for display (shortened) using a character count.
- * Shows the first and last `chars` characters separated by an ellipsis.
- */
-export function formatAddress(address: string, chars: number = 6): string {
-  if (address.length <= chars * 2) return address;
-  return `${address.slice(0, chars)}\u2026${address.slice(-chars)}`;
-}
-
-export function truncateName(
-  name: string,
-  maxLength?: number,
-): string {
-  const max = maxLength ?? Math.round(16 * scaleFactor);
-  if (name.length <= max) return name;
-  return `${name.slice(0, max)}\u2026`;
+export function truncateName(name: string, maxLength: number = 16): string {
+  if (name.length <= maxLength) return name;
+  return `${name.slice(0, maxLength)}…`;
 }

@@ -16,6 +16,7 @@
  */
 
 import { Platform } from 'react-native';
+import { truncateAddress } from '@/utils/formatAddress';
 import { getAllSpaces, getSpaceKey } from '@/services/config/spaceStorage';
 import { encryptionStateStorage } from '@/services/crypto/encryption-state-storage';
 import { storage as mmkv } from '@/services/offline/storage';
@@ -125,7 +126,7 @@ function buildDMCatalog(): Record<string, CatalogEntryDM> {
       conv?.metadata?.displayName ||
       // Fallback: if metadata isn't populated, show the truncated
       // remote address rather than the inbox address.
-      (conv?.participants?.[0] ? `${conv.participants[0].slice(0, 6)}…` : 'Direct message');
+      (conv?.participants?.[0] ? truncateAddress(conv.participants[0]) : 'Direct message');
     out[inboxAddress] = { display_name: display };
   }
   return out;
