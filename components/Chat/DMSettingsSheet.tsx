@@ -25,10 +25,8 @@ interface DMSettingsSheetProps {
   avatarUri?: string;
   address?: string;
   onDeleteConversation?: () => void;
-  /** The "Always sign messages" (repudiability) control is NOT surfaced yet —
-   *  making it functional needs the send-path signing gate + per-message
-   *  composer lock button ported from desktop. Tracked separately; until then
-   *  these props stay optional/unused so a future wire-up is a one-liner. */
+  /** Repudiability. The UI shows the inverse ("Always sign messages"): signing
+   *  ON ⇔ isRepudiable false. Unset ⇒ signed by default. */
   isRepudiable?: boolean;
   onToggleRepudiable?: (isRepudiable: boolean) => void;
   saveEditHistory?: boolean;
@@ -134,6 +132,21 @@ export function DMSettingsSheet({
                 <Switch
                   value={isMuted ?? false}
                   onValueChange={onToggleMute}
+                  trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                />
+              }
+            />
+          )}
+          {onToggleRepudiable && (
+            <ActionRow
+              icon="lock.fill"
+              label="Always sign messages"
+              sublabel="Proves messages come from your key"
+              trailing={
+                <Switch
+                  // ON ⇔ signed ⇔ isRepudiable false. Default ON.
+                  value={!(isRepudiable ?? false)}
+                  onValueChange={(signOn) => onToggleRepudiable(!signOn)}
                   trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
                 />
               }

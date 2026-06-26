@@ -106,6 +106,8 @@ export const DMChatArea = React.memo(function DMChatArea({
   const [replyToMessage, setReplyToMessage] = useState<{ messageId: string; senderName: string; text: string; authorId: string } | null>(null);
   const [editingMessage, setEditingMessage] = useState<EditingMessage | null>(null);
   const [bookmarksPanelVisible, setBookmarksPanelVisible] = useState(false);
+  // Per-message signing lock; only meaningful when the conversation is repudiable.
+  const [skipSigning, setSkipSigning] = useState(false);
 
   const dmMessagesListRef = useRef<MessagesListHandle>(null);
   const dmMessageInputRef = useRef<MessageInputHandle>(null);
@@ -295,13 +297,15 @@ export const DMChatArea = React.memo(function DMChatArea({
         repliesToMessageId: replyToMessage?.messageId,
         replyToAuthorAddress: replyToMessage?.authorId,
         recipientInfo,
+        isRepudiable: conversationData.isRepudiable,
+        skipSigning,
       }, {
         onSettled: refocusInput,
       });
       setMessageText('');
       setReplyToMessage(null);
     }
-  }, [conversationId, recipientAddress, sendDirectMessageMutation, sendDirectEmbedMutation, hasExistingSession, recipientRegistration, messageText, pendingAttachment, replyToMessage, editingMessage, editDirectMessageMutation, dmMessagesPages, draftsRef]);
+  }, [conversationId, recipientAddress, sendDirectMessageMutation, sendDirectEmbedMutation, hasExistingSession, recipientRegistration, messageText, pendingAttachment, replyToMessage, editingMessage, editDirectMessageMutation, dmMessagesPages, draftsRef, conversationData.isRepudiable, skipSigning]);
 
   const handleAttachmentPress = useCallback(async () => {
     const result = await pickImage('library');
@@ -506,6 +510,9 @@ export const DMChatArea = React.memo(function DMChatArea({
           onDismissReply={handleDismissReply}
           editingMessage={editingMessage}
           onCancelEdit={handleCancelEdit}
+          signingOptional={!!conversationData.isRepudiable}
+          skipSigning={skipSigning}
+          onToggleSkipSigning={() => setSkipSigning((s) => !s)}
         />
       </ChatBottomChrome>
 

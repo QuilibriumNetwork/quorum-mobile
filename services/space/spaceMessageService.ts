@@ -107,6 +107,8 @@ export interface SendSpaceMessageParams {
    * is never set and @everyone never notifies anyone.
    */
   allowEveryone?: boolean;
+  /** Skip signing this message (per-message lock); gated on space.isRepudiable at the call site. */
+  skipSigning?: boolean;
 }
 
 export interface SendSpaceMessageResult {
@@ -263,7 +265,7 @@ function hexToNumberArray(hex: string): number[] {
 export async function sendSpaceMessage(
   params: SendSpaceMessageParams
 ): Promise<SendSpaceMessageResult> {
-  const { spaceId, channelId, text, senderAddress, repliesToMessageId, replyToAuthorAddress, spaceRoles, spaceChannels, allowEveryone } = params;
+  const { spaceId, channelId, text, senderAddress, repliesToMessageId, replyToAuthorAddress, spaceRoles, spaceChannels, allowEveryone, skipSigning } = params;
 
   const cryptoProvider = new NativeCryptoProvider();
   const timestamp = Date.now();
@@ -324,20 +326,21 @@ export async function sendSpaceMessage(
       : {}),
   };
 
-  // 6. Sign the messageId hash (NOT the whole message JSON)
-  // This matches desktop implementation for non-repudiability
-  const messageIdBase64 = bytesToBase64(messageIdBytes);
-  const inboxPrivateKeyBytes = hexToBytes(inboxKey.privateKey);
-  const inboxPrivateKeyBase64 = bytesToBase64(inboxPrivateKeyBytes);
-  const signatureBase64 = await cryptoProvider.signEd448(inboxPrivateKeyBase64, messageIdBase64);
+  // 6. Sign the messageId hash (NOT the whole message JSON), unless this message
+  // opted out via the per-message lock. Gated on space.isRepudiable at the call site.
+  if (!skipSigning) {
+    const messageIdBase64 = bytesToBase64(messageIdBytes);
+    const inboxPrivateKeyBytes = hexToBytes(inboxKey.privateKey);
+    const inboxPrivateKeyBase64 = bytesToBase64(inboxPrivateKeyBytes);
+    const signatureBase64 = await cryptoProvider.signEd448(inboxPrivateKeyBase64, messageIdBase64);
 
-  // Convert signature to hex for message
-  const signatureBinary = atob(signatureBase64);
-  let signatureHex = '';
-  for (let i = 0; i < signatureBinary.length; i++) {
-    signatureHex += signatureBinary.charCodeAt(i).toString(16).padStart(2, '0');
+    const signatureBinary = atob(signatureBase64);
+    let signatureHex = '';
+    for (let i = 0; i < signatureBinary.length; i++) {
+      signatureHex += signatureBinary.charCodeAt(i).toString(16).padStart(2, '0');
+    }
+    message.signature = signatureHex;
   }
-  message.signature = signatureHex;
 
 
   // Hub-envelope only (no TR): the config key rotates on kick, giving

@@ -52,6 +52,10 @@ interface SendDirectMessageParams {
   _messageId?: string;
   _nonce?: string;
   _createdDate?: number;
+  /** Conversation repudiability (inverse of "Always sign"). Unset/false ⇒ always sign. */
+  isRepudiable?: boolean;
+  /** Per-message lock state; only consulted when isRepudiable is true. */
+  skipSigning?: boolean;
 }
 
 /**
@@ -146,6 +150,8 @@ export function useSendDirectMessage() {
       _messageId,
       _nonce,
       _createdDate,
+      isRepudiable,
+      skipSigning,
     }: SendDirectMessageParams): Promise<Message> => {
       const senderId = user?.address ?? 'unknown';
 
@@ -194,12 +200,15 @@ export function useSendDirectMessage() {
           : {}),
       };
 
-      // Sign the message hash with the user's Ed448 key (non-repudiation)
-      // This is done before encryption so the signature is included in the encrypted payload
-      const signatureData = await signMessageIdHash(new Uint8Array(messageIdBytes));
-      if (signatureData) {
-        message.signature = signatureData.signature;
-        message.publicKey = signatureData.publicKey;
+      // Sign unless the conversation is repudiable AND the lock was opened for
+      // this message. Mirrors desktop's effectiveSkip.
+      const effectiveSkip = isRepudiable ? !!skipSigning : false;
+      if (!effectiveSkip) {
+        const signatureData = await signMessageIdHash(new Uint8Array(messageIdBytes));
+        if (signatureData) {
+          message.signature = signatureData.signature;
+          message.publicKey = signatureData.publicKey;
+        }
       }
 
       // E2E encryption is required for direct messages

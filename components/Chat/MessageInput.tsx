@@ -86,6 +86,12 @@ interface MessageInputProps {
   castReplyAvailable?: boolean;
   alsoReplyOnFarcaster?: boolean;
   onToggleAlsoReplyOnFarcaster?: (next: boolean) => void;
+  /** Show the per-message signing lock button. Only true when the conversation/
+   *  space left signing optional (DM: isRepudiable; Space: space.isRepudiable). */
+  signingOptional?: boolean;
+  /** Lock open ⇒ this message will be sent unsigned (repudiable). */
+  skipSigning?: boolean;
+  onToggleSkipSigning?: () => void;
 }
 
 export interface MessageInputHandle {
@@ -257,6 +263,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   castReplyAvailable = false,
   alsoReplyOnFarcaster = false,
   onToggleAlsoReplyOnFarcaster,
+  signingOptional = false,
+  skipSigning = false,
+  onToggleSkipSigning,
 }, ref) {
   const { width: screenWidth } = useWindowDimensions();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -1113,6 +1122,24 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
               strokeWidth={1.5}
             />
           </TouchableOpacity>
+          {/* Per-message signing lock — only when the conversation/space allows
+              opt-out. Closed lock = signed (default), open = repudiable. */}
+          {signingOptional && (
+            <TouchableOpacity
+              style={styles.inputIconButton}
+              onPress={onToggleSkipSigning}
+              disabled={disabled}
+              accessibilityRole="button"
+              accessibilityLabel={skipSigning ? 'Message signing off (unsigned)' : 'Message signing on (signed)'}
+            >
+              <IconSymbol
+                name={skipSigning ? 'lock.open' : 'lock.fill'}
+                color={skipSigning ? theme.colors.textMuted : theme.colors.primary}
+                size={24}
+                strokeWidth={1.5}
+              />
+            </TouchableOpacity>
+          )}
         </View>
 
         <TextInput

@@ -134,6 +134,8 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
   const [messageText, setMessageText] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<ProcessedAttachment | null>(null);
   const [replyToMessage, setReplyToMessage] = useState<{ messageId: string; senderName: string; text: string; authorId: string } | null>(null);
+  // Per-message signing lock; only meaningful when the space is repudiable.
+  const [skipSigning, setSkipSigning] = useState(false);
   // Opt-in per-send. Reset whenever the reply target changes; user must
   // explicitly check the box again for each cast reply.
   const [alsoReplyOnFarcaster, setAlsoReplyOnFarcaster] = useState(false);
@@ -483,6 +485,8 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         spaceRoles: spaceData?.roles?.map((r) => ({ roleId: r.roleId, roleTag: r.roleTag })),
         spaceChannels: channelsData?.map((c) => ({ channelId: c.channelId, channelName: c.channelName })),
         allowEveryone: canMentionEveryone,
+        isRepudiable: spaceData?.isRepudiable,
+        skipSigning,
       }, {
         onSettled: refocusInput,
       });
@@ -513,7 +517,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
       setAlsoReplyOnFarcaster(false);
       replyCastHashRef.current = null;
     }
-  }, [messageText, spaceId, channelId, sendMessageMutation, sendEmbedMutation, pendingAttachment, replyToMessage, editingMessage, editSpaceMessageMutation, draftsRef, alsoReplyOnFarcaster, isCastReply, farcasterAuthToken, spaceData, channelsData, canMentionEveryone]);
+  }, [messageText, spaceId, channelId, sendMessageMutation, sendEmbedMutation, pendingAttachment, replyToMessage, editingMessage, editSpaceMessageMutation, draftsRef, alsoReplyOnFarcaster, isCastReply, farcasterAuthToken, spaceData, channelsData, canMentionEveryone, skipSigning]);
 
   const handleAttachmentPress = useCallback(async () => {
     const result = await pickImage('library');
@@ -809,6 +813,9 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             editingMessage={editingMessage}
             onCancelEdit={handleCancelEdit}
             disabled={!canPost}
+            signingOptional={!!spaceData?.isRepudiable}
+            skipSigning={skipSigning}
+            onToggleSkipSigning={() => setSkipSigning((s) => !s)}
           />
         )}
       </ChatBottomChrome>
