@@ -79,17 +79,6 @@ export function ChannelIconPickerSheet({
 
   const previewHex = getIconColorHex(pickedColor);
 
-  // Pick black/white text for contrast against the chosen swatch color.
-  const applyTextColor = (() => {
-    const h = previewHex.replace('#', '');
-    if (h.length < 6) return '#fff';
-    const r = parseInt(h.slice(0, 2), 16);
-    const g = parseInt(h.slice(2, 4), 16);
-    const b = parseInt(h.slice(4, 6), 16);
-    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return lum > 0.6 ? '#1a1a1a' : '#fff';
-  })();
-
   const handleConfirm = () => {
     onSelect(pickedIcon, pickedColor, pickedVariant);
     onClose();
@@ -102,7 +91,7 @@ export function ChannelIconPickerSheet({
   };
 
   return (
-    <BaseModal visible={visible} onClose={onClose} height={0.7} showHandle>
+    <BaseModal visible={visible} onClose={onClose} height={0.85} showHandle>
       <View style={styles.container}>
         <Text style={styles.title}>Icon</Text>
 
@@ -173,9 +162,15 @@ export function ChannelIconPickerSheet({
           </View>
         </ScrollView>
 
-        {/* Color row (wraps to any count) */}
+        {/* Color — single row, scrolls horizontally so it stays one line on any
+            screen and never pushes the buttons off the bottom. */}
         <Text style={styles.sectionLabel}>Color</Text>
-        <View style={styles.colorRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.colorRow}
+          contentContainerStyle={styles.colorRowContent}
+        >
           {PICKER_COLORS.map((token) => {
             const hex = getIconColorHex(token);
             return (
@@ -188,11 +183,11 @@ export function ChannelIconPickerSheet({
                 ]}
                 onPress={() => setPickedColor(token)}
                 accessibilityLabel={token}
-                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                hitSlop={{ top: 8, bottom: 4, left: 6, right: 6 }}
               />
             );
           })}
-        </View>
+        </ScrollView>
 
         {/* Actions */}
         <View style={styles.actions}>
@@ -200,10 +195,10 @@ export function ChannelIconPickerSheet({
             <Text style={styles.clearButtonText}>Reset</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.confirmButton, { backgroundColor: previewHex }]}
+            style={styles.confirmButton}
             onPress={handleConfirm}
           >
-            <Text style={[styles.confirmButtonText, { color: applyTextColor }]}>Apply</Text>
+            <Text style={styles.confirmButtonText}>Apply</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -213,13 +208,10 @@ export function ChannelIconPickerSheet({
 
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
-    // Hug content instead of flex:1 stretching to the sheet's maxHeight, which
-    // pushed the Reset/Apply row (last child, outside the grid's own ScrollView)
-    // off the bottom edge under the Android nav bar. The icon grid keeps its own
-    // maxHeight:200 ScrollView; everything else is fixed-height and bounded, so
-    // the column hugs and BaseModal's paddingBottom: insets.bottom keeps the
-    // buttons clear of the system bar.
-    container: { paddingHorizontal: Skin.space(20), paddingTop: Skin.space(8) },
+    // Hug content; BaseModal caps the sheet at SCREEN_HEIGHT*height (adaptive
+    // with a cap). The icon grid (flexShrink + maxHeight) is the part that gives
+    // when the cap is hit, so the color row + Reset/Apply always stay on screen.
+    container: { flexShrink: 1, paddingHorizontal: Skin.space(20), paddingTop: Skin.space(8) },
     title: {
       ...theme.textStyles.headline,
       color: theme.colors.textStrong,
@@ -263,7 +255,11 @@ const createStyles = (theme: AppTheme) =>
       marginBottom: Skin.space(8),
       textTransform: 'uppercase',
     },
-    iconGrid: { maxHeight: 200, marginBottom: Skin.space(16) },
+    // The grid is the part that gives when the sheet hits its height cap:
+    // flexShrink + minHeight:0 lets the ScrollView shrink below its content;
+    // maxHeight caps it on tall screens so the sheet hugs content there.
+    // Color row + Reset/Apply stay fully visible on every device.
+    iconGrid: { flexShrink: 1, minHeight: 0, maxHeight: 240, marginBottom: Skin.space(12) },
     gridRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Skin.space(8) },
     iconCell: {
       width: 44,
@@ -275,7 +271,12 @@ const createStyles = (theme: AppTheme) =>
       borderWidth: Skin.border(2),
       borderColor: 'transparent',
     },
-    colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Skin.space(10), marginBottom: Skin.space(20) },
+    // Single horizontal row, edge-to-edge: negative margins cancel the
+    // container's horizontal padding so the scroll track reaches both screen
+    // edges; the content re-adds that padding so the first/last swatch sit at a
+    // comfortable inset. flexGrow:0 so it doesn't fill leftover column space.
+    colorRow: { flexGrow: 0, marginHorizontal: -Skin.space(20), marginBottom: Skin.space(16) },
+    colorRowContent: { flexDirection: 'row', gap: Skin.space(10), paddingHorizontal: Skin.space(20), paddingVertical: Skin.space(3), alignItems: 'center' },
     colorSwatch: { width: 32, height: 32, borderRadius: Skin.radius(16) },
     colorSwatchActive: {
       borderWidth: Skin.border(3),
@@ -300,6 +301,9 @@ const createStyles = (theme: AppTheme) =>
       paddingVertical: Skin.space(12),
       borderRadius: Skin.radius(10),
       alignItems: 'center',
+      // Stable primary color — NOT the picked icon color (that washed the button
+      // out / broke text contrast for light picks, and conflated two choices).
+      backgroundColor: theme.colors.primary,
     },
     confirmButtonText: { ...theme.textStyles.body, color: '#fff' },
   });
