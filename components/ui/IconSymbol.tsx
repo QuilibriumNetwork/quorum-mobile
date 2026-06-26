@@ -57,7 +57,7 @@ const SF_TO_TABLER = {
   // Status & flags
   'flag': tabler('IconFlag', 'IconFlagFilled'),
   'flag.fill': tabler('IconFlag', 'IconFlagFilled'),
-  'flask': tabler('IconFlask'),
+  'flask': tabler('IconFlask', 'IconFlaskFilled'),
   'nosign': tabler('IconBan'),
   'ellipsis': tabler('IconDots'),
   'ellipsis.vertical': tabler('IconDotsVertical'),
@@ -84,6 +84,9 @@ const SF_TO_TABLER = {
   'rectangle.grid.2x2': tabler('IconLayoutGrid'),
   'square.stack': tabler('IconStack2'),
   'rectangle.stack.fill': tabler('IconStack2', 'IconStack2Filled'),
+  // Picker uses the bare semantic name 'stack'; without this it falls through to
+  // IconStack (single layer), not the intended IconStack2 (layers).
+  'stack': tabler('IconStack2', 'IconStack2Filled'),
   'number': tabler('IconHash'),
 
   // Home & navigation
@@ -135,7 +138,7 @@ const SF_TO_TABLER = {
 
   // Security
   'lock.fill': tabler('IconLock', 'IconLockFilled'),
-  'lock': tabler('IconLock'),
+  'lock': tabler('IconLock', 'IconLockFilled'),
   'lock.open': tabler('IconLockOpen'),
   'lock.shield.fill': tabler('IconShieldLock', 'IconShieldLockFilled'),
   'shield': tabler('IconShield', 'IconShieldFilled'),
@@ -331,7 +334,10 @@ const SF_TO_TABLER = {
   // doesn't match Tabler's actual export, so they need explicit mapping).
   'bullhorn': tabler('IconSpeakerphone'),
   'hashtag': tabler('IconHash'),
-  'hand-peace': tabler('IconHandTwoFingers'),
+  'hand-peace': tabler('IconHandLoveYou'),
+  // 'ghost' must map to IconGhost3 (the picker's intended ghost); pascalCase
+  // would otherwise resolve the different IconGhost.
+  'ghost': tabler('IconGhost3', 'IconGhost3Filled'),
   'smile': tabler('IconMoodSmile', 'IconMoodSmileFilled'),
   'party': tabler('IconConfetti', 'IconConfettiFilled'),
   'envelope': tabler('IconMail', 'IconMailFilled'),

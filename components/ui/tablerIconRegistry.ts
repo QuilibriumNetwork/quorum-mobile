@@ -278,6 +278,27 @@ import IconWifiOff from '@tabler/icons-react-native/IconWifiOff';
 import IconWorld from '@tabler/icons-react-native/IconWorld';
 import IconWorldMap from '@tabler/icons-react-native/IconWorldMap';
 import IconX from '@tabler/icons-react-native/IconX';
+// Channel-icon-picker additions (2026-06-26).
+import IconSticker from '@tabler/icons-react-native/IconSticker';
+import IconTank from '@tabler/icons-react-native/IconTank';
+import IconGenderFemale from '@tabler/icons-react-native/IconGenderFemale';
+import IconGenderMale from '@tabler/icons-react-native/IconGenderMale';
+import IconBomb from '@tabler/icons-react-native/IconBomb';
+import IconBombFilled from '@tabler/icons-react-native/IconBombFilled';
+import IconOm from '@tabler/icons-react-native/IconOm';
+import IconCross from '@tabler/icons-react-native/IconCross';
+import IconCrossFilled from '@tabler/icons-react-native/IconCrossFilled';
+import IconMenorah from '@tabler/icons-react-native/IconMenorah';
+import IconAnkh from '@tabler/icons-react-native/IconAnkh';
+import IconJewishStar from '@tabler/icons-react-native/IconJewishStar';
+import IconJewishStarFilled from '@tabler/icons-react-native/IconJewishStarFilled';
+import IconConfucius from '@tabler/icons-react-native/IconConfucius';
+import IconGhost3 from '@tabler/icons-react-native/IconGhost3';
+import IconGhost3Filled from '@tabler/icons-react-native/IconGhost3Filled';
+import IconSpiral from '@tabler/icons-react-native/IconSpiral';
+import IconHeartHandshake from '@tabler/icons-react-native/IconHeartHandshake';
+import IconFlower from '@tabler/icons-react-native/IconFlower';
+import IconHandLoveYou from '@tabler/icons-react-native/IconHandLoveYou';
 
 export const TablerIcons = {
   IconAi,
@@ -539,4 +560,25 @@ export const TablerIcons = {
   IconWorld,
   IconWorldMap,
   IconX,
+  // Channel-icon-picker additions (2026-06-26).
+  IconSticker,
+  IconTank,
+  IconGenderFemale,
+  IconGenderMale,
+  IconBomb,
+  IconBombFilled,
+  IconOm,
+  IconCross,
+  IconCrossFilled,
+  IconMenorah,
+  IconAnkh,
+  IconJewishStar,
+  IconJewishStarFilled,
+  IconConfucius,
+  IconGhost3,
+  IconGhost3Filled,
+  IconSpiral,
+  IconHeartHandshake,
+  IconFlower,
+  IconHandLoveYou,
 };
