@@ -617,6 +617,8 @@ export interface SendGenericMessageParams {
    *  (edit, embed caption). Defaults to empty for text-less content (reactions,
    *  deletes, calls, profile updates). */
   mentions?: Mentions;
+  /** Skip signing (per-message lock). Already gated on space.isRepudiable by the caller. */
+  skipSigning?: boolean;
 }
 
 export interface SendGenericMessageResult {
@@ -628,7 +630,7 @@ export interface SendGenericMessageResult {
 async function sendGenericMessage(
   params: SendGenericMessageParams
 ): Promise<SendGenericMessageResult> {
-  const { spaceId, channelId, senderAddress, content, mentions } = params;
+  const { spaceId, channelId, senderAddress, content, mentions, skipSigning } = params;
 
   const cryptoProvider = new NativeCryptoProvider();
   const timestamp = Date.now();
@@ -668,19 +670,21 @@ async function sendGenericMessage(
     publicKey: inboxKey.publicKey,
   };
 
-  // Sign the messageId hash (NOT the whole message JSON)
-  // This matches desktop implementation for non-repudiability
-  const messageIdBase64 = bytesToBase64(messageIdBytes);
-  const inboxPrivateKeyBytes = hexToBytes(inboxKey.privateKey);
-  const inboxPrivateKeyBase64 = bytesToBase64(inboxPrivateKeyBytes);
-  const signatureBase64 = await cryptoProvider.signEd448(inboxPrivateKeyBase64, messageIdBase64);
+  // Sign the messageId hash (NOT the whole message JSON), unless this message
+  // opted out via the per-message lock. Gated on space.isRepudiable by the caller.
+  if (!skipSigning) {
+    const messageIdBase64 = bytesToBase64(messageIdBytes);
+    const inboxPrivateKeyBytes = hexToBytes(inboxKey.privateKey);
+    const inboxPrivateKeyBase64 = bytesToBase64(inboxPrivateKeyBytes);
+    const signatureBase64 = await cryptoProvider.signEd448(inboxPrivateKeyBase64, messageIdBase64);
 
-  const signatureBinary = atob(signatureBase64);
-  let signatureHex = '';
-  for (let i = 0; i < signatureBinary.length; i++) {
-    signatureHex += signatureBinary.charCodeAt(i).toString(16).padStart(2, '0');
+    const signatureBinary = atob(signatureBase64);
+    let signatureHex = '';
+    for (let i = 0; i < signatureBinary.length; i++) {
+      signatureHex += signatureBinary.charCodeAt(i).toString(16).padStart(2, '0');
+    }
+    message.signature = signatureHex;
   }
-  message.signature = signatureHex;
 
 
   // Hub-envelope only (no TR): config key rotates on kick.
@@ -1050,6 +1054,8 @@ export interface SendEmbedMessageParams {
   spaceChannels?: Array<{ channelId: string; channelName: string }>;
   /** Sender may use @everyone (has mention:everyone) — gates @everyone in captions. */
   allowEveryone?: boolean;
+  /** Skip signing (per-message lock); gated on space.isRepudiable by the caller. */
+  skipSigning?: boolean;
 }
 
 /**
@@ -1089,6 +1095,7 @@ export async function sendEmbedMessage(
     spaceRoles,
     spaceChannels,
     allowEveryone,
+    skipSigning,
   } = params;
 
   const content = buildPostWithEmbeddedMedia(senderAddress, imageUrl, thumbnailUrl, text, repliesToMessageId);
@@ -1098,6 +1105,7 @@ export async function sendEmbedMessage(
     senderAddress,
     content,
     mentions: text ? extractMentionsFromText(text, { spaceRoles, spaceChannels, allowEveryone }) : undefined,
+    skipSigning,
   });
 }
 

@@ -283,6 +283,8 @@ export const DMChatArea = React.memo(function DMChatArea({
         height: pendingAttachment.height,
         text: messageText.trim() || undefined,
         recipientInfo,
+        isRepudiable: conversationData.isRepudiable,
+        skipSigning,
       }, {
         onSettled: refocusInput,
       });

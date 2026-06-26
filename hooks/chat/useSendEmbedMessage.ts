@@ -24,6 +24,10 @@ export interface UseSendEmbedMessageParams {
   spaceChannels?: Array<{ channelId: string; channelName: string }>;
   /** Sender has mention:everyone — gates @everyone in an image caption. */
   allowEveryone?: boolean;
+  /** Space repudiability (inverse of "Require Message Signing"). */
+  isRepudiable?: boolean;
+  /** Per-message lock state; only consulted when isRepudiable is true. */
+  skipSigning?: boolean;
 }
 
 export function useSendEmbedMessage() {
@@ -53,6 +57,8 @@ export function useSendEmbedMessage() {
         spaceRoles: params.spaceRoles,
         spaceChannels: params.spaceChannels,
         allowEveryone: params.allowEveryone,
+        // Sign unless the space left it optional AND the lock was opened.
+        skipSigning: params.isRepudiable ? !!params.skipSigning : false,
       });
 
       // Send via WebSocket

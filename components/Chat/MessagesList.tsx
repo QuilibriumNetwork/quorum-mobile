@@ -719,7 +719,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               message: 'Message does not have a valid signature, this may not be from the sender.',
             })
           }
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
           accessibilityRole="button"
           accessibilityLabel="Unsigned message"
           style={styles.unsignedWarning}

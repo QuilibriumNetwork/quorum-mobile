@@ -148,6 +148,7 @@ export function DMSettingsSheet({
                   value={!(isRepudiable ?? false)}
                   onValueChange={(signOn) => onToggleRepudiable(!signOn)}
                   trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                  thumbColor="#fff"
                 />
               }
             />

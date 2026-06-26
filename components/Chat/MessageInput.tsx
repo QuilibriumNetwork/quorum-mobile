@@ -1188,13 +1188,14 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
                 style={styles.inputIconButton}
                 onPress={handleToggleSigning}
                 disabled={disabled || isComposing}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 accessibilityRole="button"
                 accessibilityLabel={skipSigning ? 'Message signing off (unsigned)' : 'Message signing on (signed)'}
               >
                 <IconSymbol
                   name={skipSigning ? 'lock.open' : 'lock'}
                   color={skipSigning ? theme.colors.textMuted : theme.colors.primary}
-                  size={25}
+                  size={27}
                   strokeWidth={1.5}
                 />
               </TouchableOpacity>

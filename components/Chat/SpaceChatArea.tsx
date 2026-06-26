@@ -468,6 +468,8 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         spaceRoles: spaceData?.roles?.map((r) => ({ roleId: r.roleId, roleTag: r.roleTag })),
         spaceChannels: channelsData?.map((c) => ({ channelId: c.channelId, channelName: c.channelName })),
         allowEveryone: canMentionEveryone,
+        isRepudiable: spaceData?.isRepudiable,
+        skipSigning,
       }, {
         onSettled: refocusInput,
       });
