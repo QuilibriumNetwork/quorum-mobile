@@ -1227,7 +1227,7 @@ export default function ProfileModal({
       // and returns a proper Qm... base58 address
       const address = deriveAddress(hexKey);
       // Truncate for display
-      return `${address.slice(0, 8)}...${address.slice(-6)}`;
+      return truncateAddress(address, 'long');
     } catch {
       return hexKey.slice(0, 16) + '...';
     }
@@ -4346,9 +4346,7 @@ const DeviceKeysSection = React.memo(function DeviceKeysSection({
           {visibleDevices.map((device) => {
             const isCurrentDevice = device.inbox_registration.inbox_address === currentDeviceInboxAddress;
             const inboxAddr = device.inbox_registration.inbox_address;
-            const displayAddr = inboxAddr.length > 16
-              ? `${inboxAddr.slice(0, 8)}...${inboxAddr.slice(-6)}`
-              : inboxAddr;
+            const displayAddr = truncateAddress(inboxAddr, 'long');
 
             return (
               <View key={device.identity_public_key} style={styles.deviceItem}>

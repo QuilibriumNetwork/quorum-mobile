@@ -9,6 +9,7 @@ import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import type { Conversation } from '@/hooks/chat';
 import { coerceMessagePreview, previewKindIcon } from '@/utils/messagePreview';
+import { truncateAddress } from '@/utils/formatAddress';
 import React, { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Alert, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
@@ -101,13 +102,7 @@ const DMConversationItem = React.memo(function DMConversationItem({
 
   let displayName = item.displayName;
   if (!displayName && item.address) {
-    if (item.address.startsWith('@')) {
-      displayName = item.address;
-    } else if (item.address.length > 12) {
-      displayName = `${item.address.slice(0, 8)}...${item.address.slice(-4)}`;
-    } else {
-      displayName = item.address;
-    }
+    displayName = truncateAddress(item.address, 'long');
   }
   displayName = displayName || 'Unknown';
 

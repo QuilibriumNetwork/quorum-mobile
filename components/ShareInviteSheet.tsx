@@ -14,6 +14,7 @@
 
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { truncateAddress } from '@/utils/formatAddress';
 import { ActionRow, ActionRowGroup } from '@/components/shared';
 import { useToast } from '@/context/ToastContext';
 import { useConversations } from '@/hooks/chat/useConversations';
@@ -169,8 +170,8 @@ export default function ShareInviteSheet({
                         style={styles.avatar}
                       />
                     }
-                    label={conv.displayName || conv.address.slice(0, 12)}
-                    sublabel={`${conv.address.slice(0, 16)}…`}
+                    label={conv.displayName || truncateAddress(conv.address)}
+                    sublabel={truncateAddress(conv.address, 'medium')}
                     trailing={
                       sending ? (
                         <ActivityIndicator size="small" color={theme.colors.accent} />
