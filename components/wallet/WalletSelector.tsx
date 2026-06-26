@@ -101,7 +101,7 @@ const createStyles = (theme: AppTheme) =>
     },
     walletAddress: {
       fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(1),
     },
     switchButton: {

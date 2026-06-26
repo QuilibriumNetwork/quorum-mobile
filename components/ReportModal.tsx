@@ -230,7 +230,7 @@ const createStyles = (theme: AppTheme) =>
     },
     subtitle: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       lineHeight: Skin.font(18),
     },
     reasons: {

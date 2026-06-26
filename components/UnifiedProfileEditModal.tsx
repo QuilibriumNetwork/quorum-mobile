@@ -374,7 +374,7 @@ function createStyles(theme: AppTheme) {
     },
     subtitle: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       marginTop: Skin.space(-8),
     },
@@ -407,7 +407,7 @@ function createStyles(theme: AppTheme) {
     fieldLabel: {
       fontSize: Skin.font(13),
       fontWeight: '600',
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     fieldError: {
       fontSize: Skin.font(12),

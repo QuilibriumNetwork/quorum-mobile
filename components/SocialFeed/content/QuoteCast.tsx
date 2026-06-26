@@ -98,7 +98,7 @@ function createStyles(theme: AppTheme) {
       fontSize: Skin.font(14),
     },
     username: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(13),
       marginLeft: Skin.space(4),
     },

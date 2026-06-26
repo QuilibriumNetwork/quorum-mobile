@@ -740,7 +740,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     loadingText: {
       marginTop: Skin.space(16),
       fontSize: Skin.font(16),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     errorContainer: {
       flex: 1,
@@ -752,7 +752,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     errorText: {
       marginTop: Skin.space(16),
       fontSize: Skin.font(16),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
     retryButton: {
@@ -929,7 +929,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     appDescription: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
       textAlign: 'center',
       lineHeight: Skin.font(17),
@@ -944,7 +944,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     smallStatText: {
       fontSize: Skin.font(10),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     authBadge: {
       width: 18,
@@ -971,7 +971,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     emptyStateText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
   });

@@ -147,13 +147,13 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginBottom: Skin.space(4),
   },
   descriptionLarge: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(13),
     lineHeight: Skin.font(18),
     marginBottom: Skin.space(4),
   },
   domainLarge: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(12),
   },
   containerSmall: {
@@ -175,13 +175,13 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginBottom: Skin.space(4),
   },
   descriptionSmall: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(12),
     lineHeight: Skin.font(16),
     marginBottom: Skin.space(4),
   },
   domainSmall: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(11),
   },
 });

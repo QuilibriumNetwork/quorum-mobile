@@ -397,7 +397,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     resolvingText: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     resolvedBanner: {
       flexDirection: 'row',

@@ -474,7 +474,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     infoText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       paddingHorizontal: Skin.space(16),
       paddingBottom: Skin.space(12),
       lineHeight: Skin.font(20),
@@ -502,7 +502,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     statusText: {
       fontSize: Skin.font(16),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(16),
       textAlign: 'center',
     },
@@ -528,7 +528,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     addressLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(4),
     },
     addressText: {
@@ -556,7 +556,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     skipButtonText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     retryButton: {
       backgroundColor: theme.colors.surface2,

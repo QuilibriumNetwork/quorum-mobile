@@ -64,7 +64,7 @@ function AuctionCountdown({ endTime }: { endTime: string }) {
       fontSize: Skin.font(12),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      color: isUrgent ? theme.colors.danger : theme.colors.textMuted,
+      color: isUrgent ? theme.colors.danger : theme.colors.textSubtle,
     }}>
       {remaining}
     </Text>
@@ -287,7 +287,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     bidLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(2),
     },
     bidRow: {
@@ -303,14 +303,14 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     bidToken: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     auctionMeta: {
       alignItems: 'flex-end',
     },
     bidCount: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     instantBuyText: {
       fontSize: Skin.font(11),
@@ -332,7 +332,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     emptySubtitle: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
   });

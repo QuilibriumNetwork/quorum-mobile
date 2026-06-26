@@ -485,7 +485,7 @@ const shareToChatStyles = {
   sectionHeader: (theme: AppTheme) => ({
     fontSize: Skin.font(13),
     fontWeight: '600' as const,
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     paddingHorizontal: Skin.space(16),
     paddingTop: Skin.space(16),
     paddingBottom: Skin.space(8),
@@ -663,7 +663,7 @@ function ShareToChatModal({
           {isSending && (
             <View style={{ padding: Skin.space(20), alignItems: 'center' }}>
               <ActivityIndicator color={theme.colors.accent} />
-              <Text style={{ color: theme.colors.textMuted, marginTop: Skin.space(8) }}>Sending...</Text>
+              <Text style={{ color: theme.colors.textSubtle, marginTop: Skin.space(8) }}>Sending...</Text>
             </View>
           )}
 
@@ -736,7 +736,7 @@ function ShareToChatModal({
 
               {spaces.length === 0 && allDMs.length === 0 && (
                 <View style={{ padding: Skin.space(40), alignItems: 'center' }}>
-                  <Text style={{ color: theme.colors.textMuted, textAlign: 'center' }}>
+                  <Text style={{ color: theme.colors.textSubtle, textAlign: 'center' }}>
                     No conversations yet.{'\n'}Start a chat to share to it.
                   </Text>
                 </View>
@@ -759,7 +759,7 @@ function ShareToChatModal({
               </ActionRowGroup>
               {channels.length === 0 && (
                 <View style={{ padding: Skin.space(40), alignItems: 'center' }}>
-                  <Text style={{ color: theme.colors.textMuted }}>No channels in this space</Text>
+                  <Text style={{ color: theme.colors.textSubtle }}>No channels in this space</Text>
                 </View>
               )}
             </ScrollView>
@@ -1181,7 +1181,7 @@ function LinkPreview({
           {description && (
             <Text
               style={{
-                color: theme.colors.textMuted,
+                color: theme.colors.textSubtle,
                 fontSize: Skin.font(13),
                 lineHeight: Skin.font(18),
                 marginBottom: Skin.space(4),
@@ -1192,7 +1192,7 @@ function LinkPreview({
             </Text>
           )}
           {domain && (
-            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>
+            <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(12) }}>
               {domain}
             </Text>
           )}
@@ -1239,7 +1239,7 @@ function LinkPreview({
         {description && (
           <Text
             style={{
-              color: theme.colors.textMuted,
+              color: theme.colors.textSubtle,
               fontSize: Skin.font(12),
               lineHeight: Skin.font(16),
               marginBottom: Skin.space(4),
@@ -1250,7 +1250,7 @@ function LinkPreview({
           </Text>
         )}
         {domain && (
-          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(11) }}>
+          <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(11) }}>
             {domain}
           </Text>
         )}
@@ -1460,7 +1460,7 @@ function ParentContextLine({
         <View style={{ padding: Skin.space(8), gap: Skin.space(2) }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
             <IconSymbol name="arrowshape.turn.up.left" color={theme.colors.textMuted} size={12} />
-            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>
+            <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(12) }}>
               replying to <Text style={{ color: theme.colors.accent }}>{handle}</Text>
             </Text>
           </View>
@@ -1493,7 +1493,7 @@ function ParentContextLine({
         style={{ marginTop: Skin.space(2) }}
       />
       {showUrlContext ? (
-        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), flex: 1 }} numberOfLines={1}>
+        <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13), flex: 1 }} numberOfLines={1}>
           replying to{' '}
           <Text style={{ color: theme.colors.accent }}>
             {(() => {
@@ -1507,7 +1507,7 @@ function ParentContextLine({
         </Text>
       ) : (
         // showUserContext, mini-preview-still-loading, or showGenericReply
-        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), flex: 1 }}>
+        <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13), flex: 1 }}>
           replying to{' '}
           <Text style={{ color: theme.colors.accent }}>
             {cast.parentAuthor?.username
@@ -1802,7 +1802,7 @@ function QuoteCast({
         }}
       >
         <ActivityIndicator size="small" color={theme.colors.textMuted} />
-        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>
+        <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13) }}>
           Loading quoted cast…
         </Text>
       </View>
@@ -1840,7 +1840,7 @@ function QuoteCast({
             {displayName}
           </Text>
           {username && (
-            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginLeft: Skin.space(4) }}>
+            <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13), marginLeft: Skin.space(4) }}>
               @{username}
             </Text>
           )}
@@ -1943,7 +1943,7 @@ function FarcasterCastUrlEmbed({
         }}
       >
         <ActivityIndicator size="small" color={theme.colors.textMuted} />
-        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>
+        <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13) }}>
           Loading quoted cast…
         </Text>
       </View>
@@ -1971,7 +1971,7 @@ function FarcasterCastUrlEmbed({
         <IconSymbol name="chevron.right" color={theme.colors.textMuted} size={14} />
       </View>
       {fallbackDescription && (
-        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(4) }} numberOfLines={2}>
+        <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13), marginTop: Skin.space(4) }} numberOfLines={2}>
           {fallbackDescription}
         </Text>
       )}
@@ -2429,8 +2429,8 @@ function ThreadDetailView({
           </Text>
           {/* Handle • status (status sits where the timestamp would) */}
           <Text style={{ fontSize: Skin.font(13), marginTop: Skin.space(2) }} numberOfLines={1}>
-            <Text style={{ color: theme.colors.textMuted }}>{handle ? `${handle} • ` : ''}</Text>
-            <Text style={{ color: failed ? theme.colors.danger : theme.colors.textMuted }}>
+            <Text style={{ color: theme.colors.textSubtle }}>{handle ? `${handle} • ` : ''}</Text>
+            <Text style={{ color: failed ? theme.colors.danger : theme.colors.textSubtle }}>
               {statusText}
             </Text>
           </Text>
@@ -2454,7 +2454,7 @@ function ThreadDetailView({
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => optimistic.discardPending(pending.localId)} hitSlop={8}>
-                <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>Discard</Text>
+                <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13) }}>Discard</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -2663,7 +2663,7 @@ function ThreadDetailView({
                       />
                     )}
                   </View>
-                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>
+                  <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>
                     @{cast.author.username} • {formatTimestamp(cast.timestamp)}
                   </Text>
                 </>

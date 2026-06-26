@@ -145,7 +145,7 @@ function PriceChart({
   if (data.length < 2) {
     return (
       <View style={[styles.chartPlaceholder, { height: CHART_HEIGHT }]}>
-        <Text style={{ color: theme.colors.textMuted }}>No chart data available</Text>
+        <Text style={{ color: theme.colors.textSubtle }}>No chart data available</Text>
       </View>
     );
   }
@@ -330,7 +330,7 @@ function PriceChart({
           <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(12), fontWeight: '600', textAlign: 'center' }}>
             {formatAxisPrice(selectedPoint.point.price)}
           </Text>
-          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(9), textAlign: 'center' }}>
+          <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(9), textAlign: 'center' }}>
             {formatAxisTime(selectedPoint.point.timestamp, timeframe)}
           </Text>
         </View>
@@ -391,7 +391,7 @@ function CandleChart({
   if (data.length < 2) {
     return (
       <View style={[styles.chartPlaceholder, { height: CHART_HEIGHT }]}>
-        <Text style={{ color: theme.colors.textMuted }}>No candle data available</Text>
+        <Text style={{ color: theme.colors.textSubtle }}>No candle data available</Text>
       </View>
     );
   }
@@ -574,7 +574,7 @@ function CandleChart({
             elevation: 4,
           }}
         >
-          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(9), marginBottom: Skin.space(2) }}>
+          <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(9), marginBottom: Skin.space(2) }}>
             {formatAxisTime(selectedCandle.candle.timestamp, timeframe)}
           </Text>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: Skin.space(8) }}>
@@ -884,7 +884,7 @@ export default function AssetDetailModal({
             </View>
           ) : error ? (
             <View style={[styles.chartPlaceholder, { height: CHART_HEIGHT }]}>
-              <Text style={{ color: theme.colors.textMuted }}>{error}</Text>
+              <Text style={{ color: theme.colors.textSubtle }}>{error}</Text>
             </View>
           ) : chartType === 'line' && priceData ? (
             <PriceChart
@@ -903,7 +903,7 @@ export default function AssetDetailModal({
             />
           ) : (
             <View style={[styles.chartPlaceholder, { height: CHART_HEIGHT }]}>
-              <Text style={{ color: theme.colors.textMuted }}>No chart data</Text>
+              <Text style={{ color: theme.colors.textSubtle }}>No chart data</Text>
             </View>
           )}
         </View>

@@ -75,7 +75,7 @@ function ProposalCard({
         <View style={[styles.badge, { backgroundColor: theme.colors.accent + '22' }]}>
           <Text style={[styles.badgeText, { color: theme.colors.accent }]}>{badge}</Text>
         </View>
-        <Text style={[styles.timeText, { color: theme.colors.textMuted }]}>
+        <Text style={[styles.timeText, { color: theme.colors.textSubtle }]}>
           {formatTimeAgo(proposal.createdAt)}
         </Text>
       </View>
@@ -85,7 +85,7 @@ function ProposalCard({
       </Text>
 
       {bodyText ? (
-        <Text style={[styles.cardBody, { color: theme.colors.textMuted }]} numberOfLines={2}>
+        <Text style={[styles.cardBody, { color: theme.colors.textSubtle }]} numberOfLines={2}>
           {bodyText}
         </Text>
       ) : null}
@@ -124,7 +124,7 @@ function ProposalCard({
         </View>
 
         {proposal.authorName ? (
-          <Text style={[styles.authorText, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.authorText, { color: theme.colors.textSubtle }]}>
             by {proposal.authorName}
           </Text>
         ) : null}
@@ -165,7 +165,7 @@ export default function GovernanceView({ theme, onOpenProposal }: GovernanceView
             >
               <Text style={[
                 styles.tabText,
-                { color: activeTab === tab ? theme.colors.accent : theme.colors.textMuted },
+                { color: activeTab === tab ? theme.colors.accent : theme.colors.textSubtle },
               ]}>
                 {tab === 'protocol' ? 'Protocol' : 'Client'}
               </Text>
@@ -189,7 +189,7 @@ export default function GovernanceView({ theme, onOpenProposal }: GovernanceView
         {displayedProposals.length === 0 ? (
           <View style={styles.emptyState}>
             <IconSymbol name="checkmark.seal.fill" size={40} color={theme.colors.textMuted} />
-            <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
+            <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>
               No {activeTab} proposals yet.
             </Text>
           </View>

@@ -2612,7 +2612,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     subtitle: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(4),
     },
     tabBar: {
@@ -3144,7 +3144,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     inviteHint: {
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(12),
       textAlign: 'center',
     },

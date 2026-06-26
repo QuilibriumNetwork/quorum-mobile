@@ -38,7 +38,7 @@ export function IncomingCallScreen() {
         <Text style={[styles.callerName, { color: theme.colors.text }]}>
           {incomingCall.callerDisplayName}
         </Text>
-        <Text style={[styles.callType, { color: theme.colors.textMuted }]}>
+        <Text style={[styles.callType, { color: theme.colors.textSubtle }]}>
           Incoming {incomingCall.mediaType} call
         </Text>
       </View>

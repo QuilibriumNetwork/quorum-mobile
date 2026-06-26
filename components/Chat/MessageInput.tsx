@@ -1503,7 +1503,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   emojiSectionTitle: {
     fontSize: Skin.font(12),
     fontFamily: theme.fonts.medium.fontFamily,
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     marginBottom: Skin.space(6),
   },
   emojiRow: {
@@ -1541,7 +1541,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   emptyText: {
     textAlign: 'center',
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     marginTop: Skin.space(16),
     fontSize: Skin.font(14),
   },

@@ -465,7 +465,8 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     userId: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      // secondary text → subtle (muted is unreadable in light)
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
     addressRow: {
@@ -553,7 +554,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     addRoleBadgeText: {
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     actionsContainer: {
       marginBottom: Skin.space(24),

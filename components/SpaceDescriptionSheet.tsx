@@ -60,14 +60,14 @@ export function SpaceDescriptionSheet({
         {/* Row 3: member count */}
         <View style={styles.memberRow}>
           <IconSymbol name="person.2" size={14} color={theme.colors.textMuted} />
-          <Text style={[styles.memberCount, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.memberCount, { color: theme.colors.textSubtle }]}>
             {formatMemberCount(members.length)} {members.length === 1 ? 'member' : 'members'}
           </Text>
         </View>
 
         {/* Row 4: description */}
         {!!space.description && (
-          <Text style={[styles.description, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.description, { color: theme.colors.textSubtle }]}>
             {space.description}
           </Text>
         )}

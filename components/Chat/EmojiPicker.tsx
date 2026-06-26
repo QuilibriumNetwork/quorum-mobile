@@ -647,7 +647,7 @@ const createStyles = (theme: AppTheme, keyboardHeight: number) => StyleSheet.cre
   },
   emptyText: {
     textAlign: 'center',
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     marginTop: Skin.space(24),
     fontSize: Skin.font(14),
   },

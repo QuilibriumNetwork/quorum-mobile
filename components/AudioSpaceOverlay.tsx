@@ -363,7 +363,7 @@ export function AudioSpaceOverlay() {
             <ScrollView contentContainerStyle={{ paddingBottom: Skin.space(24) }}>
               {speakers.length > 0 && (
                 <View style={styles.section}>
-                  <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>
+                  <Text style={[styles.sectionLabel, { color: theme.colors.textSubtle }]}>
                     Speakers
                   </Text>
                   <View style={styles.grid}>
@@ -392,7 +392,7 @@ export function AudioSpaceOverlay() {
 
               {listeners.length > 0 && (
                 <View style={styles.section}>
-                  <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>
+                  <Text style={[styles.sectionLabel, { color: theme.colors.textSubtle }]}>
                     Listeners · {listeners.length}
                   </Text>
                   <View style={styles.grid}>
@@ -669,7 +669,7 @@ function ScheduledPreview({
           </Text>
           {scheduledLabel && (
             <Text
-              style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}
+              style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13), marginTop: Skin.space(2) }}
             >
               {scheduledLabel}
             </Text>
@@ -723,7 +723,7 @@ function ScheduledPreview({
 
       <Text
         style={{
-          color: theme.colors.textMuted,
+          color: theme.colors.textSubtle,
           fontSize: Skin.font(12),
           textAlign: 'center',
           marginTop: Skin.space(4),
@@ -864,7 +864,7 @@ function ChatPanel({
         keyboardShouldPersistTaps="handled"
       >
         {messages.length === 0 && (
-          <Text style={{ color: theme.colors.textMuted, textAlign: 'center', paddingVertical: Skin.space(24) }}>
+          <Text style={{ color: theme.colors.textSubtle, textAlign: 'center', paddingVertical: Skin.space(24) }}>
             No messages yet.
           </Text>
         )}
@@ -912,7 +912,7 @@ function ChatPanel({
                     accessibilityLabel="Go to replied message"
                   >
                     <IconSymbol name="arrowshape.turn.up.left.fill" size={11} color={theme.colors.textMuted} />
-                    <Text numberOfLines={1} style={{ flex: 1, color: theme.colors.textMuted, fontSize: Skin.font(12) }}>
+                    <Text numberOfLines={1} style={{ flex: 1, color: theme.colors.textSubtle, fontSize: Skin.font(12) }}>
                       {(parent.author.displayName ?? parent.author.username ?? `fid:${parent.author.fid}`)}: {parent.text}
                     </Text>
                   </Pressable>
@@ -933,7 +933,7 @@ function ChatPanel({
                     >
                       <IconSymbol name={liked ? 'heart.fill' : 'heart'} size={14} color={liked ? theme.colors.danger : theme.colors.textMuted} />
                       {likeCount > 0 && (
-                        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>{likeCount}</Text>
+                        <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(12) }}>{likeCount}</Text>
                       )}
                     </Pressable>
                     <Pressable
@@ -944,7 +944,7 @@ function ChatPanel({
                     >
                       <IconSymbol name="bubble.left" size={14} color={theme.colors.textMuted} />
                       {replyCount > 0 && (
-                        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>{replyCount}</Text>
+                        <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(12) }}>{replyCount}</Text>
                       )}
                     </Pressable>
                     <Pressable
@@ -955,7 +955,7 @@ function ChatPanel({
                     >
                       <IconSymbol name="arrow.triangle.2.circlepath" size={14} color={recasted ? theme.colors.success : theme.colors.textMuted} />
                       {recastCount > 0 && (
-                        <Text style={{ color: recasted ? theme.colors.success : theme.colors.textMuted, fontSize: Skin.font(12) }}>{recastCount}</Text>
+                        <Text style={{ color: recasted ? theme.colors.success : theme.colors.textSubtle, fontSize: Skin.font(12) }}>{recastCount}</Text>
                       )}
                     </Pressable>
                   </View>
@@ -978,7 +978,7 @@ function ChatPanel({
             borderTopColor: theme.colors.surface3,
           }}
         >
-          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12), flex: 1 }} numberOfLines={1}>
+          <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(12), flex: 1 }} numberOfLines={1}>
             Replying to {replyTarget.author.displayName ?? replyTarget.author.username ?? `fid:${replyTarget.author.fid}`}
           </Text>
           <Pressable onPress={() => setReplyTarget(null)} hitSlop={8} accessibilityLabel="Cancel reply">
@@ -1300,7 +1300,7 @@ function ParticipantTile({
           || `fid:${participant.user.fid}`}
       </Text>
       {(participant.role === 'host' || participant.role === 'cohost') && (
-        <Text style={[styles.roleLabel, { color: theme.colors.textMuted }]}>
+        <Text style={[styles.roleLabel, { color: theme.colors.textSubtle }]}>
           {participant.role}
         </Text>
       )}
@@ -1350,7 +1350,7 @@ function ControlButton({
           color={active ? '#fff' : theme.colors.textMain}
         />
       </View>
-      <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(11) }}>{label}</Text>
+      <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(11) }}>{label}</Text>
     </Pressable>
   );
 }

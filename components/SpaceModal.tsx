@@ -590,7 +590,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     spaceDescription: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       marginTop: Skin.space(8),
       paddingHorizontal: Skin.space(16),
@@ -598,7 +598,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     placeholderText: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       marginTop: Skin.space(8),
     },

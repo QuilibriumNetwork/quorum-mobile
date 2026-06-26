@@ -182,7 +182,7 @@ const createStyles = (theme: AppTheme) =>
     emptySubtext: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       marginTop: Skin.space(4),
     },
@@ -228,7 +228,7 @@ const createStyles = (theme: AppTheme) =>
     bookmarkSource: {
       fontSize: Skin.font(11),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginLeft: Skin.space(8),
     },
     bookmarkText: {
@@ -240,7 +240,7 @@ const createStyles = (theme: AppTheme) =>
     bookmarkDate: {
       fontSize: Skin.font(11),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(4),
     },
     removeButton: {

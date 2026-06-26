@@ -125,7 +125,7 @@ export function FarcasterTokenEmbed({
         }}
       >
         <ActivityIndicator size="small" color={theme.colors.textMuted} />
-        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>
+        <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13) }}>
           Loading token…
         </Text>
       </View>
@@ -195,7 +195,7 @@ export function FarcasterTokenEmbed({
               {data.name || data.symbol || 'Token'}
             </Text>
             {data.symbol && (
-              <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }} numberOfLines={1}>
+              <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(12) }} numberOfLines={1}>
                 {data.symbol}
               </Text>
             )}

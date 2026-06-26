@@ -542,7 +542,7 @@ function createStyles(theme: AppTheme) {
       fontSize: Skin.font(15),
     },
     statLabel: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(14),
     },
     miniAppButton: {
@@ -581,7 +581,7 @@ function createStyles(theme: AppTheme) {
       fontSize: Skin.font(15),
     },
     castAuthorMeta: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(13),
       marginTop: Skin.space(2),
     },

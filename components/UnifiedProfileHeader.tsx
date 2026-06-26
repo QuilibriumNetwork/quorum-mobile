@@ -332,14 +332,14 @@ function createStyles(theme: AppTheme) {
     },
     handleText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       // Allow a very long handle to shrink + ellipsize instead of overflowing
       // the card or pushing a sibling handle off-screen (see issue #61).
       flexShrink: 1,
     },
     addressText: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: 'Menlo',
     },
     bioText: {

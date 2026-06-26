@@ -481,13 +481,13 @@ const createStyles = (theme: AppTheme) =>
     timestamp: {
       fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginLeft: Skin.space(8),
     },
     messagePreview: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     messagePreviewUnread: {
       color: theme.colors.textMain,
@@ -500,7 +500,7 @@ const createStyles = (theme: AppTheme) =>
       marginTop: Skin.space(12),
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     errorText: {
       marginTop: Skin.space(16),
@@ -514,7 +514,7 @@ const createStyles = (theme: AppTheme) =>
       marginTop: Skin.space(8),
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
     emptyTitle: {
@@ -529,7 +529,7 @@ const createStyles = (theme: AppTheme) =>
       marginTop: Skin.space(8),
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
     newConversationButton: {

@@ -1372,7 +1372,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexShrink: 1,
   },
   messageTime: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(12),
   },
   messageText: {
@@ -1393,7 +1393,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   loadingText: {
     marginTop: Skin.space(12),
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
   },
@@ -1406,7 +1406,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   errorDetail: {
     marginTop: Skin.space(8),
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
     textAlign: 'center',
@@ -1420,7 +1420,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   emptySubtext: {
     marginTop: Skin.space(8),
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
     textAlign: 'center',
@@ -1467,14 +1467,14 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     paddingHorizontal: Skin.space(16),
   },
   systemMessageText: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(13),
     fontFamily: theme.fonts.regular.fontFamily,
     marginHorizontal: Skin.space(8),
     fontStyle: 'italic',
   },
   systemMessageTime: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(11),
     fontFamily: theme.fonts.regular.fontFamily,
   },
@@ -1486,7 +1486,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     opacity: 0.6,
   },
   deletedMessageText: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
     fontStyle: 'italic',
@@ -1494,7 +1494,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   // Edited indicator
   editedIndicator: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(11),
     fontFamily: theme.fonts.regular.fontFamily,
     marginLeft: Skin.space(6),
@@ -1506,7 +1506,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginBottom: Skin.space(4),
   },
   replyIndicatorText: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(12),
     fontFamily: theme.fonts.regular.fontFamily,
     marginLeft: Skin.space(4),
@@ -1541,7 +1541,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderRadius: Skin.radius(2),
   },
   reactionCount: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(12),
     fontFamily: theme.fonts.medium.fontFamily,
     marginLeft: Skin.space(4),
@@ -1593,7 +1593,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
   },
   stickerPlaceholderText: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
   },

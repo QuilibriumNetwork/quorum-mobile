@@ -221,7 +221,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     collectionLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
@@ -258,7 +258,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     sectionTitle: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       textTransform: 'uppercase',
@@ -284,7 +284,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     detailLabel: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     detailValueRow: {
       flexDirection: 'row',

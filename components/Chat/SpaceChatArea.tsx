@@ -714,7 +714,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
               style={{
                 flex: 1,
                 fontSize: Skin.font(13),
-                color: theme.colors.textMuted,
+                color: theme.colors.textSubtle,
                 lineHeight: Skin.font(18),
               }}
             >
@@ -875,6 +875,6 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   readOnlyBannerText: {
     fontSize: 14,
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
   },
 });

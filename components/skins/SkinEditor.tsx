@@ -363,7 +363,7 @@ export function SkinEditor({ onClose }: { onClose: () => void }) {
 function Field({ label, children, theme }: { label: string; children: React.ReactNode; theme: ReturnType<typeof useTheme>['theme'] }) {
   return (
     <View style={{ paddingHorizontal: Skin.space(16), paddingVertical: Skin.space(8) }}>
-      <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginBottom: Skin.space(6) }}>{label}</Text>
+      <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13), marginBottom: Skin.space(6) }}>{label}</Text>
       {children}
     </View>
   );
@@ -434,7 +434,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
   return StyleSheet.create({
     headerRow: { flexDirection: 'row', alignItems: 'center', gap: Skin.space(8), paddingHorizontal: Skin.space(16), paddingTop: Skin.space(8), paddingBottom: Skin.space(4) },
     title: { color: theme.colors.textStrong, fontSize: Skin.font(22), fontWeight: '700' },
-    section: { color: theme.colors.textMuted, fontSize: Skin.font(13), fontWeight: '600', textTransform: 'uppercase', paddingHorizontal: Skin.space(16), paddingTop: Skin.space(16), paddingBottom: Skin.space(4) },
+    section: { color: theme.colors.textSubtle, fontSize: Skin.font(13), fontWeight: '600', textTransform: 'uppercase', paddingHorizontal: Skin.space(16), paddingTop: Skin.space(16), paddingBottom: Skin.space(4) },
     input: { backgroundColor: theme.colors.surface3, borderRadius: theme.radii.md, paddingHorizontal: Skin.space(12), paddingVertical: Skin.space(10), color: theme.colors.textMain, fontSize: Skin.font(15) },
     colorRow: { flexDirection: 'row', alignItems: 'center', gap: Skin.space(10), paddingHorizontal: Skin.space(16), paddingVertical: Skin.space(6) },
     swatch: { width: Skin.space(26), height: Skin.space(26), borderRadius: theme.radii.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.colors.surface5 },

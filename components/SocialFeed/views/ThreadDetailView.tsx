@@ -663,12 +663,12 @@ function createStyles(theme: AppTheme) {
       fontSize: Skin.font(13),
     },
     usernameTimestamp: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(13),
       marginTop: Skin.space(2),
     },
     mutedText13: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(13),
     },
     accentText: {

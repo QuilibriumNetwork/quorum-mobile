@@ -80,7 +80,7 @@ export function LiveSpacesStrip() {
 
   return (
     <View style={styles.container}>
-      <Text style={[styles.label, { color: theme.colors.textMuted }]}>
+      <Text style={[styles.label, { color: theme.colors.textSubtle }]}>
         {live.length > 0
           ? 'Live spaces'
           : upcoming.length > 0
@@ -160,7 +160,7 @@ function CreateTile({ onPress }: { onPress: () => void }) {
       </Text>
       <Text
         style={{
-          color: theme.colors.textMuted,
+          color: theme.colors.textSubtle,
           fontSize: Skin.font(11),
           marginTop: Skin.space(2),
           textAlign: 'center',

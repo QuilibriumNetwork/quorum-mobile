@@ -254,11 +254,11 @@ const createStyles = (theme: AppTheme) =>
       borderWidth: Skin.border(1),
       borderColor: theme.colors.primary,
     },
-    variantChipText: { ...theme.textStyles.footnote, color: theme.colors.textMuted },
+    variantChipText: { ...theme.textStyles.footnote, color: theme.colors.textSubtle },
     variantChipTextActive: { color: theme.colors.textStrong },
     sectionLabel: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       letterSpacing: 0.5,
       marginBottom: Skin.space(8),
       textTransform: 'uppercase',

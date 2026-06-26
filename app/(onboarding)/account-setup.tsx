@@ -323,7 +323,7 @@ const createStyles = (theme: AppTheme) =>
     },
     dividerText: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       paddingHorizontal: Skin.space(16),
     },
@@ -355,7 +355,7 @@ const createStyles = (theme: AppTheme) =>
     },
     securityNote: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
       lineHeight: Skin.font(18),

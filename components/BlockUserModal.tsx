@@ -143,7 +143,7 @@ const createStyles = (theme: AppTheme) =>
     },
     userAddress: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       marginTop: Skin.space(2),
     },

@@ -596,7 +596,7 @@ const createStyles = (theme: AppTheme) =>
     },
     createSectionLabel: {
       ...theme.textStyles.caption1,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -617,7 +617,7 @@ const createStyles = (theme: AppTheme) =>
     },
     groupChipText: {
       ...theme.textStyles.caption1,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     groupChipTextSelected: {
       color: theme.colors.textStrong,

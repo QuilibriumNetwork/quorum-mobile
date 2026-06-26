@@ -160,9 +160,9 @@ export default function BoundChannelFeedPanel({
               <ActivityIndicator color={theme.colors.accent} size="small" />
             </View>
           ) : error ? (
-            <Text style={[styles.errorText, { color: theme.colors.textMuted }]}>{error}</Text>
+            <Text style={[styles.errorText, { color: theme.colors.textSubtle }]}>{error}</Text>
           ) : casts.length === 0 ? (
-            <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
+            <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>
               No recent casts.
             </Text>
           ) : (
@@ -301,7 +301,7 @@ function CastRow({
             </Text>
             {live && <LivePulse theme={theme} />}
           </View>
-          <Text style={[castRowStyles.meta, { color: theme.colors.textMuted }]}>{ts}</Text>
+          <Text style={[castRowStyles.meta, { color: theme.colors.textSubtle }]}>{ts}</Text>
         </View>
         {cast.text ? (
           <Text style={[castRowStyles.text, { color: theme.colors.textMain }]} numberOfLines={3}>
@@ -311,12 +311,12 @@ function CastRow({
         {(replyCount > 0 || reactionCount > 0) && (
           <View style={castRowStyles.statsRow}>
             {replyCount > 0 && (
-              <Text style={[castRowStyles.stat, { color: theme.colors.textMuted }]}>
+              <Text style={[castRowStyles.stat, { color: theme.colors.textSubtle }]}>
                 {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
               </Text>
             )}
             {reactionCount > 0 && (
-              <Text style={[castRowStyles.stat, { color: theme.colors.textMuted }]}>
+              <Text style={[castRowStyles.stat, { color: theme.colors.textSubtle }]}>
                 ♥ {reactionCount}
               </Text>
             )}

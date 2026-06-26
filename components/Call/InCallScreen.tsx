@@ -113,7 +113,7 @@ export function InCallScreen() {
             <Text style={[styles.callerName, { color: theme.colors.text }]}>
               {activeCall.recipientDisplayName}
             </Text>
-            <Text style={[styles.duration, { color: theme.colors.textMuted }]}>
+            <Text style={[styles.duration, { color: theme.colors.textSubtle }]}>
               {isConnecting ? 'Connecting...' : formatDuration(elapsed)}
             </Text>
           </View>
@@ -189,7 +189,7 @@ export function InCallScreen() {
           {activeCall.recipientDisplayName}
         </Text>
         <View style={qualityStyles.timerRow}>
-          <Text style={[styles.duration, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.duration, { color: theme.colors.textSubtle }]}>
             {isConnecting ? 'Connecting...' : formatDuration(elapsed)}
           </Text>
           <CallQualityIndicator quality={activeCall.callQuality} />
@@ -209,7 +209,7 @@ export function InCallScreen() {
             color={activeCall.isMuted ? '#fff' : theme.colors.text}
             size={22}
           />
-          <Text style={[styles.controlLabel, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.controlLabel, { color: theme.colors.textSubtle }]}>
             {activeCall.isMuted ? 'Unmute' : 'Mute'}
           </Text>
         </TouchableOpacity>
@@ -226,7 +226,7 @@ export function InCallScreen() {
             color={activeCall.isSpeakerOn ? '#fff' : theme.colors.text}
             size={22}
           />
-          <Text style={[styles.controlLabel, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.controlLabel, { color: theme.colors.textSubtle }]}>
             Speaker
           </Text>
         </TouchableOpacity>

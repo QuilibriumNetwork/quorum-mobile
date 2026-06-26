@@ -262,7 +262,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -285,7 +285,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     tokenOptionTextSelected: { color: theme.colors.primary },
     inputRow: {
@@ -304,7 +304,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     inputToken: {
       paddingHorizontal: Skin.space(14),
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -322,7 +322,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       borderColor: theme.colors.primary,
       backgroundColor: isDark ? 'theme.colors.accentSoft' : 'theme.colors.accentSubtle',
     },
-    expiryText: { fontSize: Skin.font(13), color: theme.colors.textMuted },
+    expiryText: { fontSize: Skin.font(13), color: theme.colors.textSubtle },
     expiryTextSelected: {
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -334,7 +334,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       gap: Skin.space(6),
       marginBottom: Skin.space(20),
     },
-    feeInfoText: { fontSize: Skin.font(13), color: theme.colors.textMuted },
+    feeInfoText: { fontSize: Skin.font(13), color: theme.colors.textSubtle },
     submitButton: {
       height: 50,
       backgroundColor: theme.colors.primary,

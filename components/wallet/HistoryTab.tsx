@@ -406,7 +406,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     loadingText: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     emptyContainer: {
       flex: 1,
@@ -426,7 +426,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     emptySubtitle: {
       ...theme.textStyles.subheadline,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(4),
       textAlign: 'center',
     },
@@ -479,7 +479,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     transactionChain: {
       fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       backgroundColor: theme.colors.surface3,
       paddingHorizontal: Skin.space(6),
       paddingVertical: Skin.space(2),
@@ -493,11 +493,11 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     transactionTo: {
       fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       flex: 1,
     },
     transactionTime: {
       fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
   });

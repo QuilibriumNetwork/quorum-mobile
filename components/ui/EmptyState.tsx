@@ -94,7 +94,7 @@ const createStyles = (theme: AppTheme) =>
     },
     message: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
       lineHeight: Skin.font(20),

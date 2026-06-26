@@ -84,7 +84,7 @@ const styles = (theme: AppTheme) =>
     },
     subtitle: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       paddingHorizontal: Skin.space(20),
       paddingTop: Skin.space(4),
       paddingBottom: Skin.space(12),
@@ -107,7 +107,7 @@ const styles = (theme: AppTheme) =>
     },
     rowDescription: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(2),
     },
   });

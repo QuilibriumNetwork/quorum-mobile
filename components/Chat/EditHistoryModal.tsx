@@ -186,7 +186,7 @@ const createStyles = (theme: AppTheme) =>
     editTimestamp: {
       fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     editText: {
       fontSize: Skin.font(15),

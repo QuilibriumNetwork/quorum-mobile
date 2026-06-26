@@ -173,7 +173,7 @@ const createStyles = (theme: AppTheme, variant: TabBarVariant) => {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     tabTextActive: {
       color: isPill ? '#ffffff' : theme.colors.primary,

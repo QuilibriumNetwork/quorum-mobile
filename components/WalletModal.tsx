@@ -1648,7 +1648,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     infoText: {
       flex: 1,
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textMain,
       lineHeight: Skin.font(18),
     },
     // Collectibles/NFT styles

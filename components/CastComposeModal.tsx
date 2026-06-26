@@ -210,7 +210,7 @@ function createStyles(theme: AppTheme) {
       marginHorizontal: Skin.space(12),
     },
     cancelText: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(15),
     },
     disabled: {
@@ -277,7 +277,7 @@ function createStyles(theme: AppTheme) {
     },
     charCount: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     errorText: {
       color: theme.colors.danger,

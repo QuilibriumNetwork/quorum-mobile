@@ -162,7 +162,7 @@ const createStyles = (theme: AppTheme) =>
     },
     message: {
       ...theme.textStyles.subheadline,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       marginTop: Skin.space(2),
     },
@@ -171,7 +171,7 @@ const createStyles = (theme: AppTheme) =>
     },
     sectionTitle: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
       marginTop: Skin.space(4),

@@ -264,7 +264,7 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
               </Text>
               <Text style={[styles.topBarSeparator, { color: theme.colors.textMuted }]}>{'\u00B7'}</Text>
               <IconSymbol name="person.2.fill" size={14} color={theme.colors.textMuted} />
-              <Text style={[styles.audioTopBarParticipants, { color: theme.colors.textMuted }]}>
+              <Text style={[styles.audioTopBarParticipants, { color: theme.colors.textSubtle }]}>
                 {participantCount}
               </Text>
               <QualityIndicator quality={state.callQuality} />
@@ -286,7 +286,7 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
           {state.participants.length === 0 ? (
             <View style={styles.avatarItem}>
               <DefaultAvatar address="space" size={80} />
-              <Text style={[styles.avatarLabel, { color: theme.colors.textMuted }]}>
+              <Text style={[styles.avatarLabel, { color: theme.colors.textSubtle }]}>
                 Waiting...
               </Text>
             </View>
@@ -336,7 +336,7 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
             color={state.isMuted ? '#fff' : theme.colors.textMain}
             size={22}
           />
-          <Text style={[styles.controlLabel, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.controlLabel, { color: theme.colors.textSubtle }]}>
             {state.isMuted ? 'Unmute' : 'Mute'}
           </Text>
         </TouchableOpacity>
@@ -353,7 +353,7 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
             color={state.isVideoEnabled ? '#fff' : theme.colors.textMain}
             size={22}
           />
-          <Text style={[styles.controlLabel, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.controlLabel, { color: theme.colors.textSubtle }]}>
             Video
           </Text>
         </TouchableOpacity>
@@ -370,7 +370,7 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
             color={state.isSpeakerOn ? '#fff' : theme.colors.textMain}
             size={22}
           />
-          <Text style={[styles.controlLabel, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.controlLabel, { color: theme.colors.textSubtle }]}>
             Speaker
           </Text>
         </TouchableOpacity>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
@@ -14,9 +14,14 @@ import {
   type Space,
 } from '@quilibrium/quorum-shared';
 
-const BANNER_HEIGHT = 180;
-const GRADIENT_HEIGHT = BANNER_HEIGHT * 0.75;
 const BUTTON_SIZE = 32;
+
+// Shrink the banner on shorter screens so it doesn't eat the channel list.
+function bannerHeightForScreen(screenHeight: number): number {
+  if (screenHeight <= 700) return 120;
+  if (screenHeight <= 800) return 150;
+  return 180;
+}
 
 interface SpaceBannerHeaderProps {
   space: Space;
@@ -43,6 +48,10 @@ export function SpaceBannerHeader({
   const hasBanner = !!space.bannerUrl;
   const hasIcon = !!space.iconUrl;
 
+  const { height: screenHeight } = useWindowDimensions();
+  const bannerHeight = bannerHeightForScreen(screenHeight);
+  const gradientHeight = bannerHeight * 0.75;
+
   // No banner and no icon: wash the banner in the same deterministic color the
   // space-initials avatar uses, so the empty area carries the space's identity
   // color instead of flat grey. Matches AvatarInitials' gradient recipe.
@@ -64,7 +73,7 @@ export function SpaceBannerHeader({
     : 'rgba(246,246,248,0.92)';
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { height: bannerHeight }]}>
       {/* ── Background layer ── */}
       {hasBanner ? (
         <Image
@@ -88,7 +97,7 @@ export function SpaceBannerHeader({
         colors={[gradientStart, 'transparent']}
         start={{ x: 0, y: 1 }}
         end={{ x: 0, y: 0 }}
-        style={[styles.gradient, { height: GRADIENT_HEIGHT }]}
+        style={[styles.gradient, { height: gradientHeight }]}
       />
 
       {/* ── Button row ── */}
@@ -184,7 +193,6 @@ function FrostedPill({ children, onPress, style }: FrostedPillProps) {
 
 const styles = StyleSheet.create({
   container: {
-    height: BANNER_HEIGHT,
     width: '100%',
     overflow: 'hidden',
   },

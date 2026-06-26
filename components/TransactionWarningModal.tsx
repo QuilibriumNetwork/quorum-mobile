@@ -188,7 +188,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, seve
     },
     warningMessage: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textMain,
       textAlign: 'center',
       lineHeight: Skin.font(20),
       paddingHorizontal: Skin.space(20),
@@ -219,7 +219,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, seve
     },
     transactionLabel: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },

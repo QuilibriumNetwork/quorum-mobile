@@ -347,7 +347,7 @@ const createStyles = (theme: AppTheme) =>
     },
     wordCountText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
     },
     wordCountTextActive: {
@@ -369,7 +369,7 @@ const createStyles = (theme: AppTheme) =>
     },
     wordNumber: {
       fontSize: Skin.font(10),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       width: 16,
     },
@@ -437,7 +437,7 @@ const createStyles = (theme: AppTheme) =>
     },
     wordCountTextSmall: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
     },
     footer: {

@@ -300,7 +300,7 @@ const createStyles = (theme: AppTheme) =>
     },
     summaryLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       marginBottom: Skin.space(2),
     },
@@ -320,7 +320,7 @@ const createStyles = (theme: AppTheme) =>
     },
     footerNote: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
       marginBottom: Skin.space(16),

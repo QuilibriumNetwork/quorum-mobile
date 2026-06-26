@@ -205,7 +205,7 @@ const createStyles = (theme: AppTheme) =>
     },
     headerAddress: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
     headerSubtitle: {

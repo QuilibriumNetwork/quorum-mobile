@@ -354,7 +354,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     appName: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(4),
     },
     warningContainer: {
@@ -380,7 +380,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     simCheckingText: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     simDangerContainer: {
       flexDirection: 'row',
@@ -418,7 +418,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     detailLabel: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     detailValue: {
       fontSize: Skin.font(14),

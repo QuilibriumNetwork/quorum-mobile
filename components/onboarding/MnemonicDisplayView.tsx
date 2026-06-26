@@ -149,7 +149,7 @@ const createStyles = (theme: AppTheme) =>
     },
     addressLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       marginBottom: Skin.space(4),
     },
@@ -191,7 +191,7 @@ const createStyles = (theme: AppTheme) =>
     },
     wordNumber: {
       fontSize: Skin.font(10),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       width: 16,
     },

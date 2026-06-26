@@ -234,14 +234,14 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     qrPlaceholderText: {
       marginTop: Skin.space(8),
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     addressContainer: {
       marginBottom: Skin.space(16),
     },
     addressLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -271,7 +271,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     infoText: {
       flex: 1,
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textMain,
       lineHeight: Skin.font(18),
     },
   });
