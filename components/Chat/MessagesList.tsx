@@ -1539,7 +1539,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   unsignedWarning: {
     marginLeft: Skin.space(6),
-    alignSelf: 'center',
+    // Pin to the text line so the icon never grows the baseline-aligned header
+    // row (which would push the message body down). Height matches the 12pt glyph.
+    height: Skin.font(12),
+    justifyContent: 'center',
+    alignSelf: 'flex-end',
   },
   // Reply indicator
   replyIndicator: {
