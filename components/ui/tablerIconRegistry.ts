@@ -275,6 +275,7 @@ import IconVolume from '@tabler/icons-react-native/IconVolume';
 import IconWallet from '@tabler/icons-react-native/IconWallet';
 import IconWifiOff from '@tabler/icons-react-native/IconWifiOff';
 import IconWorld from '@tabler/icons-react-native/IconWorld';
+import IconWorldMap from '@tabler/icons-react-native/IconWorldMap';
 import IconX from '@tabler/icons-react-native/IconX';
 
 export const TablerIcons = {
@@ -534,5 +535,6 @@ export const TablerIcons = {
   IconWallet,
   IconWifiOff,
   IconWorld,
+  IconWorldMap,
   IconX,
 };

@@ -157,6 +157,7 @@ const SF_TO_TABLER = {
 
   // Globe / web
   'globe': tabler('IconWorld'),
+  'world-map': tabler('IconWorldMap'),
   'safari': tabler('IconCompass'),
   'safari.fill': tabler('IconCompass', 'IconCompassFilled'),
 
