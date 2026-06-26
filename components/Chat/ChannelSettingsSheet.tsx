@@ -390,7 +390,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
           <>
             <ActionRowGroup style={styles.group}>
               <ActionRow
-                icon="lock.fill"
+                icon="lock"
                 label="Read-only"
                 sublabel="Only managers can post, pin & delete"
                 trailing={
@@ -405,7 +405,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
               />
               {channel?.isReadOnly && (
                 <ActionRow
-                  icon="shield.fill"
+                  icon="shield"
                   label="Managers"
                   sublabel={managerNames || 'No roles selected'}
                   trailing="chevron"
@@ -422,7 +422,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
 
             <ActionRowGroup style={styles.group}>
               <ActionRow
-                icon="star.fill"
+                icon="star"
                 label="Set as default channel"
                 sublabel={
                   channel?.channelId === space?.defaultChannelId
@@ -448,7 +448,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
           <>
             <ActionRowGroup style={styles.group}>
               <ActionRow
-                icon="lock.fill"
+                icon="lock"
                 label="Read-only"
                 sublabel="Only managers can post, pin & delete"
                 trailing={
@@ -463,7 +463,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
               />
               {draftReadOnly && (
                 <ActionRow
-                  icon="shield.fill"
+                  icon="shield"
                   label="Managers"
                   sublabel={
                     draftManagerRoleIds.length > 0
@@ -487,7 +487,7 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
 
             <ActionRowGroup style={styles.group}>
               <ActionRow
-                icon="star.fill"
+                icon="star"
                 label="Set as default channel"
                 sublabel="New members land here first"
                 trailing={

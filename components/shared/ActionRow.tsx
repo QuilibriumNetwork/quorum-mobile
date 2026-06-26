@@ -104,7 +104,9 @@ export function ActionRow(props: ActionRowProps) {
           {props.label}
         </Text>
         {props.sublabel ? (
-          <Text style={styles.sublabel} numberOfLines={1}>
+          // No numberOfLines — sublabels wrap to as many lines as needed so the
+          // full text always shows (never truncated on narrow screens).
+          <Text style={styles.sublabel}>
             {props.sublabel}
           </Text>
         ) : null}
