@@ -27,6 +27,10 @@ export interface UseSendSpaceMessageParams {
   spaceChannels?: Array<{ channelId: string; channelName: string }>;
   /** Sender has the mention:everyone permission (gates @everyone extraction). */
   allowEveryone?: boolean;
+  /** Space repudiability (inverse of "Require Message Signing"). */
+  isRepudiable?: boolean;
+  /** Per-message lock state; only consulted when isRepudiable is true. */
+  skipSigning?: boolean;
 }
 
 export function useSendSpaceMessage() {
@@ -54,6 +58,8 @@ export function useSendSpaceMessage() {
         spaceRoles: params.spaceRoles,
         spaceChannels: params.spaceChannels,
         allowEveryone: params.allowEveryone,
+        // Sign unless the space left it optional AND the lock was opened.
+        skipSigning: params.isRepudiable ? !!params.skipSigning : false,
       });
 
       // Send via WebSocket

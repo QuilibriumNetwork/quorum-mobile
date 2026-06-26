@@ -238,6 +238,13 @@ export default function DMChatScreen() {
     [updateConversationSetting]
   );
 
+  // "Always sign messages" persists the inverse as isRepudiable. The send path
+  // and composer lock read it back from the conversation.
+  const handleToggleRepudiable = useCallback(
+    (value: boolean) => updateConversationSetting({ isRepudiable: value }),
+    [updateConversationSetting]
+  );
+
   // Delete this conversation locally (DMs are E2E-encrypted, so this only
   // removes it from this device). The confirm lives in DMSettingsSheet; this
   // is the previously-unwired effect. Refresh the conversation list and leave
@@ -436,6 +443,8 @@ export default function DMChatScreen() {
             displayName={title}
             theme={theme}
             onDeleteConversation={handleDeleteConversation}
+            isRepudiable={conversation.isRepudiable}
+            onToggleRepudiable={handleToggleRepudiable}
             saveEditHistory={conversation.saveEditHistory}
             onToggleEditHistory={handleToggleEditHistory}
             isMuted={conversationMuted}

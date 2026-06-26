@@ -10,11 +10,38 @@ import { useAuth, useWebSocket } from '@/context';
 import { getQuorumClient } from '@/services/api/quorumClient';
 import { encryptionService } from '@/services/crypto/encryption-service';
 import { encryptionStateStorage, type ConversationInboxKeypair } from '@/services/crypto/encryption-state-storage';
-import { getDeviceKeyset } from '@/services/onboarding/secureStorage';
+import { getDeviceKeyset, getPrivateKey, getPublicKey } from '@/services/onboarding/secureStorage';
 import { deriveAddress } from '@/services/onboarding/keyService';
 import { queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope, type EmbedMessage } from '@quilibrium/quorum-shared';
 import type { Message } from '@quilibrium/quorum-shared';
 import type { MessagePreview } from '@/utils/messagePreview';
+import { NativeSigningProvider } from '@/services/crypto/native-signing-provider';
+import { sha256 } from '@noble/hashes/sha2.js';
+
+/** SHA-256 messageId hash, matching desktop: nonce + 'post' + sender + JSON.stringify(content). */
+function embedMessageIdHash(nonce: string, senderAddress: string, content: object): { messageId: string; messageIdBytes: Uint8Array } {
+  const input = nonce + 'post' + senderAddress + JSON.stringify(content);
+  const hashBytes = sha256(new TextEncoder().encode(input));
+  return { messageId: bytesToHex(Array.from(hashBytes)), messageIdBytes: hashBytes };
+}
+
+/** Sign the messageId hash with the user's Ed448 key. Returns null on any failure. */
+async function signEmbedMessageId(messageIdBytes: Uint8Array): Promise<{ signature: string; publicKey: string } | null> {
+  try {
+    const privateKeyHex = await getPrivateKey();
+    const publicKeyHex = await getPublicKey();
+    if (!privateKeyHex || !publicKeyHex) return null;
+    const messageBase64 = btoa(String.fromCharCode(...messageIdBytes));
+    const privateKeyBase64 = btoa(String.fromCharCode(...hexToBytes(privateKeyHex)));
+    const signatureBase64 = await new NativeSigningProvider().signEd448(privateKeyBase64, messageBase64);
+    const signatureHex = Array.from(atob(signatureBase64))
+      .map((c) => c.charCodeAt(0).toString(16).padStart(2, '0'))
+      .join('');
+    return { signature: signatureHex, publicKey: publicKeyHex };
+  } catch {
+    return null;
+  }
+}
 
 export interface SendDirectEmbedMessageParams {
   conversationId: string;
@@ -32,6 +59,10 @@ export interface SendDirectEmbedMessageParams {
     inboxAddress: string;
     inboxEncryptionKey: number[];
   };
+  /** Conversation repudiability (inverse of "Always sign"). Unset/false ⇒ always sign. */
+  isRepudiable?: boolean;
+  /** Per-message lock state; only consulted when isRepudiable is true. */
+  skipSigning?: boolean;
 }
 
 import type { MessagesPage, InfiniteMessagesData } from './queryTypes';
@@ -53,6 +84,8 @@ export function useSendDirectEmbedMessage() {
       height,
       text,
       recipientInfo,
+      isRepudiable,
+      skipSigning,
     }: SendDirectEmbedMessageParams): Promise<Message> => {
       const senderId = user?.address ?? 'unknown';
 
@@ -62,7 +95,20 @@ export function useSendDirectEmbedMessage() {
         return v.toString(16);
       });
       const createdDate = Date.now();
-      const messageId = `${nonce}-${createdDate}`;
+
+      const content = {
+        type: 'embed',
+        senderId,
+        imageUrl,
+        thumbnailUrl,
+        width: width?.toString(),
+        height: height?.toString(),
+        text,
+      } as EmbedMessage & { text?: string };
+
+      // messageId is the SHA-256 hash of the content, matching desktop so a
+      // desktop recipient can verify the signature.
+      const { messageId, messageIdBytes } = embedMessageIdHash(nonce, senderId, content);
 
       // Create embed message object
       const message: Message = {
@@ -74,18 +120,20 @@ export function useSendDirectEmbedMessage() {
         createdDate,
         modifiedDate: createdDate,
         lastModifiedHash: '',
-        content: {
-          type: 'embed',
-          senderId,
-          imageUrl,
-          thumbnailUrl,
-          width: width?.toString(),
-          height: height?.toString(),
-          text,
-        } as EmbedMessage & { text?: string },
+        content,
         reactions: [],
         mentions: { memberIds: [], roleIds: [], channelIds: [] },
       };
+
+      // Sign unless the conversation is repudiable AND the lock was opened.
+      const effectiveSkip = isRepudiable ? !!skipSigning : false;
+      if (!effectiveSkip) {
+        const sig = await signEmbedMessageId(messageIdBytes);
+        if (sig) {
+          message.signature = sig.signature;
+          message.publicKey = sig.publicKey;
+        }
+      }
 
       // E2E encryption is required for direct messages
       const hasDeviceKeys = encryptionService.hasDeviceKeys();
@@ -268,7 +316,12 @@ export function useSendDirectEmbedMessage() {
       const key = queryKeys.messages.infinite(recipientAddress, recipientAddress);
 
       const sentMessage: Message = context?.optimisticMessage
-        ? { ...context.optimisticMessage, sendStatus: 'sent' as const }
+        ? {
+            ...context.optimisticMessage,
+            sendStatus: 'sent' as const,
+            signature: message.signature,
+            publicKey: message.publicKey,
+          }
         : message;
 
       queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {

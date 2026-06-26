@@ -135,6 +135,8 @@ const SF_TO_TABLER = {
 
   // Security
   'lock.fill': tabler('IconLock', 'IconLockFilled'),
+  'lock': tabler('IconLock'),
+  'lock.open': tabler('IconLockOpen'),
   'lock.shield.fill': tabler('IconShieldLock', 'IconShieldLockFilled'),
   'shield': tabler('IconShield', 'IconShieldFilled'),
   'shield.fill': tabler('IconShield', 'IconShieldFilled'),

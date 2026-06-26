@@ -163,6 +163,7 @@ import IconLink from '@tabler/icons-react-native/IconLink';
 import IconLinkPlus from '@tabler/icons-react-native/IconLinkPlus';
 import IconLock from '@tabler/icons-react-native/IconLock';
 import IconLockFilled from '@tabler/icons-react-native/IconLockFilled';
+import IconLockOpen from '@tabler/icons-react-native/IconLockOpen';
 import IconMail from '@tabler/icons-react-native/IconMail';
 import IconMailFilled from '@tabler/icons-react-native/IconMailFilled';
 import IconMailOpened from '@tabler/icons-react-native/IconMailOpened';
@@ -423,6 +424,7 @@ export const TablerIcons = {
   IconLinkPlus,
   IconLock,
   IconLockFilled,
+  IconLockOpen,
   IconMail,
   IconMailFilled,
   IconMailOpened,
