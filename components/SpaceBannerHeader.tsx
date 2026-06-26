@@ -17,10 +17,16 @@ import {
 const BUTTON_SIZE = 32;
 
 // Shrink the banner on shorter screens so it doesn't eat the channel list.
-function bannerHeightForScreen(screenHeight: number): number {
-  if (screenHeight <= 700) return 120;
-  if (screenHeight <= 800) return 150;
-  return 180;
+// 180 is the baseline (optimal on tall phones e.g. Motorola Edge 50, ~780dp);
+// only genuinely shorter screens step down. The result is floored so the top
+// button row (insetTop + 8 + BUTTON_SIZE) never collides with the space name
+// (~46px tall, bottom: 18) — see the minHeight clamp below.
+function bannerHeightForScreen(screenHeight: number, insetTop: number): number {
+  const tier = screenHeight <= 640 ? 120 : screenHeight <= 720 ? 150 : 180;
+  // Buttons end at insetTop + 8 + BUTTON_SIZE; name needs ~64px at the bottom.
+  // Keep an 8px gap between them so they never touch on a tall status bar.
+  const minHeight = insetTop + 8 + BUTTON_SIZE + 8 + 64;
+  return Math.max(tier, minHeight);
 }
 
 interface SpaceBannerHeaderProps {
@@ -49,7 +55,7 @@ export function SpaceBannerHeader({
   const hasIcon = !!space.iconUrl;
 
   const { height: screenHeight } = useWindowDimensions();
-  const bannerHeight = bannerHeightForScreen(screenHeight);
+  const bannerHeight = bannerHeightForScreen(screenHeight, insetTop);
   const gradientHeight = bannerHeight * 0.75;
 
   // No banner and no icon: wash the banner in the same deterministic color the

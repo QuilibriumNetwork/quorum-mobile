@@ -60,6 +60,10 @@ export default function FarcasterReimportSheet({ visible, onClose, onImported }:
     setBusy(true);
     setError(null);
     try {
+      // deriveFarcasterKeys is heavy SYNCHRONOUS crypto (BIP-39/32) that blocks
+      // the JS thread. Yield one tick first so React can paint the spinner before
+      // the thread locks up — otherwise the button looks dead for 20-30s.
+      await new Promise((resolve) => setTimeout(resolve, 0));
       const keys = deriveFarcasterKeys(words);
       const account = await lookupFarcasterAccount(
         keys.custodyAddress,
