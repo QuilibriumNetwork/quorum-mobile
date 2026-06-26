@@ -3,7 +3,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { setProfileSplitMode } from '@/services/profile/profilePrefs';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -29,11 +29,8 @@ export default function ProfileSplitModeModal({
   };
 
   return (
-    <BaseModal visible={visible} onClose={onClose} height={0.85} showHandle>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-      >
+    <BaseModal visible={visible} onClose={onClose} height={0.85} showHandle scrollable>
+      <View style={styles.container}>
         <Text style={styles.title}>Keep profiles separate?</Text>
         <Text style={styles.subtitle}>
           You can manage your Quorum and Farcaster profiles independently, or
@@ -68,7 +65,7 @@ export default function ProfileSplitModeModal({
         </TouchableOpacity>
 
         <Text style={styles.footer}>You can change this any time from the Farcaster section of your profile.</Text>
-      </ScrollView>
+      </View>
     </BaseModal>
   );
 }

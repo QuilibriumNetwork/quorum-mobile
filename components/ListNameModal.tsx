@@ -188,7 +188,7 @@ export default function ListNameModal({
   const feeAmount = priceAmount ? (parseFloat(priceAmount) * 0.01).toFixed(2) : '0.00';
 
   return (
-    <BaseModal visible={visible} onClose={onClose} height={0.7} avoidKeyboard>
+    <BaseModal visible={visible} onClose={onClose} height={0.7} avoidKeyboard fillHeight>
       <View style={styles.header}>
         <Text style={styles.title}>List on Marketplace</Text>
         <TouchableOpacity onPress={onClose} style={styles.closeButton}>

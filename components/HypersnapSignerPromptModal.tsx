@@ -3,7 +3,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { setHypersnapOptInChoice } from '@/services/farcaster/hypersnapOptIn';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -29,11 +29,8 @@ export default function HypersnapSignerPromptModal({
   };
 
   return (
-    <BaseModal visible={visible} onClose={onClose} height={0.85} showHandle>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-      >
+    <BaseModal visible={visible} onClose={onClose} height={0.85} showHandle scrollable>
+      <View style={styles.container}>
         <View style={styles.heroIcon}>
           <IconSymbol name="sparkles" size={28} color={theme.colors.accent} />
         </View>
@@ -72,7 +69,7 @@ export default function HypersnapSignerPromptModal({
         </TouchableOpacity>
 
         <Text style={styles.footer}>You can change this in Settings.</Text>
-      </ScrollView>
+      </View>
     </BaseModal>
   );
 }

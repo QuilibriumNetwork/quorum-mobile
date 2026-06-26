@@ -193,7 +193,7 @@ export default function NewConversationModal({
   }, [onClose]);
 
   return (
-    <BaseModal visible={visible} onClose={handleClose} height={0.6} avoidKeyboard>
+    <BaseModal visible={visible} onClose={handleClose} height={0.6} avoidKeyboard scrollable>
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>

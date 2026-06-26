@@ -484,6 +484,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     // foldable screens (issue #7).
     tabContentScroll: {
       flexGrow: 1,
+      paddingBottom: insets.bottom + Skin.space(20),
     },
     inputSection: {
       marginBottom: Skin.space(16),

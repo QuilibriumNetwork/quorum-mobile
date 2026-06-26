@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Animated, Dimensions, Keyboard, KeyboardAvoidingView, Modal, Platform, StyleSheet, TouchableWithoutFeedback, View, ViewStyle } from 'react-native';
+import { Animated, Dimensions, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, TouchableWithoutFeedback, View, ViewStyle } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets, EdgeInsets } from 'react-native-safe-area-context';
@@ -29,6 +29,9 @@ export interface BaseModalProps {
   minHeight?: number;
   /** Sheet background color. Defaults to surface1. */
   backgroundColor?: string;
+  /** Wrap children in a ScrollView so tall content scrolls instead of clipping.
+   *  Don't combine with a child that has its own FlatList/ScrollView. */
+  scrollable?: boolean;
 }
 
 /**
@@ -56,6 +59,7 @@ export function BaseModal({
   fillHeight = false,
   minHeight,
   backgroundColor,
+  scrollable = false,
 }: BaseModalProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -130,7 +134,18 @@ export function BaseModal({
       )}
 
       {/* Modal content */}
-      {children}
+      {scrollable ? (
+        <ScrollView
+          style={styles.scrollFlex}
+          contentContainerStyle={{ paddingBottom: insets.bottom + Skin.space(20) }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {children}
+        </ScrollView>
+      ) : (
+        children
+      )}
     </Animated.View>
   );
 
@@ -140,6 +155,13 @@ export function BaseModal({
       visible={visible}
       animationType="none"
       statusBarTranslucent
+      // Let the modal window draw edge-to-edge UNDER the bottom nav bar too (not
+      // just under the status bar). Without this, Android gives the modal's own
+      // native window an opaque, default-colored nav-bar background — which reads
+      // light even in dark mode. With it on, the sheet's themed surface1 (which
+      // already extends through insets.bottom) paints behind the nav bar, so the
+      // bar matches the theme. Requires statusBarTranslucent (already set). RN ≥ 0.77.
+      navigationBarTranslucent
       onRequestClose={onClose}
       testID={testID}
     >
@@ -204,6 +226,9 @@ const createStyles = (
       ...(minHeight ? { minHeight: SCREEN_HEIGHT * minHeight } : {}),
       maxHeight: SCREEN_HEIGHT * height,
       paddingBottom: insets.bottom,
+    },
+    scrollFlex: {
+      flexShrink: 1,
     },
     handleContainer: {
       alignItems: 'center',
