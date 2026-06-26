@@ -37,6 +37,9 @@ export function MigrationModal({ visible }: MigrationModalProps) {
       // while migration is in progress.
       onRequestClose={() => { /* intentional no-op */ }}
       statusBarTranslucent
+      // Edge-to-edge under the bottom nav bar so the backdrop covers it instead
+      // of leaving a default-colored (light) nav bar.
+      navigationBarTranslucent
     >
       <View style={styles.backdrop}>
         <View style={styles.card}>

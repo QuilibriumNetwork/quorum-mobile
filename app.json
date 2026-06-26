@@ -7,6 +7,9 @@
     "icon": "./assets/images/icon.png",
     "scheme": "quorummobile",
     "userInterfaceStyle": "automatic",
+    "androidNavigationBar": {
+      "enforceContrast": false
+    },
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/splash.png",

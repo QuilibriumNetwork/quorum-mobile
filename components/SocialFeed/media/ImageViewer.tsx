@@ -290,6 +290,8 @@ export function ImageViewer({
       animationType="fade"
       onRequestClose={onClose}
       statusBarTranslucent
+      // Full-screen media viewer goes edge-to-edge under the bottom nav bar too.
+      navigationBarTranslucent
     >
       <GestureHandlerRootView style={styles.gestureRoot}>
         <ReanimatedView style={[styles.container, containerAnimatedStyle]}>

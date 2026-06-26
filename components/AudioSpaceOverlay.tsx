@@ -269,6 +269,9 @@ export function AudioSpaceOverlay() {
       // a draggable pill behind. Live/connecting spaces still minimize.
       onRequestClose={state === 'scheduled' ? leave : minimize}
       statusBarTranslucent
+      // Edge-to-edge under the bottom nav bar so the overlay's themed background
+      // paints behind it instead of a default-colored (light) nav bar.
+      navigationBarTranslucent
     >
       <View style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
         <View

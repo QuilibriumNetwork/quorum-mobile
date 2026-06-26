@@ -244,6 +244,9 @@ export function CreateSpaceSheet({
       animationType="slide"
       onRequestClose={onClose}
       statusBarTranslucent
+      // Edge-to-edge under the bottom nav bar so the sheet's themed background
+      // paints behind it instead of a default-colored (light) nav bar.
+      navigationBarTranslucent
     >
       <View style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
         <KeyboardAvoidingView
