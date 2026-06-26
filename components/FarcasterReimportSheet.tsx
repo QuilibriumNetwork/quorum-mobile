@@ -107,7 +107,7 @@ export default function FarcasterReimportSheet({ visible, onClose, onImported }:
           <Text style={[styles.title, { color: theme.colors.textStrong }]}>
             Re-import Farcaster
           </Text>
-          <Text style={[styles.body, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.body, { color: theme.colors.textSubtle /* secondary text → subtle (muted is unreadable in light) */ }]}>
             Paste your Farcaster recovery phrase. We derive the signing keys
             locally and store them in this device&apos;s keychain.
           </Text>

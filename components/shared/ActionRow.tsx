@@ -199,7 +199,9 @@ const createRowStyles = (theme: AppTheme) =>
     },
     sublabel: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      // Secondary description text → textSubtle (the readable secondary tone),
+      // not textMuted (the placeholder/disabled tone, near-invisible in light).
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(1),
     },
   });

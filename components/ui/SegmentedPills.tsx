@@ -154,7 +154,7 @@ export function SegmentedPills({
     let subtitleColor: string = theme.colors.textMuted;
 
     if (variant === 'solid') {
-      fg = isActive ? theme.colors.surface0 : theme.colors.textMuted;
+      fg = isActive ? theme.colors.surface0 : theme.colors.textSubtle; // secondary text → subtle (muted is unreadable in light)
       bg = isActive ? itemAccent : theme.colors.surface3;
       borderColor = isActive ? itemAccent : undefined;
       if (isActive) subtitleColor = withAlpha(theme.colors.surface0, 0.8);

@@ -1119,7 +1119,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     assetSymbol: {
       ...theme.textStyles.subheadline,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle, // secondary text → subtle (muted is unreadable in light)
       marginTop: Skin.space(2),
     },
     closeButton: {
@@ -1150,12 +1150,12 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     timeframeLabel: {
       ...theme.textStyles.subheadline,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginLeft: Skin.space(8),
     },
     noPriceText: {
       fontSize: Skin.font(24),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     chartTypeToggle: {
       flexDirection: 'row',
@@ -1178,7 +1178,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     chartTypeText: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -1231,7 +1231,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     timeframeButtonText: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -1243,7 +1243,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     sectionTitle: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1261,7 +1261,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     balanceLabel: {
       fontSize: Skin.font(15),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     balanceValue: {
       fontSize: Skin.font(15),
@@ -1288,7 +1288,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     statLabel: {
       fontSize: Skin.font(15),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     statValue: {
       fontSize: Skin.font(15),
@@ -1312,7 +1312,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     contractAddress: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(4),
     },
   });

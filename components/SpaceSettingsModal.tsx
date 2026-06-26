@@ -2740,7 +2740,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     toggleDescription: {
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(2),
     },
     saveButton: {
@@ -2774,7 +2774,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     // to the top-level space toggle rather than equal-weight siblings.
     notifGroupTitle: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
       marginTop: Skin.space(16),
@@ -2811,7 +2811,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     sectionDescription: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(16),
       lineHeight: Skin.font(20),
     },
@@ -2862,7 +2862,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     roleTag: {
       fontSize: Skin.font(12),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     roleName: {
       fontSize: Skin.font(15),
@@ -2884,12 +2884,12 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     roleTagPrefix: {
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     roleTagInput: {
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       padding: 0,
       minWidth: 60,
     },
@@ -2915,7 +2915,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     rolePermissionsLabel: {
       fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginRight: Skin.space(8),
     },
     rolePermissionsValue: {
@@ -2970,7 +2970,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     emptyStateDescription: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(8),
       textAlign: 'center',
     },
@@ -3136,7 +3136,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     inviteTypeButtonTextActive: {
       color: '#fff',
@@ -3163,7 +3163,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     dangerDescription: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle, // secondary text → subtle (muted is unreadable in light)
       marginBottom: Skin.space(16),
       lineHeight: Skin.font(20),
     },
@@ -3219,7 +3219,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     memberAddress: {
       fontSize: Skin.font(12),
       fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(2),
     },
     memberRolesRow: {
@@ -3315,7 +3315,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
@@ -3388,7 +3388,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     emptyGroupText: {
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       paddingVertical: Skin.space(16),
     },
