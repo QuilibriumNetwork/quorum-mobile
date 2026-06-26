@@ -159,7 +159,8 @@ export function SegmentedPills({
       borderColor = isActive ? itemAccent : undefined;
       if (isActive) subtitleColor = withAlpha(theme.colors.surface0, 0.8);
     } else if (variant === 'segmented') {
-      fg = isActive ? theme.colors.textStrong : theme.colors.textMuted;
+      // inactive segment label → subtle, not muted (muted is unreadable in light)
+      fg = isActive ? theme.colors.textStrong : theme.colors.textSubtle;
       bg = isActive ? theme.colors.background : 'transparent';
       borderColor = undefined;
     } else {
