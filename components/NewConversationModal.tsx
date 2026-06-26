@@ -310,7 +310,10 @@ export default function NewConversationModal({
 const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
   StyleSheet.create({
     container: {
-      flex: 1,
+      // Hug content instead of flex:1 stretching to the sheet's maxHeight, which
+      // pushed the action row off the bottom edge (under the Android nav bar) when
+      // validation banners stacked. BaseModal's paddingBottom: insets.bottom then
+      // keeps the buttons clear of the system bar.
       paddingHorizontal: Skin.space(20),
     },
     header: {

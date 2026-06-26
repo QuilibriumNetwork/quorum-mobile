@@ -356,7 +356,7 @@ export default function UserProfileModal({
                   Distinct from the moderation mute below. */}
               {onBlockUser && !isSelf && (
                 <ActionRow
-                  icon={isUserBlocked ? 'eye' : 'hand.raised.fill'}
+                  icon={isUserBlocked ? 'hand.raised.slash.fill' : 'hand.raised.fill'}
                   label={isUserBlocked ? 'Unblock' : 'Block'}
                   onPress={() => setBlockVisible(true)}
                 />

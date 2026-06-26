@@ -137,6 +137,7 @@ import IconGift from '@tabler/icons-react-native/IconGift';
 import IconGiftFilled from '@tabler/icons-react-native/IconGiftFilled';
 import IconGripVertical from '@tabler/icons-react-native/IconGripVertical';
 import IconHammer from '@tabler/icons-react-native/IconHammer';
+import IconHandOff from '@tabler/icons-react-native/IconHandOff';
 import IconHandStop from '@tabler/icons-react-native/IconHandStop';
 import IconHandTwoFingers from '@tabler/icons-react-native/IconHandTwoFingers';
 import IconHash from '@tabler/icons-react-native/IconHash';
@@ -395,6 +396,7 @@ export const TablerIcons = {
   IconGiftFilled,
   IconGripVertical,
   IconHammer,
+  IconHandOff,
   IconHandStop,
   IconHandTwoFingers,
   IconHash,

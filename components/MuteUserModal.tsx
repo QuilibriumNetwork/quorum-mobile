@@ -93,7 +93,7 @@ export function MuteUserModal({
     <BaseModal
       visible={visible}
       onClose={isSaving ? () => {} : onClose}
-      height={isUnmuting ? 0.35 : 0.45}
+      height={isUnmuting ? 0.42 : 0.55}
       testID="mute-user-modal"
     >
       <View style={styles.container}>
@@ -166,7 +166,10 @@ export function MuteUserModal({
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
-      flex: 1,
+      // Hug content instead of flex:1 stretching to the sheet's maxHeight, which
+      // pushed the button row off the bottom edge (under the Android nav bar) when
+      // the description/duration field grew. BaseModal's paddingBottom:
+      // insets.bottom then keeps the buttons clear of the system bar.
       padding: Skin.space(20),
     },
     overlay: {
