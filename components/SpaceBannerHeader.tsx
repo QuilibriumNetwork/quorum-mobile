@@ -6,7 +6,13 @@ import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
-import type { Space } from '@quilibrium/quorum-shared';
+import {
+  getColorFromDisplayName,
+  getInitials,
+  lightenColor,
+  darkenColor,
+  type Space,
+} from '@quilibrium/quorum-shared';
 
 const BANNER_HEIGHT = 180;
 const GRADIENT_HEIGHT = BANNER_HEIGHT * 0.75;
@@ -37,6 +43,17 @@ export function SpaceBannerHeader({
   const hasBanner = !!space.bannerUrl;
   const hasIcon = !!space.iconUrl;
 
+  // No banner and no icon: wash the banner in the same deterministic color the
+  // space-initials avatar uses, so the empty area carries the space's identity
+  // color instead of flat grey. Matches AvatarInitials' gradient recipe.
+  const fallbackGradient = React.useMemo(() => {
+    if (getInitials(space.spaceName) === '?') {
+      return ['#9d9da3', '#7a7a7f'] as const;
+    }
+    const base = getColorFromDisplayName(space.spaceName);
+    return [lightenColor(base, 5), darkenColor(base, 10)] as const;
+  }, [space.spaceName]);
+
   const buttonBg = isDark ? 'rgba(15,15,18,0.65)' : 'rgba(255,255,255,0.65)';
   const iconColor = isDark ? '#fff' : theme.colors.textMain;
   const nameColor = isDark ? '#fff' : theme.colors.textMain;
@@ -58,8 +75,11 @@ export function SpaceBannerHeader({
       ) : hasIcon ? (
         <IconBannerBackground iconUrl={space.iconUrl} isDark={isDark} />
       ) : (
-        <View
-          style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.surface2 }]}
+        <LinearGradient
+          colors={fallbackGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={StyleSheet.absoluteFill}
         />
       )}
 
