@@ -308,7 +308,7 @@ const createStyles = (theme: AppTheme) =>
     },
     featureText: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
     },
     featureTextSelected: {

@@ -288,7 +288,7 @@ const createStyles = (theme: AppTheme) =>
     description: {
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(2),
       lineHeight: Skin.font(18),
     },

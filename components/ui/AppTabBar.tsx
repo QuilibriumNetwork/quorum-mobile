@@ -415,7 +415,7 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
               accessibilityLabel="Spaces"
             />
             <PrimaryTabButton
-              icon={<IconSymbol size={24} name="globe" color={getTabColor('feed')} />}
+              icon={<IconSymbol size={24} name="world-map" color={getTabColor('feed')} />}
               isFocused={state.routes[state.index]?.name === 'feed'}
               onPress={handleFeedPress}
               accessibilityLabel="Feed"

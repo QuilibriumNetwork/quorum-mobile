@@ -84,7 +84,7 @@ function ReplyThread({
                   </Text>
                 )}
                 {r.points > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(11) }}>{getTier(r.points)}</Text>
+                  <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(11) }}>{getTier(r.points)}</Text>
                 )}
               </View>
               <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(12), marginTop: Skin.space(2) }}>
@@ -149,7 +149,7 @@ export function HegemonyGovernanceView({ theme, token }: { theme: AppTheme; toke
   if (error) {
     return (
       <View style={s.center}>
-        <Text style={{ color: theme.colors.textMuted, textAlign: 'center' }}>Couldn’t load governance.</Text>
+        <Text style={{ color: theme.colors.textSubtle, textAlign: 'center' }}>Couldn't load governance.</Text>
         <Pressable onPress={() => refetch()} hitSlop={8} style={{ marginTop: Skin.space(12) }}>
           <Text style={{ color: theme.colors.accent }}>Retry</Text>
         </Pressable>
@@ -159,7 +159,7 @@ export function HegemonyGovernanceView({ theme, token }: { theme: AppTheme; toke
   if (casts.length === 0) {
     return (
       <View style={s.center}>
-        <Text style={{ color: theme.colors.textMuted }}>No proposals yet.</Text>
+        <Text style={{ color: theme.colors.textSubtle }}>No proposals yet.</Text>
       </View>
     );
   }

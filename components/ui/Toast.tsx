@@ -208,7 +208,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets, type: string) =>
     },
     message: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(8),
       lineHeight: Skin.font(18),
     },
@@ -228,7 +228,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets, type: string) =>
     },
     txLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     txHash: {
       fontSize: Skin.font(12),

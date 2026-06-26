@@ -127,6 +127,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
     marginLeft: Skin.space(10),
+    marginRight: Skin.space(12),
     flex: 1,
   },
   headerIconButton: {

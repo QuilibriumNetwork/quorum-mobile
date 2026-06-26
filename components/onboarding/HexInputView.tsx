@@ -255,7 +255,7 @@ const createStyles = (theme: AppTheme) =>
     },
     charCount: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       marginTop: Skin.space(8),
       textAlign: 'right',

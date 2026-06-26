@@ -222,7 +222,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       paddingBottom: Skin.space(80),
     },
     emptyTitle: { ...theme.textStyles.headline, color: theme.colors.textMain, marginTop: Skin.space(12) },
-    emptySubtitle: { ...theme.textStyles.subheadline, color: theme.colors.textMuted, textAlign: 'center', paddingHorizontal: Skin.space(40) },
+    emptySubtitle: { ...theme.textStyles.subheadline, color: theme.colors.textSubtle, textAlign: 'center', paddingHorizontal: Skin.space(40) },
     // paddingBottom is applied inline (Skin.space(100) + insets.bottom) so the
     // last card clears the system nav bar in edge-to-edge mode.
     listContent: { paddingHorizontal: Skin.space(16) },
@@ -240,8 +240,8 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     cardIcon: { width: 48, height: 48, borderRadius: Skin.radius(12) },
     cardInfo: { flex: 1, gap: Skin.space(2) },
     cardName: { ...theme.textStyles.body, color: theme.colors.textMain, fontWeight: '600' },
-    cardCategory: { ...theme.textStyles.caption1, color: theme.colors.textMuted, textTransform: 'capitalize' },
-    cardDescription: { ...theme.textStyles.subheadline, color: theme.colors.textMuted, marginTop: Skin.space(8) },
+    cardCategory: { ...theme.textStyles.caption1, color: theme.colors.textSubtle, textTransform: 'capitalize' },
+    cardDescription: { ...theme.textStyles.subheadline, color: theme.colors.textSubtle, marginTop: Skin.space(8) },
     joinButton: {
       backgroundColor: theme.colors.primary,
       paddingHorizontal: Skin.space(16),
@@ -256,5 +256,5 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       borderColor: theme.colors.border,
     },
     joinButtonText: { ...theme.textStyles.footnote, color: '#fff', fontWeight: '600' },
-    joinedButtonText: { color: theme.colors.textMuted },
+    joinedButtonText: { color: theme.colors.textSubtle },
   });

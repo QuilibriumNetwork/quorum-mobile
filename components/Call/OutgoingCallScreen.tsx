@@ -43,7 +43,7 @@ export function OutgoingCallScreen() {
         <Text style={[styles.callerName, { color: theme.colors.text }]}>
           {activeCall.recipientDisplayName}
         </Text>
-        <Animated.Text style={[styles.statusText, { color: theme.colors.textMuted }, dotStyle]}>
+        <Animated.Text style={[styles.statusText, { color: theme.colors.textSubtle }, dotStyle]}>
           {activeCall.state === 'offering' ? 'Connecting...' : 'Ringing...'}
         </Animated.Text>
       </View>

@@ -244,6 +244,9 @@ export function CreateSpaceSheet({
       animationType="slide"
       onRequestClose={onClose}
       statusBarTranslucent
+      // Edge-to-edge under the bottom nav bar so the sheet's themed background
+      // paints behind it instead of a default-colored (light) nav bar.
+      navigationBarTranslucent
     >
       <View style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
         <KeyboardAvoidingView
@@ -279,7 +282,7 @@ export function CreateSpaceSheet({
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <Text style={[styles.fieldLabel, { color: theme.colors.textMuted }]}>
+              <Text style={[styles.fieldLabel, { color: theme.colors.textSubtle }]}>
                 Title
               </Text>
               <TextInput
@@ -302,7 +305,7 @@ export function CreateSpaceSheet({
               <Text
                 style={[
                   styles.fieldLabel,
-                  { color: theme.colors.textMuted, marginTop: Skin.space(16) },
+                  { color: theme.colors.textSubtle, marginTop: Skin.space(16) },
                 ]}
               >
                 Description (optional)
@@ -328,7 +331,7 @@ export function CreateSpaceSheet({
               <Text
                 style={[
                   styles.fieldLabel,
-                  { color: theme.colors.textMuted, marginTop: Skin.space(16) },
+                  { color: theme.colors.textSubtle, marginTop: Skin.space(16) },
                 ]}
               >
                 Start
@@ -367,7 +370,7 @@ export function CreateSpaceSheet({
                 <View style={{ marginTop: Skin.space(16), gap: Skin.space(12) }}>
                   <View style={{ flexDirection: 'row', gap: Skin.space(12) }}>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.fieldLabel, { color: theme.colors.textMuted }]}>
+                      <Text style={[styles.fieldLabel, { color: theme.colors.textSubtle }]}>
                         Date
                       </Text>
                       <TextInput
@@ -388,7 +391,7 @@ export function CreateSpaceSheet({
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.fieldLabel, { color: theme.colors.textMuted }]}>
+                      <Text style={[styles.fieldLabel, { color: theme.colors.textSubtle }]}>
                         Time
                       </Text>
                       <View style={{ flexDirection: 'row', gap: Skin.space(6) }}>
@@ -454,7 +457,7 @@ export function CreateSpaceSheet({
                       {customResult.error}
                     </Text>
                   ) : (
-                    <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>
+                    <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(12) }}>
                       Going live {formatRelative(customResult.date.toISOString())}
                     </Text>
                   )}

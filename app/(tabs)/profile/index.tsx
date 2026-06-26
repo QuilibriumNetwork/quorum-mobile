@@ -433,7 +433,7 @@ const createStyles = (theme: AppTheme) =>
     },
     emptySubtitle: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       lineHeight: Skin.font(20),
     },
@@ -493,7 +493,7 @@ const createStyles = (theme: AppTheme) =>
     locationChannel: {
       fontSize: Skin.font(14),
       fontWeight: '400',
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     quorumMessage: {
       fontSize: Skin.font(14),
@@ -518,16 +518,16 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
       letterSpacing: 0.5,
       textTransform: 'uppercase',
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     subtitle: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       lineHeight: Skin.font(18),
     },
     time: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(2),
     },
     trashButton: {

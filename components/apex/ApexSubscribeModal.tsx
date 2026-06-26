@@ -570,7 +570,7 @@ const createStyles = (theme: AppTheme) =>
     pitchText: {
       fontSize: Skin.font(13),
       lineHeight: Skin.font(18),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
     },
     debugBox: {
@@ -591,7 +591,7 @@ const createStyles = (theme: AppTheme) =>
     },
     debugHint: {
       fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
     },
     debugButtonRow: {
@@ -622,7 +622,7 @@ const createStyles = (theme: AppTheme) =>
     },
     inputLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -690,7 +690,7 @@ const createStyles = (theme: AppTheme) =>
     },
     quoteMuted: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     quoteError: {
       fontSize: Skin.font(13),
@@ -703,7 +703,7 @@ const createStyles = (theme: AppTheme) =>
     },
     selectionCount: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
     },
     selectionCountComplete: {
@@ -718,7 +718,7 @@ const createStyles = (theme: AppTheme) =>
     emptySpacesText: {
       fontSize: Skin.font(13),
       lineHeight: Skin.font(18),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       backgroundColor: theme.colors.surface2,
       borderRadius: Skin.radius(12),
       padding: Skin.space(14),
@@ -754,11 +754,11 @@ const createStyles = (theme: AppTheme) =>
     },
     spacePayout: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     slotsHint: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
     },
     slotControls: {
@@ -782,7 +782,7 @@ const createStyles = (theme: AppTheme) =>
     },
     chainHint: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     payErrorText: {
       fontSize: Skin.font(13),

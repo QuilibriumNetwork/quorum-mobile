@@ -29,7 +29,7 @@ export default function HypersnapSignerPromptModal({
   };
 
   return (
-    <BaseModal visible={visible} onClose={onClose} height={0.7} showHandle>
+    <BaseModal visible={visible} onClose={onClose} height={0.85} showHandle scrollable>
       <View style={styles.container}>
         <View style={styles.heroIcon}>
           <IconSymbol name="sparkles" size={28} color={theme.colors.accent} />
@@ -99,7 +99,7 @@ function createStyles(theme: AppTheme) {
     },
     subtitle: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       lineHeight: Skin.font(20),
     },
@@ -150,12 +150,12 @@ function createStyles(theme: AppTheme) {
     },
     optionDesc: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       lineHeight: Skin.font(18),
     },
     footer: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       marginTop: Skin.space(4),
     },

@@ -188,7 +188,7 @@ export default function ListNameModal({
   const feeAmount = priceAmount ? (parseFloat(priceAmount) * 0.01).toFixed(2) : '0.00';
 
   return (
-    <BaseModal visible={visible} onClose={onClose} height={0.7} avoidKeyboard>
+    <BaseModal visible={visible} onClose={onClose} height={0.7} avoidKeyboard fillHeight>
       <View style={styles.header}>
         <Text style={styles.title}>List on Marketplace</Text>
         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -383,7 +383,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     },
     sectionDescription: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(12),
       lineHeight: Skin.font(18),
     },
@@ -420,7 +420,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     tokenButtonTextActive: {
       color: '#fff',
@@ -439,7 +439,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     },
     feeLabel: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     feeValue: {
       fontSize: Skin.font(14),
@@ -451,7 +451,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     addressInput: {
       backgroundColor: theme.colors.surface2,
@@ -483,7 +483,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     infoText: {
       flex: 1,
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textMain,
       lineHeight: Skin.font(18),
     },
     footer: {

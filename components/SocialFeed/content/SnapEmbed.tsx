@@ -532,7 +532,7 @@ function SnapInput({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
   return (
     <View>
       {p.label ? (
-        <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMuted, marginBottom: Skin.space(4) }}>
+        <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textSubtle, marginBottom: Skin.space(4) }}>
           {String(p.label)}
         </Text>
       ) : null}
@@ -572,7 +572,7 @@ function SnapSliderElement({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx })
       {(p.label || showValue) ? (
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: Skin.space(4) }}>
           {p.label ? (
-            <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMuted }}>
+            <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textSubtle }}>
               {String(p.label)}
             </Text>
           ) : <View />}
@@ -631,7 +631,7 @@ function SnapProgress({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
   return (
     <View>
       {p.label ? (
-        <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMuted, marginBottom: Skin.space(4) }}>
+        <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textSubtle, marginBottom: Skin.space(4) }}>
           {String(p.label)}
         </Text>
       ) : null}
@@ -697,7 +697,7 @@ function SnapItem({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
           {String(p.title ?? '')}
         </Text>
         {p.description ? (
-          <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMuted, marginTop: Skin.space(2) }}>
+          <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textSubtle, marginTop: Skin.space(2) }}>
             {String(p.description)}
           </Text>
         ) : null}
@@ -760,7 +760,7 @@ function SnapBarChart({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
           <View key={i} style={{ gap: Skin.space(2) }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMain }}>{bar.label}</Text>
-              <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMuted }}>{bar.value}</Text>
+              <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textSubtle }}>{bar.value}</Text>
             </View>
             <View style={[elStyles.progressTrack, { backgroundColor: ctx.theme.colors.surface3, height: 8 }]}>
               <View style={{ height: 8, borderRadius: Skin.radius(4), backgroundColor: resolvePaletteColor(bar.color, ctx) ?? defaultBarColor, width: `${pct * 100}%` }} />
@@ -805,7 +805,7 @@ function SnapToggleGroup({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
   return (
     <View>
       {p.label ? (
-        <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textMuted, marginBottom: Skin.space(6) }}>
+        <Text style={{ fontSize: Skin.font(13), color: ctx.theme.colors.textSubtle, marginBottom: Skin.space(6) }}>
           {String(p.label)}
         </Text>
       ) : null}
@@ -1328,7 +1328,7 @@ export function SnapEmbed({
       },
       errorText: {
         fontSize: Skin.font(13),
-        color: theme.colors.textMuted,
+        color: theme.colors.textSubtle,
         textAlign: 'center' as const,
       },
       retryButton: {

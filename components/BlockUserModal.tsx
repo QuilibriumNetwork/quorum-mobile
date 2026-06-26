@@ -51,7 +51,7 @@ export function BlockUserModal({
     <BaseModal
       visible={visible}
       onClose={onClose}
-      height={0.4}
+      height={0.55}
       testID="block-user-modal"
     >
       <View style={styles.container}>
@@ -103,7 +103,10 @@ export function BlockUserModal({
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
-      flex: 1,
+      // Hug content instead of flex:1 stretching to the sheet's maxHeight, which
+      // pushed the button row off the bottom edge (under the Android nav bar) when
+      // the description wrapped to several lines. BaseModal's paddingBottom:
+      // insets.bottom then keeps the buttons clear of the system bar.
       padding: Skin.space(20),
     },
     title: {
@@ -140,7 +143,7 @@ const createStyles = (theme: AppTheme) =>
     },
     userAddress: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       marginTop: Skin.space(2),
     },

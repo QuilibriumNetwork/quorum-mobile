@@ -840,7 +840,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     inputLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle, // secondary text → subtle (muted is unreadable in light)
       marginBottom: Skin.space(8),
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -881,11 +881,11 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     assetBalance: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     placeholderText: {
       fontSize: Skin.font(15),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     assetPickerDropdown: {
       marginTop: Skin.space(8),
@@ -926,7 +926,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     recentsLabel: {
       fontSize: Skin.font(11),
       letterSpacing: 0.6,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       marginBottom: Skin.space(6),
@@ -978,11 +978,11 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     balanceHint: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(6),
     },
     sendButton: {

@@ -50,7 +50,12 @@ export const colors = {
     dark: {
       strong: '#f8f7fa',
       main: '#f4f1f6',
-      subtle: '#bfb5c8',
+      // Dark `subtle` quieted from #bfb5c8 toward the muted tone (#84788b) so
+      // the secondary text re-pointed from muted→subtle (for the light-theme
+      // contrast fix) doesn't read louder than it did on dark, where it already
+      // looked right. Still clearly above muted for legibility. Light is
+      // unchanged (#818181 is already the correct secondary tone there).
+      subtle: '#9b8fa6',
       muted: '#84788b',
     },
   },

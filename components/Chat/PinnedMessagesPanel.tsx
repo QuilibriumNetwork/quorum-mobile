@@ -142,7 +142,7 @@ const createStyles = (theme: AppTheme) =>
     emptySubtext: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       marginTop: Skin.space(4),
     },
@@ -174,7 +174,7 @@ const createStyles = (theme: AppTheme) =>
     messageTime: {
       fontSize: Skin.font(11),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginLeft: Skin.space(8),
     },
     messageContent: {
@@ -195,7 +195,7 @@ const createStyles = (theme: AppTheme) =>
     unpinText: {
       fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
   });
 

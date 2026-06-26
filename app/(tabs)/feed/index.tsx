@@ -150,9 +150,9 @@ export default function FeedScreen() {
       <View style={[styles.container, { backgroundColor: theme.colors.surface1 }]}>
         <View style={styles.center}>
           <Text style={[styles.title, { color: theme.colors.textStrong }]}>{title}</Text>
-          <Text style={[styles.body, { color: theme.colors.textMuted }]}>{body}</Text>
+          <Text style={[styles.body, { color: theme.colors.textSubtle }]}>{body}</Text>
           {fcState.detail ? (
-            <Text style={[styles.detail, { color: theme.colors.textMuted }]}>{fcState.detail}</Text>
+            <Text style={[styles.detail, { color: theme.colors.textSubtle }]}>{fcState.detail}</Text>
           ) : null}
           <View style={styles.actionRow}>
             <TouchableOpacity

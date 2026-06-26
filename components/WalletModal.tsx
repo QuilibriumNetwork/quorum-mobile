@@ -1301,7 +1301,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     evmOnlyNoteText: {
       flex: 1,
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle, // secondary text → subtle (muted is unreadable in light)
       lineHeight: Skin.font(16),
     },
     filterContainer: {
@@ -1319,7 +1319,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     loadingText: {
       marginTop: Skin.space(12),
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     errorContainer: {
       alignItems: 'center',
@@ -1361,7 +1361,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     emptySubtext: {
       marginTop: Skin.space(4),
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
     assetsSection: {
@@ -1380,7 +1380,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     totalBalanceLabel: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     hideBalanceButton: {
       padding: Skin.space(2),
@@ -1463,7 +1463,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     assetChain: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     assetRight: {
       alignItems: 'flex-end',
@@ -1482,7 +1482,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     assetUsdValue: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     priceChange: {
       fontSize: Skin.font(12),
@@ -1550,7 +1550,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     addressCardSubtitle: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(2),
     },
     addressRow: {
@@ -1575,7 +1575,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     btcToggleText: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     addressRowActive: {
       borderWidth: Skin.border(2),
@@ -1595,7 +1595,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     walletHint: {
       fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       marginTop: Skin.space(10),
       fontStyle: 'italic',
@@ -1608,7 +1608,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     addressLabel: {
       fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       textTransform: 'uppercase',
@@ -1648,7 +1648,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     infoText: {
       flex: 1,
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textMain,
       lineHeight: Skin.font(18),
     },
     // Collectibles/NFT styles
@@ -1706,7 +1706,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     nftCollection: {
       fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(2),
     },
     // Show More Button styles
@@ -1723,7 +1723,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     showMoreText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -1734,7 +1734,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     settingsSectionTitle: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       marginBottom: Skin.space(12),

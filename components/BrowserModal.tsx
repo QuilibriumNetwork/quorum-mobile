@@ -1475,7 +1475,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     },
     pageTitle: {
       fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(2),
     },
     closeButton: {
@@ -1526,7 +1526,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     },
     errorDescription: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       lineHeight: Skin.font(20),
       marginBottom: Skin.space(24),
@@ -1556,7 +1556,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     splashText: {
       marginTop: Skin.space(16),
       fontSize: Skin.font(16),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     primaryButtonContainer: {
       padding: Skin.space(16),
@@ -1620,7 +1620,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     },
     farcasterModalMessage: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       lineHeight: Skin.font(20),
       marginBottom: Skin.space(24),
@@ -1639,7 +1639,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     },
     continueAnywayText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textDecorationLine: 'underline',
     },
     // Compose modal styles
@@ -1667,7 +1667,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
       paddingVertical: Skin.space(16),
     },
     composeCancel: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(16),
       fontFamily: theme.fonts.regular.fontFamily,
     },
@@ -1721,7 +1721,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
       maxWidth: 200,
     },
     embedText: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(12),
       flex: 1,
     },
@@ -1746,7 +1746,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
       marginTop: Skin.space(12),
     },
     composeCharCount: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(13),
     },
     composeError: {
@@ -1818,7 +1818,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     },
     walletSelectorSubtitle: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       marginBottom: Skin.space(20),
     },
@@ -1852,7 +1852,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     },
     walletOptionAddress: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(2),
     },
   });

@@ -181,7 +181,7 @@ function createStyles(theme: AppTheme) {
     },
     subtitle: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       lineHeight: Skin.font(18),
     },
     searchRow: {
@@ -210,7 +210,7 @@ function createStyles(theme: AppTheme) {
       fontWeight: '600',
       letterSpacing: 0.5,
       textTransform: 'uppercase',
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     chipRow: {
       flexDirection: 'row',
@@ -256,7 +256,7 @@ function createStyles(theme: AppTheme) {
     },
     rowKey: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(1),
     },
     checkbox: {
@@ -278,7 +278,7 @@ function createStyles(theme: AppTheme) {
     },
     emptyText: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
   });

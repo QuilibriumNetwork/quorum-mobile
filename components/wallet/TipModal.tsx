@@ -653,7 +653,7 @@ const createStyles = (theme: AppTheme) =>
     },
     inputLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -682,7 +682,7 @@ const createStyles = (theme: AppTheme) =>
     },
     recipientAddress: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     recipientError: {
       fontSize: Skin.font(12),
@@ -724,11 +724,11 @@ const createStyles = (theme: AppTheme) =>
     },
     assetBalance: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     placeholderText: {
       fontSize: Skin.font(15),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     assetPickerDropdown: {
       marginTop: Skin.space(8),
@@ -749,7 +749,7 @@ const createStyles = (theme: AppTheme) =>
     },
     emptyAssetsText: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       padding: Skin.space(12),
     },
@@ -791,11 +791,11 @@ const createStyles = (theme: AppTheme) =>
       fontSize: Skin.font(15),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     balanceHint: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(6),
     },
     sendButton: {

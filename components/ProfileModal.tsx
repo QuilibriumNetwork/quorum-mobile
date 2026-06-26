@@ -178,7 +178,7 @@ function CallScreeningSection({ theme }: { theme: AppTheme }) {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flex: 1, marginRight: Skin.space(12) }}>
             <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Screen Unknown Callers</Text>
-            <Text style={{ fontSize: Skin.font(12), color: theme.colors.textMuted, marginTop: Skin.space(2) }}>
+            <Text style={{ fontSize: Skin.font(12), color: theme.colors.textSubtle, marginTop: Skin.space(2) }}>
               Only ring for people you have a conversation with
             </Text>
           </View>
@@ -210,7 +210,7 @@ function DevModeSection({ theme }: { theme: AppTheme }) {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flex: 1, marginRight: Skin.space(12) }}>
             <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Use Local API</Text>
-            <Text style={{ fontSize: Skin.font(12), color: theme.colors.textMuted, marginTop: Skin.space(2) }}>
+            <Text style={{ fontSize: Skin.font(12), color: theme.colors.textSubtle, marginTop: Skin.space(2) }}>
               {isLocal ? config.baseUrl : 'Connects to production'}
             </Text>
           </View>
@@ -273,14 +273,14 @@ function OtaUpdateSection({ theme }: { theme: AppTheme }) {
       </Text>
       <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(8), padding: Skin.space(16), gap: Skin.space(10) }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMuted }}>Current</Text>
+          <Text style={{ fontSize: Skin.font(13), color: theme.colors.textSubtle }}>Current</Text>
           <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMain, flex: 1, textAlign: 'right', marginLeft: Skin.space(12) }} numberOfLines={1}>
             {fmt(currentlyRunning)}
           </Text>
         </View>
 
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMuted }}>Latest</Text>
+          <Text style={{ fontSize: Skin.font(13), color: theme.colors.textSubtle }}>Latest</Text>
           <Text style={{ fontSize: Skin.font(13), color: theme.colors.textMain, flex: 1, textAlign: 'right', marginLeft: Skin.space(12) }} numberOfLines={1}>
             {availableUpdate
               ? fmt(availableUpdate)
@@ -2434,7 +2434,7 @@ export default function ProfileModal({
                 <View style={styles.farcasterConnected}>
                   <View style={{ flex: 1, marginRight: Skin.space(12) }}>
                     <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Hypersnap Signer</Text>
-                    <Text style={{ fontSize: Skin.font(12), color: theme.colors.textMuted, marginTop: Skin.space(2) }}>
+                    <Text style={{ fontSize: Skin.font(12), color: theme.colors.textSubtle, marginTop: Skin.space(2) }}>
                       Post and react through Quilibrium&apos;s hub to earn $SNAP
                     </Text>
                   </View>
@@ -2888,7 +2888,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     cancelButtonText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle, // secondary text → subtle (muted is unreadable in light)
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -2927,7 +2927,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     tabText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -3016,7 +3016,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     userId: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     section: {
       marginBottom: Skin.space(24),
@@ -3087,7 +3087,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     infoLabel: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     infoValue: {
       fontSize: Skin.font(14),
@@ -3118,7 +3118,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     premiumSubtitle: {
       fontSize: Skin.font(14),
-      color: isDark ? theme.colors.textSubtle : '#ffffffcc',
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
     // Quorum Apex card (premium tab)
@@ -3170,17 +3170,17 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     apexPitch: {
       fontSize: Skin.font(14),
       lineHeight: Skin.font(20),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(8),
     },
     apexMetaText: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(6),
     },
     apexSpacesLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
       marginTop: Skin.space(14),
@@ -3199,7 +3199,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     apexLockNote: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontStyle: 'italic',
       marginTop: Skin.space(8),
     },
@@ -3232,7 +3232,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     countdownSubtitle: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       marginBottom: Skin.space(20),
     },
@@ -3254,7 +3254,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     countdownLabel: {
       fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textTransform: 'uppercase',
       marginTop: Skin.space(4),
     },
@@ -3268,7 +3268,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     countdownDate: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -3322,7 +3322,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     availabilityText: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     resolvedAddressText: {
       fontSize: Skin.font(11),
@@ -3447,7 +3447,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     settingDescription: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     actionButton: {
       flexDirection: 'row',
@@ -3508,7 +3508,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     recoveryPhraseIndex: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginRight: Skin.space(6),
       minWidth: 20,
     },
@@ -3525,7 +3525,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     hexKeyLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -3565,7 +3565,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     hideButtonText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -3595,7 +3595,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     farcasterFid: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     farcasterDisconnectButton: {
       paddingVertical: Skin.space(6),
@@ -3616,7 +3616,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     farcasterImportDescription: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(12),
       lineHeight: Skin.font(18),
     },
@@ -3672,7 +3672,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     farcasterCancelText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -3703,7 +3703,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     deviceLoadingText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     deviceListContainer: {
       marginTop: Skin.space(12),
@@ -3746,7 +3746,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     deviceLabel: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -3755,7 +3755,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     deviceAddress: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
     },
     deviceRemoveButton: {
@@ -3774,7 +3774,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     deviceEmptyText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       paddingVertical: Skin.space(20),
     },
@@ -3784,7 +3784,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     actionButtonSubtext: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(2),
     },
     marketplaceButton: {
@@ -3821,7 +3821,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     namePickerSubtitle: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       paddingHorizontal: Skin.space(20),
       marginBottom: Skin.space(16),
     },

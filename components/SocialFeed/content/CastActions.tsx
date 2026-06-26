@@ -63,7 +63,7 @@ export const CastActions = React.memo(function CastActions({
           size={20}
         />
         {count > 0 && (
-          <Text style={[styles.countText, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.countText, { color: theme.colors.textSubtle }]}>
             {count}
           </Text>
         )}
@@ -75,7 +75,7 @@ export const CastActions = React.memo(function CastActions({
       >
         <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
         {replyCount > 0 && (
-          <Text style={[styles.countText, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.countText, { color: theme.colors.textSubtle }]}>
             {replyCount}
           </Text>
         )}
@@ -88,7 +88,7 @@ export const CastActions = React.memo(function CastActions({
           size={20}
         />
         {recastCount > 0 && (
-          <Text style={[styles.countText, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.countText, { color: theme.colors.textSubtle }]}>
             {recastCount}
           </Text>
         )}

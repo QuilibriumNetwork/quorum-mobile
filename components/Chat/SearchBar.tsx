@@ -83,7 +83,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     paddingVertical: Skin.space(2),
   },
   resultCount: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(12),
     marginRight: Skin.space(8),
     fontFamily: theme.fonts.regular.fontFamily,

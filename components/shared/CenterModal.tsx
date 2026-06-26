@@ -66,6 +66,9 @@ export function CenterModal({
       visible={visible}
       animationType="fade"
       statusBarTranslucent
+      // Draw edge-to-edge under the bottom nav bar too, so the backdrop dimming
+      // extends behind it instead of leaving a default-colored (light) nav bar.
+      navigationBarTranslucent
       // Android hardware back → cancel, never confirm.
       onRequestClose={onCancel}
       testID={testID}

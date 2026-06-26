@@ -329,7 +329,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     subtitle: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       marginTop: Skin.space(4),
     },
@@ -357,7 +357,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     infoText: {
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       lineHeight: Skin.font(20),
       marginBottom: Skin.space(24),
@@ -388,7 +388,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     inviteTypeButtonTextActive: {
       color: '#fff',

@@ -47,7 +47,7 @@ function CommentRow({ comment, theme }: { comment: ProposalComment; theme: AppTh
         <Text style={[styles.commentAuthor, { color: theme.colors.textMain }]}>
           {comment.authorName ? `@${comment.authorName}` : comment.authorAddress.slice(0, 10) + '...'}
         </Text>
-        <Text style={[styles.commentTime, { color: theme.colors.textMuted }]}>
+        <Text style={[styles.commentTime, { color: theme.colors.textSubtle }]}>
           {formatTimeAgo(comment.createdAt)}
         </Text>
       </View>
@@ -91,7 +91,7 @@ export function ProposalDetailView({ proposalId, theme, onClose, keyboardHeight,
           <View style={{ width: 22 }} />
         </View>
         <View style={styles.emptyState}>
-          <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>Proposal not found.</Text>
+          <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>Proposal not found.</Text>
         </View>
       </View>
     );
@@ -124,7 +124,7 @@ export function ProposalDetailView({ proposalId, theme, onClose, keyboardHeight,
             <View style={[styles.badge, { backgroundColor: theme.colors.accent + '22' }]}>
               <Text style={[styles.badgeText, { color: theme.colors.accent }]}>{badge}</Text>
             </View>
-            <Text style={[styles.timeText, { color: theme.colors.textMuted }]}>
+            <Text style={[styles.timeText, { color: theme.colors.textSubtle }]}>
               {formatTimeAgo(proposal.createdAt)}
             </Text>
           </View>
@@ -134,7 +134,7 @@ export function ProposalDetailView({ proposalId, theme, onClose, keyboardHeight,
 
           {/* Author */}
           {proposal.authorName ? (
-            <Text style={[styles.author, { color: theme.colors.textMuted }]}>
+            <Text style={[styles.author, { color: theme.colors.textSubtle }]}>
               by @{proposal.authorName}
             </Text>
           ) : null}
@@ -143,29 +143,29 @@ export function ProposalDetailView({ proposalId, theme, onClose, keyboardHeight,
           {proposal.scope === 'protocol' ? (
             <>
               <Text style={[styles.sectionHeading, { color: theme.colors.textMain }]}>Abstract</Text>
-              <Text style={[styles.sectionBody, { color: theme.colors.textMuted }]}>
+              <Text style={[styles.sectionBody, { color: theme.colors.textMain }]}>
                 {(proposal as ProtocolProposal).abstract}
               </Text>
 
               <Text style={[styles.sectionHeading, { color: theme.colors.textMain }]}>Problem Statement</Text>
-              <Text style={[styles.sectionBody, { color: theme.colors.textMuted }]}>
+              <Text style={[styles.sectionBody, { color: theme.colors.textMain }]}>
                 {(proposal as ProtocolProposal).problemStatement}
               </Text>
 
               <Text style={[styles.sectionHeading, { color: theme.colors.textMain }]}>Proposed Solution</Text>
-              <Text style={[styles.sectionBody, { color: theme.colors.textMuted }]}>
+              <Text style={[styles.sectionBody, { color: theme.colors.textMain }]}>
                 {(proposal as ProtocolProposal).proposedSolution}
               </Text>
             </>
           ) : (
             <>
               <Text style={[styles.sectionHeading, { color: theme.colors.textMain }]}>Description</Text>
-              <Text style={[styles.sectionBody, { color: theme.colors.textMuted }]}>
+              <Text style={[styles.sectionBody, { color: theme.colors.textMain }]}>
                 {(proposal as ClientProposal).description}
               </Text>
 
               <Text style={[styles.sectionHeading, { color: theme.colors.textMain }]}>Rationale</Text>
-              <Text style={[styles.sectionBody, { color: theme.colors.textMuted }]}>
+              <Text style={[styles.sectionBody, { color: theme.colors.textMain }]}>
                 {(proposal as ClientProposal).rationale}
               </Text>
             </>
@@ -207,7 +207,7 @@ export function ProposalDetailView({ proposalId, theme, onClose, keyboardHeight,
           {/* Comments divider */}
           <View style={styles.dividerRow}>
             <View style={[styles.dividerLine, { backgroundColor: theme.colors.surface3 }]} />
-            <Text style={[styles.dividerText, { color: theme.colors.textMuted }]}>
+            <Text style={[styles.dividerText, { color: theme.colors.textSubtle }]}>
               Comments ({comments.length})
             </Text>
             <View style={[styles.dividerLine, { backgroundColor: theme.colors.surface3 }]} />
@@ -215,7 +215,7 @@ export function ProposalDetailView({ proposalId, theme, onClose, keyboardHeight,
 
           {/* Comment list */}
           {comments.length === 0 ? (
-            <Text style={[styles.noComments, { color: theme.colors.textMuted }]}>
+            <Text style={[styles.noComments, { color: theme.colors.textSubtle }]}>
               No comments yet. Be the first to share your thoughts.
             </Text>
           ) : (

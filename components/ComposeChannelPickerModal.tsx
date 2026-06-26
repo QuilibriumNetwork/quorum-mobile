@@ -196,7 +196,7 @@ function createStyles(theme: AppTheme) {
       fontWeight: '600',
       letterSpacing: 0.5,
       textTransform: 'uppercase',
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     row: {
       flexDirection: 'row',
@@ -228,7 +228,7 @@ function createStyles(theme: AppTheme) {
     },
     rowKey: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(1),
     },
     loadingWrap: {
@@ -241,7 +241,7 @@ function createStyles(theme: AppTheme) {
     },
     emptyText: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
   });

@@ -242,7 +242,7 @@ const createStyles = (theme: AppTheme) =>
     },
     participantCount: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(2),
     },
     actionsRow: {
@@ -311,6 +311,6 @@ const createStyles = (theme: AppTheme) =>
     },
     endedText: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
   });

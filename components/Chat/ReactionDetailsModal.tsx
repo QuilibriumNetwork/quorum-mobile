@@ -239,7 +239,7 @@ function createStyles(theme: AppTheme) {
     },
     empty: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       paddingVertical: Skin.space(24),
     },

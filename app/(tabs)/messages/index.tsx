@@ -536,7 +536,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
     subtitle: {
       flex: 1,
       ...theme.textStyles.subheadline,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     subtitlePrefix: {
       color: theme.colors.textMain,
@@ -545,11 +545,11 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
     },
     subtitlePlaceholder: {
       fontStyle: 'italic',
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     time: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     unreadBadge: {
       minWidth: 20,
@@ -579,7 +579,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
     },
     emptySubtitle: {
       ...theme.textStyles.subheadline,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
     emptyAction: {
@@ -611,11 +611,11 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
     spacesRailTitle: {
       ...theme.textStyles.caption2,
       letterSpacing: 0.8,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     spacesRailCount: {
       ...theme.textStyles.caption2,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       letterSpacing: 0.4,
     },
     spacesRailContent: {
@@ -649,7 +649,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
     },
     spaceTileName: {
       ...theme.textStyles.caption1,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
     spaceUnreadBadge: {

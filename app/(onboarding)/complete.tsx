@@ -6,8 +6,8 @@
 
 import { OnboardingLayout } from '@/components/onboarding';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { useAuth, useOnboarding } from '@/context';
 import { useToast } from '@/context/ToastContext';
 import { formatAddress, initializeEncryptionKeys, uploadUserRegistration } from '@/services/onboarding/keyService';
@@ -139,52 +139,30 @@ export default function CompleteScreen() {
         </View>
 
         <View style={styles.summary}>
-          {/* Account */}
-          <Card variant="bordered" style={styles.summaryCard}>
+          {/* Quorum account address */}
+          <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
               <View style={styles.summaryIcon}>
                 <IconSymbol name="key.fill" size={20} color={theme.colors.primary} />
               </View>
               <View style={styles.summaryContent}>
-                <Text style={styles.summaryLabel}>Quorum Account</Text>
+                <Text style={styles.summaryLabel}>Quorum Account Address</Text>
                 <Text style={styles.summaryValue}>
                   {state.quorumKeys ? formatAddress(state.quorumKeys.address, 8) : 'Not set'}
                 </Text>
               </View>
               <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success ?? '#22c55e'} />
             </View>
-          </Card>
+          </View>
 
-          {/* Farcaster */}
-          <Card variant="bordered" style={styles.summaryCard}>
+          {/* Display name */}
+          <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
               <View style={styles.summaryIcon}>
-                <IconSymbol name="person.2.fill" size={20} color={state.farcasterEnabled ? theme.colors.primary : theme.colors.textMuted} />
+                <IconSymbol name="person" size={20} color={state.profile.username ? theme.colors.primary : theme.colors.textMuted} />
               </View>
               <View style={styles.summaryContent}>
-                <Text style={styles.summaryLabel}>Farcaster</Text>
-                <Text style={styles.summaryValue}>
-                  {state.farcasterEnabled && state.farcasterAccount
-                    ? `@${state.farcasterAccount.username}`
-                    : 'Not connected'}
-                </Text>
-              </View>
-              {state.farcasterEnabled ? (
-                <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success ?? '#22c55e'} />
-              ) : (
-                <Text style={styles.skippedText}>Skipped</Text>
-              )}
-            </View>
-          </Card>
-
-          {/* Profile */}
-          <Card variant="bordered" style={styles.summaryCard}>
-            <View style={styles.summaryRow}>
-              <View style={styles.summaryIcon}>
-                <IconSymbol name="person.fill" size={20} color={state.profile.username ? theme.colors.primary : theme.colors.textMuted} />
-              </View>
-              <View style={styles.summaryContent}>
-                <Text style={styles.summaryLabel}>Profile</Text>
+                <Text style={styles.summaryLabel}>Display Name</Text>
                 <Text style={styles.summaryValue}>
                   {state.profile.displayName || state.profile.username
                     ? state.profile.displayName || `@${state.profile.username}`
@@ -197,10 +175,28 @@ export default function CompleteScreen() {
                 <Text style={styles.skippedText}>Skipped</Text>
               )}
             </View>
-          </Card>
+          </View>
+
+          {/* Farcaster (only when connected) */}
+          {state.farcasterEnabled && state.farcasterAccount && (
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryIcon}>
+                  <FarcasterLogoIcon size={20} color={theme.colors.primary} />
+                </View>
+                <View style={styles.summaryContent}>
+                  <Text style={styles.summaryLabel}>Farcaster</Text>
+                  <Text style={styles.summaryValue}>
+                    {`@${state.farcasterAccount.username}`}
+                  </Text>
+                </View>
+                <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success ?? '#22c55e'} />
+              </View>
+            </View>
+          )}
 
           {/* Privacy */}
-          <Card variant="bordered" style={styles.summaryCard}>
+          <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
               <View style={styles.summaryIcon}>
                 <IconSymbol name="hand.raised.fill" size={20} color={theme.colors.primary} />
@@ -213,7 +209,7 @@ export default function CompleteScreen() {
               </View>
               <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success ?? '#22c55e'} />
             </View>
-          </Card>
+          </View>
         </View>
 
         <View style={styles.footer}>
@@ -281,6 +277,8 @@ const createStyles = (theme: AppTheme) =>
     },
     summaryCard: {
       padding: Skin.space(16),
+      borderRadius: Skin.radius(12),
+      backgroundColor: theme.colors.bgButtonSubtle,
     },
     summaryRow: {
       flexDirection: 'row',
@@ -290,7 +288,7 @@ const createStyles = (theme: AppTheme) =>
       width: 40,
       height: 40,
       borderRadius: Skin.radius(10),
-      backgroundColor: theme.colors.surface3,
+      backgroundColor: theme.colors.primary + '22',
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: Skin.space(12),
@@ -300,7 +298,7 @@ const createStyles = (theme: AppTheme) =>
     },
     summaryLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       marginBottom: Skin.space(2),
     },
@@ -320,7 +318,7 @@ const createStyles = (theme: AppTheme) =>
     },
     footerNote: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
       marginBottom: Skin.space(16),

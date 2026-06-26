@@ -96,7 +96,7 @@ const createStyles = (theme: AppTheme) =>
     },
     subtitle: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
       marginBottom: Skin.space(14),
     },

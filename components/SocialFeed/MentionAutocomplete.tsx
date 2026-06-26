@@ -238,7 +238,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(14),
     fontFamily: theme.fonts.regular.fontFamily,
   },
@@ -286,7 +286,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontWeight: theme.fonts.medium.fontWeight,
   },
   itemUsername: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSubtle,
     fontSize: Skin.font(13),
     fontFamily: theme.fonts.regular.fontFamily,
     marginTop: Skin.space(1),

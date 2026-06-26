@@ -49,7 +49,7 @@ export const ChannelHeader = React.memo(function ChannelHeader({
           </TouchableOpacity>
         )}
         <IconSymbol name="number" color={theme.colors.textMuted} size={16} />
-        <Text style={styles.title}>{channelName}</Text>
+        <Text style={styles.title} numberOfLines={1}>{channelName}</Text>
       </View>
       <View style={styles.right}>
         {onOpenSearch && (
@@ -97,6 +97,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   left: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
   },
   right: {
     flexDirection: 'row',
@@ -110,6 +112,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
     marginLeft: Skin.space(8),
+    marginRight: Skin.space(12),
+    flex: 1,
   },
   headerIconButton: {
     marginRight: Skin.space(16),

@@ -157,6 +157,7 @@ const SF_TO_TABLER = {
 
   // Globe / web
   'globe': tabler('IconWorld'),
+  'world-map': tabler('IconWorldMap'),
   'safari': tabler('IconCompass'),
   'safari.fill': tabler('IconCompass', 'IconCompassFilled'),
 
@@ -173,6 +174,7 @@ const SF_TO_TABLER = {
   'person.crop.circle.badge.exclamationmark': tabler('IconUserExclamation'),
   'person.badge.shield.checkmark.fill': tabler('IconShieldCheck', 'IconShieldCheckFilled'),
   'hand.raised.fill': tabler('IconHandStop'),
+  'hand.raised.slash.fill': tabler('IconHandOff'),
   'hand.thumbsup.fill': tabler('IconThumbUp', 'IconThumbUpFilled'),
   'hand.thumbsdown.fill': tabler('IconThumbDown', 'IconThumbDownFilled'),
 

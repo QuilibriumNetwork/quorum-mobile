@@ -547,7 +547,7 @@ function createStyles(theme: AppTheme) {
       fontWeight: '700',
     },
     username: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(15),
       marginTop: Skin.space(2),
     },
@@ -558,7 +558,7 @@ function createStyles(theme: AppTheme) {
       marginTop: Skin.space(12),
     },
     locationText: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(13),
     },
     statCount: {
@@ -567,7 +567,7 @@ function createStyles(theme: AppTheme) {
       fontSize: Skin.font(15),
     },
     statLabel: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(14),
     },
     headerDivider: {
@@ -600,7 +600,7 @@ function createStyles(theme: AppTheme) {
       fontSize: Skin.font(13),
     },
     castMeta: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(13),
       marginTop: Skin.space(2),
     },

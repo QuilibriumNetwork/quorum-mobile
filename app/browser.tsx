@@ -724,7 +724,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     },
     pageTitle: {
       fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(2),
     },
     loadingBar: {
@@ -769,7 +769,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     splashText: {
       marginTop: Skin.space(16),
       fontSize: Skin.font(16),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     primaryButtonContainer: {
       padding: Skin.space(16),

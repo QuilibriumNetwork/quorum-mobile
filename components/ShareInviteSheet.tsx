@@ -257,7 +257,7 @@ const createStyles = (theme: AppTheme, insets: { top: number; bottom: number; le
     },
     subtitle: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle, // secondary text → subtle (muted is unreadable in light)
       marginTop: Skin.space(4),
     },
     list: {
@@ -273,12 +273,12 @@ const createStyles = (theme: AppTheme, insets: { top: number; bottom: number; le
     },
     emptyText: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(8),
     },
     emptyHint: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       textAlign: 'center',
     },
     avatar: {

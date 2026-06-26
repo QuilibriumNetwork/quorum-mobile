@@ -213,7 +213,13 @@ export function ChannelIconPickerSheet({
 
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
-    container: { paddingHorizontal: Skin.space(20), paddingTop: Skin.space(8), flex: 1 },
+    // Hug content instead of flex:1 stretching to the sheet's maxHeight, which
+    // pushed the Reset/Apply row (last child, outside the grid's own ScrollView)
+    // off the bottom edge under the Android nav bar. The icon grid keeps its own
+    // maxHeight:200 ScrollView; everything else is fixed-height and bounded, so
+    // the column hugs and BaseModal's paddingBottom: insets.bottom keeps the
+    // buttons clear of the system bar.
+    container: { paddingHorizontal: Skin.space(20), paddingTop: Skin.space(8) },
     title: {
       ...theme.textStyles.headline,
       color: theme.colors.textStrong,
@@ -248,11 +254,11 @@ const createStyles = (theme: AppTheme) =>
       borderWidth: Skin.border(1),
       borderColor: theme.colors.primary,
     },
-    variantChipText: { ...theme.textStyles.footnote, color: theme.colors.textMuted },
+    variantChipText: { ...theme.textStyles.footnote, color: theme.colors.textSubtle },
     variantChipTextActive: { color: theme.colors.textStrong },
     sectionLabel: {
       ...theme.textStyles.footnote,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       letterSpacing: 0.5,
       marginBottom: Skin.space(8),
       textTransform: 'uppercase',

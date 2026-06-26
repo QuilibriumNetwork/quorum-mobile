@@ -287,12 +287,12 @@ const createStyles = (theme: AppTheme) =>
     username: {
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     timestamp: {
       fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginRight: Skin.space(4),
     },
     castText: {
@@ -324,7 +324,7 @@ const createStyles = (theme: AppTheme) =>
     statText: {
       fontSize: Skin.font(12),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     errorContainer: {
       flexDirection: 'row',
@@ -340,7 +340,7 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
       fontSize: Skin.font(13),
       fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     // Skeleton loading styles
     skeletonHeader: {

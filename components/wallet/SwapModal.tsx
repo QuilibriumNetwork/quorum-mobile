@@ -2172,7 +2172,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     swapLabel: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     maxButton: {
       fontSize: Skin.font(12),
@@ -2208,7 +2208,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       color: theme.colors.textMain,
     },
     swapAmountPlaceholder: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     tokenSelector: {
       flexDirection: 'row',
@@ -2243,7 +2243,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     balanceText: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(8),
     },
     balanceTextError: {
@@ -2301,18 +2301,18 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     assetBalance: {
       fontSize: Skin.font(11),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     contractAddress: {
       fontSize: Skin.font(10),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: 'monospace',
       opacity: 0.7,
     },
     noAssetsText: {
       padding: Skin.space(16),
       textAlign: 'center',
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(13),
     },
     swapDirectionContainer: {
@@ -2357,7 +2357,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     quoteLabel: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     quoteValue: {
       fontSize: Skin.font(13),
@@ -2440,7 +2440,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     manualEntryLabel: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(6),
     },
     manualEntryInput: {

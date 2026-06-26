@@ -270,7 +270,7 @@ export function SkinsModal({ visible, onClose }: { visible: boolean; onClose: ()
               onPress={() => setTab(t)}
               style={[s.tab, tab === t && { backgroundColor: theme.colors.surface3 }]}
             >
-              <Text style={{ color: tab === t ? theme.colors.textMain : theme.colors.textMuted, fontWeight: '600' }}>
+              <Text style={{ color: tab === t ? theme.colors.textMain : theme.colors.textSubtle, fontWeight: '600' }}>
                 {t === 'local' ? 'My Skins' : 'Gallery'}
               </Text>
             </TouchableOpacity>
@@ -411,7 +411,7 @@ function SkinRow({
         )}
         <View style={{ flex: 1 }}>
           <Text style={{ color: theme.colors.textMain, fontWeight: '600', fontSize: Skin.font(15) }}>{label}</Text>
-          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>{description}</Text>
+          <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>{description}</Text>
         </View>
         {active && <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.accent} />}
         {onDelete && (
@@ -468,7 +468,7 @@ function AppearanceSegments({
           >
             <Text
               style={{
-                color: active ? theme.colors.textMain : theme.colors.textMuted,
+                color: active ? theme.colors.textMain : theme.colors.textSubtle,
                 fontWeight: '600',
                 fontSize: Skin.font(13),
               }}
@@ -524,7 +524,7 @@ const styles = (theme: ReturnType<typeof useTheme>['theme']) =>
       paddingTop: Skin.space(8),
     },
     subtitle: {
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontSize: Skin.font(13),
       paddingHorizontal: Skin.space(16),
       paddingTop: Skin.space(4),

@@ -135,7 +135,7 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
         {isLive && typeof room?.listenerCount === 'number' && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(4) }}>
             <IconSymbol name="person.2.fill" size={12} color={theme.colors.textMuted} />
-            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>
+            <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(12) }}>
               {room.listenerCount}
             </Text>
           </View>
@@ -163,7 +163,7 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
             {room?.title || 'Audio space'}
           </Text>
           {host?.username && (
-            <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12), marginTop: Skin.space(2) }} numberOfLines={1}>
+            <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(12), marginTop: Skin.space(2) }} numberOfLines={1}>
               by @{host.username}
               {scheduledLabel ? ` · ${scheduledLabel}` : ''}
             </Text>

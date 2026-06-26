@@ -130,7 +130,7 @@ export default function CreateProposalSheet({
         {/* Scope-specific fields */}
         {scope === 'protocol' ? (
           <>
-            <Text style={[styles.label, { color: theme.colors.textMuted }]}>Category</Text>
+            <Text style={[styles.label, { color: theme.colors.textSubtle }]}>Category</Text>
             <SegmentedPills
               style={styles.pillRow}
               variant="solid"
@@ -141,7 +141,7 @@ export default function CreateProposalSheet({
               onChange={(key) => setCategory(key as ProtocolCategory)}
             />
 
-            <Text style={[styles.label, { color: theme.colors.textMuted }]}>Title</Text>
+            <Text style={[styles.label, { color: theme.colors.textSubtle }]}>Title</Text>
             <TextInput
               style={inputStyle}
               value={title}
@@ -150,7 +150,7 @@ export default function CreateProposalSheet({
               placeholderTextColor={theme.colors.textMuted}
             />
 
-            <Text style={[styles.label, { color: theme.colors.textMuted }]}>Abstract</Text>
+            <Text style={[styles.label, { color: theme.colors.textSubtle }]}>Abstract</Text>
             <TextInput
               style={[inputStyle, { height: 72 }]}
               value={abstract}
@@ -162,7 +162,7 @@ export default function CreateProposalSheet({
               textAlignVertical="top"
             />
 
-            <Text style={[styles.label, { color: theme.colors.textMuted }]}>Problem Statement</Text>
+            <Text style={[styles.label, { color: theme.colors.textSubtle }]}>Problem Statement</Text>
             <TextInput
               style={[inputStyle, { height: 110 }]}
               value={problemStatement}
@@ -174,7 +174,7 @@ export default function CreateProposalSheet({
               textAlignVertical="top"
             />
 
-            <Text style={[styles.label, { color: theme.colors.textMuted }]}>Proposed Solution</Text>
+            <Text style={[styles.label, { color: theme.colors.textSubtle }]}>Proposed Solution</Text>
             <TextInput
               style={[inputStyle, { height: 110 }]}
               value={proposedSolution}
@@ -188,7 +188,7 @@ export default function CreateProposalSheet({
           </>
         ) : (
           <>
-            <Text style={[styles.label, { color: theme.colors.textMuted }]}>Client Area</Text>
+            <Text style={[styles.label, { color: theme.colors.textSubtle }]}>Client Area</Text>
             <SegmentedPills
               style={styles.pillRow}
               variant="solid"
@@ -199,7 +199,7 @@ export default function CreateProposalSheet({
               onChange={(key) => setClientArea(key as ClientArea)}
             />
 
-            <Text style={[styles.label, { color: theme.colors.textMuted }]}>Title</Text>
+            <Text style={[styles.label, { color: theme.colors.textSubtle }]}>Title</Text>
             <TextInput
               style={inputStyle}
               value={title}
@@ -208,7 +208,7 @@ export default function CreateProposalSheet({
               placeholderTextColor={theme.colors.textMuted}
             />
 
-            <Text style={[styles.label, { color: theme.colors.textMuted }]}>Description</Text>
+            <Text style={[styles.label, { color: theme.colors.textSubtle }]}>Description</Text>
             <TextInput
               style={[inputStyle, { height: 96 }]}
               value={description}
@@ -220,7 +220,7 @@ export default function CreateProposalSheet({
               textAlignVertical="top"
             />
 
-            <Text style={[styles.label, { color: theme.colors.textMuted }]}>Rationale</Text>
+            <Text style={[styles.label, { color: theme.colors.textSubtle }]}>Rationale</Text>
             <TextInput
               style={[inputStyle, { height: 96 }]}
               value={rationale}

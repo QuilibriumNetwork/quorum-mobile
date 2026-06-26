@@ -23,7 +23,7 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
@@ -469,7 +469,8 @@ const styles = createSkinnable(() => StyleSheet.create({
   headerName: {
     fontSize: Skin.font(17),
     fontWeight: '600',
-    maxWidth: 180,
+    flexShrink: 1,
+    maxWidth: Dimensions.get('window').width - 200,
   },
   headerRight: {
     flexDirection: 'row',

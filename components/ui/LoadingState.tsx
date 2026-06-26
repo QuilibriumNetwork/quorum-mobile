@@ -70,7 +70,7 @@ const createStyles = (theme: AppTheme, size: LoadingSize) =>
     message: {
       marginTop: Skin.space(12),
       fontSize: size === 'sm' ? 12 : 14,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
     },

@@ -145,7 +145,7 @@ function PriceChart({
   if (data.length < 2) {
     return (
       <View style={[styles.chartPlaceholder, { height: CHART_HEIGHT }]}>
-        <Text style={{ color: theme.colors.textMuted }}>No chart data available</Text>
+        <Text style={{ color: theme.colors.textSubtle }}>No chart data available</Text>
       </View>
     );
   }
@@ -330,7 +330,7 @@ function PriceChart({
           <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(12), fontWeight: '600', textAlign: 'center' }}>
             {formatAxisPrice(selectedPoint.point.price)}
           </Text>
-          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(9), textAlign: 'center' }}>
+          <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(9), textAlign: 'center' }}>
             {formatAxisTime(selectedPoint.point.timestamp, timeframe)}
           </Text>
         </View>
@@ -391,7 +391,7 @@ function CandleChart({
   if (data.length < 2) {
     return (
       <View style={[styles.chartPlaceholder, { height: CHART_HEIGHT }]}>
-        <Text style={{ color: theme.colors.textMuted }}>No candle data available</Text>
+        <Text style={{ color: theme.colors.textSubtle }}>No candle data available</Text>
       </View>
     );
   }
@@ -574,7 +574,7 @@ function CandleChart({
             elevation: 4,
           }}
         >
-          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(9), marginBottom: Skin.space(2) }}>
+          <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(9), marginBottom: Skin.space(2) }}>
             {formatAxisTime(selectedCandle.candle.timestamp, timeframe)}
           </Text>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: Skin.space(8) }}>
@@ -884,7 +884,7 @@ export default function AssetDetailModal({
             </View>
           ) : error ? (
             <View style={[styles.chartPlaceholder, { height: CHART_HEIGHT }]}>
-              <Text style={{ color: theme.colors.textMuted }}>{error}</Text>
+              <Text style={{ color: theme.colors.textSubtle }}>{error}</Text>
             </View>
           ) : chartType === 'line' && priceData ? (
             <PriceChart
@@ -903,7 +903,7 @@ export default function AssetDetailModal({
             />
           ) : (
             <View style={[styles.chartPlaceholder, { height: CHART_HEIGHT }]}>
-              <Text style={{ color: theme.colors.textMuted }}>No chart data</Text>
+              <Text style={{ color: theme.colors.textSubtle }}>No chart data</Text>
             </View>
           )}
         </View>
@@ -1119,7 +1119,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     assetSymbol: {
       ...theme.textStyles.subheadline,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle, // secondary text → subtle (muted is unreadable in light)
       marginTop: Skin.space(2),
     },
     closeButton: {
@@ -1150,12 +1150,12 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     timeframeLabel: {
       ...theme.textStyles.subheadline,
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginLeft: Skin.space(8),
     },
     noPriceText: {
       fontSize: Skin.font(24),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     chartTypeToggle: {
       flexDirection: 'row',
@@ -1178,7 +1178,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     chartTypeText: {
       fontSize: Skin.font(12),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -1231,7 +1231,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     timeframeButtonText: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
     },
@@ -1243,7 +1243,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     sectionTitle: {
       fontSize: Skin.font(14),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
@@ -1261,7 +1261,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     balanceLabel: {
       fontSize: Skin.font(15),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     balanceValue: {
       fontSize: Skin.font(15),
@@ -1288,7 +1288,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     statLabel: {
       fontSize: Skin.font(15),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
     },
     statValue: {
       fontSize: Skin.font(15),
@@ -1312,7 +1312,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     },
     contractAddress: {
       fontSize: Skin.font(13),
-      color: theme.colors.textMuted,
+      color: theme.colors.textSubtle,
       marginTop: Skin.space(4),
     },
   });
