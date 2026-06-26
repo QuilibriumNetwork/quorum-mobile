@@ -164,8 +164,8 @@ export function SegmentedPills({
       bg = isActive ? theme.colors.background : 'transparent';
       borderColor = undefined;
     } else {
-      // tinted
-      fg = hasItemColor ? itemAccent : isActive ? itemAccent : theme.colors.textMuted;
+      // tinted — inactive label → subtle, not muted (muted is unreadable in light)
+      fg = hasItemColor ? itemAccent : isActive ? itemAccent : theme.colors.textSubtle;
       bg = hasItemColor
         ? isActive
           ? withAlpha(itemAccent, 0.15)
