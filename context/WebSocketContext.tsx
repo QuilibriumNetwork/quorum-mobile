@@ -2731,6 +2731,25 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           return;
         }
 
+        // delete-conversation, fallback path (defensive — mirrors the batch
+        // branch): reset the session only, before the save.
+        if (decryptedMessage.content?.type === 'delete-conversation') {
+          encryptionStateStorage.deleteAllEncryptionStates(conversationId);
+          getDeviceKeyset().then(dk => {
+            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
+          });
+          return;
+        }
+
+        // delete-conversation-self: not implemented on mobile yet — drop it so
+        // it isn't saved as a ghost row (forward-compat until mobile Part 2).
+        if ((decryptedMessage.content?.type as string) === 'delete-conversation-self') {
+          getDeviceKeyset().then(dk => {
+            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
+          });
+          return;
+        }
+
         // Save conversation to storage (creates new or updates existing)
         const existingConversation = await storage.getConversation(conversationId);
         // Get sender display name for preview
@@ -3807,6 +3826,45 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
 
         const resolvedSenderAddress = conversationId.split('/')[0];
+
+        // delete-conversation: counterparty deleted this DM. Reset our encryption
+        // session only (next message re-handshakes); do NOT delete our copy.
+        // Before the conversation-save below so it can't resurrect a deleted row.
+        if (decryptedMessage.content?.type === 'delete-conversation') {
+          encryptionStateStorage.deleteAllEncryptionStates(conversationId);
+
+          // Best-effort: clear the processed control message from the inbox.
+          const originalDeleteMsg = batch.find(m => m.timestamp === msgResult.timestamp);
+          if (originalDeleteMsg) {
+            const conversationKeypair = encryptionStateStorage.getConversationInboxKeypairByAddress(originalDeleteMsg.inboxAddress);
+            if (conversationKeypair?.signingPrivateKey && conversationKeypair?.signingPublicKey) {
+              const signingKey = {
+                publicKey: bytesToHex(conversationKeypair.signingPublicKey),
+                privateKey: bytesToHex(conversationKeypair.signingPrivateKey),
+              };
+              deleteConversationInboxMessages(originalDeleteMsg.inboxAddress, [originalDeleteMsg.timestamp], signingKey).catch(() => {});
+            } else {
+              getDeviceKeyset().then(dk => {
+                if (dk) deleteInboxMessages(originalDeleteMsg.inboxAddress, [originalDeleteMsg.timestamp], dk).catch(() => {});
+              });
+            }
+          }
+          continue;
+        }
+
+        // delete-conversation-self: self-device delete-sync (desktop sends it).
+        // Mobile doesn't implement the wipe yet — drop it so it isn't saved as a
+        // ghost row. Forward-compat until mobile Part 2 lands. Never act on it
+        // from a non-self sender regardless.
+        if ((decryptedMessage.content?.type as string) === 'delete-conversation-self') {
+          const originalSelfMsg = batch.find(m => m.timestamp === msgResult.timestamp);
+          if (originalSelfMsg) {
+            getDeviceKeyset().then(dk => {
+              if (dk) deleteInboxMessages(originalSelfMsg.inboxAddress, [originalSelfMsg.timestamp], dk).catch(() => {});
+            });
+          }
+          continue;
+        }
 
         // Save conversation
         const existingConversation = await storage.getConversation(conversationId);
