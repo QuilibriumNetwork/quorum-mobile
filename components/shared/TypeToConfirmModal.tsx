@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme } from '@/theme';
 import { createTheme } from '@/theme/themes';
 import * as Skin from '@/theme/skins/geometry';
+import { Button } from '@/components/ui/Button';
 import { CenterModal } from './CenterModal';
 
 type ThemeType = ReturnType<typeof createTheme>;
@@ -107,26 +107,18 @@ export function TypeToConfirmModal({
         />
 
         <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.button, styles.cancelButton]}
-            onPress={handleCancel}
-            accessibilityRole="button"
-            accessibilityLabel={cancelLabel}
-          >
-            <Text style={styles.cancelLabel}>{cancelLabel}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, matches ? styles.confirmEnabled : styles.confirmDisabled]}
-            onPress={matches ? onConfirm : undefined}
+          <Button variant="secondary" size="lg" onPress={handleCancel} style={styles.button}>
+            {cancelLabel}
+          </Button>
+          <Button
+            variant="danger"
+            size="lg"
+            onPress={onConfirm}
             disabled={!matches}
-            accessibilityRole="button"
-            accessibilityLabel={confirmLabel}
-            accessibilityState={{ disabled: !matches }}
+            style={styles.button}
           >
-            <Text style={[styles.confirmLabel, !matches && styles.confirmLabelDisabled]}>
-              {confirmLabel}
-            </Text>
-          </TouchableOpacity>
+            {confirmLabel}
+          </Button>
         </View>
       </KeyboardAvoidingView>
     </CenterModal>
@@ -199,34 +191,6 @@ const createStyles = (theme: ThemeType) =>
     },
     button: {
       flex: 1,
-      paddingVertical: Skin.space(12),
-      borderRadius: Skin.radius(12),
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    cancelButton: {
-      backgroundColor: theme.colors.bgButtonSubtle,
-    },
-    cancelLabel: {
-      fontSize: Skin.font(15),
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMain,
-    },
-    confirmEnabled: {
-      backgroundColor: theme.colors.danger,
-    },
-    confirmDisabled: {
-      backgroundColor: theme.colors.surface4,
-    },
-    confirmLabel: {
-      fontSize: Skin.font(15),
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: '#fff',
-    },
-    confirmLabelDisabled: {
-      color: theme.colors.textMuted,
     },
   });
 

@@ -1,9 +1,9 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme } from '@/theme';
 import { createTheme } from '@/theme/themes';
 import * as Skin from '@/theme/skins/geometry';
+import { Button } from '@/components/ui/Button';
 import { CenterModal } from './CenterModal';
 
 type ThemeType = ReturnType<typeof createTheme>;
@@ -43,7 +43,6 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const confirmColor = variant === 'danger' ? theme.colors.danger : theme.colors.primary;
 
   return (
     <CenterModal
@@ -55,22 +54,12 @@ export function ConfirmDialog({
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.message}>{message}</Text>
       <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.button, styles.cancelButton]}
-          onPress={onCancel}
-          accessibilityRole="button"
-          accessibilityLabel={cancelLabel}
-        >
-          <Text style={styles.cancelLabel}>{cancelLabel}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: confirmColor }]}
-          onPress={onConfirm}
-          accessibilityRole="button"
-          accessibilityLabel={confirmLabel}
-        >
-          <Text style={styles.confirmLabel}>{confirmLabel}</Text>
-        </TouchableOpacity>
+        <Button variant="secondary" size="lg" onPress={onCancel} style={styles.button}>
+          {cancelLabel}
+        </Button>
+        <Button variant={variant} size="lg" onPress={onConfirm} style={styles.button}>
+          {confirmLabel}
+        </Button>
       </View>
     </CenterModal>
   );
@@ -98,25 +87,6 @@ const createStyles = (theme: ThemeType) =>
     },
     button: {
       flex: 1,
-      paddingVertical: Skin.space(12),
-      borderRadius: Skin.radius(12),
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    cancelButton: {
-      backgroundColor: theme.colors.bgButtonSubtle,
-    },
-    cancelLabel: {
-      fontSize: Skin.font(15),
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.textMain,
-    },
-    confirmLabel: {
-      fontSize: Skin.font(15),
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: '#fff',
     },
   });
 

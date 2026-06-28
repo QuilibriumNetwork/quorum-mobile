@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme, type AppTheme } from '@/theme';
 import { IconSymbol, type IconSymbolName } from './IconSymbol';
+import { Button } from './Button';
 import * as Skin from '@/theme/skins/geometry';
 
 interface EmptyStateProps {
@@ -62,13 +62,9 @@ export function EmptyState({
         <Text style={styles.message}>{message}</Text>
       )}
       {actionLabel && onAction && (
-        <TouchableOpacity
-          onPress={onAction}
-          style={styles.actionButton}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.actionText}>{actionLabel}</Text>
-        </TouchableOpacity>
+        <Button variant="primary" onPress={onAction}>
+          {actionLabel}
+        </Button>
       )}
     </View>
   );
@@ -99,18 +95,6 @@ const createStyles = (theme: AppTheme) =>
       textAlign: 'center',
       lineHeight: Skin.font(20),
       marginBottom: Skin.space(20),
-    },
-    actionButton: {
-      paddingVertical: Skin.space(12),
-      paddingHorizontal: Skin.space(24),
-      backgroundColor: theme.colors.primary,
-      borderRadius: Skin.radius(8),
-    },
-    actionText: {
-      fontSize: Skin.font(14),
-      color: '#ffffff',
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
     },
   });
 

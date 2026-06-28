@@ -2672,7 +2672,7 @@ export default function ProfileModal({
           title="Reset App Data"
           body="This permanently deletes all your data, including your private keys. Back up your recovery phrase first — this cannot be undone."
           keyword="reset"
-          confirmLabel="Reset App Data"
+          confirmLabel="Reset"
           onConfirm={handleResetAppData}
           onCancel={() => setShowResetConfirm(false)}
         />

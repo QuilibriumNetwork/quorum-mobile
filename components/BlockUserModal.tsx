@@ -12,8 +12,8 @@
 import { truncateAddress } from '@/utils/formatAddress';
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { BaseModal } from '@/components/shared/BaseModal';
+import { Button } from '@/components/ui/Button';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
@@ -80,20 +80,12 @@ export function BlockUserModal({
         </Text>
 
         <View style={styles.buttonRow}>
-          <TouchableOpacity
-            style={[styles.button, styles.cancelButton]}
-            onPress={onClose}
-          >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, styles.primaryButton]}
-            onPress={handleConfirm}
-          >
-            <Text style={styles.primaryButtonText}>
-              {isUnblocking ? 'Unblock' : 'Block'}
-            </Text>
-          </TouchableOpacity>
+          <Button variant="secondary" size="lg" onPress={onClose} style={styles.button}>
+            Cancel
+          </Button>
+          <Button variant="primary" size="lg" onPress={handleConfirm} style={styles.button}>
+            {isUnblocking ? 'Unblock' : 'Block'}
+          </Button>
         </View>
       </View>
     </BaseModal>
@@ -161,26 +153,6 @@ const createStyles = (theme: AppTheme) =>
     },
     button: {
       flex: 1,
-      paddingVertical: Skin.space(14),
-      borderRadius: Skin.radius(8),
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    cancelButton: {
-      backgroundColor: theme.colors.bgButtonSubtle,
-    },
-    cancelButtonText: {
-      color: theme.colors.textMain,
-      fontSize: Skin.font(16),
-      fontFamily: theme.fonts.medium.fontFamily,
-    },
-    primaryButton: {
-      backgroundColor: theme.colors.primary,
-    },
-    primaryButtonText: {
-      color: '#fff',
-      fontSize: Skin.font(16),
-      fontFamily: theme.fonts.medium.fontFamily,
     },
   });
 
