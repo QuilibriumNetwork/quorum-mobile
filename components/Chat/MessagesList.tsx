@@ -24,7 +24,7 @@ import { EditHistoryModal } from './EditHistoryModal';
 import { ReactionDetailsModal } from './ReactionDetailsModal';
 import { SpaceCallBubble } from './SpaceCallBubble';
 import type { DisplayMessage, DisplayReaction } from './types';
-import { hasPermission, logger, type Emoji, type Sticker, type SpaceMember, type Channel, type Role, type Space } from '@quilibrium/quorum-shared';
+import { hasPermission, logger, shouldShowCompactHeader, type Emoji, type Sticker, type SpaceMember, type Channel, type Role, type Space } from '@quilibrium/quorum-shared';
 import * as Skin from '@/theme/skins/geometry';
 // MESSAGE_IMAGE_MAX_WIDTH computed inside the component via useWindowDimensions
 
@@ -399,6 +399,28 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   // Messages are ordered oldest-first; FlashList's startRenderingFromBottom
   // renders from the bottom without needing an inverted array.
   const orderedMessages = messages;
+
+  // Consecutive messages from the same sender (within the shared time window)
+  // hide the repeated avatar + header and render as compact continuation rows,
+  // matching desktop via shouldShowCompactHeader. Precomputed once per list
+  // change (renderItem can't see the previous item); no DisplayMessage is
+  // mutated so SpaceChatArea's render cache stays valid. Only post/embed/sticker
+  // backed by a real wire Message can group; casts/Farcaster rows break the run.
+  const compactMessageIds = useMemo(() => {
+    const ids = new Set<string>();
+    const canGroup = (m: DisplayMessage) =>
+      !!m.originalMessage &&
+      (m.renderType === 'post' || m.renderType === 'embed' || m.renderType === 'sticker');
+    for (let i = 1; i < orderedMessages.length; i++) {
+      const current = orderedMessages[i];
+      const previous = orderedMessages[i - 1];
+      if (!canGroup(current) || !canGroup(previous)) continue;
+      if (shouldShowCompactHeader(current.originalMessage!, previous.originalMessage!, false, false)) {
+        ids.add(current.id);
+      }
+    }
+    return ids;
+  }, [orderedMessages]);
 
   // Stable identities for FlashList's object/style props. FlashList re-initialises
   // its scroll anchor when these change identity, so passing fresh inline literals
@@ -894,17 +916,20 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       const handleLongPress = () => handleMessageLongPress(item.id);
 
       const isHighlighted = highlightedMessageId === item.id;
+      const isCompact = compactMessageIds.has(item.id);
 
       return (
         <Pressable onLongPress={handleLongPress} delayLongPress={300}>
-          <Animated.View style={[styles.message, isHighlighted && highlightAnimStyle]}>
-            {renderAvatar(item)}
+          <Animated.View style={[styles.message, isCompact && styles.messageCompact, isHighlighted && highlightAnimStyle]}>
+            {isCompact ? <View style={styles.messageAvatarSpacer} /> : renderAvatar(item)}
             <View style={styles.messageContent}>
+              {!isCompact && (
               <View style={styles.messageHeader}>
                 <Text style={styles.messageUser} numberOfLines={1}>{item.userName}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
                 {renderUnsignedWarning(item)}
               </View>
+              )}
               {imageUrl && (
                 <View style={styles.embedImageContainer}>
                   <EmbedMessageImage
@@ -949,7 +974,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, renderAvatar, renderUnsignedWarning, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress]
+    [styles, renderReactions, renderAvatar, renderUnsignedWarning, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, compactMessageIds]
   );
 
   // Render sticker message
@@ -960,17 +985,20 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       const handleLongPress = () => handleMessageLongPress(item.id);
 
       const isHighlighted = highlightedMessageId === item.id;
+      const isCompact = compactMessageIds.has(item.id);
 
       return (
         <Pressable onLongPress={handleLongPress} delayLongPress={300}>
-          <Animated.View style={[styles.message, isHighlighted && highlightAnimStyle]}>
-            {renderAvatar(item)}
+          <Animated.View style={[styles.message, isCompact && styles.messageCompact, isHighlighted && highlightAnimStyle]}>
+            {isCompact ? <View style={styles.messageAvatarSpacer} /> : renderAvatar(item)}
             <View style={styles.messageContent}>
+              {!isCompact && (
               <View style={styles.messageHeader}>
                 <Text style={styles.messageUser} numberOfLines={1}>{item.userName}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
                 {renderUnsignedWarning(item)}
               </View>
+              )}
               {sticker ? (
                 <View style={styles.stickerContainer}>
                   <Image
@@ -990,7 +1018,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, stickerMap, renderAvatar, renderUnsignedWarning, handleMessageLongPress, highlightedMessageId, highlightAnimStyle]
+    [styles, renderReactions, stickerMap, renderAvatar, renderUnsignedWarning, handleMessageLongPress, highlightedMessageId, highlightAnimStyle, compactMessageIds]
   );
 
   // Helper to get reply preview from parent message
@@ -1038,14 +1066,17 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       // Get reply preview
       const replyPreview = item.replyToPreview || getReplyPreview(item.replyToMessageId);
 
+      const isCompact = compactMessageIds.has(item.id);
+
       return (
         <Pressable
           onLongPress={handleLongPress}
           delayLongPress={300}
         >
-          <Animated.View style={[styles.message, isSending && styles.messageSending, isHighlighted && highlightAnimStyle]}>
-            {renderAvatar(item)}
+          <Animated.View style={[styles.message, isCompact && styles.messageCompact, isSending && styles.messageSending, isHighlighted && highlightAnimStyle]}>
+            {isCompact ? <View style={styles.messageAvatarSpacer} /> : renderAvatar(item)}
             <View style={styles.messageContent}>
+              {!isCompact && (
               <View style={styles.messageHeader}>
                 <Text style={styles.messageUser} numberOfLines={1}>{item.userName}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
@@ -1064,6 +1095,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   />
                 )}
               </View>
+              )}
               {/* Reply indicator - tap to scroll to original message */}
               {item.isReply && item.replyToAuthor && item.replyToMessageId && (
                 <ReplyIndicator
@@ -1151,7 +1183,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedWarning, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress]
+    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedWarning, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds]
   );
 
   const renderCast = useCallback(
@@ -1380,7 +1412,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   message: {
     flexDirection: 'row',
-    paddingVertical: Skin.space(16),
+    // All inter-message gap lives on the top so continuation rows (paddingTop 0)
+    // sit flush, making a run read as one message across several lines.
+    paddingTop: Skin.space(12),
     // Shared content-row width (matches the Farcaster feed cards).
     paddingHorizontal: Skin.contentRowPaddingH(),
     width: '100%',
@@ -1394,6 +1428,15 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   // gold ring hugs the image instead of enclosing the margin.
   messageAvatarRing: {
     marginRight: Skin.space(12),
+  },
+  // Spacer in place of the hidden avatar on continuation rows (40 + 12 margin).
+  messageAvatarSpacer: {
+    width: 40 + 12,
+  },
+  // Continuation rows sit flush under the message above so a run reads as one
+  // message wrapped across lines (the body text's own marginTop is the gap).
+  messageCompact: {
+    paddingTop: 0,
   },
   messageContent: {
     flex: 1,
