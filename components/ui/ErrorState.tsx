@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useTheme, type AppTheme } from '@/theme';
 import { IconSymbol } from './IconSymbol';
+import { Button } from './Button';
 import * as Skin from '@/theme/skins/geometry';
 
 interface ErrorStateProps {
@@ -50,18 +50,9 @@ export function ErrorState({
       </View>
       <Text style={styles.message}>{message}</Text>
       {onRetry && (
-        <TouchableOpacity
-          onPress={onRetry}
-          style={styles.retryButton}
-          activeOpacity={0.7}
-        >
-          <IconSymbol
-            name="arrow.clockwise"
-            size={14}
-            color={theme.colors.primary}
-          />
-          <Text style={styles.retryText}>{retryLabel}</Text>
-        </TouchableOpacity>
+        <Button variant="ghost" size="sm" icon="arrow.clockwise" onPress={onRetry}>
+          {retryLabel}
+        </Button>
       )}
     </View>
   );
@@ -84,21 +75,6 @@ const createStyles = (theme: AppTheme) =>
       textAlign: 'center',
       lineHeight: Skin.font(20),
       marginBottom: Skin.space(16),
-    },
-    retryButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: Skin.space(8),
-      paddingHorizontal: Skin.space(16),
-      backgroundColor: theme.colors.surface2,
-      borderRadius: Skin.radius(8),
-      gap: Skin.space(6),
-    },
-    retryText: {
-      fontSize: Skin.font(14),
-      color: theme.colors.primary,
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
     },
   });
 

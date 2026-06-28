@@ -15,7 +15,7 @@ import { IconSymbol, type IconSymbolName } from './IconSymbol';
 import * as Skin from '@/theme/skins/geometry';
 import { useSurface } from '@/theme/skins/surfaces';
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'success' | 'ghost' | 'outline';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps {
@@ -37,6 +37,12 @@ interface ButtonProps {
   onPress: () => void;
   /** Full width button */
   fullWidth?: boolean;
+  /**
+   * Override the fill color for a one-off brand button (e.g. biometric purple,
+   * Apex gold). Applies to `primary`/`danger`/`success` fills; for `outline`
+   * it tints the border + label. Prefer a variant when the color is reusable.
+   */
+  color?: string;
   /** Custom style */
   style?: StyleProp<ViewStyle>;
   /** Test ID */
@@ -67,11 +73,12 @@ export function Button({
   iconPosition = 'left',
   onPress,
   fullWidth = false,
+  color,
   style,
   testID,
 }: ButtonProps) {
   const { theme } = useTheme();
-  const styles = createStyles(theme, variant, size, disabled, fullWidth);
+  const styles = createStyles(theme, variant, size, disabled, fullWidth, color);
 
   // Per-variant skin surface: `button.<variant>` inherits the generic `button`.
   const surface = useSurface(`button.${variant}`);
@@ -81,9 +88,17 @@ export function Button({
   const isDisabled = disabled || loading;
 
   const iconSize = size === 'sm' ? 14 : size === 'md' ? 16 : 18;
-  const iconColor = surface.text ?? (variant === 'ghost'
-    ? (disabled ? theme.colors.textMuted : theme.colors.primary)
-    : (variant === 'secondary' ? theme.colors.textMain : '#ffffff'));
+  // `ghost`/`outline` use a tinted label/icon (the override color, or accent);
+  // `secondary` uses textMain; filled variants (primary/danger/success) use white.
+  const tintedLabel = variant === 'ghost' || variant === 'outline';
+  const iconColor = surface.text ?? (
+    disabled
+      ? theme.colors.textMuted
+      : tintedLabel
+        ? (color ?? theme.colors.primary)
+        : variant === 'secondary'
+          ? theme.colors.textMain
+          : '#ffffff');
 
   const content = (
     <>
@@ -146,18 +161,22 @@ const createStyles = (
   variant: ButtonVariant,
   size: ButtonSize,
   disabled: boolean,
-  fullWidth: boolean
+  fullWidth: boolean,
+  color?: string
 ) => {
   const getBackgroundColor = () => {
     if (disabled) return theme.colors.surface3;
     switch (variant) {
       case 'primary':
-        return theme.colors.primary;
+        return color ?? theme.colors.primary;
       case 'secondary':
         return theme.colors.surface3;
       case 'danger':
-        return theme.colors.danger;
+        return color ?? theme.colors.danger;
+      case 'success':
+        return color ?? theme.colors.success;
       case 'ghost':
+      case 'outline':
         return 'transparent';
     }
   };
@@ -167,11 +186,13 @@ const createStyles = (
     switch (variant) {
       case 'primary':
       case 'danger':
+      case 'success':
         return '#ffffff';
       case 'secondary':
         return theme.colors.textMain;
       case 'ghost':
-        return theme.colors.primary;
+      case 'outline':
+        return color ?? theme.colors.primary;
     }
   };
 
@@ -205,6 +226,12 @@ const createStyles = (
       backgroundColor: getBackgroundColor(),
       borderRadius: size === 'sm' ? 6 : size === 'md' ? 8 : 12,
       ...getPadding(),
+      ...(variant === 'outline'
+        ? {
+            borderWidth: Skin.border(1),
+            borderColor: disabled ? theme.colors.surface5 : (color ?? theme.colors.primary),
+          }
+        : {}),
       ...(fullWidth ? { width: '100%' } : {}),
       opacity: disabled ? 0.6 : 1,
     } as ViewStyle,
