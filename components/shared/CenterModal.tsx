@@ -7,6 +7,8 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets, EdgeInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 import { createTheme } from '@/theme/themes';
@@ -60,6 +62,20 @@ export function CenterModal({
   const insets = useSafeAreaInsets();
   const styles = createStyles(theme, insets);
 
+  // Keyboard avoidance. An RN <Modal> is a separate window, so the Activity's
+  // `adjustResize` does NOT shrink it — the soft keyboard draws on top of the
+  // centered card, hiding the input + buttons on short screens (Galaxy A40).
+  // `KeyboardAvoidingView` inside a Modal is unreliable on Android for the same
+  // window reason, so we track the live keyboard height and lift the card.
+  // The card is vertically centered, so translating it up by HALF the keyboard
+  // height re-centers it in the space remaining above the keyboard.
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  const cardAnimatedStyle = useAnimatedStyle(() => ({
+    // `keyboardHeight` is negative while the keyboard is open (RN keyboard-
+    // controller convention), so `/ 2` already yields an upward (negative) shift.
+    transform: [{ translateY: keyboardHeight.value / 2 }],
+  }));
+
   return (
     <Modal
       transparent
@@ -83,15 +99,16 @@ export function CenterModal({
           <View style={styles.backdrop} />
         </TouchableWithoutFeedback>
 
-        {/* The card. accessibilityViewIsModal traps the screen reader inside it. */}
-        <View
-          style={[styles.card, cardStyle]}
+        {/* The card. accessibilityViewIsModal traps the screen reader inside it.
+            Animated so it lifts above the keyboard (see note above). */}
+        <Animated.View
+          style={[styles.card, cardStyle, cardAnimatedStyle]}
           accessibilityViewIsModal
           accessibilityRole={Platform.OS === 'ios' ? 'none' : 'alert'}
           accessibilityLabel={accessibilityLabel}
         >
           {children}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
