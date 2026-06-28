@@ -8,6 +8,7 @@ import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useConversation } from '@/hooks/chat/useConversations';
 import { useDMMute } from '@/hooks/chat/useDMMute';
+import { useDeleteConversationSignal } from '@/hooks/chat/useDeleteConversationSignal';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
 import { useStorageAdapter } from '@/context/StorageContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -245,16 +246,23 @@ export default function DMChatScreen() {
     [updateConversationSetting]
   );
 
-  // Delete this conversation locally (DMs are E2E-encrypted, so this only
-  // removes it from this device). The confirm lives in DMSettingsSheet; this
-  // is the previously-unwired effect. Refresh the conversation list and leave
-  // the now-deleted screen.
+  // Delete this conversation. Like desktop, we FIRST signal the counterparty
+  // (a `delete-conversation` control message) so they reset their encryption
+  // session and the next message cleanly re-handshakes — they do NOT delete
+  // their copy. Then we delete locally (DMs are E2E-encrypted; this only removes
+  // it from this device). The confirm lives in DMSettingsSheet.
+  const sendDeleteConversationSignal = useDeleteConversationSignal();
   const handleDeleteConversation = useCallback(async () => {
     if (!conversationId) return;
+    // Best-effort signal first (Quorum DMs only — Farcaster has no such control
+    // message and no recipientAddress). Failure must not block the local delete.
+    if (recipientAddress && !isFarcasterConversation) {
+      await sendDeleteConversationSignal(conversationId, recipientAddress);
+    }
     await storage.deleteConversation(conversationId);
     queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all('direct') });
     router.back();
-  }, [conversationId, storage, queryClient]);
+  }, [conversationId, recipientAddress, isFarcasterConversation, sendDeleteConversationSignal, storage, queryClient]);
 
   const { initiateCall } = useCall();
   const handleCallPress = useCallback(() => {
