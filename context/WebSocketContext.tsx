@@ -2448,11 +2448,29 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }
 
             conversationId = sessionResult.conversationId;
-            authenticatedDmSender = conversationId.split('/')[0]; // init path never self-sync-rewrites
+            authenticatedDmSender = conversationId.split('/')[0];
             userProfileFromEnvelope = sessionResult.userProfile;
 
             // The message should now be properly decrypted plaintext JSON
             decryptedMessage = JSON.parse(sessionResult.message) as Message;
+
+            // Self-echo init guard: if the sender is our own address and the
+            // message carries no channelId, we cannot determine the real partner.
+            // Drop it to prevent a phantom selfAddress/selfAddress conversation row.
+            const initSenderAddress = conversationId.split('/')[0];
+            if (initSenderAddress === user?.address) {
+              if (decryptedMessage.channelId) {
+                // Has channelId — redirect to the real partner conversation.
+                const actualRecipient = decryptedMessage.channelId;
+                conversationId = `${actualRecipient}/${actualRecipient}`;
+              } else {
+                // Channel-less self-echo (observed live: a steady stream of
+                // self-echoes with no channelId and often no content.type).
+                // Cannot attribute to a real partner and nothing to display —
+                // discard so it can't create a self-address conversation row.
+                return;
+              }
+            }
 
             // Subscribe to our conversation inbox so future replies arrive.
             if (sessionResult.ourConversationInbox) {
@@ -2678,11 +2696,24 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           if (senderAddress === user?.address && decryptedMessage.channelId) {
             const actualRecipient = decryptedMessage.channelId;
             conversationId = `${actualRecipient}/${actualRecipient}`;
+          } else if (senderAddress === user?.address) {
+            // Channel-less self-echo — can't attribute to a partner, nothing to
+            // display. Drop it so it can't create a self-address conversation row.
+            return;
           }
         }
 
         // Extract sender address from conversation ID (may have been updated for self-sync)
         const senderAddress = conversationId.split('/')[0];
+
+        // Self-sync guard: on our own message echoed from another device the
+        // envelope profile is OURS, not the partner's — drop it so it can't
+        // overwrite the partner's row. Mirrors desktop's
+        // `envelope.user_address != self_address` check. authenticatedDmSender
+        // is the true (pre-rewrite) sender.
+        if (authenticatedDmSender && authenticatedDmSender === user?.address) {
+          userProfileFromEnvelope = undefined;
+        }
 
         // Intercept dm-update-profile control messages — update the partner's
         // conversation row in place, never persist as a chat post. Handles both
@@ -3804,11 +3835,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           continue;
         }
 
-        // Handle same-user multi-device sync
+        // Handle same-user multi-device sync. A true (pre-rewrite) sender === us
+        // means our own message echoed from another device; its user_profile is
+        // OURS, not the partner's (see the JS path's self-sync guard).
         const senderAddress = conversationId.split('/')[0];
-        if (senderAddress === fullUserAddrRef.current && decryptedMessage.channelId) {
+        const isSelfSyncEcho = senderAddress === fullUserAddrRef.current;
+        if (isSelfSyncEcho && decryptedMessage.channelId) {
           const actualRecipient = decryptedMessage.channelId;
           conversationId = `${actualRecipient}/${actualRecipient}`;
+        } else if (isSelfSyncEcho) {
+          // Channel-less self-echo — can't attribute to a partner, nothing to
+          // display. Drop it so it can't create a self-address conversation row.
+          continue;
         }
 
         // Intercept dm-update-profile control messages — same as the JS path.
@@ -3866,10 +3904,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           continue;
         }
 
-        // Save conversation
+        // Save conversation. On a self-sync echo ignore our own profile for the
+        // row identity (see the JS path's self-sync guard).
+        const rowProfile = isSelfSyncEcho ? undefined : msgResult.user_profile;
         const existingConversation = await storage.getConversation(conversationId);
-        const senderDisplayName = msgResult.user_profile?.display_name || existingConversation?.displayName || resolvedSenderAddress.substring(0, 8);
-        const senderIcon = msgResult.user_profile?.user_icon || existingConversation?.icon || '';
+        const senderDisplayName = rowProfile?.display_name || existingConversation?.displayName || resolvedSenderAddress.substring(0, 8);
+        const senderIcon = rowProfile?.user_icon || existingConversation?.icon || '';
         // Typed preview (icon + text, no emoji) — see the live DM path above.
         const messagePreview = getSpaceMessagePreview(decryptedMessage);
 
