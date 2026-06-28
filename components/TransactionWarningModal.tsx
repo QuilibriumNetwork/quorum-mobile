@@ -1,10 +1,10 @@
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { BaseModal } from '@/components/shared';
+import { Button } from '@/components/ui/Button';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -85,7 +85,7 @@ export default function TransactionWarningModal({
   };
 
   const warningConfig = getWarningConfig(warningType);
-  const styles = createStyles(theme, isDark, insets, warningConfig.severity);
+  const styles = createStyles(theme, isDark, insets);
 
   return (
     <BaseModal
@@ -155,20 +155,23 @@ export default function TransactionWarningModal({
 
       {/* Action Buttons */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-          <Text style={styles.cancelButtonText}>Cancel</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.proceedButton} onPress={onProceed}>
-          <Text style={styles.proceedButtonText}>
-            {warningConfig.severity === 'high' ? 'Proceed Anyway' : 'Continue'}
-          </Text>
-        </TouchableOpacity>
+        <Button variant="secondary" size="lg" onPress={onClose} style={styles.button}>
+          Cancel
+        </Button>
+        <Button
+          variant={warningConfig.severity === 'high' ? 'danger' : 'primary'}
+          size="lg"
+          onPress={onProceed}
+          style={styles.button}
+        >
+          {warningConfig.severity === 'high' ? 'Proceed Anyway' : 'Continue'}
+        </Button>
       </View>
     </BaseModal>
   );
 }
 
-const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, severity: 'low' | 'medium' | 'high') =>
+const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
   StyleSheet.create({
     warningHeader: {
       alignItems: 'center',
@@ -258,30 +261,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, seve
       paddingBottom: insets.bottom + 16,
       gap: Skin.space(12),
     },
-    cancelButton: {
+    button: {
       flex: 1,
-      backgroundColor: theme.colors.bgButtonSubtle,
-      paddingVertical: Skin.space(16),
-      borderRadius: Skin.radius(12),
-      alignItems: 'center',
-    },
-    cancelButtonText: {
-      fontSize: Skin.font(16),
-      color: theme.colors.textMain,
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-    },
-    proceedButton: {
-      flex: 1,
-      backgroundColor: severity === 'high' ? theme.colors.danger : theme.colors.primary,
-      paddingVertical: Skin.space(16),
-      borderRadius: Skin.radius(12),
-      alignItems: 'center',
-    },
-    proceedButtonText: {
-      fontSize: Skin.font(16),
-      color: '#ffffff',
-      fontFamily: theme.fonts.bold.fontFamily,
-      fontWeight: theme.fonts.bold.fontWeight,
     },
   });

@@ -54,10 +54,10 @@ export function ConfirmDialog({
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.message}>{message}</Text>
       <View style={styles.actions}>
-        <Button variant="secondary" onPress={onCancel} style={styles.button}>
+        <Button variant="secondary" size="lg" onPress={onCancel} style={styles.button}>
           {cancelLabel}
         </Button>
-        <Button variant={variant} onPress={onConfirm} style={styles.button}>
+        <Button variant={variant} size="lg" onPress={onConfirm} style={styles.button}>
           {confirmLabel}
         </Button>
       </View>

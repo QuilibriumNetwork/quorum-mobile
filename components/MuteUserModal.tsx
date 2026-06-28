@@ -13,8 +13,8 @@
 import { truncateAddress } from '@/utils/formatAddress';
 import React, { useEffect, useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Image, TextInput } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { BaseModal } from '@/components/shared/BaseModal';
+import { Button } from '@/components/ui/Button';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
 import { useModMuteUser } from '@/hooks/chat/useModMuteUser';
@@ -143,20 +143,24 @@ export function MuteUserModal({
         </Text>
 
         <View style={styles.buttonRow}>
-          <TouchableOpacity
-            style={[styles.button, styles.cancelButton]}
+          <Button
+            variant="secondary"
+            size="lg"
             onPress={onClose}
             disabled={isSaving}
+            style={styles.button}
           >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, styles.confirmButton, isSaving && styles.buttonDisabled]}
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="lg"
             onPress={handleConfirm}
             disabled={isSaving}
+            style={styles.button}
           >
-            <Text style={styles.confirmButtonText}>{isUnmuting ? 'Unmute' : 'Mute'}</Text>
-          </TouchableOpacity>
+            {isUnmuting ? 'Unmute' : 'Mute'}
+          </Button>
         </View>
       </View>
     </BaseModal>
@@ -264,29 +268,6 @@ const createStyles = (theme: AppTheme) =>
     },
     button: {
       flex: 1,
-      paddingVertical: Skin.space(14),
-      borderRadius: Skin.radius(8),
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    cancelButton: {
-      backgroundColor: theme.colors.bgButtonSubtle,
-    },
-    cancelButtonText: {
-      color: theme.colors.textMain,
-      fontSize: Skin.font(16),
-      fontFamily: theme.fonts.medium.fontFamily,
-    },
-    confirmButton: {
-      backgroundColor: theme.colors.primary,
-    },
-    confirmButtonText: {
-      color: '#fff',
-      fontSize: Skin.font(16),
-      fontFamily: theme.fonts.medium.fontFamily,
-    },
-    buttonDisabled: {
-      opacity: 0.5,
     },
   });
 

@@ -10,11 +10,11 @@
 
 import { BaseModal } from '@/components/shared';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
+import { Button } from '@/components/ui/Button';
 import WalletSelector from '@/components/wallet/WalletSelector';
 import { useTheme, type AppTheme } from '@/theme';
 import React from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import {
   TransactionForApproval,
   MessageForApproval,
@@ -300,27 +300,26 @@ export default function MiniAppApprovalModal({
 
         {/* Actions - fixed at bottom */}
         <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.rejectButton}
+          <Button
+            variant="secondary"
+            size="lg"
             onPress={handleReject}
             disabled={isProcessing}
+            style={styles.button}
           >
-            <Text style={styles.rejectButtonText}>Reject</Text>
-          </TouchableOpacity>
+            Reject
+          </Button>
 
-          <TouchableOpacity
-            style={[styles.approveButton, isProcessing && styles.buttonDisabled]}
+          <Button
+            variant="primary"
+            size="lg"
             onPress={handleApprove}
             disabled={isProcessing}
+            loading={isProcessing}
+            style={styles.button}
           >
-            {isProcessing ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.approveButtonText}>
-                {request.type === 'transaction' ? 'Confirm' : 'Sign'}
-              </Text>
-            )}
-          </TouchableOpacity>
+            {request.type === 'transaction' ? 'Confirm' : 'Sign'}
+          </Button>
         </View>
       </View>
     </BaseModal>
@@ -466,33 +465,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       gap: Skin.space(12),
       paddingVertical: Skin.space(16),
     },
-    rejectButton: {
+    button: {
       flex: 1,
-      backgroundColor: theme.colors.surface2,
-      borderRadius: Skin.radius(12),
-      padding: Skin.space(16),
-      alignItems: 'center',
-    },
-    rejectButtonText: {
-      fontSize: Skin.font(16),
-      fontFamily: theme.fonts.bold.fontFamily,
-      fontWeight: theme.fonts.bold.fontWeight,
-      color: theme.colors.textMain,
-    },
-    approveButton: {
-      flex: 1,
-      backgroundColor: theme.colors.primary,
-      borderRadius: Skin.radius(12),
-      padding: Skin.space(16),
-      alignItems: 'center',
-    },
-    approveButtonText: {
-      fontSize: Skin.font(16),
-      fontFamily: theme.fonts.bold.fontFamily,
-      fontWeight: theme.fonts.bold.fontWeight,
-      color: '#fff',
-    },
-    buttonDisabled: {
-      opacity: 0.6,
     },
   });

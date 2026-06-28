@@ -107,11 +107,12 @@ export function TypeToConfirmModal({
         />
 
         <View style={styles.actions}>
-          <Button variant="secondary" onPress={handleCancel} style={styles.button}>
+          <Button variant="secondary" size="lg" onPress={handleCancel} style={styles.button}>
             {cancelLabel}
           </Button>
           <Button
             variant="danger"
+            size="lg"
             onPress={onConfirm}
             disabled={!matches}
             style={styles.button}

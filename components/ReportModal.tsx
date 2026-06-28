@@ -5,9 +5,10 @@
  */
 
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { Button } from '@/components/ui/Button';
 import type { AppTheme } from '@/theme';
 import { useTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -174,28 +175,25 @@ export function ReportModal({ visible, onClose, target, onSubmitted }: ReportMod
             />
 
             <View style={styles.actions}>
-              <TouchableOpacity
+              <Button
+                variant="secondary"
+                size="lg"
                 onPress={handleClose}
-                style={[styles.button, styles.secondary]}
                 disabled={submitting}
+                style={styles.button}
               >
-                <Text style={[styles.buttonLabel, { color: theme.colors.textMain }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
                 onPress={handleSubmit}
                 disabled={!reason || submitting}
-                style={[
-                  styles.button,
-                  styles.primary,
-                  { backgroundColor: theme.colors.primary, opacity: !reason || submitting ? 0.5 : 1 },
-                ]}
+                loading={submitting}
+                style={styles.button}
               >
-                {submitting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={[styles.buttonLabel, { color: '#fff' }]}>Submit report</Text>
-                )}
-              </TouchableOpacity>
+                Submit report
+              </Button>
             </View>
           </Pressable>
         </KeyboardAvoidingView>
@@ -266,20 +264,7 @@ const createStyles = (theme: AppTheme) =>
       marginTop: Skin.space(4),
     },
     button: {
-      paddingVertical: Skin.space(12),
-      paddingHorizontal: Skin.space(20),
-      borderRadius: Skin.radius(10),
       minWidth: 120,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    primary: {},
-    secondary: {
-      backgroundColor: theme.colors.bgButtonSubtle,
-    },
-    buttonLabel: {
-      fontSize: Skin.font(15),
-      fontWeight: '600',
     },
   });
 
