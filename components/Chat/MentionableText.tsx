@@ -77,6 +77,29 @@ interface TextPart {
 // Excludes digits 0-9 and other text characters that are technically in \p{Emoji}
 const EMOJI_ONLY_REGEX = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{FE0F}\s]+$/u;
 
+// Matches ONE emoji cluster: a base pictographic char plus any variation
+// selectors and ZWJ-joined follow-ups (so 👨‍👩‍👧 counts as one). Used to count
+// how many emojis an emoji-only message holds, for the size tiers below.
+const EMOJI_CLUSTER_REGEX =
+  /\p{Extended_Pictographic}(\u{FE0F}?(‍\p{Extended_Pictographic}\u{FE0F}?)*)/gu;
+
+// Emoji-only messages render bigger than inline emoji, in three tiers by count:
+//   1 emoji  → largest (a single reaction-style emoji reads big)
+//   2–3      → the current large size
+//   4+       → default inline size (a wall of emoji shouldn't dominate the row)
+// Multipliers are applied to the base body font size.
+function emojiOnlyScale(count: number): number {
+  if (count <= 1) return 3;
+  if (count <= 3) return 2;
+  return 1;
+}
+
+// Count emoji clusters in an emoji-only string (whitespace ignored).
+function countEmojiClusters(text: string): number {
+  const matches = text.replace(/\s+/g, '').match(EMOJI_CLUSTER_REGEX);
+  return matches ? matches.length : 0;
+}
+
 function MentionableTextBase({
   text: rawText,
   customEmojis,
@@ -423,8 +446,13 @@ function MentionableTextBase({
     // Check if text is only Unicode emojis
     const isEmojiOnly = text && EMOJI_ONLY_REGEX.test(text.trim());
     if (isEmojiOnly) {
+      const base = style?.fontSize || 16;
+      const size = base * emojiOnlyScale(countEmojiClusters(text));
+      // Pin lineHeight to the font size: a large emoji Text with no lineHeight
+      // gets an oversized line box on Android (extra emoji-font ascent/descent),
+      // which showed as a big empty gap below emoji-only messages.
       return renderWithToggle(
-        <Text style={[style, { fontSize: (style?.fontSize || 16) * 2 }]}>{text}</Text>
+        <Text style={[style, { fontSize: size, lineHeight: size }]}>{text}</Text>
       );
     }
     return renderWithToggle(<Text style={style}>{text}</Text>);
@@ -437,9 +465,31 @@ function MentionableTextBase({
       p.type === 'standard_emoji' ||
       (p.type === 'text' && p.content.trim() === '')
   );
-  const effectiveEmojiSize = isEmojiOnlyMessage ? largeEmojiSize : emojiSize;
+  // Count emojis (custom-image parts + Unicode clusters in standard parts) so an
+  // emoji-only message scales by the same 1 / 2–3 / 4+ tiers as the plain path.
+  const emojiOnlyCount = isEmojiOnlyMessage
+    ? parts.reduce(
+        (n, p) =>
+          n +
+          (p.type === 'emoji'
+            ? 1
+            : p.type === 'standard_emoji'
+            ? countEmojiClusters(p.standardEmoji ?? p.content)
+            : 0),
+        0
+      )
+    : 0;
+  const emojiScale = isEmojiOnlyMessage ? emojiOnlyScale(emojiOnlyCount) : 1;
+  const baseFont = style?.fontSize || 16;
+  const scaledFont = baseFont * emojiScale;
+  // Image emoji scale with the tier too; inline (with-text) keeps emojiSize.
+  const effectiveEmojiSize = isEmojiOnlyMessage
+    ? (largeEmojiSize / 2) * emojiScale
+    : emojiSize;
+  // lineHeight pinned to the font so the enlarged emoji row doesn't reserve the
+  // oversized emoji-font line box on Android (the empty-gap-below bug).
   const effectiveStyle = isEmojiOnlyMessage
-    ? { ...style, fontSize: (style?.fontSize || 16) * 2 }
+    ? { ...style, fontSize: scaledFont, lineHeight: scaledFont }
     : style;
 
   // Mention/channel styling — color-only (no highlighted background). The bg
