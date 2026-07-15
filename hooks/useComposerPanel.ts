@@ -329,10 +329,19 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   // and it never fights a legitimate hold (panel open or mid hand-off both keep
   // one of the two flags set). Mirror of the channels "bar visible above panel"
   // bug — same flag, opposite direction — so this hardens both.
+  // Emits: 1 = force-hold busy, 0 = force-release busy, -1 = leave alone.
   useAnimatedReaction(
     () => {
-      if (panelOpenSV.value === 1) return false; // panel open → legitimately busy
-      if (closingSV.value === 0) return true; // closed, no hand-off → must be idle
+      // Panel open → the bottom is legitimately busy. ENFORCE it (not just
+      // "don't release"): on the keyboard-first open path the dismiss's
+      // onEnd(height=0) worklet can run in the window before openPanel's
+      // JS-thread `panelOpenSV=1` write has propagated to the UI thread, so its
+      // `panelOpenSV !== 1` guard reads a stale 0 and clears the flag while the
+      // panel is open. Nothing re-set it, so the tab bar stayed visible over the
+      // panel until close (intermittent — depends on that write race). Re-holding
+      // here self-heals that within a frame. Mirror of the release direction.
+      if (panelOpenSV.value === 1) return 1;
+      if (closingSV.value === 0) return 0; // closed, no hand-off → must be idle
       // A hand-off is armed (closingSV===1). It's legitimate ONLY while the
       // summoned keyboard is rising. Once the keyboard is essentially fully up,
       // the hand-off is effectively complete even if onEnd hasn't fired — so the
@@ -340,11 +349,14 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
       // race that otherwise leaves both flags stuck and the tab bar hidden.
       const liveKb = Math.max(-keyboardHeight.value, 0);
       const kbTarget = lastKeyboardHeight.value;
-      return kbTarget > 0 && liveKb >= kbTarget * 0.9;
+      return kbTarget > 0 && liveKb >= kbTarget * 0.9 ? 0 : -1;
     },
-    (shouldRelease) => {
-      if (shouldRelease && composerBottomBusySV.value !== 0) {
-        composerBottomBusySV.value = 0;
+    (action) => {
+      if (action === 1) {
+        // Panel open but the flag got cleared by the open-path race → re-hold.
+        if (composerBottomBusySV.value !== 1) composerBottomBusySV.value = 1;
+      } else if (action === 0) {
+        if (composerBottomBusySV.value !== 0) composerBottomBusySV.value = 0;
         // Disarm the hand-off too so it can't re-trigger a stuck state.
         if (closingSV.value !== 0) closingSV.value = 0;
       }

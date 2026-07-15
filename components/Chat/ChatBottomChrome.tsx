@@ -26,6 +26,10 @@ import { StyleSheet, View } from 'react-native';
 // padding + margin). Used to pad the list bottom and size the fade.
 const COMPOSER_RESTING_HEIGHT = 60;
 
+// Breathing room above the composer so the newest message doesn't sit flush
+// against the pill. Pads the list bottom only — deliberately NOT the fade height.
+const LAST_MESSAGE_GAP = 12;
+
 // Fade distance ABOVE the composer top. Kept at 0 so the gradient STARTS at the
 // composer top and never dims messages sitting above the composer (any lead here
 // visibly greys the last message line — reported + reverted). The fade covers
@@ -60,7 +64,7 @@ const BOTTOM_OPACITY_LIGHT = 0.30;
  * from the same constants.
  */
 export function useChatListBottomInset(tabBarHeight: number): number {
-  return COMPOSER_RESTING_HEIGHT + tabBarHeight;
+  return COMPOSER_RESTING_HEIGHT + tabBarHeight + LAST_MESSAGE_GAP;
 }
 
 interface ChatBottomChromeProps {
