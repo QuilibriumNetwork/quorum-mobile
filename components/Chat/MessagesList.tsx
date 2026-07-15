@@ -1489,8 +1489,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   messageUser: {
     color: theme.colors.textStrong,
-    fontFamily: theme.fonts.medium.fontFamily,
-    fontWeight: theme.fonts.medium.fontWeight,
+    fontFamily: theme.fonts.bold.fontFamily,
+    fontWeight: theme.fonts.bold.fontWeight,
     fontSize: Skin.font(14),
     lineHeight: Skin.font(20),
     marginRight: Skin.space(8),
