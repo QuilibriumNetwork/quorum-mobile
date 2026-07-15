@@ -114,7 +114,13 @@ export function useMembersWithPublicProfileFallback(
       const chatTs = local?.profileTimestamp;
       const chatIsNewer = chatTs != null && chatTs >= pub.timestamp;
       const pickField = (localVal: string | undefined, pubVal: string) => {
-        if (chatIsNewer) return localVal || pubVal || '';
+        // When the local (per-space) record is the newer source, its value
+        // WINS — including a deliberate empty '' (a cleared avatar / name),
+        // which must not fall back to the older public-profile value.
+        // `!== undefined` keeps the intended "explicit clear wins" without
+        // resurrecting the global value. Absent (undefined) still falls
+        // through to the public profile (partial-update / never-set case).
+        if (chatIsNewer) return localVal !== undefined ? localVal : pubVal || '';
         return pubVal || localVal || '';
       };
       merged[addr] = {

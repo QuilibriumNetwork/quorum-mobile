@@ -60,7 +60,8 @@ import { pickImage, compressAvatarImage } from '@/services/media/imageAttachment
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
-import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, type Emoji, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
+import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, queryKeys, type Emoji, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
+import { useQueryClient } from '@tanstack/react-query';
 import { resolveChannelIconColor } from '@/utils/channelIcon';
 import * as Clipboard from 'expo-clipboard';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -508,6 +509,7 @@ export default function SpaceSettingsModal({
   const styles = createStyles(theme, insets);
   const { user } = useAuth();
   const { enqueueOutbound } = useWebSocket();
+  const queryClient = useQueryClient();
 
   // Determine if user is space owner
   const isSpaceOwner = useMemo(() => {
@@ -678,6 +680,13 @@ export default function SpaceSettingsModal({
       };
       await adapter.saveSpaceMember(spaceId, merged as never);
 
+      // The member record is served to the channel UI via the
+      // useSpaceMembers React Query cache (2-min staleTime). Writing MMKV
+      // above doesn't refresh that cache, so without this the sender's own
+      // messages keep showing the old name/avatar until a remount. Invalidate
+      // so the open channel re-reads the updated member immediately.
+      queryClient.invalidateQueries({ queryKey: queryKeys.spaces.members(spaceId) });
+
       // Broadcast — only fields that actually changed since baseline
       // get included so we don't clobber stale fields with empty
       // values. maybeSendUpdateProfileMessage gates duplicate sends.
@@ -696,14 +705,18 @@ export default function SpaceSettingsModal({
         channelId,
         senderAddress: user.address,
       };
+      // Pass the RAW value (including '') when the field changed, so an
+      // explicit clear — cleared per-space name / removed avatar — reaches
+      // other members instead of being stripped to undefined ("no change").
+      // The service honors '' as a deliberate clear now (mirrors bio).
       if (spaceProfileDisplayName !== spaceProfileBaseline.displayName) {
-        params.displayName = spaceProfileDisplayName || undefined;
+        params.displayName = spaceProfileDisplayName;
       }
       if (spaceProfileBio !== spaceProfileBaseline.bio) {
         params.bio = spaceProfileBio;
       }
       if (spaceProfileImage !== spaceProfileBaseline.profileImage) {
-        params.userIcon = spaceProfileImage || undefined;
+        params.userIcon = spaceProfileImage;
       }
       // Auto-include Farcaster linkage whenever the user has one.
       // The broadcast gate (maybeSendUpdateProfileMessage) dedupes
@@ -742,6 +755,7 @@ export default function SpaceSettingsModal({
     spaceProfileImage,
     spaceProfileBaseline,
     enqueueOutbound,
+    queryClient,
   ]);
 
   // Tab state - default to 'account' for non-owners
@@ -1519,7 +1533,14 @@ export default function SpaceSettingsModal({
           {spaceProfileImage ? (
             <Image source={{ uri: spaceProfileImage }} style={{ width: 72, height: 72 }} />
           ) : (
-            <IconSymbol name="person.crop.circle" color={theme.colors.textMuted} size={36} />
+            // No image → show initials (matches the app-wide no-avatar
+            // fallback), using the per-space name if set, else the user's
+            // global name / address so the initials are still recognizable.
+            <DefaultAvatar
+              displayName={spaceProfileDisplayName || user?.displayName || user?.username}
+              address={user?.address}
+              size={72}
+            />
           )}
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: Skin.space(16) }}>

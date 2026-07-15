@@ -2155,7 +2155,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 // The sender omits displayName on bio/avatar-only edits, so
                 // '' on the wire is always an intentional clear.
                 ...(profileContent.displayName !== undefined ? { display_name: profileContent.displayName } : {}),
-                ...(profileContent.userIcon ? { profile_image: profileContent.userIcon } : {}),
+                // Presence check (not truthy), same as displayName/bio: '' is a
+                // deliberate avatar clear that must land, not be dropped as
+                // "no change". The sender omits userIcon on name/bio-only edits.
+                ...(profileContent.userIcon !== undefined ? { profile_image: profileContent.userIcon } : {}),
                 ...(profileContent.bio !== undefined ? { bio: profileContent.bio } : {}),
                 ...(profileContent.farcasterFid !== undefined && profileContent.farcasterFid > 0
                   ? { farcasterFid: profileContent.farcasterFid }
@@ -3596,7 +3599,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // per-space-name clear, matching bio + desktop's receiver. See
               // the matching comment in the JS-path handler above.
               ...(profileContent.displayName !== undefined ? { display_name: profileContent.displayName } : {}),
-              ...(profileContent.userIcon ? { profile_image: profileContent.userIcon } : {}),
+              // Presence check (not truthy): '' is a deliberate avatar clear,
+              // matching displayName/bio + desktop's receiver.
+              ...(profileContent.userIcon !== undefined ? { profile_image: profileContent.userIcon } : {}),
               ...(profileContent.bio !== undefined ? { bio: profileContent.bio } : {}),
               ...(profileContent.farcasterFid !== undefined && profileContent.farcasterFid > 0
                 ? { farcasterFid: profileContent.farcasterFid }
