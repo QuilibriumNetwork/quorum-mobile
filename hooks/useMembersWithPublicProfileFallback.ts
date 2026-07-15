@@ -34,10 +34,15 @@ export function useMembersWithPublicProfileFallback(
   members: MemberMap,
   visibleAddresses: string[],
 ): MemberMap {
-  // Determine which addresses need a public-profile query — addresses
-  // where we have no local record, or the record exists but has no
-  // display_name AND no profile_image. Fully-populated members aren't
-  // queried.
+  // Determine which addresses need a public-profile query. Under the two-state
+  // "follow global" model, an empty per-space field follows the member's global
+  // value, so we need the public profile whenever a rendered per-space field
+  // (name OR avatar) is missing — not only when BOTH are missing. A member who
+  // overrode just their name still needs the fetch to fill their global avatar.
+  // (Bio is NOT gated on: it's only shown in the profile modal, and gating on
+  // it would fetch for nearly everyone — a fetch storm the memoized cache and
+  // this bounded set are meant to avoid. The merge below still fills bio from
+  // the public profile whenever a fetch happens for another reason.)
   const addressesToFetch = useMemo(() => {
     const out: string[] = [];
     const seen = new Set<string>();
@@ -45,7 +50,7 @@ export function useMembersWithPublicProfileFallback(
       if (!addr || seen.has(addr)) continue;
       seen.add(addr);
       const m = members[addr];
-      if (!m || (!m.display_name && !m.profile_image)) {
+      if (!m || !m.display_name || !m.profile_image) {
         out.push(addr);
       }
     }
@@ -114,13 +119,13 @@ export function useMembersWithPublicProfileFallback(
       const chatTs = local?.profileTimestamp;
       const chatIsNewer = chatTs != null && chatTs >= pub.timestamp;
       const pickField = (localVal: string | undefined, pubVal: string) => {
-        // When the local (per-space) record is the newer source, its value
-        // WINS — including a deliberate empty '' (a cleared avatar / name),
-        // which must not fall back to the older public-profile value.
-        // `!== undefined` keeps the intended "explicit clear wins" without
-        // resurrecting the global value. Absent (undefined) still falls
-        // through to the public profile (partial-update / never-set case).
-        if (chatIsNewer) return localVal !== undefined ? localVal : pubVal || '';
+        // Per-space profile is two-state: a per-space OVERRIDE (non-empty
+        // value) wins; otherwise the field follows the member's GLOBAL value
+        // from their public profile. An empty per-space field = "follow global"
+        // (there is no per-space "blank" — that only exists globally), so empty
+        // falls through to the public value in BOTH freshness branches. See
+        // per-space-profile-follow-global design.
+        if (chatIsNewer) return localVal || pubVal || '';
         return pubVal || localVal || '';
       };
       merged[addr] = {
