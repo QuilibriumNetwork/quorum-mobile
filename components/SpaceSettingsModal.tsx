@@ -1533,14 +1533,11 @@ export default function SpaceSettingsModal({
           {spaceProfileImage ? (
             <Image source={{ uri: spaceProfileImage }} style={{ width: 72, height: 72 }} />
           ) : (
-            // No image → show initials (matches the app-wide no-avatar
-            // fallback), using the per-space name if set, else the user's
-            // global name / address so the initials are still recognizable.
-            <DefaultAvatar
-              displayName={spaceProfileDisplayName || user?.displayName || user?.username}
-              address={user?.address}
-              size={72}
-            />
+            // Empty per-space avatar → show the empty upload placeholder (not
+            // initials). An empty per-space avatar means "use my global avatar"
+            // (see per-space-profile-empty-follows-global design); the editor
+            // shows a neutral upload slot, matching desktop.
+            <IconSymbol name="person.crop.circle" color={theme.colors.textMuted} size={36} />
           )}
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: Skin.space(16) }}>
