@@ -29,6 +29,7 @@ import {
   type RemoveMessage,
   type RemoveReactionMessage,
   type StickerMessage,
+  type UpdateProfileMessage,
   type SpaceCallStartMessage,
   type SpaceCallEndMessage,
   // New sync types
@@ -219,6 +220,18 @@ function canonicalizeContent(content: MessageContent): string {
   if (content.type === 'space-call-end') {
     const c = content as SpaceCallEndMessage;
     return content.type + c.callId;
+  }
+
+  // update-profile. MUST match shared canonicalize() byte-for-byte
+  // (quorum-shared 'update-profile' branch: type + displayName + userIcon, raw
+  // concatenation with NO ?? '' fallback) so a profile update signed on mobile
+  // verifies on desktop. When a field is omitted on the wire, JS concatenates
+  // the literal string "undefined" — shared does the same, so do NOT add a
+  // fallback here. bio/farcaster fields are intentionally excluded from the hash
+  // on both sides; matching shared is the requirement, not covering more fields.
+  if (content.type === 'update-profile') {
+    const updateProfileContent = content as UpdateProfileMessage;
+    return content.type + updateProfileContent.displayName + updateProfileContent.userIcon;
   }
 
   // Default: stringify the content
@@ -906,11 +919,18 @@ export async function sendUpdateProfileMessage(
 ): Promise<SendGenericMessageResult> {
   const { spaceId, channelId, senderAddress, displayName, userIcon, bio, farcasterFid, farcasterUsername } = params;
 
+  // displayName/userIcon use `!== undefined` (not a truthy check) so a caller
+  // that explicitly passes '' — a deliberate clear (removed avatar / cleared
+  // per-space name) — puts the empty value on the wire and clears it for other
+  // members. Callers that mean "no change" MUST pass undefined, never ''.
+  // (The on-connect rebroadcast in WebSocketContext passes `x || undefined`,
+  // so it stays omission-based and can't clobber a stored value with an
+  // incidental empty.) bio already worked this way.
   const content = {
     type: 'update-profile' as const,
     senderId: senderAddress,
-    ...(displayName ? { displayName } : {}),
-    ...(userIcon ? { userIcon } : {}),
+    ...(displayName !== undefined ? { displayName } : {}),
+    ...(userIcon !== undefined ? { userIcon } : {}),
     ...(bio !== undefined && { bio }),
     ...(farcasterFid !== undefined && farcasterFid > 0 ? { farcasterFid } : {}),
     ...(farcasterUsername ? { farcasterUsername } : {}),
@@ -946,8 +966,10 @@ function profileBroadcastKey(spaceId: string, senderAddress: string): string {
 // signatures), and field values matter. Stable JSON: keys sorted.
 function profileBroadcastSignature(p: SendUpdateProfileParams): string {
   const obj: Record<string, string> = {};
-  if (p.displayName) obj.displayName = p.displayName;
-  if (p.userIcon) obj.userIcon = p.userIcon;
+  // `!== undefined` (not truthy) so an explicit clear ('') produces a distinct
+  // signature and isn't deduped away — matches the wire builder above.
+  if (p.displayName !== undefined) obj.displayName = p.displayName;
+  if (p.userIcon !== undefined) obj.userIcon = p.userIcon;
   if (p.bio !== undefined) obj.bio = p.bio;
   if (p.farcasterFid !== undefined && p.farcasterFid > 0) {
     obj.farcasterFid = String(p.farcasterFid);
