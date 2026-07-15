@@ -757,6 +757,39 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     [showToast, styles, theme]
   );
 
+  // On compact continuation rows the whole header is hidden, dropping the
+  // per-message indicators. Reproduce the two that matter — (edited) + unsigned —
+  // on one small row below the content. Pinned/bookmark are deliberately omitted
+  // (they have dedicated surfaces). The sending spinner is included since it's
+  // also dropped on compact rows today. Returns null when there's nothing to show.
+  const renderCompactIndicators = useCallback(
+    (item: DisplayMessage, opts?: { isSending?: boolean }) => {
+      const isEdited = item.isEdited;
+      const showUnsigned =
+        item.renderType !== 'system' &&
+        item.renderType !== 'error' &&
+        !item.originalMessage?.signature &&
+        item.sendStatus !== 'sending' &&
+        item.sendStatus !== 'failed';
+      const isSending = opts?.isSending;
+      if (!isEdited && !showUnsigned && !isSending) return null;
+      return (
+        <View style={styles.compactIndicatorRow}>
+          {isEdited && <Text style={styles.editedIndicator}>(edited)</Text>}
+          {renderUnsignedWarning(item)}
+          {isSending && (
+            <ActivityIndicator
+              size="small"
+              color={theme.colors.textMuted}
+              style={styles.sendingIndicator}
+            />
+          )}
+        </View>
+      );
+    },
+    [styles, theme, renderUnsignedWarning]
+  );
+
   const renderReactions = useCallback(
     (reactions: DisplayReaction[], messageId: string) => {
       if (!reactions || reactions.length === 0) return null;
@@ -968,13 +1001,15 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   onLinkPress={onLinkPress}
                 />
               ) : null}
+              {/* Per-message indicators on grouped continuation rows (header hidden) */}
+              {isCompact && renderCompactIndicators(item)}
               {renderReactions(item.reactions || [], item.id)}
             </View>
           </Animated.View>
         </Pressable>
       );
     },
-    [styles, renderReactions, renderAvatar, renderUnsignedWarning, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, compactMessageIds]
+    [styles, renderReactions, renderAvatar, renderUnsignedWarning, renderCompactIndicators, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, compactMessageIds]
   );
 
   // Render sticker message
@@ -1012,13 +1047,15 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   <Text style={styles.stickerPlaceholderText}>[Sticker]</Text>
                 </View>
               )}
+              {/* Per-message indicators on grouped continuation rows (header hidden) */}
+              {isCompact && renderCompactIndicators(item)}
               {renderReactions(item.reactions || [], item.id)}
             </View>
           </Animated.View>
         </Pressable>
       );
     },
-    [styles, renderReactions, stickerMap, renderAvatar, renderUnsignedWarning, handleMessageLongPress, highlightedMessageId, highlightAnimStyle, compactMessageIds]
+    [styles, renderReactions, stickerMap, renderAvatar, renderUnsignedWarning, renderCompactIndicators, handleMessageLongPress, highlightedMessageId, highlightAnimStyle, compactMessageIds]
   );
 
   // Helper to get reply preview from parent message
@@ -1145,6 +1182,8 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   onLinkPress={onLinkPress}
                 />
               ) : null}
+              {/* Per-message indicators on grouped continuation rows (header hidden) */}
+              {isCompact && renderCompactIndicators(item, { isSending })}
               {/* Render invite link card if detected */}
               {inviteLink && (
                 <InviteLinkCard
@@ -1183,7 +1222,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedWarning, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds]
+    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedWarning, renderCompactIndicators, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds]
   );
 
   const renderCast = useCallback(
@@ -1579,6 +1618,17 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: Skin.font(11),
     fontFamily: theme.fonts.regular.fontFamily,
     marginLeft: Skin.space(6),
+  },
+  // Row below a compact continuation message holding its per-message indicators
+  // ((edited) + unsigned + sending), since the header is hidden when grouped.
+  // The children (editedIndicator/unsignedWarning) carry a marginLeft:6 meant for
+  // the header layout; cancel it on the row so the first item aligns flush-left
+  // with the message text above, while keeping the spacing between items.
+  compactIndicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Skin.space(2),
+    marginLeft: -Skin.space(6),
   },
   unsignedWarning: {
     marginLeft: Skin.space(6),
