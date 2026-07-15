@@ -1483,11 +1483,16 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   messageHeader: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    // Fixed line box so non-text indicators (warning/pin/edited/spinner) can't
+    // stretch the row taller than the username line and widen the header→text gap.
+    height: Skin.font(20),
   },
   messageUser: {
     color: theme.colors.textStrong,
     fontFamily: theme.fonts.medium.fontFamily,
     fontWeight: theme.fonts.medium.fontWeight,
+    fontSize: Skin.font(14),
+    lineHeight: Skin.font(20),
     marginRight: Skin.space(8),
     flexShrink: 1,
   },
