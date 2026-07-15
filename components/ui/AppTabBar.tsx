@@ -347,21 +347,27 @@ export function AppTabBar({ state, navigation }: BottomTabBarProps) {
     opacity: composerBottomBusySV.value === 1 ? 0 : 1,
   }));
 
+  // Safe-area fill keeps a scrim behind the device nav buttons. Unlike the bar,
+  // it must NOT fully vanish when a composer panel owns the bottom — it drops to
+  // a partial opacity so the panel shows faintly through while the buttons stay
+  // legible (a fully transparent strip made them near-invisible).
+  const safeAreaFillStyle = useAnimatedStyle(() => ({
+    opacity: composerBottomBusySV.value === 1 ? 0.75 : 1,
+  }));
+
   return (
     <>
-      {/* Safe-area fill: the bar floats `insets.bottom` above the screen edge so
-          its rows clear the home indicator / app-switcher. That strip below the
-          bar is otherwise transparent, letting scrolled content show through (iOS,
-          and any Android with a bottom inset). Paint it the same solid bar color so
-          the bottom edge reads as one continuous surface. Shares hideStyle so it
-          fades out in lockstep with the bar when a composer panel owns the bottom. */}
+      {/* Safe-area fill: scrim behind the device nav buttons / home indicator so
+          scrolled content (incl. the emoji panel) doesn't show through solid. Uses
+          safeAreaFillStyle, not hideStyle: it stays partly opaque when a composer
+          panel owns the bottom so the buttons remain legible. */}
       {insets.bottom > 0 && (
         <Reanimated.View
           pointerEvents="none"
           style={[
             styles.safeAreaFill,
             { height: insets.bottom, backgroundColor: isDark ? '#000000' : '#ffffff' },
-            hideStyle,
+            safeAreaFillStyle,
           ]}
         />
       )}
