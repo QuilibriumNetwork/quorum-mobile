@@ -20,6 +20,7 @@ import {
   validateDisplayName,
   validateUserBio,
   queryKeys,
+  type SpaceMember,
 } from '@quilibrium/quorum-shared';
 import {
   translateValidationResult,
@@ -196,7 +197,12 @@ export default function UnifiedProfileEditModal({
             global_profile_image: avatar ?? '',
             global_bio: globalBioValue,
             globalProfileTimestamp: Date.now(),
-          } as never);
+          } as SpaceMember & {
+            global_display_name?: string;
+            global_profile_image?: string;
+            global_bio?: string;
+            globalProfileTimestamp?: number;
+          });
           queryClient.invalidateQueries({ queryKey: queryKeys.spaces.members(space.spaceId) });
         } catch {
           // Non-fatal — the broadcast below still informs other members.

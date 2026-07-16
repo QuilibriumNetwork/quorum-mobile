@@ -2153,10 +2153,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 hasGlobalFields &&
                 !(existingMember?.globalProfileTimestamp && existingMember.globalProfileTimestamp >= ts);
 
-              // Nothing to apply (both slots stale or absent, ignoring Farcaster
-              // which follows the override guard) — drop the inbox message and
-              // return, matching the prior single-guard behavior.
-              if (!applyOverride && !applyGlobal && !hasGlobalFields) {
+              // Nothing to apply — neither slot is fresh (both stale or absent).
+              // Drop the inbox message and return. A stale global-ONLY message
+              // hits this too (applyGlobal false, applyOverride false), so it's
+              // cleaned up instead of falling through to a no-op write. Matches
+              // the native-batch path's `!applyOverride && !applyGlobal` guard.
+              if (!applyOverride && !applyGlobal) {
                 if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
                   deleteSpaceInboxMessages(
                     spaceInboxKey.address,
