@@ -663,11 +663,10 @@ export default function SpaceSettingsModal({
       // Optimistically update the local SpaceMember so the UI
       // reflects the new values immediately. Receivers apply the
       // same fields on their end when our update-profile broadcast
-      // lands. Note: clearing fields (e.g. removing the avatar)
-      // works locally but the current update-profile wire shape
-      // skips empty fields, so other members keep seeing the old
-      // value until we add a clear-field signal. Tracked as a known
-      // limitation; flag if you hit it.
+      // lands. Clearing a field (e.g. reverting the avatar to follow
+      // global) sends an explicit '' below, which the service honors
+      // as a deliberate clear — receivers drop the override and fall
+      // back to the sender's global value via the render fallback.
       const adapter = getMMKVAdapter();
       const existing = await adapter.getSpaceMember(spaceId, user.address);
       const merged = {
@@ -1548,8 +1547,13 @@ export default function SpaceSettingsModal({
             </Text>
           </TouchableOpacity>
           {spaceProfileImage ? (
-            <TouchableOpacity onPress={() => setSpaceProfileImage('')} style={{ marginTop: Skin.space(4) }}>
-              <Text style={{ color: theme.colors.danger, fontSize: Skin.font(13) }}>Remove</Text>
+            // Revert this per-space OVERRIDE back to following the global
+            // avatar. Only shown when an override exists (spaceProfileImage is
+            // non-empty). Labeled by its true effect ("Use my main avatar"),
+            // not "Remove" — there is no per-space blank; clearing the override
+            // reverts to the global avatar. (Follow-global design.)
+            <TouchableOpacity onPress={() => setSpaceProfileImage('')} style={{ marginTop: Skin.space(4) }} aria-label="Use my main avatar in this space">
+              <Text style={{ color: theme.colors.primary, fontSize: Skin.font(13) }}>Use my main avatar</Text>
             </TouchableOpacity>
           ) : null}
         </View>

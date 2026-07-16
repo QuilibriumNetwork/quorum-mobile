@@ -4775,14 +4775,28 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // running this on every connect is cheap and safe.
         runProfileBroadcastMigrations();
         const spaces = getAllSpaces();
+        const adapter = getMMKVAdapter();
         for (const space of spaces) {
           try {
+            // Per-space profile follows the global value unless the user
+            // set a deliberate OVERRIDE in this space. The stored member
+            // row carries an override iff its field is a non-empty value;
+            // empty/absent = follow global. We must NOT stamp the global
+            // value as a per-space field (that froze the space to a stale
+            // global and broke "clear the override" — the bug this whole
+            // effort removes). So: send the per-space override if one
+            // exists, else OMIT the field so receivers fall back to the
+            // sender's global (public-profile) value.
+            // (See 2026-07-15-per-space-profile-empty-follows-global design.)
+            const member = await adapter.getSpaceMember(space.spaceId, user.address);
+            const nameOverride = member?.display_name || undefined;
+            const iconOverride = member?.profile_image || undefined;
             const res = await maybeSendUpdateProfileMessage({
               spaceId: space.spaceId,
               channelId: space.defaultChannelId,
               senderAddress: user.address,
-              displayName: displayName || undefined,
-              userIcon: userIcon || undefined,
+              displayName: nameOverride,
+              userIcon: iconOverride,
               // Include Farcaster linkage if linked so peers can
               // surface it in UserProfileModal. Gate dedupes on
               // signature so this is a no-op once recorded.
