@@ -4837,6 +4837,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               senderAddress: user.address,
               displayName: nameOverride,
               userIcon: iconOverride,
+              // Carry the current GLOBAL identity in the global* slots so any
+              // member who missed the global-save broadcast still learns it on
+              // our reconnect. Separate from the override fields above; receivers
+              // store them apart. (Two-slot design — identity-resolution doc.)
+              globalDisplayName: displayName || undefined,
+              globalUserIcon: userIcon || undefined,
               // Include Farcaster linkage if linked so peers can
               // surface it in UserProfileModal. Gate dedupes on
               // signature so this is a no-op once recorded.
