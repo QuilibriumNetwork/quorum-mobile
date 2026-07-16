@@ -10,6 +10,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import type { Conversation } from '@/hooks/chat';
 import { coerceMessagePreview, previewKindIcon } from '@/utils/messagePreview';
 import { truncateAddress } from '@/utils/formatAddress';
+import { formatRowTime } from '@/utils/dateFormat';
 import React, { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Alert, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
@@ -46,26 +47,10 @@ function isValidAvatarUri(icon: string | undefined): boolean {
   return icon.startsWith('data:');
 }
 
-// Format timestamp for conversation list (Discord-style)
+// DM-list-row time via the shared conversation formatter: today → locale time,
+// 1–6 days → "Nd", older → "Jun 28" / "Jun 28, 2025".
 function formatRelativeTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-
-  // Check if same day - show time only
-  if (date.toDateString() === now.toDateString()) {
-    return timeStr;
-  }
-
-  // Check if yesterday
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) {
-    return `Yesterday at ${timeStr}`;
-  }
-
-  // Older - show date and time
-  return `${date.toLocaleDateString()} ${timeStr}`;
+  return formatRowTime(timestamp);
 }
 
 // Truncate sender name for preview

@@ -7,6 +7,7 @@ import { isValidAvatarUri } from '@/utils/validation';
 import { useChannelMentionUnread } from '@/services/notifications/mentionReplyLog';
 import { useSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { useMutedSpaceIds } from '@/hooks/chat/useChannelMute';
+import { formatRowTime } from '@/utils/dateFormat';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { haptics } from '@/utils/haptics';
 import type { Space } from '@quilibrium/quorum-shared';
@@ -34,17 +35,10 @@ interface SpaceItem {
   isMuted: boolean;
 }
 
+// Conversation-row time via the shared formatter: today → locale time,
+// 1–6 days → "Nd", older → "Jun 28" / "Jun 28, 2025".
 function formatRelativeTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  if (date.toDateString() === now.toDateString()) return timeStr;
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays < 7) return date.toLocaleDateString([], { weekday: 'short' });
-  return date.toLocaleDateString();
+  return formatRowTime(timestamp);
 }
 
 const SpaceRow = React.memo(function SpaceRow({

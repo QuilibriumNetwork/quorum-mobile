@@ -8,6 +8,7 @@
 import { ImageSourcePropType } from 'react-native';
 import type { Message as SharedMessage, Space, Channel, SpaceMember, MessageSendStatus } from '@quilibrium/quorum-shared';
 import type { DirectCastMessage } from '@/services/farcasterClient';
+import { formatMessageTime } from '@/utils/dateFormat';
 
 // Message type categories for rendering
 export type MessageRenderType =
@@ -175,30 +176,16 @@ export interface DisplayGroup {
 export type MemberMap = Record<string, SpaceMember>;
 
 /**
- * Format timestamp to display string (Discord-style)
- * - Today: "12:34 PM"
- * - Yesterday: "Yesterday at 12:34 PM"
- * - Older: "01/15/2025 12:34 PM"
+ * Per-message time inside a chat. Delegates to the shared message-date formatter
+ * (locale-driven clock; older messages bucket to weekday / "N days ago" instead
+ * of the ambiguous locale-numeric date the old impl produced).
+ * - Today: locale time (e.g. "16:40" or "4:40 PM")
+ * - Yesterday: "Yesterday at 16:40"
+ * - Last week: weekday ("Monday")
+ * - Older: "3 days ago"
  */
 export function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-
-  // Check if same day - show time only
-  if (date.toDateString() === now.toDateString()) {
-    return timeStr;
-  }
-
-  // Check if yesterday
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) {
-    return `Yesterday at ${timeStr}`;
-  }
-
-  // Older - show date and time
-  return `${date.toLocaleDateString()} ${timeStr}`;
+  return formatMessageTime(timestamp);
 }
 
 // Image URL pattern - matches common image hosting URLs

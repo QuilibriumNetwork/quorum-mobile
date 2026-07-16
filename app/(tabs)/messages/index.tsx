@@ -11,6 +11,7 @@ import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { coerceMessagePreview, previewKindIcon } from '@/utils/messagePreview';
+import { formatRowTime } from '@/utils/dateFormat';
 import { useAuth } from '@/context/AuthContext';
 import type { Conversation } from '@/hooks/chat';
 import { useDMMute } from '@/hooks/chat/useDMMute';
@@ -59,17 +60,10 @@ interface InboxItem {
   placeholder?: boolean;
 }
 
+// Conversation-row time via the shared formatter: today → locale time,
+// 1–6 days → "Nd", older → "Jun 28" / "Jun 28, 2025".
 function formatRelativeTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  if (date.toDateString() === now.toDateString()) return timeStr;
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays < 7) return date.toLocaleDateString([], { weekday: 'short' });
-  return date.toLocaleDateString();
+  return formatRowTime(timestamp);
 }
 
 interface InboxRowProps {
