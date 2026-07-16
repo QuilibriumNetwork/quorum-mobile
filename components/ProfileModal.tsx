@@ -9,6 +9,7 @@ import { BaseModal, TypeToConfirmModal } from '@/components/shared';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
+import { QnsIcon } from '@/components/ui/QnsIcon';
 import { QuorumLogoIcon } from '@/components/SocialFeed/content/QuorumLogoIcon';
 import { ApexAvatarRing, ApexIcon, APEX_GOLD } from '@/components/ui/ApexAvatarRing';
 import { useApexSubscription, type ApexSubscriptionState } from '@/hooks/useApex';
@@ -1750,7 +1751,7 @@ export default function ProfileModal({
 
             {/* Premium Banner */}
             <View style={[styles.premiumBanner, { backgroundColor: theme.colors.primary }]}>
-              <IconSymbol name="star.fill" size={32} color="#fff" />
+              <QnsIcon size={32} color="#fff" />
               <Text style={styles.premiumTitle}>Claim Your Username</Text>
               <Text style={styles.premiumSubtitle}>
                 Secure a unique @username on the Quilibrium network
@@ -3119,7 +3120,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     premiumSubtitle: {
       fontSize: Skin.font(14),
-      color: theme.colors.textSubtle,
+      color: '#fff',
       textAlign: 'center',
     },
     // Quorum Apex card (premium tab)
