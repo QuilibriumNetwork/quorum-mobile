@@ -2117,13 +2117,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 displayName?: string;
                 userIcon?: string;
                 bio?: string;
+                globalDisplayName?: string;
+                globalUserIcon?: string;
+                globalBio?: string;
                 farcasterFid?: number;
                 farcasterUsername?: string;
               };
 
               const adapter = getMMKVAdapter();
               const existingMember = await adapter.getSpaceMember(spaceId, profileContent.senderId) as
-                | (SpaceMember & { profileTimestamp?: number; farcasterFid?: number; farcasterUsername?: string })
+                | (SpaceMember & { profileTimestamp?: number; globalProfileTimestamp?: number; farcasterFid?: number; farcasterUsername?: string })
                 | undefined;
 
               // Stamp the merge with the wire message's createdDate so the
@@ -2131,9 +2134,29 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // both exist for the same user.
               const ts = spaceMessage.createdDate || Date.now();
 
-              // Skip stale updates — older than the timestamp we already
-              // applied for this member.
-              if (existingMember?.profileTimestamp && existingMember.profileTimestamp >= ts) {
+              // Two-slot staleness: OVERRIDE fields (display_name/profile_image/
+              // bio) and GLOBAL fields (global_*) each have their own timestamp
+              // guard, so a global-only rename message isn't dropped by a newer
+              // override message (or vice versa). See identity-resolution doc.
+              const hasOverrideFields =
+                profileContent.displayName !== undefined ||
+                profileContent.userIcon !== undefined ||
+                profileContent.bio !== undefined;
+              const hasGlobalFields =
+                profileContent.globalDisplayName !== undefined ||
+                profileContent.globalUserIcon !== undefined ||
+                profileContent.globalBio !== undefined;
+              const applyOverride =
+                hasOverrideFields &&
+                !(existingMember?.profileTimestamp && existingMember.profileTimestamp >= ts);
+              const applyGlobal =
+                hasGlobalFields &&
+                !(existingMember?.globalProfileTimestamp && existingMember.globalProfileTimestamp >= ts);
+
+              // Nothing to apply (both slots stale or absent, ignoring Farcaster
+              // which follows the override guard) — drop the inbox message and
+              // return, matching the prior single-guard behavior.
+              if (!applyOverride && !applyGlobal && !hasGlobalFields) {
                 if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
                   deleteSpaceInboxMessages(
                     spaceInboxKey.address,
@@ -2149,23 +2172,24 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   address: profileContent.senderId,
                   inbox_address: '',
                 }),
-                // Presence check (not truthy): an empty displayName is a
-                // deliberate per-space-name clear ("use my global/QNS name
-                // here"), matching bio's semantics and desktop's receiver.
-                // The sender omits displayName on bio/avatar-only edits, so
-                // '' on the wire is always an intentional clear.
-                ...(profileContent.displayName !== undefined ? { display_name: profileContent.displayName } : {}),
-                // Presence check (not truthy), same as displayName/bio: '' is a
-                // deliberate avatar clear that must land, not be dropped as
-                // "no change". The sender omits userIcon on name/bio-only edits.
-                ...(profileContent.userIcon !== undefined ? { profile_image: profileContent.userIcon } : {}),
-                ...(profileContent.bio !== undefined ? { bio: profileContent.bio } : {}),
-                ...(profileContent.farcasterFid !== undefined && profileContent.farcasterFid > 0
+                // OVERRIDE slot — applied only when newer. Presence check (not
+                // truthy): an empty displayName is a deliberate per-space clear
+                // ("follow my global name here"). '' on the wire is intentional.
+                ...(applyOverride && profileContent.displayName !== undefined ? { display_name: profileContent.displayName } : {}),
+                ...(applyOverride && profileContent.userIcon !== undefined ? { profile_image: profileContent.userIcon } : {}),
+                ...(applyOverride && profileContent.bio !== undefined ? { bio: profileContent.bio } : {}),
+                ...(applyOverride ? { profileTimestamp: ts } : {}),
+                // GLOBAL slot — the sender's current global identity, stored
+                // separately so it never masquerades as a per-space override.
+                ...(applyGlobal && profileContent.globalDisplayName !== undefined ? { global_display_name: profileContent.globalDisplayName } : {}),
+                ...(applyGlobal && profileContent.globalUserIcon !== undefined ? { global_profile_image: profileContent.globalUserIcon } : {}),
+                ...(applyGlobal && profileContent.globalBio !== undefined ? { global_bio: profileContent.globalBio } : {}),
+                ...(applyGlobal ? { globalProfileTimestamp: ts } : {}),
+                ...(applyOverride && profileContent.farcasterFid !== undefined && profileContent.farcasterFid > 0
                   ? { farcasterFid: profileContent.farcasterFid }
                   : {}),
-                ...(profileContent.farcasterUsername ? { farcasterUsername: profileContent.farcasterUsername } : {}),
-                profileTimestamp: ts,
-              } as SpaceMember & { profileTimestamp: number; farcasterFid?: number; farcasterUsername?: string };
+                ...(applyOverride && profileContent.farcasterUsername ? { farcasterUsername: profileContent.farcasterUsername } : {}),
+              } as SpaceMember & { profileTimestamp: number; globalProfileTimestamp?: number; farcasterFid?: number; farcasterUsername?: string };
 
               await adapter.saveSpaceMember(spaceId, merged);
 
@@ -3572,43 +3596,59 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               displayName?: string;
               userIcon?: string;
               bio?: string;
+              globalDisplayName?: string;
+              globalUserIcon?: string;
+              globalBio?: string;
               farcasterFid?: number;
               farcasterUsername?: string;
             };
             const adapter = getMMKVAdapter();
             const existingMember = await adapter.getSpaceMember(spaceId, profileContent.senderId) as
-              | (SpaceMember & { profileTimestamp?: number; farcasterFid?: number; farcasterUsername?: string })
+              | (SpaceMember & { profileTimestamp?: number; globalProfileTimestamp?: number; farcasterFid?: number; farcasterUsername?: string })
               | undefined;
             const ts = spaceMessage.createdDate || Date.now();
 
-            // Skip stale updates.
-            if (existingMember?.profileTimestamp && existingMember.profileTimestamp >= ts) {
+            // Two-slot staleness (mirror of the JS-path handler): override and
+            // global field groups each guard on their own timestamp.
+            const hasOverrideFields =
+              profileContent.displayName !== undefined ||
+              profileContent.userIcon !== undefined ||
+              profileContent.bio !== undefined;
+            const hasGlobalFields =
+              profileContent.globalDisplayName !== undefined ||
+              profileContent.globalUserIcon !== undefined ||
+              profileContent.globalBio !== undefined;
+            const applyOverride =
+              hasOverrideFields &&
+              !(existingMember?.profileTimestamp && existingMember.profileTimestamp >= ts);
+            const applyGlobal =
+              hasGlobalFields &&
+              !(existingMember?.globalProfileTimestamp && existingMember.globalProfileTimestamp >= ts);
+            if (!applyOverride && !applyGlobal) {
               continue;
             }
 
-            // Spread-only-if-truthy: an empty string in the wire content
-            // means "no change", not "clear it". Same rule as the legacy
-            // handler; without it a partial broadcast (e.g. avatar-only)
-            // would clobber everyone's stored display name.
             const merged = {
               ...(existingMember ?? {
                 address: profileContent.senderId,
                 inbox_address: '',
               }),
-              // Presence check (not truthy): empty displayName = deliberate
-              // per-space-name clear, matching bio + desktop's receiver. See
-              // the matching comment in the JS-path handler above.
-              ...(profileContent.displayName !== undefined ? { display_name: profileContent.displayName } : {}),
-              // Presence check (not truthy): '' is a deliberate avatar clear,
-              // matching displayName/bio + desktop's receiver.
-              ...(profileContent.userIcon !== undefined ? { profile_image: profileContent.userIcon } : {}),
-              ...(profileContent.bio !== undefined ? { bio: profileContent.bio } : {}),
-              ...(profileContent.farcasterFid !== undefined && profileContent.farcasterFid > 0
+              // OVERRIDE slot (applied only when newer). Presence check: '' is a
+              // deliberate per-space clear. See the JS-path handler above.
+              ...(applyOverride && profileContent.displayName !== undefined ? { display_name: profileContent.displayName } : {}),
+              ...(applyOverride && profileContent.userIcon !== undefined ? { profile_image: profileContent.userIcon } : {}),
+              ...(applyOverride && profileContent.bio !== undefined ? { bio: profileContent.bio } : {}),
+              ...(applyOverride ? { profileTimestamp: ts } : {}),
+              // GLOBAL slot — stored separately from the override fields.
+              ...(applyGlobal && profileContent.globalDisplayName !== undefined ? { global_display_name: profileContent.globalDisplayName } : {}),
+              ...(applyGlobal && profileContent.globalUserIcon !== undefined ? { global_profile_image: profileContent.globalUserIcon } : {}),
+              ...(applyGlobal && profileContent.globalBio !== undefined ? { global_bio: profileContent.globalBio } : {}),
+              ...(applyGlobal ? { globalProfileTimestamp: ts } : {}),
+              ...(applyOverride && profileContent.farcasterFid !== undefined && profileContent.farcasterFid > 0
                 ? { farcasterFid: profileContent.farcasterFid }
                 : {}),
-              ...(profileContent.farcasterUsername ? { farcasterUsername: profileContent.farcasterUsername } : {}),
-              profileTimestamp: ts,
-            } as SpaceMember & { profileTimestamp: number; farcasterFid?: number; farcasterUsername?: string };
+              ...(applyOverride && profileContent.farcasterUsername ? { farcasterUsername: profileContent.farcasterUsername } : {}),
+            } as SpaceMember & { profileTimestamp: number; globalProfileTimestamp?: number; farcasterFid?: number; farcasterUsername?: string };
 
             await adapter.saveSpaceMember(spaceId, merged);
 
