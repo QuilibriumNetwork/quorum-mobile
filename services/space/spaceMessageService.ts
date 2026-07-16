@@ -902,6 +902,16 @@ export interface SendUpdateProfileParams {
   displayName?: string;
   userIcon?: string;
   bio?: string;
+  // Global-identity slots (two-slot design — see
+  // identity-resolution-and-profile-sync doc). These carry the sender's
+  // CURRENT GLOBAL name/avatar/bio, stored by receivers separately from the
+  // per-space override fields above. A global rename sends ONLY these (never
+  // the override fields), so it reaches spacemates live WITHOUT being mistaken
+  // for a deliberate per-space override. Empty string is a deliberate global
+  // clear; undefined = no change.
+  globalDisplayName?: string;
+  globalUserIcon?: string;
+  globalBio?: string;
   // Farcaster linkage — included automatically when the user has a
   // linked Farcaster account. Lets other members see "@username · FID"
   // on the user's profile card and tap through to the Farcaster feed
@@ -917,7 +927,12 @@ export interface SendUpdateProfileParams {
 export async function sendUpdateProfileMessage(
   params: SendUpdateProfileParams
 ): Promise<SendGenericMessageResult> {
-  const { spaceId, channelId, senderAddress, displayName, userIcon, bio, farcasterFid, farcasterUsername } = params;
+  const {
+    spaceId, channelId, senderAddress,
+    displayName, userIcon, bio,
+    globalDisplayName, globalUserIcon, globalBio,
+    farcasterFid, farcasterUsername,
+  } = params;
 
   // displayName/userIcon use `!== undefined` (not a truthy check) so a caller
   // that explicitly passes '' — a deliberate clear (removed avatar / cleared
@@ -925,18 +940,25 @@ export async function sendUpdateProfileMessage(
   // members. Callers that mean "no change" MUST pass undefined, never ''.
   // (The on-connect rebroadcast in WebSocketContext passes `x || undefined`,
   // so it stays omission-based and can't clobber a stored value with an
-  // incidental empty.) bio already worked this way.
+  // incidental empty.) bio already worked this way. The global* slots use the
+  // same `!== undefined` presence rule.
   const content = {
     type: 'update-profile' as const,
     senderId: senderAddress,
     ...(displayName !== undefined ? { displayName } : {}),
     ...(userIcon !== undefined ? { userIcon } : {}),
     ...(bio !== undefined && { bio }),
+    ...(globalDisplayName !== undefined ? { globalDisplayName } : {}),
+    ...(globalUserIcon !== undefined ? { globalUserIcon } : {}),
+    ...(globalBio !== undefined ? { globalBio } : {}),
     ...(farcasterFid !== undefined && farcasterFid > 0 ? { farcasterFid } : {}),
     ...(farcasterUsername ? { farcasterUsername } : {}),
   };
 
-  return sendGenericMessage({ spaceId, channelId, senderAddress, content });
+  // Cast: global* slots are additive and not yet in shared's UpdateProfileMessage
+  // (additive shared PR pending, non-blocking). Wire-compatible: receivers read
+  // them untyped. Matches the untyped-additive-field pattern used elsewhere.
+  return sendGenericMessage({ spaceId, channelId, senderAddress, content: content as MessageContent });
 }
 
 // MMKV-backed gate that records the last profile-update payload broadcast
@@ -971,6 +993,9 @@ function profileBroadcastSignature(p: SendUpdateProfileParams): string {
   if (p.displayName !== undefined) obj.displayName = p.displayName;
   if (p.userIcon !== undefined) obj.userIcon = p.userIcon;
   if (p.bio !== undefined) obj.bio = p.bio;
+  if (p.globalDisplayName !== undefined) obj.globalDisplayName = p.globalDisplayName;
+  if (p.globalUserIcon !== undefined) obj.globalUserIcon = p.globalUserIcon;
+  if (p.globalBio !== undefined) obj.globalBio = p.globalBio;
   if (p.farcasterFid !== undefined && p.farcasterFid > 0) {
     obj.farcasterFid = String(p.farcasterFid);
   }

@@ -28,24 +28,47 @@ import {
 } from '@/hooks/useUserPublicProfile';
 import type { MemberMap } from '@/components/Chat/types';
 
-type MemberWithTs = MemberMap[string] & { profileTimestamp?: number };
+type MemberWithTs = MemberMap[string] & {
+  profileTimestamp?: number;
+  global_display_name?: string;
+  global_profile_image?: string;
+  global_bio?: string;
+};
+
+// Effective per-field value BEFORE the public-profile fetch: a non-empty
+// per-space OVERRIDE wins; otherwise the roster GLOBAL slot (the sender's
+// global identity, pushed via the two-slot update-profile). Empty string
+// means "not set at this tier" — fall through. See identity-resolution doc.
+function effectiveLocal(
+  override: string | undefined,
+  global: string | undefined,
+): string | undefined {
+  return override || global || undefined;
+}
 
 export function useMembersWithPublicProfileFallback(
   members: MemberMap,
   visibleAddresses: string[],
 ): MemberMap {
-  // Determine which addresses need a public-profile query — addresses
-  // where we have no local record, or the record exists but has no
-  // display_name AND no profile_image. Fully-populated members aren't
-  // queried.
+  // Determine which addresses need a public-profile query. A member's name/
+  // avatar is resolved by: override → roster global slot → public profile.
+  // So we only need the public-profile fetch when NEITHER the override NOR the
+  // roster global slot supplies the field (name or avatar). This narrows the
+  // fetch set now that a global rename is pushed into the roster global slot —
+  // most members resolve without any fetch. (Bio is NOT gated on, to avoid a
+  // fetch storm; the merge still fills bio from public profile when a fetch
+  // happens for another reason.) The public profile is still fetched for the
+  // QNS `.q` name it uniquely carries when nothing else resolves.
   const addressesToFetch = useMemo(() => {
     const out: string[] = [];
     const seen = new Set<string>();
     for (const addr of visibleAddresses) {
       if (!addr || seen.has(addr)) continue;
       seen.add(addr);
-      const m = members[addr];
-      if (!m || (!m.display_name && !m.profile_image)) {
+      const m = members[addr] as MemberWithTs | undefined;
+      const effName = effectiveLocal(m?.display_name, m?.global_display_name);
+      const effIcon = effectiveLocal(m?.profile_image, m?.global_profile_image);
+      if (!m || !effName || !effIcon) {
         out.push(addr);
       }
     }
@@ -80,6 +103,7 @@ export function useMembersWithPublicProfileFallback(
   const cacheRef = useRef<{
     members: MemberMap;
     addressesToFetch: string[];
+    visibleAddresses: string[];
     dataRefs: (PublicProfile | null)[];
     result: MemberMap;
   } | null>(null);
@@ -89,50 +113,73 @@ export function useMembersWithPublicProfileFallback(
     cached !== null &&
     cached.members === members &&
     cached.addressesToFetch === addressesToFetch &&
+    cached.visibleAddresses === visibleAddresses &&
     cached.dataRefs.length === dataRefs.length &&
     cached.dataRefs.every((d, i) => d === dataRefs[i]);
   if (sameInputs) return cached!.result;
 
   let result: MemberMap;
-  if (addressesToFetch.length === 0) {
-    result = members;
-  } else {
+  {
+    // Build the effective map. For every VISIBLE member, resolve each field by
+    // precedence: per-space OVERRIDE → roster GLOBAL slot → public profile.
+    // The override always wins when non-empty. Between the roster global slot
+    // and the public profile, prefer whichever is newer by timestamp (both
+    // carry the sender's global identity; the roster slot is the live push, the
+    // public profile is the stranger-fallback). This runs even when nothing was
+    // fetched, so a global rename pushed into the roster slot renders without a
+    // public profile (works for non-public users). See identity-resolution doc.
+    const fetchIndex = new Map<string, number>();
+    addressesToFetch.forEach((addr, i) => fetchIndex.set(addr, i));
+
+    let changed = false;
     const merged: MemberMap = { ...members };
-    addressesToFetch.forEach((addr, i) => {
-      const pub = dataRefs[i];
-      if (!pub) return;
+    for (const addr of new Set(visibleAddresses)) {
+      if (!addr) continue;
       const local = members[addr] as MemberWithTs | undefined;
-      // Per-field fallback. Whichever source is "newer" by timestamp
-      // is preferred, but only if it has a non-empty value for that
-      // field — otherwise we fall through to the other source.
-      // This matters when a user broadcasts a partial update (e.g.
-      // avatar-only with no displayName): their profileTimestamp gets
-      // stamped recently while display_name stays empty. Without the
-      // per-field fallback, the all-or-nothing "useChat" branch would
-      // pin them to the empty local record and ignore the public
-      // profile that has the real name.
-      const chatTs = local?.profileTimestamp;
-      const chatIsNewer = chatTs != null && chatTs >= pub.timestamp;
-      const pickField = (localVal: string | undefined, pubVal: string) => {
-        // When the local (per-space) record is the newer source, its value
-        // WINS — including a deliberate empty '' (a cleared avatar / name),
-        // which must not fall back to the older public-profile value.
-        // `!== undefined` keeps the intended "explicit clear wins" without
-        // resurrecting the global value. Absent (undefined) still falls
-        // through to the public profile (partial-update / never-set case).
-        if (chatIsNewer) return localVal !== undefined ? localVal : pubVal || '';
-        return pubVal || localVal || '';
+      const fi = fetchIndex.get(addr);
+      const pub = fi != null ? dataRefs[fi] : null;
+
+      // Resolve one field: override wins; else newer-of(global slot, public).
+      const globalTs = (local as { globalProfileTimestamp?: number } | undefined)?.globalProfileTimestamp ?? 0;
+      const pubTs = pub?.timestamp ?? -1;
+      const globalNewer = globalTs >= pubTs;
+      const pick = (
+        override: string | undefined,
+        globalSlot: string | undefined,
+        pubVal: string | undefined,
+      ): string => {
+        if (override) return override;
+        const g = globalSlot || undefined;
+        const p = pubVal || undefined;
+        if (globalNewer) return g || p || '';
+        return p || g || '';
       };
-      merged[addr] = {
-        ...(local ?? { address: addr }),
-        display_name: pickField(local?.display_name, pub.display_name),
-        profile_image: pickField(local?.profile_image, pub.profile_image),
-        bio: pickField(local?.bio, pub.bio),
-      } as MemberMap[string];
-    });
-    result = merged;
+
+      const nextName = pick(local?.display_name, local?.global_display_name, pub?.display_name);
+      const nextIcon = pick(local?.profile_image, local?.global_profile_image, pub?.profile_image);
+      const nextBio = pick(local?.bio, local?.global_bio, pub?.bio);
+
+      // Only rewrite when a rendered field actually changes, so members that
+      // already resolve (override present) keep their identity and don't churn
+      // downstream memos.
+      if (
+        !local ||
+        nextName !== (local.display_name ?? '') ||
+        nextIcon !== (local.profile_image ?? '') ||
+        nextBio !== (local.bio ?? '')
+      ) {
+        merged[addr] = {
+          ...(local ?? { address: addr }),
+          display_name: nextName,
+          profile_image: nextIcon,
+          bio: nextBio,
+        } as MemberMap[string];
+        changed = true;
+      }
+    }
+    result = changed ? merged : members;
   }
 
-  cacheRef.current = { members, addressesToFetch, dataRefs, result };
+  cacheRef.current = { members, addressesToFetch, visibleAddresses, dataRefs, result };
   return result;
 }

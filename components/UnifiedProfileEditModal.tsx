@@ -7,6 +7,7 @@ import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { updateFarcasterProfile } from '@/services/farcaster/updateProfile';
 import { getAllSpaces } from '@/services/config/spaceStorage';
 import { maybeSendUpdateProfileMessage } from '@/services/space/spaceMessageService';
+import { publicProfileQueryKey, type PublicProfile } from '@/hooks/useUserPublicProfile';
 import { compressAvatarImage } from '@/services/media/imageAttachment';
 import { useTheme, type AppTheme } from '@/theme';
 import * as ImagePicker from 'expo-image-picker';
@@ -14,9 +15,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
+import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import {
   validateDisplayName,
   validateUserBio,
+  queryKeys,
+  type SpaceMember,
 } from '@quilibrium/quorum-shared';
 import {
   translateValidationResult,
@@ -126,24 +130,96 @@ export default function UnifiedProfileEditModal({
       profileImage: avatar ?? undefined,
     });
 
-    // Broadcast to all spaces
+    // Publish the new profile to the public-profile server when public.
+    // Without this, mobile edits never reach the server, so other devices'
+    // published value (and our own space messages, which render via the
+    // public-profile fallback) keep showing the stale name/avatar. Best-effort:
+    // the local save is the source of truth; a failed publish only warns.
+    if (user?.address && user.isProfilePublic) {
+      try {
+        const { publishPublicProfile } = await import('@/services/profile/publicProfile');
+        await publishPublicProfile({
+          address: user.address,
+          displayName: name,
+          profileImage: avatar ?? '',
+          bio: b,
+          primaryUsername: user.primaryUsername,
+        });
+      } catch (e) {
+        Alert.alert('Profile not published', 'Your profile was saved on this device but could not be published publicly. Other devices may show an old name until you retry.');
+      }
+    }
+
+    // Refresh our own public-profile cache. Non-overridden spaces render our
+    // name/avatar via this cache (1h staleTime), so without this a global change
+    // wouldn't reach already-rendered messages until the cache expired. Set
+    // optimistically for an instant update; refetch (public only) reads the
+    // value we just published above, not another device's stale one.
+    if (user?.address) {
+      const key = publicProfileQueryKey(user.address);
+      queryClient.setQueryData<PublicProfile | null>(key, (prev) => ({
+        display_name: name,
+        profile_image: avatar ?? '',
+        bio: user.isProfilePublic ? b : (prev?.bio ?? ''),
+        timestamp: Date.now(),
+        signature: prev?.signature ?? '',
+      }));
+      if (user.isProfilePublic) {
+        void queryClient.invalidateQueries({ queryKey: key });
+      }
+    }
+
+    // Broadcast the new GLOBAL identity to all spaces — via the global* slots,
+    // NOT the per-space override fields. This is the two-slot fix: a global
+    // rename reaches spacemates live without being stored as a per-space
+    // override (which would freeze the space and defeat follow-global). We send
+    // the actual values (empty string = deliberate global clear); bio stays
+    // gated on the public toggle to preserve prior bio-privacy behavior.
+    // Also write our OWN roster global slots locally so this device (and
+    // non-public users) render the new global value immediately.
     const spaces = getAllSpaces();
     if (spaces.length > 0) {
+      const adapter = getMMKVAdapter();
+      const selfAddress = user.address;
+      // Global bio propagates to SPACEMATES like the name/avatar — NOT gated on
+      // the public toggle. The public toggle only controls the stranger-facing
+      // public-profile server (channel B), not what your spacemates see. Empty
+      // string = a deliberately empty global bio. (Per-space bio override still
+      // wins where set.) See identity-resolution doc.
+      const globalBioValue = b;
+      // Local self-apply of global slots (best-effort, per space).
+      for (const space of spaces) {
+        try {
+          const existing = await adapter.getSpaceMember(space.spaceId, selfAddress);
+          await adapter.saveSpaceMember(space.spaceId, {
+            ...(existing ?? { address: selfAddress, inbox_address: '' }),
+            global_display_name: name,
+            global_profile_image: avatar ?? '',
+            global_bio: globalBioValue,
+            globalProfileTimestamp: Date.now(),
+          } as SpaceMember & {
+            global_display_name?: string;
+            global_profile_image?: string;
+            global_bio?: string;
+            globalProfileTimestamp?: number;
+          });
+          queryClient.invalidateQueries({ queryKey: queryKeys.spaces.members(space.spaceId) });
+        } catch {
+          // Non-fatal — the broadcast below still informs other members.
+        }
+      }
+
       enqueueOutbound(async () => {
         const envelopes: string[] = [];
         for (const space of spaces) {
           try {
-            // Only include fields that have a real value — empty
-            // strings would clobber recipients' stored values for
-            // those fields under the receiver's "treat present as
-            // assigned" rule.
             const res = await maybeSendUpdateProfileMessage({
               spaceId: space.spaceId,
               channelId: space.defaultChannelId,
-              senderAddress: user.address,
-              displayName: name || undefined,
-              userIcon: avatar || undefined,
-              bio: user.isProfilePublic ? b : undefined,
+              senderAddress: selfAddress,
+              globalDisplayName: name,
+              globalUserIcon: avatar ?? '',
+              globalBio: globalBioValue,
             });
             if (res) {
               envelopes.push(res.wsEnvelope);
