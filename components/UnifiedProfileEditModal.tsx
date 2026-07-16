@@ -127,11 +127,31 @@ export default function UnifiedProfileEditModal({
       profileImage: avatar ?? undefined,
     });
 
+    // Publish the new profile to the public-profile server when public.
+    // Without this, mobile edits never reach the server, so other devices'
+    // published value (and our own space messages, which render via the
+    // public-profile fallback) keep showing the stale name/avatar. Best-effort:
+    // the local save is the source of truth; a failed publish only warns.
+    if (user?.address && user.isProfilePublic) {
+      try {
+        const { publishPublicProfile } = await import('@/services/profile/publicProfile');
+        await publishPublicProfile({
+          address: user.address,
+          displayName: name,
+          profileImage: avatar ?? '',
+          bio: b,
+          primaryUsername: user.primaryUsername,
+        });
+      } catch (e) {
+        Alert.alert('Profile not published', 'Your profile was saved on this device but could not be published publicly. Other devices may show an old name until you retry.');
+      }
+    }
+
     // Refresh our own public-profile cache. Non-overridden spaces render our
     // name/avatar via this cache (1h staleTime), so without this a global change
     // wouldn't reach already-rendered messages until the cache expired. Set
-    // optimistically for an instant update; only refetch when public (a private
-    // profile 404s to null, which would blank the optimistic value).
+    // optimistically for an instant update; refetch (public only) reads the
+    // value we just published above, not another device's stale one.
     if (user?.address) {
       const key = publicProfileQueryKey(user.address);
       queryClient.setQueryData<PublicProfile | null>(key, (prev) => ({
