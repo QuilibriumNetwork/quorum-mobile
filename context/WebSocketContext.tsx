@@ -18,7 +18,7 @@ import {
   queryKeys,
 } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
-import { PERSISTABLE_TYPES } from '@/components/Chat/types';
+import { PERSISTABLE_TYPES, DM_GUARD_PASSTHROUGH_TYPES } from '@/components/Chat/types';
 import React, {
   createContext,
   useCallback,
@@ -2810,6 +2810,33 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           return;
         }
 
+        // Default-deny (parity with the space paths): only PERSISTABLE_TYPES are
+        // saved + rendered. Runs LAST, after every applied-type handler above
+        // (reaction/remove-message/dm-update-profile/delete-conversation*, which
+        // all return earlier), before the conversation + message save — so an
+        // unknown type produces nothing instead of a ghost row / junk bubble.
+        // Any future DM control feature (pin/thread/mute/bookmark) adds its own
+        // handler ABOVE this line; new displayable content adds to PERSISTABLE_TYPES.
+        // Carve-out: DM_GUARD_PASSTHROUGH_TYPES (currently edit-message) are NOT
+        // dropped — mobile has no DM handler for them yet, so dropping+inbox-deleting
+        // would lose a real cross-device action. They fall through unchanged
+        // (saved-but-hidden today, not deleted) until the real handler lands.
+        // Note: flat receipt objects (delivery-ack/read-ack) have no content.type,
+        // so dmContentType is undefined and the guard doesn't fire — those are a
+        // separate concern (DM receipts wiring), not handled here.
+        const dmContentType = decryptedMessage.content?.type;
+        if (
+          dmContentType &&
+          !PERSISTABLE_TYPES.has(dmContentType) &&
+          !DM_GUARD_PASSTHROUGH_TYPES.has(dmContentType)
+        ) {
+          logger.debug(`[DM] default-deny dropped unsupported type=${dmContentType}`);
+          getDeviceKeyset().then(dk => {
+            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
+          });
+          return;
+        }
+
         // Save conversation to storage (creates new or updates existing)
         const existingConversation = await storage.getConversation(conversationId);
         // Get sender display name for preview
@@ -3951,38 +3978,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           continue;
         }
 
-        // Save conversation. On a self-sync echo ignore our own profile for the
-        // row identity (see the JS path's self-sync guard).
+        // Compute the conversation row identity now (needed by the reaction fold
+        // + final save below), but DEFER the actual saveConversation until after
+        // the applied-type folds + default-deny guard — a reaction/remove/dropped
+        // type must NOT bump the row's preview/timestamp. On a self-sync echo
+        // ignore our own profile for the row identity (see the JS path's guard).
         const rowProfile = isSelfSyncEcho ? undefined : msgResult.user_profile;
         const existingConversation = await storage.getConversation(conversationId);
         const senderDisplayName = rowProfile?.display_name || existingConversation?.displayName || resolvedSenderAddress.substring(0, 8);
         const senderIcon = rowProfile?.user_icon || existingConversation?.icon || '';
         // Typed preview (icon + text, no emoji) — see the live DM path above.
         const messagePreview = getSpaceMessagePreview(decryptedMessage);
-
-        if (!existingConversation) {
-          const newConversation: Conversation = {
-            conversationId,
-            address: resolvedSenderAddress,
-            displayName: senderDisplayName,
-            icon: senderIcon,
-            timestamp: decryptedMessage.createdDate || Date.now(),
-            type: 'direct',
-            lastMessagePreview: messagePreview,
-            lastMessageSenderName: senderDisplayName,
-          };
-          await storage.saveConversation(newConversation);
-        } else {
-          const updatedConversation: Conversation = {
-            ...existingConversation,
-            displayName: senderDisplayName,
-            icon: senderIcon,
-            timestamp: decryptedMessage.createdDate || Date.now(),
-            lastMessagePreview: messagePreview,
-            lastMessageSenderName: senderDisplayName,
-          };
-          await storage.saveConversation(updatedConversation);
-        }
 
         const messagesKey = queryKeys.messages.infinite(resolvedSenderAddress, resolvedSenderAddress);
 
@@ -4122,6 +4128,70 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }
           }
           continue;
+        }
+
+        // Default-deny (parity with the space batch path + the DM JS path): only
+        // PERSISTABLE_TYPES are saved. Runs LAST, after every applied-type fold
+        // above (reaction/remove-reaction/remove-message/dm-update-profile/
+        // delete-conversation*, which all continue earlier), before the save — so
+        // an unknown type is dropped, not persisted as junk. Future DM control
+        // features add their handler ABOVE this line.
+        // Carve-out: DM_GUARD_PASSTHROUGH_TYPES (currently edit-message) are NOT
+        // dropped — mobile has no DM handler for them yet, so dropping+inbox-deleting
+        // would lose a real cross-device action (they fall through to the save below,
+        // unchanged from today's behavior) until the real handler lands.
+        // Flat receipts (delivery-ack/read-ack) have no content.type, so
+        // dmContentType is undefined and the guard doesn't fire — separate concern.
+        if (
+          dmContentType &&
+          !PERSISTABLE_TYPES.has(dmContentType) &&
+          !DM_GUARD_PASSTHROUGH_TYPES.has(dmContentType)
+        ) {
+          logger.debug(`[DM] default-deny dropped unsupported type=${dmContentType}`);
+          // Best-effort inbox cleanup so the dropped message can't replay on
+          // reconnect — same resolve-and-delete pattern as the remove-message fold.
+          const originalMsg = batch.find(m => m.timestamp === msgResult.timestamp);
+          if (originalMsg) {
+            const conversationKeypair = encryptionStateStorage.getConversationInboxKeypairByAddress(originalMsg.inboxAddress);
+            if (conversationKeypair?.signingPrivateKey && conversationKeypair?.signingPublicKey) {
+              const signingKey = {
+                publicKey: bytesToHex(conversationKeypair.signingPublicKey),
+                privateKey: bytesToHex(conversationKeypair.signingPrivateKey),
+              };
+              deleteConversationInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], signingKey).catch(() => {});
+            } else {
+              getDeviceKeyset().then(dk => {
+                if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
+              });
+            }
+          }
+          continue;
+        }
+
+        // Deferred conversation-save (moved below the folds + guard): only a
+        // message that actually persists bumps the row's preview/timestamp.
+        if (!existingConversation) {
+          const newConversation: Conversation = {
+            conversationId,
+            address: resolvedSenderAddress,
+            displayName: senderDisplayName,
+            icon: senderIcon,
+            timestamp: decryptedMessage.createdDate || Date.now(),
+            type: 'direct',
+            lastMessagePreview: messagePreview,
+            lastMessageSenderName: senderDisplayName,
+          };
+          await storage.saveConversation(newConversation);
+        } else {
+          const updatedConversation: Conversation = {
+            ...existingConversation,
+            displayName: senderDisplayName,
+            icon: senderIcon,
+            timestamp: decryptedMessage.createdDate || Date.now(),
+            lastMessagePreview: messagePreview,
+            lastMessageSenderName: senderDisplayName,
+          };
+          await storage.saveConversation(updatedConversation);
         }
 
         // Save message
