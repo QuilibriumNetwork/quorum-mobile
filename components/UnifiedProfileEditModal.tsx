@@ -7,6 +7,7 @@ import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { updateFarcasterProfile } from '@/services/farcaster/updateProfile';
 import { getAllSpaces } from '@/services/config/spaceStorage';
 import { maybeSendUpdateProfileMessage } from '@/services/space/spaceMessageService';
+import { publicProfileQueryKey, type PublicProfile } from '@/hooks/useUserPublicProfile';
 import { compressAvatarImage } from '@/services/media/imageAttachment';
 import { useTheme, type AppTheme } from '@/theme';
 import * as ImagePicker from 'expo-image-picker';
@@ -125,6 +126,25 @@ export default function UnifiedProfileEditModal({
       bio: b || undefined,
       profileImage: avatar ?? undefined,
     });
+
+    // Refresh our own public-profile cache. Non-overridden spaces render our
+    // name/avatar via this cache (1h staleTime), so without this a global change
+    // wouldn't reach already-rendered messages until the cache expired. Set
+    // optimistically for an instant update; only refetch when public (a private
+    // profile 404s to null, which would blank the optimistic value).
+    if (user?.address) {
+      const key = publicProfileQueryKey(user.address);
+      queryClient.setQueryData<PublicProfile | null>(key, (prev) => ({
+        display_name: name,
+        profile_image: avatar ?? '',
+        bio: user.isProfilePublic ? b : (prev?.bio ?? ''),
+        timestamp: Date.now(),
+        signature: prev?.signature ?? '',
+      }));
+      if (user.isProfilePublic) {
+        void queryClient.invalidateQueries({ queryKey: key });
+      }
+    }
 
     // Broadcast to all spaces
     const spaces = getAllSpaces();
