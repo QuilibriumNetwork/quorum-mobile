@@ -290,11 +290,11 @@ export async function createSpace(params: CreateSpaceParams): Promise<CreateSpac
   const adapter = getMMKVAdapter();
   await adapter.saveSpace(space);
 
-  // 8.1 Save creator as a member of the space
+  // 8.1 Save creator as a member. Follow-global: don't stamp the creator's
+  // global name/avatar into their per-space row (empty = follow global). Peers
+  // learn identity from the join envelope; this row only records membership.
   await adapter.saveSpaceMember(spaceAddress, {
     address: params.userAddress,
-    display_name: params.userDisplayName,
-    profile_image: params.userIcon,
     inbox_address: inboxAddress,
   });
 
