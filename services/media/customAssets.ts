@@ -8,22 +8,26 @@
  * - Stickers: 512px on longest axis
  */
 
+import { FILE_SIZE_LIMITS, IMAGE_CONFIGS } from '@quilibrium/quorum-shared';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-// Configuration matching desktop behavior
+// Numeric limits sourced from the shared IMAGE_CONFIGS single source of truth
+// (kills cross-platform drift). Mobile keeps its aspect-preserving longest-axis
+// resize (it does NOT adopt shared's square cropToFit for emoji/sticker) — only
+// the max-bound number comes from shared.
 const EMOJI_CONFIG = {
-  maxInputSizeMB: 5,
-  quality: 0.8,
-  maxGifSizeKB: 100,
-  maxSize: 128, // Max 128px on longest axis
+  maxInputSizeMB: FILE_SIZE_LIMITS.MAX_EMOJI_INPUT_SIZE / (1024 * 1024), // 5MB
+  quality: IMAGE_CONFIGS.emoji.quality, // 0.8
+  maxGifSizeKB: FILE_SIZE_LIMITS.MAX_EMOJI_GIF_SIZE / 1024, // 100KB
+  maxSize: IMAGE_CONFIGS.emoji.maxWidth, // 128px on longest axis
 };
 
 const STICKER_CONFIG = {
-  maxInputSizeMB: 25,
-  quality: 0.8,
-  maxGifSizeKB: 750,
-  maxSize: 512, // Max 512px on longest axis
+  maxInputSizeMB: FILE_SIZE_LIMITS.MAX_INPUT_SIZE / (1024 * 1024), // 25MB
+  quality: IMAGE_CONFIGS.sticker.quality, // 0.8
+  maxGifSizeKB: FILE_SIZE_LIMITS.MAX_STICKER_GIF_SIZE / 1024, // 750KB
+  maxSize: IMAGE_CONFIGS.sticker.maxWidth, // 512px on longest axis
 };
 
 export interface ProcessedAsset {

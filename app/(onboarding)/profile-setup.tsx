@@ -11,6 +11,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Image, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as ImagePicker from 'expo-image-picker';
+import { compressAvatarImage } from '@/services/media/imageAttachment';
 import { useTheme, type AppTheme } from '@/theme';
 import { useOnboarding } from '@/context';
 import { OnboardingLayout, StepNavigation } from '@/components/onboarding';
@@ -70,7 +71,7 @@ export default function ProfileSetupScreen() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      setProfileImage(result.assets[0].uri);
+      await setCompressedAvatar(result.assets[0]);
     }
   };
 
@@ -88,8 +89,17 @@ export default function ProfileSetupScreen() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      setProfileImage(result.assets[0].uri);
+      await setCompressedAvatar(result.assets[0]);
     }
+  };
+
+  // Compress the picked avatar (512px, ~150KB) before storing. Without this
+  // the raw multi-MP picker URI becomes user.profileImage and can broadcast as
+  // a full-size userIcon — an OOM/bandwidth risk. Falls back to the raw URI if
+  // compression fails, so the user still gets an avatar.
+  const setCompressedAvatar = async (asset: ImagePicker.ImagePickerAsset) => {
+    const compressed = await compressAvatarImage(asset.uri, asset.width, asset.height);
+    setProfileImage(compressed?.dataUri ?? asset.uri);
   };
 
   const handleContinue = () => {

@@ -108,6 +108,7 @@ export default function UnifiedProfileEditModal({
       // bloating the public-profile JSON to 60MB+, OOM'ing okhttp
       // on the fetching side.
       base64: false,
+      exif: false,
     });
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];

@@ -60,7 +60,7 @@ import { pickImage, compressAvatarImage } from '@/services/media/imageAttachment
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
-import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, queryKeys, type Emoji, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
+import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, queryKeys, IMAGE_CONFIGS, type Emoji, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { resolveChannelIconColor } from '@/utils/channelIcon';
 import * as Clipboard from 'expo-clipboard';
@@ -623,6 +623,7 @@ export default function SpaceSettingsModal({
       aspect: [1, 1],
       quality: 0.8,
       base64: false,
+      exif: false,
     });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
@@ -950,14 +951,16 @@ export default function SpaceSettingsModal({
   }, [hasGeneralChanges]);
 
   const handlePickIcon = useCallback(async () => {
-    const result = await pickImage('library');
+    // Space icon → 256px (shared spaceIcon config), not the 1200px chat path.
+    const result = await pickImage('library', { maxDimension: IMAGE_CONFIGS.spaceIcon.maxWidth });
     if (result.success && result.attachment) {
       setIconUrl(result.attachment.imageUrl);
     }
   }, []);
 
   const handlePickBanner = useCallback(async () => {
-    const result = await pickImage('library');
+    // Space banner → 1600px longest-axis bounding box (shared spaceBanner config).
+    const result = await pickImage('library', { maxDimension: IMAGE_CONFIGS.spaceBanner.maxWidth });
     if (result.success && result.attachment) {
       setBannerUrl(result.attachment.imageUrl);
     }

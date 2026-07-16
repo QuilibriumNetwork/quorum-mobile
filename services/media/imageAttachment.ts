@@ -17,20 +17,25 @@
 // stable callable API (downloadAsync / readAsStringAsync /
 // deleteAsync) without the warning. saveToLibrary.ts already uses
 // /legacy — keep this consistent.
+import { FILE_SIZE_LIMITS, IMAGE_CONFIGS } from '@quilibrium/quorum-shared';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
-// Configuration matching desktop behavior
+// Numeric limits are sourced from the shared IMAGE_CONFIGS single source of
+// truth (kills cross-platform drift). Mobile-only fields with no shared
+// equivalent (the 1MB byte target, the thumbnail sizing) stay local.
+const messageConfig = IMAGE_CONFIGS.messageAttachment;
 const IMAGE_CONFIG = {
-  maxWidth: 1200,
-  maxHeight: 1200,
-  quality: 0.8,
-  thumbnailMaxSize: 300,
-  thumbnailThreshold: 300, // Generate thumbnail if image > 300px
-  maxFileSizeMB: 25,
-  maxGifSizeMB: 2,
-  targetFileSizeBytes: 1024 * 1024, // 1MB target for E2EE chats
+  maxWidth: messageConfig.maxWidth, // 1200
+  maxHeight: messageConfig.maxHeight, // 1200
+  quality: messageConfig.quality, // 0.8
+  thumbnailMaxSize: messageConfig.thumbnailConfig?.maxWidth ?? 300,
+  thumbnailThreshold: messageConfig.thumbnailConfig?.threshold ?? 300,
+  // Input-size ceiling before compression (shared MAX_INPUT_SIZE = 25MB).
+  maxInputSizeBytes: FILE_SIZE_LIMITS.MAX_INPUT_SIZE,
+  maxGifSizeBytes: messageConfig.gifSizeLimit ?? FILE_SIZE_LIMITS.MAX_GIF_SIZE, // 2MB
+  targetFileSizeBytes: 1024 * 1024, // 1MB target for E2EE chats (mobile-local, no shared equivalent)
 };
 
 export interface ProcessedAttachment {
@@ -55,6 +60,17 @@ export interface ProcessedAttachment {
   localUri: string;
 }
 
+/**
+ * Per-surface overrides for pickImage. Absent = the default message-attachment
+ * path (1200px, 1MB byte target). When `maxDimension` is set (e.g. space icon
+ * 256, banner 1600×900), the picked image is resized so its longest axis fits
+ * that bound before base64 encoding — used by non-chat surfaces so they don't
+ * ride the oversized attachment path.
+ */
+export interface PickImageOptions {
+  maxDimension?: number;
+}
+
 export interface AttachmentPickerResult {
   success: boolean;
   attachment?: ProcessedAttachment;
@@ -66,7 +82,8 @@ export interface AttachmentPickerResult {
  * Request permissions and pick an image from library or camera
  */
 export async function pickImage(
-  source: 'library' | 'camera' = 'library'
+  source: 'library' | 'camera' = 'library',
+  options?: PickImageOptions,
 ): Promise<AttachmentPickerResult> {
   try {
     // Request permissions
@@ -102,7 +119,7 @@ export async function pickImage(
     }
 
     const asset = result.assets[0];
-    return processImageAsset(asset);
+    return processImageAsset(asset, options);
   } catch (error) {
     return {
       success: false,
@@ -215,7 +232,8 @@ async function compressImageToTargetSize(
  * Process an image asset into a ProcessedAttachment
  */
 async function processImageAsset(
-  asset: ImagePicker.ImagePickerAsset
+  asset: ImagePicker.ImagePickerAsset,
+  options?: PickImageOptions,
 ): Promise<AttachmentPickerResult> {
   try {
     const { uri, width, height, mimeType, fileSize } = asset;
@@ -226,10 +244,11 @@ async function processImageAsset(
     // For GIFs, we don't compress (would lose animation)
     if (isGif) {
       const fileSizeMB = currentFileSize / (1024 * 1024);
-      if (fileSizeMB > IMAGE_CONFIG.maxGifSizeMB) {
+      if (currentFileSize > IMAGE_CONFIG.maxGifSizeBytes) {
+        const maxGifMB = Math.round(IMAGE_CONFIG.maxGifSizeBytes / (1024 * 1024));
         return {
           success: false,
-          error: `GIF too large (max ${IMAGE_CONFIG.maxGifSizeMB}MB)`,
+          error: `GIF too large (max ${maxGifMB}MB)`,
         };
       }
 
@@ -255,6 +274,17 @@ async function processImageAsset(
       };
     }
 
+    // Reject oversized inputs before any decode/compress work (shared 25MB
+    // ceiling). Previously this limit existed as a dead config field and was
+    // never enforced.
+    if (currentFileSize > IMAGE_CONFIG.maxInputSizeBytes) {
+      const maxMB = Math.round(IMAGE_CONFIG.maxInputSizeBytes / (1024 * 1024));
+      return {
+        success: false,
+        error: `Image too large (max ${maxMB}MB)`,
+      };
+    }
+
     // For non-GIF images, compress to target size (1MB)
     let finalUri = uri;
     let finalBase64 = asset.base64;
@@ -262,12 +292,47 @@ async function processImageAsset(
     let finalHeight = height;
     let finalMime = mime;
 
-    // Check if compression is needed
-    if (currentFileSize > IMAGE_CONFIG.targetFileSizeBytes) {
+    // Surface override (e.g. space icon 256, banner 1600×900): resize down to
+    // the requested longest-axis bound before anything else, so non-chat
+    // surfaces don't ride the 1200px attachment path. Runs even when the file
+    // is small enough to skip the byte-target sweep below.
+    const maxDim = options?.maxDimension;
+    if (maxDim && Math.max(finalWidth, finalHeight) > maxDim) {
+      const scale = maxDim / Math.max(finalWidth, finalHeight);
+      const targetW = Math.round(finalWidth * scale);
+      const targetH = Math.round(finalHeight * scale);
+      try {
+        const resized = await ImageManipulator.manipulateAsync(
+          finalUri,
+          [{ resize: { width: targetW, height: targetH } }],
+          { compress: IMAGE_CONFIG.quality, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+        );
+        if (resized.base64) {
+          finalUri = resized.uri;
+          finalBase64 = resized.base64;
+          finalWidth = resized.width;
+          finalHeight = resized.height;
+          finalMime = 'image/jpeg';
+        }
+      } catch {
+        // Resize failed — fall through with the original; the byte-target
+        // sweep below still bounds the payload.
+      }
+    }
+
+    // Check if compression is needed. Use the (possibly resized) file size —
+    // recompute from base64 when the override already produced a smaller image.
+    const sizeForCompressionCheck =
+      finalBase64 && finalUri !== uri
+        ? Math.ceil(finalBase64.length * 0.75)
+        : currentFileSize;
+    if (sizeForCompressionCheck > IMAGE_CONFIG.targetFileSizeBytes) {
+      // Compress the current (possibly override-resized) image. On the default
+      // chat path finalUri/finalWidth/finalHeight still equal the originals.
       const compressed = await compressImageToTargetSize(
-        uri,
-        width,
-        height,
+        finalUri,
+        finalWidth,
+        finalHeight,
         IMAGE_CONFIG.targetFileSizeBytes
       );
 
@@ -465,7 +530,11 @@ export async function compressAvatarImage(
   height: number,
   opts?: { maxDimension?: number; maxBytes?: number },
 ): Promise<{ dataUri: string; width: number; height: number } | null> {
-  const MAX_DIM = opts?.maxDimension ?? 512;
+  // Dimension sourced from shared IMAGE_CONFIGS.avatar (512) so it can't drift
+  // from desktop. The 150KB byte cap is mobile-only OOM protection (shared has
+  // no byte target) — it prevents an uncompressed camera photo from OOMing RN's
+  // okhttp layer, so it stays local and load-bearing.
+  const MAX_DIM = opts?.maxDimension ?? IMAGE_CONFIGS.avatar.maxWidth;
   const MAX_BYTES = opts?.maxBytes ?? 150 * 1024;
 
   // Resize first so dimensions never exceed MAX_DIM. We respect
