@@ -20,7 +20,7 @@ import type { TextStyle } from 'react-native';
 import type { Emoji, SpaceMember, Channel, Role } from '@quilibrium/quorum-shared';
 import { MentionableText } from './MentionableText';
 import { MessageMarkdownRenderer } from './MessageMarkdownRenderer.native';
-import { hasMarkdown, prepareMessageContent } from '@/utils/messagePreprocessing';
+import { hasMarkdown, prepareMessageContent } from '@quilibrium/quorum-shared';
 
 interface MessageRendererProps {
   text: string;

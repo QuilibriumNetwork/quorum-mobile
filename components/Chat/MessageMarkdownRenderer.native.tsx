@@ -9,8 +9,8 @@
  * code, spoilers, links) and the mention/channel/everyone/role pills plus
  * custom + standard emoji.
  *
- * The input MUST already be run through `prepareMessageContent` (see
- * `utils/messagePreprocessing.ts`) so mentions are tokenized as `<<<...>>>`,
+ * The input MUST already be run through `prepareMessageContent` (from
+ * `@quilibrium/quorum-shared`) so mentions are tokenized as `<<<...>>>`,
  * URLs are auto-linked, headers are normalized to `###`, and code fences are
  * balanced. `MessageRenderer` does that before handing off here.
  *
