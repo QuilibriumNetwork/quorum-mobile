@@ -15,9 +15,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
+import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import {
   validateDisplayName,
   validateUserBio,
+  queryKeys,
 } from '@quilibrium/quorum-shared';
 import {
   translateValidationResult,
@@ -166,24 +168,47 @@ export default function UnifiedProfileEditModal({
       }
     }
 
-    // Broadcast to all spaces
+    // Broadcast the new GLOBAL identity to all spaces — via the global* slots,
+    // NOT the per-space override fields. This is the two-slot fix: a global
+    // rename reaches spacemates live without being stored as a per-space
+    // override (which would freeze the space and defeat follow-global). We send
+    // the actual values (empty string = deliberate global clear); bio stays
+    // gated on the public toggle to preserve prior bio-privacy behavior.
+    // Also write our OWN roster global slots locally so this device (and
+    // non-public users) render the new global value immediately.
     const spaces = getAllSpaces();
     if (spaces.length > 0) {
+      const adapter = getMMKVAdapter();
+      const selfAddress = user.address;
+      const globalBioValue = user.isProfilePublic ? b : undefined;
+      // Local self-apply of global slots (best-effort, per space).
+      for (const space of spaces) {
+        try {
+          const existing = await adapter.getSpaceMember(space.spaceId, selfAddress);
+          await adapter.saveSpaceMember(space.spaceId, {
+            ...(existing ?? { address: selfAddress, inbox_address: '' }),
+            global_display_name: name,
+            global_profile_image: avatar ?? '',
+            ...(globalBioValue !== undefined ? { global_bio: globalBioValue } : {}),
+            globalProfileTimestamp: Date.now(),
+          } as never);
+          queryClient.invalidateQueries({ queryKey: queryKeys.spaces.members(space.spaceId) });
+        } catch {
+          // Non-fatal — the broadcast below still informs other members.
+        }
+      }
+
       enqueueOutbound(async () => {
         const envelopes: string[] = [];
         for (const space of spaces) {
           try {
-            // Only include fields that have a real value — empty
-            // strings would clobber recipients' stored values for
-            // those fields under the receiver's "treat present as
-            // assigned" rule.
             const res = await maybeSendUpdateProfileMessage({
               spaceId: space.spaceId,
               channelId: space.defaultChannelId,
-              senderAddress: user.address,
-              displayName: name || undefined,
-              userIcon: avatar || undefined,
-              bio: user.isProfilePublic ? b : undefined,
+              senderAddress: selfAddress,
+              globalDisplayName: name,
+              globalUserIcon: avatar ?? '',
+              globalBio: globalBioValue,
             });
             if (res) {
               envelopes.push(res.wsEnvelope);
