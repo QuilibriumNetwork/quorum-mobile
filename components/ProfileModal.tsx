@@ -988,6 +988,7 @@ export default function ProfileModal({
       aspect: [1, 1],
       quality: 0.8,
       base64: false,
+      exif: false,
     });
 
     if (!result.canceled && result.assets[0]) {

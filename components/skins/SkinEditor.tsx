@@ -157,6 +157,7 @@ export function SkinEditor({ onClose }: { onClose: () => void }) {
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 1,
+      exif: false,
     });
     if (res.canceled || !res.assets?.[0]) return null;
     const a = res.assets[0];
