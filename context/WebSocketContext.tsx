@@ -4843,6 +4843,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // store them apart. (Two-slot design — identity-resolution doc.)
               globalDisplayName: displayName || undefined,
               globalUserIcon: userIcon || undefined,
+              // Global bio propagates to spacemates ungated (not gated on the
+              // public toggle) — matches the global-save path and desktop.
+              globalBio: user.bio || undefined,
               // Include Farcaster linkage if linked so peers can
               // surface it in UserProfileModal. Gate dedupes on
               // signature so this is a no-op once recorded.

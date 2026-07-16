@@ -180,7 +180,12 @@ export default function UnifiedProfileEditModal({
     if (spaces.length > 0) {
       const adapter = getMMKVAdapter();
       const selfAddress = user.address;
-      const globalBioValue = user.isProfilePublic ? b : undefined;
+      // Global bio propagates to SPACEMATES like the name/avatar — NOT gated on
+      // the public toggle. The public toggle only controls the stranger-facing
+      // public-profile server (channel B), not what your spacemates see. Empty
+      // string = a deliberately empty global bio. (Per-space bio override still
+      // wins where set.) See identity-resolution doc.
+      const globalBioValue = b;
       // Local self-apply of global slots (best-effort, per space).
       for (const space of spaces) {
         try {
@@ -189,7 +194,7 @@ export default function UnifiedProfileEditModal({
             ...(existing ?? { address: selfAddress, inbox_address: '' }),
             global_display_name: name,
             global_profile_image: avatar ?? '',
-            ...(globalBioValue !== undefined ? { global_bio: globalBioValue } : {}),
+            global_bio: globalBioValue,
             globalProfileTimestamp: Date.now(),
           } as never);
           queryClient.invalidateQueries({ queryKey: queryKeys.spaces.members(space.spaceId) });
