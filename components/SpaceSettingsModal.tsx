@@ -1553,7 +1553,7 @@ export default function SpaceSettingsModal({
             // not "Remove" — there is no per-space blank; clearing the override
             // reverts to the global avatar. (Follow-global design.)
             <TouchableOpacity onPress={() => setSpaceProfileImage('')} style={{ marginTop: Skin.space(4) }} aria-label="Use my main avatar in this space">
-              <Text style={{ color: theme.colors.primary, fontSize: Skin.font(13) }}>Use my main avatar</Text>
+              <Text style={{ color: theme.colors.danger, fontSize: Skin.font(13) }}>Use my main avatar</Text>
             </TouchableOpacity>
           ) : null}
         </View>
