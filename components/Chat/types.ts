@@ -44,6 +44,22 @@ export const PERSISTABLE_TYPES: ReadonlySet<string> = new Set([
   'space-call-end',
 ]);
 
+/**
+ * Types the DM default-deny guard must NOT drop, even though they aren't in
+ * PERSISTABLE_TYPES. These are applied/control types that mobile does not yet
+ * process on the DM receive path — dropping (and inbox-deleting) them would
+ * silently discard a real cross-device action. Until a proper DM handler exists,
+ * the guard lets them fall through unchanged (today's behavior: saved-but-hidden,
+ * not deleted from the server), so no data is lost.
+ *
+ * - `edit-message`: desktop sends DM edits over the wire, but mobile has no DM
+ *   edit-message handler yet (only the SPACE paths handle it). See the DM-edit
+ *   sync task; when the real handler lands, remove `edit-message` from here.
+ */
+export const DM_GUARD_PASSTHROUGH_TYPES: ReadonlySet<string> = new Set([
+  'edit-message',
+]);
+
 // Invariant: every persistable type must have a real render branch in
 // getMessageRenderType (i.e. not fall through to 'unsupported'), or the receive
 // path would save it while the render path filters it out — a message that
