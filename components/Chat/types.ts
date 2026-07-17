@@ -53,13 +53,14 @@ export const PERSISTABLE_TYPES: ReadonlySet<string> = new Set([
  * the guard lets them fall through unchanged (today's behavior: saved-but-hidden,
  * not deleted from the server), so no data is lost.
  *
- * - `edit-message`: desktop sends DM edits over the wire, but mobile has no DM
- *   edit-message handler yet (only the SPACE paths handle it). See the DM-edit
- *   sync task; when the real handler lands, remove `edit-message` from here.
+ * Currently EMPTY: `edit-message` was here while mobile had no DM edit handler;
+ * the real DM edit send + receive now exists (WebSocketContext DM paths), so it
+ * was removed and the guard treats a malformed edit as a normal drop. Keep this
+ * set as the documented escape hatch: a future half-built DM control feature can
+ * be added here to fall through instead of being dropped, then removed once its
+ * real handler lands.
  */
-export const DM_GUARD_PASSTHROUGH_TYPES: ReadonlySet<string> = new Set([
-  'edit-message',
-]);
+export const DM_GUARD_PASSTHROUGH_TYPES: ReadonlySet<string> = new Set([]);
 
 // Invariant: every persistable type must have a real render branch in
 // getMessageRenderType (i.e. not fall through to 'unsupported'), or the receive
