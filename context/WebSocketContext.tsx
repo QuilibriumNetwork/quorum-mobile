@@ -15,6 +15,7 @@ import {
   createRNWebSocketClient,
   int64ToBytes,
   logger,
+  MAX_MESSAGE_LENGTH,
   queryKeys,
 } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
@@ -39,6 +40,7 @@ import { applyReceivedEdit } from '@/utils/editHistory';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type {
   Channel,
+  EditMessage,
   EncryptedWebSocketMessage,
   KickMessage,
   Message,
@@ -2791,6 +2793,90 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           return;
         }
 
+        // edit-message on the fallback path (defensive — the batch path folds
+        // these; without this an edit control message reaching here is a ghost
+        // post). Mirrors the DM remove-message auth + the space edit-apply.
+        if (decryptedMessage.content?.type === 'edit-message') {
+          const editContent = decryptedMessage.content as EditMessage;
+          const targetMsg = await storage.getMessage({
+            spaceId: senderAddress,
+            channelId: senderAddress,
+            messageId: editContent.originalMessageId,
+          });
+
+          // Auth: editor must be the target's author, judged by the
+          // session-authenticated sender, not the spoofable payload senderId —
+          // same rule as the DM remove-message branch and desktop's DM edit
+          // (MessageService.ts: senderId === owner && target.author === owner).
+          const authorized = editContent.senderId === authenticatedDmSender &&
+            (!!targetMsg && targetMsg.content?.senderId === authenticatedDmSender);
+
+          if (authorized && targetMsg && targetMsg.content.type === 'post') {
+            // Full desktop DM parity on receive: re-check the 15-min window
+            // against the target's own createdDate, and reject oversized edits.
+            const withinWindow = Date.now() - targetMsg.createdDate <= 15 * 60 * 1000;
+            const editedText = Array.isArray(editContent.editedText)
+              ? editContent.editedText.join('')
+              : editContent.editedText;
+            const withinLength = !editedText || editedText.length <= MAX_MESSAGE_LENGTH;
+
+            if (withinWindow && withinLength) {
+              const conversation = await storage.getConversation(conversationId);
+              const saveEditHistory = conversation?.saveEditHistory ?? false;
+              const applied = applyReceivedEdit(targetMsg, {
+                newText: editContent.editedText,
+                editedAt: editContent.editedAt,
+                editNonce: editContent.editNonce,
+                saveEditHistory,
+              });
+              // Replayed edit already applied → no-op (don't clobber history).
+              if (applied.changed) {
+                const key = queryKeys.messages.infinite(senderAddress, senderAddress);
+                queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {
+                  if (!old) return old;
+                  return { ...old, pages: old.pages.map((page) => ({
+                    ...page,
+                    messages: page.messages.map((m) => {
+                      if (m.messageId === editContent.originalMessageId && m.content.type === 'post') {
+                        return {
+                          ...m,
+                          modifiedDate: applied.modifiedDate,
+                          lastModifiedHash: applied.lastModifiedHash,
+                          content: { ...m.content, text: editContent.editedText },
+                          edits: applied.edits,
+                        };
+                      }
+                      return m;
+                    }),
+                  })) };
+                });
+                const updated: Message = {
+                  ...targetMsg,
+                  modifiedDate: applied.modifiedDate,
+                  lastModifiedHash: applied.lastModifiedHash,
+                  content: { ...targetMsg.content, text: editContent.editedText },
+                  edits: applied.edits,
+                };
+                await storage.saveMessage(updated, updated.createdDate, '', '', '', '');
+                scheduleConversationRefresh(conversationId);
+              }
+            } else {
+              logger.debug(
+                `[DM-fallback] dropped edit-message for ${editContent.originalMessageId?.slice(0, 12)} (window=${withinWindow} length=${withinLength})`
+              );
+            }
+          } else if (!authorized) {
+            logger.debug(
+              `[DM-fallback] dropped unauthorized edit-message from ${editContent.senderId?.slice(0, 12)} for ${editContent.originalMessageId?.slice(0, 12)}`
+            );
+          }
+          // Best-effort: clear the control message from the inbox.
+          getDeviceKeyset().then(dk => {
+            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
+          });
+          return;
+        }
+
         // delete-conversation, fallback path (defensive — mirrors the batch
         // branch): reset the session only, before the save.
         if (decryptedMessage.content?.type === 'delete-conversation') {
@@ -4124,6 +4210,105 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             } else {
               getDeviceKeyset().then(dk => {
                 if (dk) deleteInboxMessages(originalRemoveMsg.inboxAddress, [originalRemoveMsg.timestamp], dk).catch(() => {});
+              });
+            }
+          }
+          continue;
+        }
+
+        // edit-message: edit-for-everyone control message. Fold it (don't
+        // persist as a ghost post); apply the edit to the target, authorizing
+        // per the check below. Mirrors the space batch edit handler + the DM
+        // remove-message auth.
+        if (dmContentType === 'edit-message') {
+          const editContent = decryptedMessage.content as EditMessage;
+          const targetMsg = await storage.getMessage({
+            spaceId: resolvedSenderAddress,
+            channelId: resolvedSenderAddress,
+            messageId: editContent.originalMessageId,
+          });
+
+          // Auth: editor must be the target's author. "Editor" is the
+          // session-authenticated sender (pre-self-sync `senderAddress`), NOT
+          // the spoofable payload `senderId` — same rule as remove-message and
+          // desktop's DM edit. Pre-self-sync keeps our own echo authorized.
+          const authenticatedSender = senderAddress;
+          const authorized = editContent.senderId === authenticatedSender &&
+            (!!targetMsg && targetMsg.content?.senderId === authenticatedSender);
+
+          if (authorized && targetMsg && targetMsg.content.type === 'post') {
+            // Full desktop DM parity on receive: 15-min window re-check against
+            // the target's createdDate + reject oversized edits.
+            const withinWindow = Date.now() - targetMsg.createdDate <= 15 * 60 * 1000;
+            const editedText = Array.isArray(editContent.editedText)
+              ? editContent.editedText.join('')
+              : editContent.editedText;
+            const withinLength = !editedText || editedText.length <= MAX_MESSAGE_LENGTH;
+
+            if (withinWindow && withinLength) {
+              const conversation = await storage.getConversation(conversationId);
+              const saveEditHistory = conversation?.saveEditHistory ?? false;
+              const applied = applyReceivedEdit(targetMsg, {
+                newText: editContent.editedText,
+                editedAt: editContent.editedAt,
+                editNonce: editContent.editNonce,
+                saveEditHistory,
+              });
+              // Replayed edit already applied → no-op (don't clobber history).
+              if (applied.changed) {
+                queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
+                  if (!old) return old;
+                  return { ...old, pages: old.pages.map((page) => ({
+                    ...page,
+                    messages: page.messages.map((m) => {
+                      if (m.messageId === editContent.originalMessageId && m.content.type === 'post') {
+                        return {
+                          ...m,
+                          modifiedDate: applied.modifiedDate,
+                          lastModifiedHash: applied.lastModifiedHash,
+                          content: { ...m.content, text: editContent.editedText },
+                          edits: applied.edits,
+                        };
+                      }
+                      return m;
+                    }),
+                  })) };
+                });
+                const updated: Message = {
+                  ...targetMsg,
+                  modifiedDate: applied.modifiedDate,
+                  lastModifiedHash: applied.lastModifiedHash,
+                  content: { ...targetMsg.content, text: editContent.editedText },
+                  edits: applied.edits,
+                };
+                await storage.saveMessage(updated, updated.createdDate, '', '', '', '');
+                scheduleConversationRefresh(conversationId);
+              }
+            } else {
+              logger.debug(
+                `[DM] dropped edit-message for ${editContent.originalMessageId?.slice(0, 12)} (window=${withinWindow} length=${withinLength})`
+              );
+            }
+          } else if (!authorized) {
+            logger.debug(
+              `[DM] dropped unauthorized edit-message from ${editContent.senderId?.slice(0, 12)} for ${editContent.originalMessageId?.slice(0, 12)}`
+            );
+          }
+
+          // Best-effort: delete processed control message from inbox (same as
+          // the remove-message fold above).
+          const originalEditMsg = batch.find(m => m.timestamp === msgResult.timestamp);
+          if (originalEditMsg) {
+            const conversationKeypair = encryptionStateStorage.getConversationInboxKeypairByAddress(originalEditMsg.inboxAddress);
+            if (conversationKeypair?.signingPrivateKey && conversationKeypair?.signingPublicKey) {
+              const signingKey = {
+                publicKey: bytesToHex(conversationKeypair.signingPublicKey),
+                privateKey: bytesToHex(conversationKeypair.signingPrivateKey),
+              };
+              deleteConversationInboxMessages(originalEditMsg.inboxAddress, [originalEditMsg.timestamp], signingKey).catch(() => {});
+            } else {
+              getDeviceKeyset().then(dk => {
+                if (dk) deleteInboxMessages(originalEditMsg.inboxAddress, [originalEditMsg.timestamp], dk).catch(() => {});
               });
             }
           }
