@@ -556,9 +556,6 @@ export async function saveConfig(config: UserConfig): Promise<void> {
         timestamp: ts,
         signature,
       });
-      logger.log(
-        `[ConfigSync] settings POSTED ok (blob ${Math.round(encryptedConfig.length / 1024)}KB, ${spaceKeys.length} spaces)`
-      );
 
       // Clear deleted bookmark tombstones after successful sync
       clearDeletedBookmarkIds(address);
