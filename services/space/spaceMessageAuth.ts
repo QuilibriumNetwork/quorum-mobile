@@ -30,6 +30,7 @@ import {
   buildMessageFingerprint,
   bytesToHex,
   canManageReadOnlyChannel,
+  deriveInboxAddress,
   hexToBytes,
   isControlMessageType,
   resolveVerifiedSender,
@@ -38,6 +39,7 @@ import {
   type ControlMessageVerdict,
   type Message,
   type Space,
+  type SpaceMember,
   type VerifiedSender,
 } from '@quilibrium/quorum-shared';
 import { NativeSigningProvider } from '../crypto/native-signing-provider';
@@ -126,12 +128,14 @@ export async function verifySpaceMessageSignature(
  */
 export async function resolveVerifiedSpaceSender(
   message: Message,
-  spaceId: string
+  spaceId: string,
+  members?: SpaceMember[]
 ): Promise<VerifiedSender | null> {
   const publicKey = await verifySpaceMessageSignature(message, spaceId);
   if (!publicKey) return null;
-  const members = await getMMKVAdapter().getSpaceMembers(spaceId);
-  return resolveVerifiedSender(publicKey, members);
+  const memberList =
+    members ?? (await getMMKVAdapter().getSpaceMembers(spaceId));
+  return resolveVerifiedSender(publicKey, memberList);
 }
 
 /**
@@ -148,13 +152,16 @@ export async function authorizeSpaceControlMessage(params: {
   space: Space | undefined;
   channel: Channel | undefined;
   targetMessage?: Message;
+  /** Preloaded member list (batch catch-up passes one per space so hundreds
+   *  of control messages don't re-parse the member blob each). */
+  members?: SpaceMember[];
 }): Promise<ControlMessageVerdict> {
-  const { message, spaceId, space, channel, targetMessage } = params;
+  const { message, spaceId, space, channel, targetMessage, members } = params;
   const contentType = message.content?.type;
   if (!contentType || !isControlMessageType(contentType)) {
     return { allowed: false, reason: 'unknown-control-type' };
   }
-  const verifiedSender = await resolveVerifiedSpaceSender(message, spaceId);
+  const verifiedSender = await resolveVerifiedSpaceSender(message, spaceId, members);
   return authorizeControlMessage({
     content: message.content as ControlMessageContent,
     verifiedSender,
@@ -175,11 +182,52 @@ export async function isReadOnlyPostAuthorized(
   message: Message,
   spaceId: string,
   space: Space | undefined,
-  channel: Channel | undefined
+  channel: Channel | undefined,
+  members?: SpaceMember[]
 ): Promise<boolean> {
-  const verifiedSender = await resolveVerifiedSpaceSender(message, spaceId);
+  const verifiedSender = await resolveVerifiedSpaceSender(message, spaceId, members);
   if (!verifiedSender) return false;
   return canManageReadOnlyChannel(verifiedSender, false, space, channel);
+}
+
+/**
+ * update-profile acceptance. A profile update rewrites a member's display
+ * identity AND doubles as their inbox key-rotation announcement, which forces
+ * a weaker rule than control messages: a rotated key legitimately matches no
+ * member row yet, so the strict reverse binding of `resolveVerifiedSpaceSender`
+ * would permanently block every profile update after a rotation.
+ *
+ * Rule: signature required and valid (unsigned/invalid → drop, desktop
+ * parity), PLUS a known-key binding — when the signing key DOES map to an
+ * existing member row, the claimed senderId must be that member. This kills
+ * the cheap impersonation (a member signing with their own registered key
+ * while claiming someone else's senderId) while leaving genuine rotations
+ * (unknown key) accepted exactly as desktop does.
+ *
+ * Deliberately NOT mirrored from desktop: writing the announced key's inbox
+ * address onto the claimed member's row. Accepting an unproven key→member
+ * binding into the same table `resolveVerifiedSender` authorizes against
+ * would let a forged update-profile impersonate that member for CONTROL
+ * messages afterwards. Mobile member rows keep the join-broadcast binding.
+ */
+export async function isUpdateProfileAuthorized(
+  message: Message,
+  spaceId: string,
+  members?: SpaceMember[]
+): Promise<boolean> {
+  const publicKey = await verifySpaceMessageSignature(message, spaceId);
+  if (!publicKey) return false;
+  const senderId = (message.content as { senderId?: string })?.senderId;
+  if (!senderId) return false;
+  const memberList =
+    members ?? (await getMMKVAdapter().getSpaceMembers(spaceId));
+  const inboxAddress = deriveInboxAddress(publicKey);
+  const keyOwner = memberList.find(
+    (m) => m.inbox_address && m.inbox_address === inboxAddress
+  );
+  if (!keyOwner) return true; // unknown key: rotation announcement, accept
+  const ownerAddress = keyOwner.address || keyOwner.user_address;
+  return ownerAddress === senderId;
 }
 
 /**
@@ -198,11 +246,15 @@ export async function isReadOnlyPostAuthorized(
  */
 export async function shouldStripEveryoneMention(
   message: Message,
-  spaceId: string
+  spaceId: string,
+  members?: SpaceMember[]
 ): Promise<boolean> {
   if (message.mentions?.everyone !== true) return false;
   const senderId = (message.content as { senderId?: string })?.senderId;
   if (!senderId) return true;
-  const verifiedSender = await resolveVerifiedSpaceSender(message, spaceId);
-  return verifiedSender !== senderId;
+  const verifiedSender = await resolveVerifiedSpaceSender(message, spaceId, members);
+  // Strip when unverifiable OR when the signing key belongs to someone other
+  // than the claimed sender. (VerifiedSender is a branded string, so the
+  // runtime comparison is plain string equality.)
+  return verifiedSender === null || verifiedSender !== senderId;
 }

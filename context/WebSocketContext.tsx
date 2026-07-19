@@ -66,8 +66,8 @@ import {
 import {
   authorizeSpaceControlMessage,
   isReadOnlyPostAuthorized,
+  isUpdateProfileAuthorized,
   shouldStripEveryoneMention,
-  verifySpaceMessageSignature,
 } from '../services/space/spaceMessageAuth';
 import {
   hasMuteId,
@@ -2146,15 +2146,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }
 
             if (contentType === 'update-profile') {
-              // Signature gate (desktop parity): a profile update rewrites
-              // another member's display identity, and doubles as their inbox
-              // key-rotation announcement — so an unsigned or invalid one is
-              // DROPPED, never applied. Verification is signature-only (no
-              // reverse member binding): a legitimately rotated key has no
-              // matching member row yet, exactly like desktop's update-profile
-              // carve-out in its verify block.
-              const profileSigner = await verifySpaceMessageSignature(spaceMessage, spaceId);
-              if (!profileSigner) {
+              // Profile updates rewrite a member's display identity, so they
+              // require a valid signature (unsigned/invalid → DROPPED, desktop
+              // parity) plus the known-key binding: a signing key already
+              // registered to a member may only speak for that member. A key
+              // matching no row is accepted — the message doubles as a
+              // key-rotation announcement. See isUpdateProfileAuthorized for
+              // why this is weaker than control-message auth and why the
+              // announced key is NOT written back to the member row.
+              const profileAuthorized = await isUpdateProfileAuthorized(spaceMessage, spaceId);
+              if (!profileAuthorized) {
                 logger.debug(
                   `[SpaceMsg] dropped unsigned/invalid update-profile for ${((spaceMessage.content as { senderId?: string })?.senderId ?? '').slice(0, 12)}`
                 );
@@ -3535,6 +3536,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         else entry.transforms.set(messageId, [transform]);
       };
 
+      // Member list memo for signature verification: a catch-up batch can hold
+      // hundreds of control messages and each verification needs the space's
+      // member list (reverse key→member lookup), which is one JSON.parse of
+      // the whole blob per read. Load lazily, once per space group, and
+      // invalidate whenever this loop processes something that writes member
+      // rows (join/kick via the control branch, update-profile below).
+      let batchMembersCache: SpaceMember[] | null = null;
+      const getBatchMembers = async () =>
+        (batchMembersCache ??= await getMMKVAdapter().getSpaceMembers(spaceId));
+
       for (const msgResult of groupResult.messages) {
         deleteTimestamps.push(msgResult.timestamp);
 
@@ -3588,6 +3599,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             } catch (err) {
               logger.warn(`[batch-control] handleIncomingMessage threw (ts=${msgResult.timestamp}): ${err instanceof Error ? err.message : String(err)}`);
             }
+            // Control messages (join/kick/…) may have written member rows.
+            batchMembersCache = null;
           } else {
             logger.debug(`[batch-control] dropped: no original batch message for ts=${msgResult.timestamp}`);
           }
@@ -3689,6 +3702,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               space: space ?? undefined,
               channel: editChannel,
               targetMessage: baseMsg,
+              members: await getBatchMembers(),
             });
             if (!editVerdict.allowed) {
               logger.debug(
@@ -3764,6 +3778,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               space: space ?? undefined,
               channel: removeChannel,
               targetMessage,
+              members: await getBatchMembers(),
             });
             if (!removeVerdict.allowed) {
               logger.debug(
@@ -3818,6 +3833,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               spaceId,
               space,
               channel: muteChannel,
+              members: await getBatchMembers(),
             });
             if (!muteVerdict.allowed) {
               logger.debug(
@@ -3850,11 +3866,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // the connect-time profile re-broadcast would be dropped and the
             // member's profile update would never reach this device.
             //
-            // Signature gate (desktop parity, same as live): unsigned or
-            // invalid → dropped, signature-only (no member reverse binding —
-            // the message doubles as a key-rotation announcement).
-            const profileSigner = await verifySpaceMessageSignature(spaceMessage, spaceId);
-            if (!profileSigner) {
+            // Signature + known-key-binding gate, same as live: unsigned or
+            // invalid → dropped; a signing key registered to a member may only
+            // speak for that member; unknown key accepted (rotation
+            // announcement). See isUpdateProfileAuthorized.
+            const profileAuthorized = await isUpdateProfileAuthorized(
+              spaceMessage, spaceId, await getBatchMembers()
+            );
+            if (!profileAuthorized) {
               logger.debug(
                 `[BatchMsg] dropped unsigned/invalid update-profile for ${((spaceMessage.content as { senderId?: string })?.senderId ?? '').slice(0, 12)}`
               );
@@ -3920,6 +3939,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             } as SpaceMember & { profileTimestamp: number; globalProfileTimestamp?: number; farcasterFid?: number; farcasterUsername?: string };
 
             await adapter.saveSpaceMember(spaceId, merged);
+            // Member rows changed — refresh the verification member memo.
+            batchMembersCache = null;
 
             queryClient.setQueryData(queryKeys.spaces.members(spaceId), (old: SpaceMember[] | undefined) => {
               if (!old) return old;
@@ -3971,7 +3992,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               ?.channels.find((c) => c.channelId === channelId);
             if (channel?.isReadOnly) {
               const canPost = await isReadOnlyPostAuthorized(
-                spaceMessage, spaceId, space ?? undefined, channel
+                spaceMessage, spaceId, space ?? undefined, channel, await getBatchMembers()
               );
               if (!canPost) {
                 const senderId = 'senderId' in spaceMessage.content
@@ -3989,7 +4010,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // `mentions.everyone` only when the verified signer matches the
           // claimed sender; otherwise strip the flag before the message is
           // stored or logged so badge, inbox, and rendering all agree.
-          if (spaceMessage.mentions && await shouldStripEveryoneMention(spaceMessage, spaceId)) {
+          if (spaceMessage.mentions && await shouldStripEveryoneMention(spaceMessage, spaceId, await getBatchMembers())) {
             logger.debug(
               `[BatchMsg] stripped unverified @everyone from ${spaceMessage.messageId?.slice(0, 12)}`
             );
