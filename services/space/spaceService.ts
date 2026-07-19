@@ -280,6 +280,7 @@ export async function createSpace(params: CreateSpaceParams): Promise<CreateSpac
     address: inboxAddress,
     publicKey: inboxPublicKeyHex,
     privateKey: inboxPrivateKeyHex,
+    provenance: 'origin',
   });
 
   saveSpaceKey({

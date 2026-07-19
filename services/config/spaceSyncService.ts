@@ -88,16 +88,25 @@ export async function syncSpaceFromConfig(
     // per-device (fresh) inbox key, whose signatures no receiver's member
     // table can resolve — so control messages (delete/edit/mute/…) from this
     // device get dropped fleet-wide. When another device has since published
-    // the original join-bound keypair under 'signing', adopt it. Adopt-if-
-    // absent only: never let a payload overwrite a signing key we already
-    // hold (prevents ping-ponging between devices' promotions, and ensures a
-    // device that provably holds the correct key can never lose it).
+    // the original join-bound keypair under 'signing', adopt it.
+    //
+    // Adoption rule: a key this device holds with 'origin' provenance (its
+    // own create/join flow — provably correct) is NEVER replaced. Anything
+    // else ('promoted' = migration guess that misfires on pre-split synced
+    // devices, 'adopted', or unmarked) yields to the blob, so a device that
+    // wrongly self-promoted converges to the join device's published key as
+    // soon as that device's config save reaches the blob.
     // Best-effort: storage failures are swallowed and the whole block re-runs
-    // on the next config receive; both steps are idempotent.
+    // on the next config receive; all steps are idempotent.
     try {
-      if (!getSpaceKey(spaceId, 'signing')) {
+      const localSigning = getSpaceKey(spaceId, 'signing');
+      if (!localSigning || localSigning.provenance !== 'origin') {
         const payloadSigning = keys.find((k) => k.keyId === 'signing');
-        if (payloadSigning?.privateKey && payloadSigning.publicKey) {
+        if (
+          payloadSigning?.privateKey &&
+          payloadSigning.publicKey &&
+          payloadSigning.publicKey !== localSigning?.publicKey
+        ) {
           saveSpaceKey({
             spaceId,
             keyId: 'signing',
@@ -106,6 +115,7 @@ export async function syncSpaceFromConfig(
               deriveAddress(Uint8Array.from(hexToBytes(payloadSigning.publicKey))),
             publicKey: payloadSigning.publicKey,
             privateKey: payloadSigning.privateKey,
+            provenance: 'adopted',
           });
         }
       }
@@ -144,7 +154,9 @@ export async function syncSpaceFromConfig(
       return false;
     }
 
-    // Save all keys first
+    // Save all keys first. A payload 'signing' key is marked 'adopted' (came
+    // from the blob, replaceable if the blob later offers a different one);
+    // provenance is a local-only field, never serialized back into the blob.
     for (const key of keys) {
       saveSpaceKey({
         spaceId: key.spaceId,
@@ -152,6 +164,7 @@ export async function syncSpaceFromConfig(
         address: key.address,
         publicKey: key.publicKey,
         privateKey: key.privateKey,
+        ...(key.keyId === 'signing' ? { provenance: 'adopted' as const } : {}),
       });
     }
 

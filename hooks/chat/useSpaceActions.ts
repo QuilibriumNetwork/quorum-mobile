@@ -391,6 +391,7 @@ export function useJoinSpace() {
         address: inboxAddress,
         publicKey: bytesToHex(new Uint8Array(inboxKeypair.public_key)),
         privateKey: bytesToHex(new Uint8Array(inboxKeypair.private_key)),
+        provenance: 'origin',
       });
 
       // 6. Register inbox with hub if we have hub key

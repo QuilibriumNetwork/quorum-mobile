@@ -17,6 +17,18 @@ export interface SpaceKey {
   address?: string;
   publicKey: string;
   privateKey: string;
+  /**
+   * How this device came to hold the key (LOCAL-only — deliberately not
+   * serialized into the config blob; collectSpaceKeysForSync maps explicit
+   * fields). Only meaningful for keyId 'signing':
+   * - 'origin': created by THIS device's create/join flow — provably the
+   *   join-bound identity; never replaced by a synced value.
+   * - 'adopted': taken from the config blob (another device published it).
+   * - 'promoted': self-promoted by the pre-split migration oracle, which can
+   *   misfire on devices that synced the space before the split — treated as
+   *   a guess and replaced by whatever the blob offers.
+   */
+  provenance?: 'origin' | 'adopted' | 'promoted';
 }
 
 export function getSpaceIds(): string[] {

@@ -495,6 +495,9 @@ async function promoteSpaceSigningKeys(userAddress: string): Promise<void> {
       address: inboxKey.address,
       publicKey: inboxKey.publicKey,
       privateKey: inboxKey.privateKey,
+      // A guess (the oracle misfires on pre-split synced devices): yields to
+      // any blob-published key, unlike 'origin'.
+      provenance: 'promoted',
     });
   }
 }
