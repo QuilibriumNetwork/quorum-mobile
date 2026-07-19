@@ -469,7 +469,11 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         spaceChannels: channelsData?.map((c) => ({ channelId: c.channelId, channelName: c.channelName })),
         allowEveryone: canMentionEveryone,
         isRepudiable: spaceData?.isRepudiable,
-        skipSigning,
+        // Read-only channels force-sign: receivers only accept read-only
+        // posts from a VERIFIED manager, so an unsigned send would be
+        // dropped at every peer. The composer toggle is hidden for
+        // read-only channels; this is the wire-level backstop.
+        skipSigning: isReadOnlyChannel ? false : skipSigning,
       }, {
         onSettled: refocusInput,
       });
@@ -488,7 +492,8 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
         spaceChannels: channelsData?.map((c) => ({ channelId: c.channelId, channelName: c.channelName })),
         allowEveryone: canMentionEveryone,
         isRepudiable: spaceData?.isRepudiable,
-        skipSigning,
+        // Same read-only force-sign as the embed path above.
+        skipSigning: isReadOnlyChannel ? false : skipSigning,
       }, {
         onSettled: refocusInput,
       });
@@ -519,7 +524,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
       setAlsoReplyOnFarcaster(false);
       replyCastHashRef.current = null;
     }
-  }, [messageText, spaceId, channelId, sendMessageMutation, sendEmbedMutation, pendingAttachment, replyToMessage, editingMessage, editSpaceMessageMutation, draftsRef, alsoReplyOnFarcaster, isCastReply, farcasterAuthToken, spaceData, channelsData, canMentionEveryone, skipSigning]);
+  }, [messageText, spaceId, channelId, sendMessageMutation, sendEmbedMutation, pendingAttachment, replyToMessage, editingMessage, editSpaceMessageMutation, draftsRef, alsoReplyOnFarcaster, isCastReply, farcasterAuthToken, spaceData, channelsData, canMentionEveryone, skipSigning, isReadOnlyChannel]);
 
   const handleAttachmentPress = useCallback(async () => {
     const result = await pickImage('library');
@@ -815,7 +820,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             editingMessage={editingMessage}
             onCancelEdit={handleCancelEdit}
             disabled={!canPost}
-            signingOptional={!!spaceData?.isRepudiable}
+            signingOptional={!!spaceData?.isRepudiable && !isReadOnlyChannel}
             skipSigning={skipSigning}
             onToggleSkipSigning={() => setSkipSigning((s) => !s)}
           />

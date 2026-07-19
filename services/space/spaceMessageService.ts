@@ -15,11 +15,11 @@
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import {
+  buildMessageFingerprint,
   bytesToHex,
   hexToBytes,
   extractMentionsFromText,
   type EditMessage,
-  type EmbedMessage,
   type Mentions,
   type Message,
   type MessageContent,
@@ -29,7 +29,6 @@ import {
   type RemoveMessage,
   type RemoveReactionMessage,
   type StickerMessage,
-  type UpdateProfileMessage,
   type SpaceCallStartMessage,
   type SpaceCallEndMessage,
   // New sync types
@@ -141,117 +140,29 @@ function generateNonce(): string {
 }
 
 /**
- * Canonicalize message content for hashing (matches desktop canonicalize function)
- * For 'post' type: returns the text
- * For 'sticker' type: returns type + stickerId
- * For 'embed' type: returns type + dimensions + urls
- * For 'reaction' type: returns type + messageId + reaction
- * etc.
- */
-function canonicalizeContent(content: MessageContent): string {
-  if (content.type === 'post') {
-    const postContent = content as PostMessage;
-    if (Array.isArray(postContent.text)) {
-      return postContent.text.join('');
-    }
-    return postContent.text ?? '';
-  }
-
-  if (content.type === 'sticker') {
-    const stickerContent = content as StickerMessage;
-    return content.type + stickerContent.stickerId + (stickerContent.repliesToMessageId ?? '');
-  }
-
-  if (content.type === 'embed') {
-    const embedContent = content as EmbedMessage;
-    return (
-      content.type +
-      (embedContent.width ?? '') +
-      (embedContent.height ?? '') +
-      (embedContent.imageUrl ?? '') +
-      (embedContent.repliesToMessageId ?? '') +
-      (embedContent.videoUrl ?? '')
-    );
-  }
-
-  if (content.type === 'reaction') {
-    const reactionContent = content as ReactionMessage;
-    return content.type + reactionContent.messageId + reactionContent.reaction;
-  }
-
-  if (content.type === 'remove-reaction') {
-    const removeReactionContent = content as RemoveReactionMessage;
-    return content.type + removeReactionContent.messageId + removeReactionContent.reaction;
-  }
-
-  if (content.type === 'remove-message') {
-    const removeContent = content as RemoveMessage;
-    return content.type + removeContent.removeMessageId;
-  }
-
-  // Mute (moderation). MUST match shared canonicalize() byte-for-byte
-  // (quorum-shared/src/utils/canonicalize.ts 'mute' branch) so a mute signed on
-  // mobile verifies on desktop and vice-versa.
-  if (content.type === 'mute') {
-    const muteContent = content as MuteMessage;
-    return (
-      content.type +
-      muteContent.targetUserId +
-      muteContent.muteId +
-      muteContent.timestamp +
-      muteContent.action +
-      (muteContent.duration ?? '')
-    );
-  }
-
-  if (content.type === 'edit-message') {
-    const editContent = content as EditMessage;
-    const editedText = Array.isArray(editContent.editedText)
-      ? editContent.editedText.join('')
-      : editContent.editedText;
-    return content.type + editContent.originalMessageId + editedText + editContent.editNonce;
-  }
-
-  if (content.type === 'space-call-start') {
-    const c = content as SpaceCallStartMessage;
-    return content.type + c.callId + c.mediaType;
-  }
-
-  if (content.type === 'space-call-end') {
-    const c = content as SpaceCallEndMessage;
-    return content.type + c.callId;
-  }
-
-  // update-profile. MUST match shared canonicalize() byte-for-byte
-  // (quorum-shared 'update-profile' branch: type + displayName + userIcon, raw
-  // concatenation with NO ?? '' fallback) so a profile update signed on mobile
-  // verifies on desktop. When a field is omitted on the wire, JS concatenates
-  // the literal string "undefined" — shared does the same, so do NOT add a
-  // fallback here. bio/farcaster fields are intentionally excluded from the hash
-  // on both sides; matching shared is the requirement, not covering more fields.
-  if (content.type === 'update-profile') {
-    const updateProfileContent = content as UpdateProfileMessage;
-    return content.type + updateProfileContent.displayName + updateProfileContent.userIcon;
-  }
-
-  // Default: stringify the content
-  return JSON.stringify(content);
-}
-
-/**
- * Generate message ID hash from content (matches desktop implementation)
- * Hash input: nonce + 'post' + senderAddress + canonicalizedContent
- * Returns both the hex messageId and the raw hash bytes for signing
+ * Generate message ID hash from content via the shared canonical fingerprint
+ * (`buildMessageFingerprint`), which both platforms use for signing AND
+ * receive-side verification - a locally-built fingerprint that diverges by
+ * even one byte makes honest signatures verify as forgeries on the other
+ * platform. Control types scope-bind spaceId+channelId (replay protection);
+ * post/embed/sticker keep the legacy format so existing messageIds are stable.
+ * Returns both the hex messageId and the raw hash bytes for signing.
  */
 function generateMessageIdHash(
   nonce: string,
   senderAddress: string,
-  content: MessageContent
+  content: MessageContent,
+  spaceId: string,
+  channelId: string
 ): { messageId: string; messageIdBytes: Uint8Array } {
-  const canonicalContent = canonicalizeContent(content);
-  const input = nonce + content.type + senderAddress + canonicalContent;
-  const inputBytes = new TextEncoder().encode(input);
-  const hashBytes = sha256(inputBytes);
+  const fingerprint = buildMessageFingerprint({
+    nonce,
+    content: content as Parameters<typeof buildMessageFingerprint>[0]['content'],
+    senderId: senderAddress,
+    spaceId,
+    channelId,
+  });
+  const hashBytes = sha256(new TextEncoder().encode(fingerprint));
   const messageId = bytesToHex(hashBytes);
   return { messageId, messageIdBytes: hashBytes };
 }
@@ -311,8 +222,7 @@ export async function sendSpaceMessage(
   };
 
   // 4. Generate message ID using SHA-256 hash (matches desktop implementation)
-  // Hash input: nonce + 'post' + senderAddress + text
-  const { messageId, messageIdBytes } = generateMessageIdHash(nonce, senderAddress, messageContent);
+  const { messageId, messageIdBytes } = generateMessageIdHash(nonce, senderAddress, messageContent, spaceId, channelId);
 
   // 5. Build full message object
   const message: Message = {
@@ -430,7 +340,7 @@ export async function sendStickerMessage(
   };
 
   // 4. Generate message ID using SHA-256 hash (matches desktop implementation)
-  const { messageId, messageIdBytes } = generateMessageIdHash(nonce, senderAddress, messageContent);
+  const { messageId, messageIdBytes } = generateMessageIdHash(nonce, senderAddress, messageContent, spaceId, channelId);
 
   // 5. Build full message object
   const message: Message = {
@@ -665,7 +575,7 @@ async function sendGenericMessage(
   }
 
   // Generate message ID using SHA-256 hash (matches desktop implementation)
-  const { messageId, messageIdBytes } = generateMessageIdHash(nonce, senderAddress, content);
+  const { messageId, messageIdBytes } = generateMessageIdHash(nonce, senderAddress, content, spaceId, channelId);
 
   // Build full message object
   const message: Message = {
@@ -794,6 +704,13 @@ export interface SendEditMessageParams {
   spaceChannels?: Array<{ channelId: string; channelName: string }>;
   /** Sender may use @everyone (has mention:everyone) — gates @everyone in edits. */
   allowEveryone?: boolean;
+  /**
+   * Edit inherit rule: `!shouldSignEdit(original)` — an edit inherits the
+   * signed/unsigned state of the message it edits, so a deliberately-unsigned
+   * (deniable) message never silently gains a signature that would both
+   * badge it as signed and leak linkage to the original content hash.
+   */
+  skipSigning?: boolean;
 }
 
 /**
@@ -802,7 +719,7 @@ export interface SendEditMessageParams {
 export async function sendEditMessage(
   params: SendEditMessageParams
 ): Promise<SendGenericMessageResult> {
-  const { spaceId, channelId, originalMessageId, editedText, senderAddress, spaceRoles, spaceChannels, allowEveryone } = params;
+  const { spaceId, channelId, originalMessageId, editedText, senderAddress, spaceRoles, spaceChannels, allowEveryone, skipSigning } = params;
 
   const editedAt = Date.now();
   const editNonce = generateNonce();
@@ -822,6 +739,7 @@ export async function sendEditMessage(
     senderAddress,
     content,
     mentions: extractMentionsFromText(editedText, { spaceRoles, spaceChannels, allowEveryone }),
+    skipSigning,
   });
 }
 

@@ -10,8 +10,6 @@
 
 import {
   bytesToHex,
-  canManageReadOnlyChannel,
-  createChannelPermissionChecker,
   createRNWebSocketClient,
   int64ToBytes,
   logger,
@@ -65,6 +63,12 @@ import {
   clearSentEnvelope,
   isSentEnvelope,
 } from '../services/space/spaceMessageService';
+import {
+  authorizeSpaceControlMessage,
+  isReadOnlyPostAuthorized,
+  shouldStripEveryoneMention,
+  verifySpaceMessageSignature,
+} from '../services/space/spaceMessageAuth';
 import {
   hasMuteId,
   isUserMuted as isModMutedUser,
@@ -1877,6 +1881,54 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // Update existing message with edit
               const editContent = spaceMessage.content as { originalMessageId: string; editedText: string | string[]; editedAt: number; editNonce?: string };
 
+              const dropEditInbox = () => {
+                if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
+                  deleteSpaceInboxMessages(
+                    spaceInboxKey.address,
+                    [message.timestamp],
+                    { publicKey: spaceInboxKey.publicKey, privateKey: spaceInboxKey.privateKey }
+                  ).catch(err => {});
+                }
+              };
+
+              // Authorization runs against the VERIFIED SIGNER, never the
+              // payload senderId — spaces are many-party, so the ed448
+              // signature is the only per-message sender proof. The verdict
+              // (shared authorizeControlMessage) requires a verified signature
+              // regardless of space.isRepudiable and permits only edits of the
+              // signer's own message; the one exception is an unsigned edit of
+              // an unsigned own message in a repudiable space (deniable
+              // content stays at the trust level it always had). Target must
+              // exist locally: without it the own-author gate can't run.
+              const existingMsg = await storage.getMessage({ spaceId, channelId, messageId: editContent.originalMessageId });
+              const editChannel: Channel | undefined = space?.groups
+                ?.find((g) => g.channels.find((c) => c.channelId === channelId))
+                ?.channels.find((c) => c.channelId === channelId);
+              const editVerdict = await authorizeSpaceControlMessage({
+                message: spaceMessage,
+                spaceId,
+                space: space ?? undefined,
+                channel: editChannel,
+                targetMessage: existingMsg,
+              });
+              if (!editVerdict.allowed) {
+                logger.debug(
+                  `[SpaceMsg] dropped unauthorized edit-message (${editVerdict.reason}) for ${editContent.originalMessageId?.slice(0, 12)}`
+                );
+                dropEditInbox();
+                return;
+              }
+
+              // Per-version signature truth: a signed, verified edit's
+              // signature attests the NEW text, so the stored row adopts the
+              // edit's publicKey/signature (otherwise the signed-state badge
+              // would vouch for text the original signature never covered).
+              // An accepted unsigned edit — only possible on an unsigned
+              // original — leaves the row unsigned.
+              const editSignatureFields = spaceMessage.signature && spaceMessage.publicKey
+                ? { publicKey: spaceMessage.publicKey, signature: spaceMessage.signature }
+                : {};
+
               // Honor the space's "Save Edit History" setting, matching desktop:
               // when OFF, don't retain prior versions (edits: []). Default false.
               const saveEditHistory = space?.saveEditHistory ?? false;
@@ -1905,6 +1957,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                             text: editContent.editedText,
                           },
                           edits: applied.edits,
+                          ...editSignatureFields,
                         };
                       }
                       return msg;
@@ -1916,7 +1969,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // remount / navigating away and back. Without this, the cache
               // update above gets overwritten the next time the infinite
               // query refetches from MMKV.
-              const existingMsg = await storage.getMessage({ spaceId, channelId, messageId: editContent.originalMessageId });
               if (existingMsg && existingMsg.content.type === 'post') {
                 const applied = applyReceivedEdit(existingMsg, {
                   newText: editContent.editedText,
@@ -1933,32 +1985,28 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     lastModifiedHash: applied.lastModifiedHash,
                     content: { ...existingMsg.content, text: editContent.editedText },
                     edits: applied.edits,
+                    ...editSignatureFields,
                   };
                   await storage.saveMessage(updated, updated.createdDate, '', '', '', '');
                 }
               }
               // Delete edit-message from inbox after processing
-              if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
-                deleteSpaceInboxMessages(
-                  spaceInboxKey.address,
-                  [message.timestamp],
-                  { publicKey: spaceInboxKey.publicKey, privateKey: spaceInboxKey.privateKey }
-                ).catch(err => {});
-              }
+              dropEditInbox();
               return;
             }
 
             if (contentType === 'remove-message') {
               const removeContent = spaceMessage.content as RemoveMessage;
 
-              // Receive-side permission enforcement. The sender's own client
-              // gates the delete button, but we can't trust that — a modified
-              // or buggy client (or a space owner relying on the owner-bypass
-              // footgun) could broadcast a delete it shouldn't. So we re-validate
-              // here against the sender's role, exactly as desktop does
-              // (MessageService.ts remove-message handling). No isSpaceOwner
-              // bypass: receivers can't verify ownership, so owners must hold a
-              // role with message:delete to delete others' messages.
+              // Receive-side permission enforcement against the VERIFIED
+              // SIGNER, never the payload senderId (which any modified client
+              // can set to a role-holder or the target's author). The verdict
+              // (shared authorizeControlMessage) requires a valid ed448
+              // signature regardless of space.isRepudiable, resolves the
+              // signer via reverse key→member lookup (fail-closed), and then
+              // runs the role check desktop runs (no isSpaceOwner bypass:
+              // receivers can't verify ownership). Missing target → honored
+              // as a no-op removal, but only from a verified sender.
               //
               // Self-deletes never reach this handler — own echoes are filtered
               // upstream (sent-envelope / senderId checks) and the local removal
@@ -1969,37 +2017,33 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 messageId: removeContent.removeMessageId,
               });
 
-              if (targetMessage) {
-                // Resolve the channel for read-only / manager-role handling.
-                const channel: Channel | undefined = space?.groups
-                  ?.find((g) => g.channels.find((c) => c.channelId === channelId))
-                  ?.channels.find((c) => c.channelId === channelId);
+              // Resolve the channel for read-only / manager-role handling.
+              const channel: Channel | undefined = space?.groups
+                ?.find((g) => g.channels.find((c) => c.channelId === channelId))
+                ?.channels.find((c) => c.channelId === channelId);
 
-                const checker = createChannelPermissionChecker({
-                  userAddress: removeContent.senderId,
-                  isSpaceOwner: false,
-                  space: space ?? undefined,
-                  channel,
-                });
-
-                if (!checker.canDeleteMessage(targetMessage)) {
-                  // Unauthorized delete — drop it, but still clear the inbox
-                  // entry so we don't reprocess it on every reconnect.
-                  logger.debug(
-                    `[SpaceMsg] dropped unauthorized remove-message from ${removeContent.senderId?.slice(0, 12)} for ${removeContent.removeMessageId?.slice(0, 12)}`
-                  );
-                  if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
-                    deleteSpaceInboxMessages(
-                      spaceInboxKey.address,
-                      [message.timestamp],
-                      { publicKey: spaceInboxKey.publicKey, privateKey: spaceInboxKey.privateKey }
-                    ).catch(err => {});
-                  }
-                  return;
+              const removeVerdict = await authorizeSpaceControlMessage({
+                message: spaceMessage,
+                spaceId,
+                space: space ?? undefined,
+                channel,
+                targetMessage,
+              });
+              if (!removeVerdict.allowed) {
+                // Unauthorized delete — drop it, but still clear the inbox
+                // entry so we don't reprocess it on every reconnect.
+                logger.debug(
+                  `[SpaceMsg] dropped unauthorized remove-message (${removeVerdict.reason}) from ${removeContent.senderId?.slice(0, 12)} for ${removeContent.removeMessageId?.slice(0, 12)}`
+                );
+                if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
+                  deleteSpaceInboxMessages(
+                    spaceInboxKey.address,
+                    [message.timestamp],
+                    { publicKey: spaceInboxKey.publicKey, privateKey: spaceInboxKey.privateKey }
+                  ).catch(err => {});
                 }
+                return;
               }
-              // targetMessage missing → nothing to protect; honor the removal so
-              // a stale reference doesn't linger in the cache.
 
               // Remove message from cache and storage
               queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
@@ -2029,12 +2073,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             if (contentType === 'mute') {
               const muteContent = spaceMessage.content as MuteMessage;
 
-              // Receive-side moderation-mute enforcement. Like remove-message we
-              // NEVER trust the sender's client — we re-validate the sender holds
-              // the `user:mute` role before honoring the mute. No isSpaceOwner
-              // bypass: receivers can't verify ownership, so owners must hold a
-              // user:mute role too (matches desktop mute-user-system). Fail-secure:
-              // reject when space data is unavailable.
+              // Receive-side moderation-mute enforcement against the VERIFIED
+              // SIGNER, never the payload senderId. The verdict (shared
+              // authorizeControlMessage) requires a valid ed448 signature
+              // regardless of space.isRepudiable, resolves the signer via
+              // reverse key→member lookup (fail-closed), and checks the
+              // `user:mute` role. No isSpaceOwner bypass: receivers can't
+              // verify ownership, so owners must hold a user:mute role too
+              // (matches desktop mute-user-system). Fail-secure: reject when
+              // space data is unavailable.
               const dropMuteInbox = () => {
                 if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
                   deleteSpaceInboxMessages(
@@ -2065,15 +2112,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               const muteChannel: Channel | undefined = space.groups
                 ?.find((g) => g.channels.find((c) => c.channelId === channelId))
                 ?.channels.find((c) => c.channelId === channelId);
-              const muteChecker = createChannelPermissionChecker({
-                userAddress: muteContent.senderId,
-                isSpaceOwner: false,
+              const muteVerdict = await authorizeSpaceControlMessage({
+                message: spaceMessage,
+                spaceId,
                 space,
                 channel: muteChannel,
               });
-              if (!muteChecker.canMuteUser()) {
+              if (!muteVerdict.allowed) {
                 logger.debug(
-                  `[SpaceMsg] dropped unauthorized mute from ${muteContent.senderId?.slice(0, 12)} for ${muteContent.targetUserId?.slice(0, 12)}`
+                  `[SpaceMsg] dropped unauthorized mute (${muteVerdict.reason}) from ${muteContent.senderId?.slice(0, 12)} for ${muteContent.targetUserId?.slice(0, 12)}`
                 );
                 dropMuteInbox();
                 return;
@@ -2099,6 +2146,28 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }
 
             if (contentType === 'update-profile') {
+              // Signature gate (desktop parity): a profile update rewrites
+              // another member's display identity, and doubles as their inbox
+              // key-rotation announcement — so an unsigned or invalid one is
+              // DROPPED, never applied. Verification is signature-only (no
+              // reverse member binding): a legitimately rotated key has no
+              // matching member row yet, exactly like desktop's update-profile
+              // carve-out in its verify block.
+              const profileSigner = await verifySpaceMessageSignature(spaceMessage, spaceId);
+              if (!profileSigner) {
+                logger.debug(
+                  `[SpaceMsg] dropped unsigned/invalid update-profile for ${((spaceMessage.content as { senderId?: string })?.senderId ?? '').slice(0, 12)}`
+                );
+                if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
+                  deleteSpaceInboxMessages(
+                    spaceInboxKey.address,
+                    [message.timestamp],
+                    { publicKey: spaceInboxKey.publicKey, privateKey: spaceInboxKey.privateKey }
+                  ).catch(err => {});
+                }
+                return;
+              }
+
               // Update member profile (display name, icon, bio) in storage and cache.
               // Two changes vs. the previous implementation:
               //   1. UPSERT instead of update-only — if we don't have a
@@ -2263,11 +2332,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }
 
             // Read-only channel enforcement (receive-side). Postable content
-            // (post/embed/sticker) authored by a non-manager must not land in a
-            // read-only channel — the sender's client should have blocked it, but
-            // we can't trust that (same reasoning as the remove-message guard).
-            // Covers all three postable types and runs BEFORE storage.saveMessage
-            // so a dropped message can't resurrect from disk on refetch.
+            // (post/embed/sticker) lands in a read-only channel only when its
+            // VERIFIED SIGNER is a manager — the claimed senderId proves
+            // nothing (a modified client sets it to any manager). Posting into
+            // a read-only channel is a privileged op, so the signature is
+            // required regardless of repudiability; unsigned → dropped. Runs
+            // BEFORE storage.saveMessage so a dropped message can't resurrect
+            // from disk on refetch.
             if (
               contentType === 'post' ||
               contentType === 'embed' ||
@@ -2278,12 +2349,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 ?.channels.find((c) => c.channelId === channelId);
 
               if (channel?.isReadOnly) {
-                const senderId = 'senderId' in spaceMessage.content
-                  ? spaceMessage.content.senderId
-                  : undefined;
-                const canPost = !!senderId
-                  && canManageReadOnlyChannel(senderId, false, space ?? undefined, channel);
+                const canPost = await isReadOnlyPostAuthorized(
+                  spaceMessage, spaceId, space ?? undefined, channel
+                );
                 if (!canPost) {
+                  const senderId = 'senderId' in spaceMessage.content
+                    ? spaceMessage.content.senderId
+                    : undefined;
                   logger.debug(
                     `[SpaceMsg] dropped read-only-channel post from ${senderId?.slice(0, 12)} in ${channelId?.slice(0, 12)}`
                   );
@@ -2297,6 +2369,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   return;
                 }
               }
+            }
+
+            // Receive-side @everyone gate: honor `mentions.everyone` only when
+            // the message's verified signer matches the claimed sender (whose
+            // mention:everyone role the downstream checks already require).
+            // Unverifiable → strip the flag BEFORE the message is stored or
+            // logged, so the badge, the notifications inbox, and the rendered
+            // "authorized @everyone" highlight all agree. The message itself
+            // still lands — it only loses the space-wide notification.
+            if (spaceMessage.mentions && await shouldStripEveryoneMention(spaceMessage, spaceId)) {
+              logger.debug(
+                `[SpaceMsg] stripped unverified @everyone from ${spaceMessage.messageId?.slice(0, 12)}`
+              );
+              spaceMessage = {
+                ...spaceMessage,
+                mentions: { ...spaceMessage.mentions, everyone: false },
+              };
             }
 
             // Regular message types (post, embed, sticker, join, leave, kick, etc.)
@@ -3581,6 +3670,41 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
           if (contentType === 'edit-message') {
             const editContent = spaceMessage.content as { originalMessageId: string; editedText: string | string[]; editedAt: number; editNonce?: string };
+
+            // Verified-signer authorization — same rule as the live path.
+            // Signature required regardless of repudiability (one exception:
+            // unsigned edit of an unsigned own message in a repudiable space);
+            // signer resolved by reverse key→member lookup; edits only of the
+            // signer's own message. Target must exist locally for the
+            // own-author gate to run. A check on one path but not the other
+            // would let cache and disk diverge, so this mirrors live exactly.
+            const baseMsg = pendingStorageUpdates.get(editContent.originalMessageId)
+              ?? await storage.getMessage({ spaceId, channelId, messageId: editContent.originalMessageId });
+            const editChannel: Channel | undefined = space?.groups
+              ?.find((g) => g.channels.find((c) => c.channelId === channelId))
+              ?.channels.find((c) => c.channelId === channelId);
+            const editVerdict = await authorizeSpaceControlMessage({
+              message: spaceMessage,
+              spaceId,
+              space: space ?? undefined,
+              channel: editChannel,
+              targetMessage: baseMsg,
+            });
+            if (!editVerdict.allowed) {
+              logger.debug(
+                `[BatchMsg] dropped unauthorized edit-message (${editVerdict.reason}) for ${editContent.originalMessageId?.slice(0, 12)}`
+              );
+              continue;
+            }
+
+            // Per-version signature truth (same as live): a signed, verified
+            // edit's signature attests the NEW text — the stored row adopts
+            // the edit's publicKey/signature. An accepted unsigned edit (only
+            // possible on an unsigned original) leaves the row unsigned.
+            const editSignatureFields = spaceMessage.signature && spaceMessage.publicKey
+              ? { publicKey: spaceMessage.publicKey, signature: spaceMessage.signature }
+              : {};
+
             // Honor the space's "Save Edit History" setting, matching desktop:
             // when OFF, don't retain prior versions (edits: []). Default false.
             const saveEditHistory = space?.saveEditHistory ?? false;
@@ -3601,6 +3725,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 lastModifiedHash: applied.lastModifiedHash,
                 content: { ...msg.content, text: editContent.editedText },
                 edits: applied.edits,
+                ...editSignatureFields,
               };
             };
             queueCacheTransform(messagesKey, editContent.originalMessageId, applyEdit);
@@ -3608,8 +3733,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // query refetches from disk (e.g. on remount, invalidate, or when
             // the user navigates away and back), so the edit appears to "snap
             // back" to the original. Match what the cache update did above.
-            const baseMsg = pendingStorageUpdates.get(editContent.originalMessageId)
-              ?? await storage.getMessage({ spaceId, channelId, messageId: editContent.originalMessageId });
             if (baseMsg && baseMsg.content.type === 'post') {
               pendingStorageUpdates.set(editContent.originalMessageId, applyEdit(baseMsg));
             }
@@ -3619,32 +3742,34 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           if (contentType === 'remove-message') {
             const removeContent = spaceMessage.content as RemoveMessage;
 
-            // Receive-side permission enforcement — same rule as the live path
-            // above. Validate the sender's role before honoring a delete; never
-            // trust the sender's client. No isSpaceOwner bypass (receivers can't
-            // verify ownership). Self-deletes are filtered upstream as self-echoes,
-            // so this won't block legitimate own deletes.
+            // Verified-signer authorization — same rule as the live path
+            // above: valid signature required regardless of repudiability,
+            // signer resolved by reverse key→member lookup (fail-closed),
+            // role check via the shared verdict. Never the payload senderId.
+            // No isSpaceOwner bypass (receivers can't verify ownership).
+            // Missing target → honored as a no-op removal, but only from a
+            // verified sender. Self-deletes are filtered upstream as
+            // self-echoes, so this won't block legitimate own deletes.
             const targetMessage = await storage.getMessage({
               spaceId,
               channelId,
               messageId: removeContent.removeMessageId,
             });
-            if (targetMessage) {
-              const channel: Channel | undefined = space?.groups
-                ?.find((g) => g.channels.find((c) => c.channelId === channelId))
-                ?.channels.find((c) => c.channelId === channelId);
-              const checker = createChannelPermissionChecker({
-                userAddress: removeContent.senderId,
-                isSpaceOwner: false,
-                space: space ?? undefined,
-                channel,
-              });
-              if (!checker.canDeleteMessage(targetMessage)) {
-                logger.debug(
-                  `[BatchMsg] dropped unauthorized remove-message from ${removeContent.senderId?.slice(0, 12)} for ${removeContent.removeMessageId?.slice(0, 12)}`
-                );
-                continue;
-              }
+            const removeChannel: Channel | undefined = space?.groups
+              ?.find((g) => g.channels.find((c) => c.channelId === channelId))
+              ?.channels.find((c) => c.channelId === channelId);
+            const removeVerdict = await authorizeSpaceControlMessage({
+              message: spaceMessage,
+              spaceId,
+              space: space ?? undefined,
+              channel: removeChannel,
+              targetMessage,
+            });
+            if (!removeVerdict.allowed) {
+              logger.debug(
+                `[BatchMsg] dropped unauthorized remove-message (${removeVerdict.reason}) from ${removeContent.senderId?.slice(0, 12)} for ${removeContent.removeMessageId?.slice(0, 12)}`
+              );
+              continue;
             }
 
             queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
@@ -3665,9 +3790,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           }
 
           if (contentType === 'mute') {
-            // Moderation-mute — same receive-side enforcement as the live path.
-            // Re-validate the sender's user:mute role; no isSpaceOwner bypass;
-            // fail-secure when space data is missing; reject self-mute + replays.
+            // Moderation-mute — same receive-side enforcement as the live
+            // path: verified-signer authorization via the shared verdict
+            // (signature required regardless of repudiability, reverse
+            // key→member lookup, user:mute role), never the payload senderId.
+            // No isSpaceOwner bypass; fail-secure when space data is missing;
+            // reject self-mute + replays.
             const muteContent = spaceMessage.content as MuteMessage;
 
             if (
@@ -3685,15 +3813,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             const muteChannel: Channel | undefined = space.groups
               ?.find((g) => g.channels.find((c) => c.channelId === channelId))
               ?.channels.find((c) => c.channelId === channelId);
-            const muteChecker = createChannelPermissionChecker({
-              userAddress: muteContent.senderId,
-              isSpaceOwner: false,
+            const muteVerdict = await authorizeSpaceControlMessage({
+              message: spaceMessage,
+              spaceId,
               space,
               channel: muteChannel,
             });
-            if (!muteChecker.canMuteUser()) {
+            if (!muteVerdict.allowed) {
               logger.debug(
-                `[BatchMsg] dropped unauthorized mute from ${muteContent.senderId?.slice(0, 12)} for ${muteContent.targetUserId?.slice(0, 12)}`
+                `[BatchMsg] dropped unauthorized mute (${muteVerdict.reason}) from ${muteContent.senderId?.slice(0, 12)} for ${muteContent.targetUserId?.slice(0, 12)}`
               );
               continue;
             }
@@ -3721,6 +3849,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // update-profile is an applied type, not persistable, so without this
             // the connect-time profile re-broadcast would be dropped and the
             // member's profile update would never reach this device.
+            //
+            // Signature gate (desktop parity, same as live): unsigned or
+            // invalid → dropped, signature-only (no member reverse binding —
+            // the message doubles as a key-rotation announcement).
+            const profileSigner = await verifySpaceMessageSignature(spaceMessage, spaceId);
+            if (!profileSigner) {
+              logger.debug(
+                `[BatchMsg] dropped unsigned/invalid update-profile for ${((spaceMessage.content as { senderId?: string })?.senderId ?? '').slice(0, 12)}`
+              );
+              continue;
+            }
             const profileContent = spaceMessage.content as {
               senderId: string;
               displayName?: string;
@@ -3818,8 +3957,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           }
 
           // Read-only channel enforcement (receive-side) — same rule as the
-          // live path above. Drop non-manager post/embed/sticker before the
-          // save so it can't resurrect from disk.
+          // live path above: only the VERIFIED SIGNER counts, and it must be
+          // a manager. Unsigned → dropped (privileged op, verified regardless
+          // of repudiability). Drops before the save so the message can't
+          // resurrect from disk.
           if (
             contentType === 'post' ||
             contentType === 'embed' ||
@@ -3829,18 +3970,33 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               ?.find((g) => g.channels.find((c) => c.channelId === channelId))
               ?.channels.find((c) => c.channelId === channelId);
             if (channel?.isReadOnly) {
-              const senderId = 'senderId' in spaceMessage.content
-                ? spaceMessage.content.senderId
-                : undefined;
-              const canPost = !!senderId
-                && canManageReadOnlyChannel(senderId, false, space ?? undefined, channel);
+              const canPost = await isReadOnlyPostAuthorized(
+                spaceMessage, spaceId, space ?? undefined, channel
+              );
               if (!canPost) {
+                const senderId = 'senderId' in spaceMessage.content
+                  ? spaceMessage.content.senderId
+                  : undefined;
                 logger.debug(
                   `[BatchMsg] dropped read-only-channel post from ${senderId?.slice(0, 12)} in ${channelId?.slice(0, 12)}`
                 );
                 continue;
               }
             }
+          }
+
+          // Receive-side @everyone gate — same rule as the live path: honor
+          // `mentions.everyone` only when the verified signer matches the
+          // claimed sender; otherwise strip the flag before the message is
+          // stored or logged so badge, inbox, and rendering all agree.
+          if (spaceMessage.mentions && await shouldStripEveryoneMention(spaceMessage, spaceId)) {
+            logger.debug(
+              `[BatchMsg] stripped unverified @everyone from ${spaceMessage.messageId?.slice(0, 12)}`
+            );
+            spaceMessage = {
+              ...spaceMessage,
+              mentions: { ...spaceMessage.mentions, everyone: false },
+            };
           }
 
           // Regular message - save and update cache
