@@ -2887,12 +2887,27 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           return;
         }
 
-        // delete-conversation-self: not implemented on mobile yet — drop it so
-        // it isn't saved as a ghost row (forward-compat until mobile Part 2).
+        // delete-conversation-self, fallback path (mirrors the batch branch):
+        // another of OUR OWN devices deleted this DM — wipe the whole conversation
+        // here too (messages + row + session), gated to self. The counterparty
+        // also receives the fan-out but must NEVER delete our copy.
         if ((decryptedMessage.content?.type as string) === 'delete-conversation-self') {
+          const selfContent = decryptedMessage.content as { senderId?: string; conversationAddress?: string };
+          const isSelfSender = !!selfContent.senderId && selfContent.senderId === user?.address;
+
+          // Always clear the processed control message from the inbox (self or not).
           getDeviceKeyset().then(dk => {
             if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
           });
+
+          if (isSelfSender) {
+            encryptionStateStorage.deleteAllEncryptionStates(conversationId);
+            await storage.deleteConversation(conversationId);
+            queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all('direct') });
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.messages.infinite(senderAddress, senderAddress),
+            });
+          }
           return;
         }
 
@@ -4050,17 +4065,37 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           continue;
         }
 
-        // delete-conversation-self: self-device delete-sync (desktop sends it).
-        // Mobile doesn't implement the wipe yet — drop it so it isn't saved as a
-        // ghost row. Forward-compat until mobile Part 2 lands. Never act on it
-        // from a non-self sender regardless.
+        // delete-conversation-self: another of OUR OWN devices deleted this DM.
+        // Delete the whole conversation here too (messages + row + session),
+        // distinct from the counterparty `delete-conversation` above which only
+        // resets the session. Gated to self — the counterparty also receives the
+        // fan-out but must NEVER delete our copy, so we act only when the
+        // authenticated conversation address is ourselves AND the payload sender
+        // is self. Runs before the conversation-save so it can't resurrect a row.
         if ((decryptedMessage.content?.type as string) === 'delete-conversation-self') {
+          const selfContent = decryptedMessage.content as { senderId?: string; conversationAddress?: string };
+          const isSelfSender = !!selfContent.senderId && selfContent.senderId === user?.address;
+
+          // Always clear the processed control message from the inbox (self or not).
           const originalSelfMsg = batch.find(m => m.timestamp === msgResult.timestamp);
           if (originalSelfMsg) {
             getDeviceKeyset().then(dk => {
               if (dk) deleteInboxMessages(originalSelfMsg.inboxAddress, [originalSelfMsg.timestamp], dk).catch(() => {});
             });
           }
+
+          if (isSelfSender) {
+            // Wipe the whole conversation locally: session reset + row/messages +
+            // cache invalidation. Mirrors the local delete in dm/[id].tsx.
+            encryptionStateStorage.deleteAllEncryptionStates(conversationId);
+            await storage.deleteConversation(conversationId);
+            queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all('direct') });
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.messages.infinite(resolvedSenderAddress, resolvedSenderAddress),
+            });
+          }
+          // Non-self delete-conversation-self is a no-op (defensive): the fan-out
+          // reaches the counterparty, but only self may delete our copy.
           continue;
         }
 
