@@ -20,7 +20,8 @@ import {
   hexToBytes,
   bytesToHex,
 } from '@quilibrium/quorum-shared';
-import { getAllSpaces, getSpaceKeys, clearSpaceStorage } from './spaceStorage';
+import { getAllSpaces, getSpaceKey, getSpaceKeys, saveSpaceKey, clearSpaceStorage } from './spaceStorage';
+import { getMMKVAdapter } from '../storage/mmkvAdapter';
 import { encryptionStateStorage } from '../crypto/encryption-state-storage';
 import type { SpaceKeyInfo } from './spaceSyncService';
 
@@ -464,6 +465,40 @@ function collectSpaceKeysForSync(): SpaceKeyInfo[] {
   return spaceKeyInfos;
 }
 
+/**
+ * Migration for spaces that predate the signing-key split: promote the local
+ * inbox key to the 'signing' slot so it rides into the config blob and the
+ * user's other devices can adopt it (their control messages are dropped
+ * fleet-wide until they sign with the join-bound key).
+ *
+ * Promote only when the local self member row binds THIS inbox key's address —
+ * on the create/join device that row was written by the join flow with this
+ * exact key, so the check passes; a device holding only a device-local mailbox
+ * key whose row says otherwise must not publish it. Known fail-soft limit: a
+ * device that synced the space BEFORE the split also self-bound its own fresh
+ * key, so it can pass this check and publish the wrong key — receivers of the
+ * blob adopt-if-absent, so the outcome is at worst today's already-broken
+ * state for the losing devices, never a regression, and it self-corrects when
+ * the join device's blob write is the one a device adopts first.
+ */
+async function promoteSpaceSigningKeys(userAddress: string): Promise<void> {
+  const adapter = getMMKVAdapter();
+  for (const space of getAllSpaces()) {
+    if (getSpaceKey(space.spaceId, 'signing')) continue;
+    const inboxKey = getSpaceKey(space.spaceId, 'inbox');
+    if (!inboxKey?.address || !inboxKey.privateKey || !inboxKey.publicKey) continue;
+    const selfRow = await adapter.getSpaceMember(space.spaceId, userAddress);
+    if (!selfRow?.inbox_address || selfRow.inbox_address !== inboxKey.address) continue;
+    saveSpaceKey({
+      spaceId: space.spaceId,
+      keyId: 'signing',
+      address: inboxKey.address,
+      publicKey: inboxKey.publicKey,
+      privateKey: inboxKey.privateKey,
+    });
+  }
+}
+
 // Syncs to server if config.allowSync is true.
 export async function saveConfig(config: UserConfig): Promise<void> {
   const privateKey = await getPrivateKey();
@@ -480,7 +515,10 @@ export async function saveConfig(config: UserConfig): Promise<void> {
   // Sync to server if allowed
   if (config.allowSync && privateKey && publicKey) {
     try {
-      // Collect space keys before encryption (matches desktop behavior)
+      // Promote pre-split signing keys, then collect space keys before
+      // encryption (matches desktop behavior). The 'signing' entries ride
+      // along in spaceKeys like any other key.
+      await promoteSpaceSigningKeys(address);
       const spaceKeys = collectSpaceKeysForSync();
       config.spaceKeys = spaceKeys;
 

@@ -42,7 +42,7 @@ import {
   type PeerEntry,
   chunkMessages,
 } from '@quilibrium/quorum-shared';
-import { getSpaceKey } from '../config/spaceStorage';
+import { getSpaceKey, getSpaceSigningKey } from '../config/spaceStorage';
 import { encryptionStateStorage } from '../crypto/encryption-state-storage';
 import { NativeCryptoProvider } from '../crypto/native-provider';
 
@@ -207,10 +207,12 @@ export async function sendSpaceMessage(
   // 1b. Get config key for hub envelope encryption
   const configKey = getSpaceKey(spaceId, 'config');
 
-  // 2. Get inbox key for signing
-  const inboxKey = getSpaceKey(spaceId, 'inbox');
-  if (!inboxKey || !inboxKey.privateKey || !inboxKey.publicKey) {
-    throw new Error('Inbox key not found for space. Cannot sign messages.');
+  // 2. Get the signing key: the user's per-space identity (join-bound, synced
+  // across devices), NOT the per-device inbox/mailbox key — receivers resolve
+  // signatures against the member table, which binds the join key only.
+  const signingKey = getSpaceSigningKey(spaceId);
+  if (!signingKey || !signingKey.privateKey || !signingKey.publicKey) {
+    throw new Error('Signing key not found for space. Cannot sign messages.');
   }
 
   // 3. Build message content first (needed for messageId hash)
@@ -237,7 +239,7 @@ export async function sendSpaceMessage(
     content: messageContent,
     reactions: [],
     mentions: extractMentionsFromText(text, { spaceRoles, spaceChannels, allowEveryone }),
-    publicKey: inboxKey.publicKey,
+    publicKey: signingKey.publicKey,
     // Add reply metadata if this is a reply (used for display and notifications)
     ...(repliesToMessageId && replyToAuthorAddress
       ? {
@@ -253,7 +255,7 @@ export async function sendSpaceMessage(
   // opted out via the per-message lock. Gated on space.isRepudiable at the call site.
   if (!skipSigning) {
     const messageIdBase64 = bytesToBase64(messageIdBytes);
-    const inboxPrivateKeyBytes = hexToBytes(inboxKey.privateKey);
+    const inboxPrivateKeyBytes = hexToBytes(signingKey.privateKey);
     const inboxPrivateKeyBase64 = bytesToBase64(inboxPrivateKeyBytes);
     const signatureBase64 = await cryptoProvider.signEd448(inboxPrivateKeyBase64, messageIdBase64);
 
@@ -326,10 +328,12 @@ export async function sendStickerMessage(
   // 1b. Get config key for hub envelope encryption
   const configKey = getSpaceKey(spaceId, 'config');
 
-  // 2. Get inbox key for signing
-  const inboxKey = getSpaceKey(spaceId, 'inbox');
-  if (!inboxKey || !inboxKey.privateKey || !inboxKey.publicKey) {
-    throw new Error('Inbox key not found for space. Cannot sign messages.');
+  // 2. Get the signing key: the user's per-space identity (join-bound, synced
+  // across devices), NOT the per-device inbox/mailbox key — receivers resolve
+  // signatures against the member table, which binds the join key only.
+  const signingKey = getSpaceSigningKey(spaceId);
+  if (!signingKey || !signingKey.privateKey || !signingKey.publicKey) {
+    throw new Error('Signing key not found for space. Cannot sign messages.');
   }
 
   // 3. Build sticker message content first (needed for messageId hash)
@@ -355,12 +359,12 @@ export async function sendStickerMessage(
     content: messageContent,
     reactions: [],
     mentions: { memberIds: [], roleIds: [], channelIds: [] },
-    publicKey: inboxKey.publicKey,
+    publicKey: signingKey.publicKey,
   };
 
   // 6. Sign the messageId hash (NOT the whole message JSON)
   const messageIdBase64 = bytesToBase64(messageIdBytes);
-  const inboxPrivateKeyBytes = hexToBytes(inboxKey.privateKey);
+  const inboxPrivateKeyBytes = hexToBytes(signingKey.privateKey);
   const inboxPrivateKeyBase64 = bytesToBase64(inboxPrivateKeyBytes);
   const signatureBase64 = await cryptoProvider.signEd448(inboxPrivateKeyBase64, messageIdBase64);
 
@@ -568,10 +572,10 @@ async function sendGenericMessage(
   // Get config key for hub envelope encryption
   const configKey = getSpaceKey(spaceId, 'config');
 
-  // Get inbox key for signing
-  const inboxKey = getSpaceKey(spaceId, 'inbox');
-  if (!inboxKey || !inboxKey.privateKey || !inboxKey.publicKey) {
-    throw new Error('Inbox key not found for space. Cannot sign messages.');
+  // Get the signing key (per-space identity, not the per-device mailbox key)
+  const signingKey = getSpaceSigningKey(spaceId);
+  if (!signingKey || !signingKey.privateKey || !signingKey.publicKey) {
+    throw new Error('Signing key not found for space. Cannot sign messages.');
   }
 
   // Generate message ID using SHA-256 hash (matches desktop implementation)
@@ -590,14 +594,14 @@ async function sendGenericMessage(
     content,
     reactions: [],
     mentions: mentions ?? { memberIds: [], roleIds: [], channelIds: [] },
-    publicKey: inboxKey.publicKey,
+    publicKey: signingKey.publicKey,
   };
 
   // Sign the messageId hash (NOT the whole message JSON), unless this message
   // opted out via the per-message lock. Gated on space.isRepudiable by the caller.
   if (!skipSigning) {
     const messageIdBase64 = bytesToBase64(messageIdBytes);
-    const inboxPrivateKeyBytes = hexToBytes(inboxKey.privateKey);
+    const inboxPrivateKeyBytes = hexToBytes(signingKey.privateKey);
     const inboxPrivateKeyBase64 = bytesToBase64(inboxPrivateKeyBytes);
     const signatureBase64 = await cryptoProvider.signEd448(inboxPrivateKeyBase64, messageIdBase64);
 

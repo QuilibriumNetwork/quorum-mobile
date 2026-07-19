@@ -21,6 +21,7 @@ import {
   saveSpace,
   saveSpaceKey,
   getSpace,
+  getSpaceKey,
   type SpaceKey,
 } from './spaceStorage';
 import { type Space } from '@quilibrium/quorum-shared';
@@ -83,6 +84,41 @@ export async function syncSpaceFromConfig(
   // Check if space already exists locally
   const existingSpace = getSpace(spaceId);
   if (existingSpace) {
+    // Heal path: a space synced before the signing-key split has only its
+    // per-device (fresh) inbox key, whose signatures no receiver's member
+    // table can resolve — so control messages (delete/edit/mute/…) from this
+    // device get dropped fleet-wide. When another device has since published
+    // the original join-bound keypair under 'signing', adopt it. Adopt-if-
+    // absent only: never let a payload overwrite a signing key we already
+    // hold (prevents ping-ponging between devices' promotions).
+    if (!getSpaceKey(spaceId, 'signing')) {
+      const payloadSigning = keys.find((k) => k.keyId === 'signing');
+      if (payloadSigning?.privateKey && payloadSigning.publicKey) {
+        const signingAddress =
+          payloadSigning.address ??
+          deriveAddress(Uint8Array.from(hexToBytes(payloadSigning.publicKey)));
+        saveSpaceKey({
+          spaceId,
+          keyId: 'signing',
+          address: signingAddress,
+          publicKey: payloadSigning.publicKey,
+          privateKey: payloadSigning.privateKey,
+        });
+        // Re-anchor the local self member row to the signing identity —
+        // the pre-split sync bound it to this device's fresh mailbox key,
+        // which breaks resolving the user's OTHER devices' signatures here.
+        if (userInfo?.address) {
+          const adapter = getMMKVAdapter();
+          const selfRow = await adapter.getSpaceMember(spaceId, userInfo.address);
+          if (selfRow && selfRow.inbox_address !== signingAddress) {
+            await adapter.saveSpaceMember(spaceId, {
+              ...selfRow,
+              inbox_address: signingAddress,
+            });
+          }
+        }
+      }
+    }
     return true;
   }
 
@@ -224,7 +260,15 @@ export async function syncSpaceFromConfig(
       onListenRequest([inboxAddress]);
     }
 
-    // Save inbox key
+    // Save inbox key — the per-device MAILBOX key (hub registration + WS
+    // listen + inbox deletion). This deliberately overwrites the payload's
+    // 'inbox' entry (another device's mailbox, useless here). It is NOT the
+    // signing identity: that is the 'signing' key the payload loop saved
+    // above — the join-bound keypair every receiver's member table resolves
+    // signatures against. Pre-split payloads have no 'signing' entry; then
+    // this device signs with this fresh key via the getSpaceSigningKey
+    // fallback and control messages stay broken until a device holding the
+    // original promotes it (see promoteSpaceSigningKeys in configService).
     saveSpaceKey({
       spaceId,
       keyId: 'inbox',
@@ -233,14 +277,24 @@ export async function syncSpaceFromConfig(
       privateKey: bytesToHex(new Uint8Array(inboxKeypair.private_key)),
     });
 
-    // Save current user as a member of the synced space
+    // Save current user as a member of the synced space. The row's
+    // inbox_address is the SIGNING identity binding (what the join broadcast
+    // announced), never this device's fresh mailbox address — binding the
+    // mailbox key here is what used to make the user's other devices'
+    // signatures unresolvable locally. Unknown (pre-split payload) → leave
+    // empty rather than assert a wrong binding.
     if (userInfo?.address) {
+      const payloadSigning = keys.find((k) => k.keyId === 'signing');
+      const signingAddress = payloadSigning
+        ? payloadSigning.address ??
+          deriveAddress(Uint8Array.from(hexToBytes(payloadSigning.publicKey)))
+        : '';
       const adapter = getMMKVAdapter();
       await adapter.saveSpaceMember(spaceId, {
         address: userInfo.address,
         display_name: userInfo.displayName,
         profile_image: userInfo.profileImage,
-        inbox_address: inboxAddress,
+        inbox_address: signingAddress,
       });
     }
 

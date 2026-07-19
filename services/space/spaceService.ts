@@ -270,6 +270,18 @@ export async function createSpace(params: CreateSpaceParams): Promise<CreateSpac
     privateKey: inboxPrivateKeyHex,
   });
 
+  // The creator's inbox keypair is also the user's SIGNING identity for this
+  // space (the member table binds its address). Stored under a separate slot
+  // so device-sync can later replace 'inbox' with a per-device mailbox key
+  // without losing the identity other clients verify signatures against.
+  saveSpaceKey({
+    spaceId: spaceAddress,
+    keyId: 'signing',
+    address: inboxAddress,
+    publicKey: inboxPublicKeyHex,
+    privateKey: inboxPrivateKeyHex,
+  });
+
   saveSpaceKey({
     spaceId: spaceAddress,
     keyId: channelAddress,

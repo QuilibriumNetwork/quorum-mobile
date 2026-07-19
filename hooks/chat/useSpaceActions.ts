@@ -380,6 +380,19 @@ export function useJoinSpace() {
         privateKey: bytesToHex(new Uint8Array(inboxKeypair.private_key)),
       });
 
+      // This keypair is what the join broadcast announces, so the member
+      // tables of every receiver bind ITS address — it is the user's signing
+      // identity for this space. Persist it under 'signing' so device-sync
+      // can later swap 'inbox' to a per-device mailbox key while every
+      // device keeps signing with this one.
+      saveSpaceKey({
+        spaceId: space.spaceId,
+        keyId: 'signing',
+        address: inboxAddress,
+        publicKey: bytesToHex(new Uint8Array(inboxKeypair.public_key)),
+        privateKey: bytesToHex(new Uint8Array(inboxKeypair.private_key)),
+      });
+
       // 6. Register inbox with hub if we have hub key
       if (inviteInfo.hubKey && space.hubAddress) {
         try {

@@ -106,6 +106,20 @@ export function getSpaceKey(spaceId: string, keyId: string): SpaceKey | null {
   }
 }
 
+/**
+ * The key a device must SIGN space messages with. Distinct from the per-device
+ * 'inbox' (mailbox/transport) key: receive-side verified-signer authorization
+ * resolves the signer via the member table, which binds the inbox address from
+ * the user's original JOIN broadcast — one key per user per space. The
+ * 'signing' slot holds that original join-time keypair on every device (synced
+ * through the user-config blob). Falls back to 'inbox' for the join/create
+ * device (where the two are the same keypair) and for spaces synced before the
+ * signing slot existed.
+ */
+export function getSpaceSigningKey(spaceId: string): SpaceKey | null {
+  return getSpaceKey(spaceId, 'signing') ?? getSpaceKey(spaceId, 'inbox');
+}
+
 export function getSpaceKeys(spaceId: string): SpaceKey[] {
   const keys: SpaceKey[] = [];
   const allKeys = spaceStorage.getAllKeys();
