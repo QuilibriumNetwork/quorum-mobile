@@ -10,7 +10,7 @@ import { useAuth, useWebSocket } from '@/context';
 import { sendEditMessage } from '@/services/space/spaceMessageService';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import { buildLocalEdits } from '@/utils/editHistory';
-import type { Message, GetMessagesResult } from '@quilibrium/quorum-shared';
+import { shouldSignEdit, type Message, type GetMessagesResult } from '@quilibrium/quorum-shared';
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -56,6 +56,16 @@ export function useEditSpaceMessage() {
         throw new Error('Messages can only be edited within 15 minutes of sending');
       }
 
+      // Edit inherit rule: the edit is signed iff the original was signed, so
+      // a deliberately-unsigned (deniable) message never silently gains a
+      // signature. The optimistic onMutate write only replaces text and
+      // preserves the row's signature field, so this read is race-safe.
+      const storedOriginal = await getMMKVAdapter().getMessage({
+        spaceId: params.spaceId,
+        channelId: params.channelId,
+        messageId: params.messageId,
+      });
+
       const result = await sendEditMessage({
         spaceId: params.spaceId,
         channelId: params.channelId,
@@ -65,6 +75,9 @@ export function useEditSpaceMessage() {
         spaceRoles: params.spaceRoles,
         spaceChannels: params.spaceChannels,
         allowEveryone: params.allowEveryone,
+        // No stored row (shouldn't happen inside the edit window) → sign, the
+        // pre-existing behavior for every edit.
+        skipSigning: storedOriginal ? !shouldSignEdit(storedOriginal) : false,
       });
 
       // Send via WebSocket
