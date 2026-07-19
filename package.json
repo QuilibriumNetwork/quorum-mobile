@@ -30,7 +30,7 @@
     "@polkadot/keyring": "14.0.1",
     "@polkadot/util": "14.0.1",
     "@polkadot/util-crypto": "14.0.1",
-    "@quilibrium/quorum-shared": "2.1.0-34",
+    "@quilibrium/quorum-shared": "2.1.0-35",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "11.4.1",
     "@react-navigation/bottom-tabs": "7.4.7",
