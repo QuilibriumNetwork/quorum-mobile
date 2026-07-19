@@ -90,34 +90,43 @@ export async function syncSpaceFromConfig(
     // device get dropped fleet-wide. When another device has since published
     // the original join-bound keypair under 'signing', adopt it. Adopt-if-
     // absent only: never let a payload overwrite a signing key we already
-    // hold (prevents ping-ponging between devices' promotions).
-    if (!getSpaceKey(spaceId, 'signing')) {
-      const payloadSigning = keys.find((k) => k.keyId === 'signing');
-      if (payloadSigning?.privateKey && payloadSigning.publicKey) {
-        const signingAddress =
-          payloadSigning.address ??
-          deriveAddress(Uint8Array.from(hexToBytes(payloadSigning.publicKey)));
-        saveSpaceKey({
-          spaceId,
-          keyId: 'signing',
-          address: signingAddress,
-          publicKey: payloadSigning.publicKey,
-          privateKey: payloadSigning.privateKey,
-        });
-        // Re-anchor the local self member row to the signing identity —
-        // the pre-split sync bound it to this device's fresh mailbox key,
-        // which breaks resolving the user's OTHER devices' signatures here.
-        if (userInfo?.address) {
-          const adapter = getMMKVAdapter();
-          const selfRow = await adapter.getSpaceMember(spaceId, userInfo.address);
-          if (selfRow && selfRow.inbox_address !== signingAddress) {
-            await adapter.saveSpaceMember(spaceId, {
-              ...selfRow,
-              inbox_address: signingAddress,
-            });
-          }
+    // hold (prevents ping-ponging between devices' promotions, and ensures a
+    // device that provably holds the correct key can never lose it).
+    // Best-effort: storage failures are swallowed and the whole block re-runs
+    // on the next config receive; both steps are idempotent.
+    try {
+      if (!getSpaceKey(spaceId, 'signing')) {
+        const payloadSigning = keys.find((k) => k.keyId === 'signing');
+        if (payloadSigning?.privateKey && payloadSigning.publicKey) {
+          saveSpaceKey({
+            spaceId,
+            keyId: 'signing',
+            address:
+              payloadSigning.address ??
+              deriveAddress(Uint8Array.from(hexToBytes(payloadSigning.publicKey))),
+            publicKey: payloadSigning.publicKey,
+            privateKey: payloadSigning.privateKey,
+          });
         }
       }
+      // Re-anchor the local self member row to the signing identity whenever
+      // they disagree — the pre-split sync bound it to this device's fresh
+      // mailbox key, which breaks resolving the user's OTHER devices'
+      // signatures here. Runs on every config receive (not only when a key
+      // was just adopted) so an interrupted heal repairs itself.
+      const signingKey = getSpaceKey(spaceId, 'signing');
+      if (signingKey?.address && userInfo?.address) {
+        const adapter = getMMKVAdapter();
+        const selfRow = await adapter.getSpaceMember(spaceId, userInfo.address);
+        if (selfRow && selfRow.inbox_address !== signingKey.address) {
+          await adapter.saveSpaceMember(spaceId, {
+            ...selfRow,
+            inbox_address: signingKey.address,
+          });
+        }
+      }
+    } catch {
+      // Heal is best-effort; retried on the next config receive.
     }
     return true;
   }
