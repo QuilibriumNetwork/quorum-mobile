@@ -19,6 +19,7 @@ import {
   int64ToBytes,
   hexToBytes,
   bytesToHex,
+  logger,
 } from '@quilibrium/quorum-shared';
 import { getAllSpaces, getSpaceKey, getSpaceKeys, saveSpaceKey, clearSpaceStorage } from './spaceStorage';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
@@ -555,11 +556,21 @@ export async function saveConfig(config: UserConfig): Promise<void> {
         timestamp: ts,
         signature,
       });
+      logger.log(
+        `[ConfigSync] settings POSTED ok (blob ${Math.round(encryptedConfig.length / 1024)}KB, ${spaceKeys.length} spaces)`
+      );
 
       // Clear deleted bookmark tombstones after successful sync
       clearDeletedBookmarkIds(address);
       config.deletedBookmarkIds = [];
     } catch (error) {
+      // Sync failure must be LOUD: a silent 400 here (e.g. the evals-bloat
+      // size limit, desktop bug #108) makes new spaces / signing keys /
+      // settings silently never leave this device while the local copy keeps
+      // a fresh timestamp — the cross-device "nothing syncs" black hole.
+      logger.warn(
+        `[ConfigSync] settings POST FAILED — this device is NOT publishing config: ${error instanceof Error ? error.message : String(error)}`
+      );
       // Continue to save locally even if sync fails
     }
   }
