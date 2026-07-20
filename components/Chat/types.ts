@@ -121,6 +121,9 @@ export interface DisplayMessage {
   stickerId?: string;
   // Reactions on this message
   reactions?: DisplayReaction[];
+  // DM receipt state (own DM messages only) — drives the inline ✓ / ✓✓
+  deliveredAt?: number;
+  readAt?: number;
   // Edit info
   isEdited?: boolean;
   editedAt?: number;
@@ -400,6 +403,8 @@ export function toDisplayMessage(
     content: getMessageText(message, memberName),
     sendStatus: message.sendStatus,
     sendError: message.sendError,
+    deliveredAt: message.deliveredAt,
+    readAt: message.readAt,
     originalMessage: message,
     renderType,
     errorDetail,
