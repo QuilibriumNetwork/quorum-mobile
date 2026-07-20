@@ -532,15 +532,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     // acks (about the partner's messages) fan out to our other devices too — a
     // self-echoed read-ack would otherwise mark our own sent messages read.
     if (raw.type === 'delivery-ack') {
-      const gate = isReceiptEnabled('delivery', partner);
-      logger.log(`[RECEIPTS] RECV delivery-ack from=${raw.senderId?.slice(0, 8)} ids=${raw.messageIds?.length ?? 0} svc=${!!svc} notSelf=${raw.senderId !== self} gate=${gate}`);
-      if (svc && raw.senderId !== self && gate) svc.onAckReceived(raw.messageIds ?? []);
+      if (svc && raw.senderId !== self && isReceiptEnabled('delivery', partner)) svc.onAckReceived(raw.messageIds ?? []);
       return true;
     }
     if (raw.type === 'read-ack') {
-      const gate = isReceiptEnabled('read', partner);
-      logger.log(`[RECEIPTS] RECV read-ack from=${raw.senderId?.slice(0, 8)} upTo=${raw.upToMessageId?.slice(0, 8)} svc=${!!svc} notSelf=${raw.senderId !== self} gate=${gate}`);
-      if (svc && raw.senderId !== self && gate && raw.upToMessageId && raw.upToTimestamp) {
+      if (svc && raw.senderId !== self && isReceiptEnabled('read', partner) && raw.upToMessageId && raw.upToTimestamp) {
         svc.onReadAckReceived(raw.upToMessageId, raw.upToTimestamp, partner);
       }
       return true;
@@ -559,12 +555,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
       // Buffer a delivery ack for an inbound post from the partner (flushed via
       // timer / background / piggyback).
-      if (decryptedMessage.content?.type === 'post') {
-        const gate = isReceiptEnabled('delivery', partner);
-        logger.log(`[RECEIPTS] RECV post ${decryptedMessage.messageId?.slice(0, 8)} from=${decryptedMessage.content?.senderId?.slice(0, 8)} partner=${partner?.slice(0, 8)} fromPartner=${fromPartner} deliveryGate=${gate} -> ${fromPartner && gate ? 'BUFFER ack' : 'skip'}`);
-        if (fromPartner && gate) {
-          svc.onMessageReceived(partner, decryptedMessage.messageId);
-        }
+      if (fromPartner && isReceiptEnabled('delivery', partner) && decryptedMessage.content?.type === 'post') {
+        svc.onMessageReceived(partner, decryptedMessage.messageId);
       }
     }
     return false;
@@ -5169,13 +5161,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     async (partnerAddress: string, ack: ReceiptControlMessage) => {
       try {
         const senderId = fullUserAddrRef.current;
-        logger.log(`[RECEIPTS] SEND ${ack.type} -> ${partnerAddress?.slice(0, 8)} (self=${senderId?.slice(0, 8)})`);
-        if (!senderId || !encryptionService.hasDeviceKeys()) {
-          logger.log(`[RECEIPTS] SEND aborted — no senderId or device keys (hasKeys=${encryptionService.hasDeviceKeys()})`);
-          return;
-        }
+        if (!senderId || !encryptionService.hasDeviceKeys()) return;
         const deviceKeyset = await getDeviceKeyset();
-        if (!deviceKeyset) { logger.log('[RECEIPTS] SEND aborted — no deviceKeyset'); return; }
+        if (!deviceKeyset) return;
 
         const apiClient = getQuorumClient();
         const allTargetDevices: DeviceInfo[] = [];
@@ -5188,12 +5176,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               ...toAllDeviceInfos(senderReg).filter((d) => d.inboxAddress !== deviceKeyset.inboxAddress)
             );
           }
-        } catch (regErr) {
-          logger.log(`[RECEIPTS] SEND registration fetch failed: ${String(regErr)}`);
+        } catch {
+          // Registration fetch failed — with no devices the send is skipped below.
         }
-        if (allTargetDevices.length === 0) { logger.log('[RECEIPTS] SEND aborted — 0 target devices'); return; }
+        if (allTargetDevices.length === 0) return;
 
-        logger.log(`[RECEIPTS] SEND ${ack.type} encrypting to ${allTargetDevices.length} device(s)`);
         await sendEncryptedMessageToAllDevices(
           `${partnerAddress}/${partnerAddress}`,
           partnerAddress,
@@ -5209,9 +5196,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           senderId,
           user?.displayName,
         );
-        logger.log(`[RECEIPTS] SEND ${ack.type} enqueued OK`);
       } catch (err) {
-        logger.log(`[RECEIPTS] SEND failed: ${String(err)}`);
+        logger.debug('[DM-receipts] ack send failed', err);
       }
     },
     [enqueueOutbound, subscribe, user?.displayName],
@@ -5221,9 +5207,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // Mark a partner's DM message read → buffers a read ack (5s flush). Gated on
   // the read-receipts master switch, per the ReceiptService contract.
   const notifyDmRead = useCallback((partnerAddress: string, messageId: string, timestamp: number) => {
-    const gate = isReceiptEnabled('read', partnerAddress);
-    logger.log(`[RECEIPTS] notifyDmRead partner=${partnerAddress?.slice(0, 8)} msg=${messageId?.slice(0, 8)} readGate=${gate}`);
-    if (!gate) return;
+    if (!isReceiptEnabled('read', partnerAddress)) return;
     receiptServiceRef.current?.onMessageRead(partnerAddress, messageId, timestamp);
   }, [isReceiptEnabled]);
 
@@ -5237,13 +5221,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
     const service = new ReceiptService({
       onFlush: (address, messageIds) => {
-        logger.log(`[RECEIPTS] FLUSH delivery-ack -> ${address?.slice(0, 8)} ids=${messageIds.length}`);
         sendDmReceiptAckRef.current?.(address, { senderId: self, type: 'delivery-ack', messageIds });
       },
       onAckProcessed: (messageIds) => {
         const now = Date.now();
         const ids = new Set(messageIds);
-        let hit = false;
         // We don't know which conversation — patch deliveredAt across all DM caches.
         queryClient.setQueriesData<InfiniteMessagesData>({ queryKey: ['messages', 'infinite'] }, (old) => {
           if (!old?.pages) return old;
@@ -5251,25 +5233,22 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           const pages = old.pages.map((page) => {
             let pageChanged = false;
             const messages = page.messages.map((m) => {
-              if (ids.has(m.messageId) && !m.deliveredAt) { changed = true; pageChanged = true; hit = true; return { ...m, deliveredAt: now }; }
+              if (ids.has(m.messageId) && !m.deliveredAt) { changed = true; pageChanged = true; return { ...m, deliveredAt: now }; }
               return m;
             });
             return pageChanged ? { ...page, messages } : page;
           });
           return changed ? { ...old, pages } : old;
         });
-        logger.log(`[RECEIPTS] PROCESS delivery-ack ids=${messageIds.length} cacheHit=${hit} -> deliveredAt set`);
         for (const id of messageIds) updateMessageDeliveredAt(id, now).catch(() => {});
       },
       onReadFlush: (address, hwm) => {
-        logger.log(`[RECEIPTS] FLUSH read-ack -> ${address?.slice(0, 8)} upTo=${hwm.messageId?.slice(0, 8)}`);
         sendDmReceiptAckRef.current?.(address, {
           senderId: self, type: 'read-ack', upToMessageId: hwm.messageId, upToTimestamp: hwm.timestamp,
         });
       },
       onReadAckProcessed: (upToMessageId, upToTimestamp, conversationAddress) => {
         const now = Date.now();
-        let hit = false;
         const key = queryKeys.messages.infinite(conversationAddress, conversationAddress);
         queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {
           if (!old?.pages) return old;
@@ -5278,7 +5257,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             let pageChanged = false;
             const messages = page.messages.map((m) => {
               if (m.content?.senderId === self && m.createdDate <= upToTimestamp && !m.readAt) {
-                changed = true; pageChanged = true; hit = true;
+                changed = true; pageChanged = true;
                 return { ...m, readAt: now, deliveredAt: m.deliveredAt || now };
               }
               return m;
@@ -5287,7 +5266,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           });
           return changed ? { ...old, pages } : old;
         });
-        logger.log(`[RECEIPTS] PROCESS read-ack conv=${conversationAddress?.slice(0, 8)} upToTs=${upToTimestamp} cacheHit=${hit} -> readAt set`);
         updateMessagesReadAt(conversationAddress, self, upToTimestamp, now).catch(() => {});
       },
     });
