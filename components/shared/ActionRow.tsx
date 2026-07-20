@@ -37,8 +37,8 @@ export interface ActionRowProps {
   onPress?: () => void;
   destructive?: boolean;
   disabled?: boolean;
-  /** Optional secondary line under the label. */
-  sublabel?: string;
+  /** Optional secondary line under the label. A node may embed inline links. */
+  sublabel?: React.ReactNode;
   /** Trailing affordance: a chevron, or any custom node (toggle, send icon…). */
   trailing?: 'chevron' | React.ReactNode;
   /** Success-tinted active state (e.g. selected / recasted). */

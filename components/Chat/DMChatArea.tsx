@@ -29,8 +29,9 @@ import type {
   MessageUserInfo,
 } from '@/components/Chat';
 
-import { useAuth } from '@/context';
+import { useAuth, useWebSocket } from '@/context';
 import { useToast } from '@/context/ToastContext';
+import { useIsFocused } from '@react-navigation/native';
 import { flattenMessages, useMessages } from '@/hooks/chat/useMessages';
 import { useMembersWithPublicProfileFallback } from '@/hooks/useMembersWithPublicProfileFallback';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
@@ -180,6 +181,29 @@ export const DMChatArea = React.memo(function DMChatArea({
   }, [dmMessagesPages, effectiveDmMemberMap, user?.address]);
 
   const dmSearch = useMessageSearch(dmMessages);
+
+  // Read receipts: while this DM is on screen, mark the partner's newest message
+  // read. The ReceiptService dedups via a high-water mark and flushes a read-ack
+  // (5s). notifyDmRead is a no-op when the read-receipts setting is off.
+  const { notifyDmRead } = useWebSocket();
+  const isFocused = useIsFocused();
+  // Skip re-marking the same message on every cache-driven re-render (the effect
+  // re-runs whenever dmMessagesPages changes reference, incl. our own readAt patch).
+  const lastMarkedReadRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isFocused) { lastMarkedReadRef.current = null; return; }
+    if (!recipientAddress || !dmMessagesPages) return;
+    let newest: Message | undefined;
+    for (const m of flattenMessages(dmMessagesPages.pages)) {
+      if (m.content?.senderId && m.content.senderId !== user?.address) {
+        if (!newest || m.createdDate > newest.createdDate) newest = m;
+      }
+    }
+    if (newest && lastMarkedReadRef.current !== newest.messageId) {
+      lastMarkedReadRef.current = newest.messageId;
+      notifyDmRead(recipientAddress, newest.messageId, newest.createdDate);
+    }
+  }, [isFocused, recipientAddress, dmMessagesPages, user?.address, notifyDmRead]);
 
   // Draft management
   const prevConversationIdRef = useRef(conversationId);

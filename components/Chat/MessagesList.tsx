@@ -790,6 +790,28 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     [styles, theme, renderUnsignedWarning]
   );
 
+  // DM delivery/read receipt tick on own messages (✓ delivered / ✓✓ read). A
+  // text glyph so it flows inline natively (IconSymbol SVGs can't sit in a
+  // <Text>). Display is unconditional — the master switch gates persistence.
+  const renderReceipt = useCallback(
+    (item: DisplayMessage) => {
+      if (!isDM || item.userId !== currentUserId) return null;
+      if (!item.deliveredAt && !item.readAt) return null;
+      const read = !!item.readAt;
+      // U+FE0E forces text (not emoji) presentation of the check glyph on iOS.
+      const tick = read ? '✓︎✓︎' : '✓︎';
+      return (
+        <Text
+          style={[styles.receiptIndicator, read && styles.receiptIndicatorRead]}
+          accessibilityLabel={read ? 'Read' : 'Delivered'}
+        >
+          {tick}
+        </Text>
+      );
+    },
+    [isDM, currentUserId, styles]
+  );
+
   const renderReactions = useCallback(
     (reactions: DisplayReaction[], messageId: string) => {
       if (!reactions || reactions.length === 0) return null;
@@ -1182,6 +1204,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   onLinkPress={onLinkPress}
                 />
               ) : null}
+              {renderReceipt(item)}
               {/* Per-message indicators on grouped continuation rows (header hidden) */}
               {isCompact && renderCompactIndicators(item, { isSending })}
               {/* Render invite link card if detected */}
@@ -1222,7 +1245,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedWarning, renderCompactIndicators, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds]
+    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedWarning, renderCompactIndicators, renderReceipt, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds]
   );
 
   const renderCast = useCallback(
@@ -1623,6 +1646,17 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: Skin.font(11),
     fontFamily: theme.fonts.regular.fontFamily,
     marginLeft: Skin.space(6),
+  },
+  // DM receipt tick — trailing, bottom-right of own message content.
+  receiptIndicator: {
+    alignSelf: 'flex-end',
+    color: theme.colors.textSubtle,
+    fontSize: Skin.font(11),
+    fontFamily: theme.fonts.regular.fontFamily,
+    marginTop: Skin.space(2),
+  },
+  receiptIndicatorRead: {
+    color: theme.colors.primary,
   },
   // Row below a compact continuation message holding its per-message indicators
   // ((edited) + unsigned + sending), since the header is hidden when grouped.

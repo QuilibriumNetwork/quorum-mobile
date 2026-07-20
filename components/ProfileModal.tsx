@@ -34,7 +34,7 @@ import {
   useValidateInviteCode,
 } from '@/hooks/useQNS';
 import { useWarpcastWallet } from '@/hooks/useWarpcastWallet';
-import { useSyncSettings } from '@/hooks/useUserConfig';
+import { useSyncSettings, useReceiptSettings } from '@/hooks/useUserConfig';
 import { useOtaUpdate } from '@/hooks/useOtaUpdate';
 import { getQuorumClient, type DeviceRegistration } from '@/services/api/quorumClient';
 import {
@@ -364,6 +364,13 @@ export default function ProfileModal({
   const { enqueueOutbound, subscribe } = useWebSocket();
   const { showToast } = useToast();
   const { allowSync, setAllowSync, isLoading: isSyncLoading } = useSyncSettings();
+  const {
+    deliveryReceipts,
+    readReceipts,
+    setDeliveryReceipts,
+    setReadReceipts,
+    isLoading: isReceiptsLoading,
+  } = useReceiptSettings();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const [internalTab, setInternalTab] = React.useState<ProfileSection>('profile');
@@ -793,6 +800,31 @@ export default function ProfileModal({
       setIsSyncToggling(false);
     }
   }, [setAllowSync]);
+
+  // DM receipt toggles. Persisted + synced cross-device via the config blob.
+  const [isReceiptsToggling, setIsReceiptsToggling] = React.useState(false);
+  const handleToggleDeliveryReceipts = React.useCallback(async (enabled: boolean) => {
+    setIsReceiptsToggling(true);
+    try {
+      await setDeliveryReceipts(enabled);
+      // Cascade: turning delivery off also turns read off (matches desktop).
+      if (!enabled) await setReadReceipts(false);
+    } catch {
+      Alert.alert('Error', 'Failed to update delivery receipts. Please try again.');
+    } finally {
+      setIsReceiptsToggling(false);
+    }
+  }, [setDeliveryReceipts, setReadReceipts]);
+  const handleToggleReadReceipts = React.useCallback(async (enabled: boolean) => {
+    setIsReceiptsToggling(true);
+    try {
+      await setReadReceipts(enabled);
+    } catch {
+      Alert.alert('Error', 'Failed to update read receipts. Please try again.');
+    } finally {
+      setIsReceiptsToggling(false);
+    }
+  }, [setReadReceipts]);
 
   const handleResetAppData = async () => {
     setShowResetConfirm(false);
@@ -2198,6 +2230,11 @@ export default function ProfileModal({
               allowSync={allowSync}
               onToggleSync={handleToggleSync}
               syncDisabled={isSyncLoading || isSyncToggling}
+              deliveryReceipts={deliveryReceipts}
+              readReceipts={readReceipts}
+              onToggleDeliveryReceipts={handleToggleDeliveryReceipts}
+              onToggleReadReceipts={handleToggleReadReceipts}
+              receiptsDisabled={isReceiptsLoading || isReceiptsToggling}
               notifications={notifications}
               onToggleNotifications={setNotifications}
               privacyLevel={user?.privacyLevel}
@@ -4141,6 +4178,11 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
   allowSync,
   onToggleSync,
   syncDisabled,
+  deliveryReceipts,
+  readReceipts,
+  onToggleDeliveryReceipts,
+  onToggleReadReceipts,
+  receiptsDisabled,
   notifications,
   onToggleNotifications,
   privacyLevel,
@@ -4152,6 +4194,11 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
   allowSync: boolean;
   onToggleSync: (enabled: boolean) => void;
   syncDisabled: boolean;
+  deliveryReceipts: boolean;
+  readReceipts: boolean;
+  onToggleDeliveryReceipts: (enabled: boolean) => void;
+  onToggleReadReceipts: (enabled: boolean) => void;
+  receiptsDisabled: boolean;
   notifications: boolean;
   onToggleNotifications: (enabled: boolean) => void;
   /** Read-only display of the account's privacy level (moved here from the old
@@ -4192,6 +4239,40 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
             thumbColor={allowSync ? '#ffffff' : '#f4f3f4'}
           />
         </View>
+        <View style={styles.settingRow}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingLabel}>Delivery receipts</Text>
+            <Text style={styles.settingDescription}>
+              When on, senders see when their messages reach your device, and you see when yours reach theirs.
+            </Text>
+          </View>
+          <Switch
+            value={deliveryReceipts}
+            onValueChange={onToggleDeliveryReceipts}
+            disabled={receiptsDisabled}
+            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+            thumbColor={deliveryReceipts ? '#ffffff' : '#f4f3f4'}
+          />
+        </View>
+        {/* Read receipts only make sense once delivery receipts are on (matches
+            desktop, which hides this row while delivery is off). */}
+        {deliveryReceipts && (
+          <View style={styles.settingRow}>
+            <View style={styles.settingLeft}>
+              <Text style={styles.settingLabel}>Read receipts</Text>
+              <Text style={styles.settingDescription}>
+                When on, senders see when you&apos;ve read their messages, and you see when yours are read.
+              </Text>
+            </View>
+            <Switch
+              value={readReceipts}
+              onValueChange={onToggleReadReceipts}
+              disabled={receiptsDisabled}
+              trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+              thumbColor={readReceipts ? '#ffffff' : '#f4f3f4'}
+            />
+          </View>
+        )}
         {/* "Show Online Status" toggle removed: there is no presence/online-status
             feature behind it, so the control was a non-functional decoration
             (hardcoded on, no handler). Re-add a real toggle here if/when presence

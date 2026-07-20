@@ -15,7 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@quilibrium/quorum-shared';
 import type { Conversation } from '@quilibrium/quorum-shared';
 import { useUserPublicProfile } from '@/hooks/useUserPublicProfile';
-import { useBookmarks } from '@/hooks/useUserConfig';
+import { useBookmarks, useReceiptSettings } from '@/hooks/useUserConfig';
 import { useCall } from '@/context';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { truncateAddress } from '@/utils/formatAddress';
@@ -246,6 +246,31 @@ export default function DMChatScreen() {
     [updateConversationSetting]
   );
 
+  // Per-conversation DM receipt override (stored on the local Conversation, like
+  // desktop; effective value = override ?? global). Cross-device sync is the
+  // unified conversation-settings task (2026-07-20). Delivery-off cascades read-off.
+  const { deliveryReceipts: globalDeliveryReceipts, readReceipts: globalReadReceipts } =
+    useReceiptSettings();
+  const handleSetDeliveryReceipts = useCallback(
+    (value: boolean) =>
+      updateConversationSetting(value ? { deliveryReceipts: true } : { deliveryReceipts: false, readReceipts: false }),
+    [updateConversationSetting]
+  );
+  const handleSetReadReceipts = useCallback(
+    (value: boolean) => updateConversationSetting({ readReceipts: value }),
+    [updateConversationSetting]
+  );
+  // Reset delivery override also clears read (read inherits when delivery does),
+  // matching desktop; reset read clears read only.
+  const handleResetDelivery = useCallback(
+    () => updateConversationSetting({ deliveryReceipts: undefined, readReceipts: undefined }),
+    [updateConversationSetting]
+  );
+  const handleResetRead = useCallback(
+    () => updateConversationSetting({ readReceipts: undefined }),
+    [updateConversationSetting]
+  );
+
   // Delete this conversation. Like desktop, we FIRST signal the counterparty
   // (a `delete-conversation` control message) so they reset their encryption
   // session and the next message cleanly re-handshakes — they do NOT delete
@@ -457,6 +482,14 @@ export default function DMChatScreen() {
             onToggleEditHistory={handleToggleEditHistory}
             isMuted={conversationMuted}
             onToggleMute={handleToggleMute}
+            deliveryReceipts={conversation.deliveryReceipts}
+            readReceipts={conversation.readReceipts}
+            globalDeliveryReceipts={globalDeliveryReceipts}
+            globalReadReceipts={globalReadReceipts}
+            onSetDeliveryReceipts={handleSetDeliveryReceipts}
+            onSetReadReceipts={handleSetReadReceipts}
+            onResetDelivery={handleResetDelivery}
+            onResetRead={handleResetRead}
           />
         </Suspense>
       )}
