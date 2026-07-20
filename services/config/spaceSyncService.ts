@@ -21,6 +21,7 @@ import {
   saveSpace,
   saveSpaceKey,
   getSpace,
+  getSpaceKey,
   type SpaceKey,
 } from './spaceStorage';
 import { type Space } from '@quilibrium/quorum-shared';
@@ -83,6 +84,60 @@ export async function syncSpaceFromConfig(
   // Check if space already exists locally
   const existingSpace = getSpace(spaceId);
   if (existingSpace) {
+    // Heal path: a space synced before the signing-key split has only its
+    // per-device (fresh) inbox key, whose signatures no receiver's member
+    // table can resolve — so control messages (delete/edit/mute/…) from this
+    // device get dropped fleet-wide. When another device has since published
+    // the original join-bound keypair under 'signing', adopt it.
+    //
+    // Adoption rule: a key this device holds with 'origin' provenance (its
+    // own create/join flow — provably correct) is NEVER replaced. Anything
+    // else ('promoted' = migration guess that misfires on pre-split synced
+    // devices, 'adopted', or unmarked) yields to the blob, so a device that
+    // wrongly self-promoted converges to the join device's published key as
+    // soon as that device's config save reaches the blob.
+    // Best-effort: storage failures are swallowed and the whole block re-runs
+    // on the next config receive; all steps are idempotent.
+    try {
+      const localSigning = getSpaceKey(spaceId, 'signing');
+      if (!localSigning || localSigning.provenance !== 'origin') {
+        const payloadSigning = keys.find((k) => k.keyId === 'signing');
+        if (
+          payloadSigning?.privateKey &&
+          payloadSigning.publicKey &&
+          payloadSigning.publicKey !== localSigning?.publicKey
+        ) {
+          saveSpaceKey({
+            spaceId,
+            keyId: 'signing',
+            address:
+              payloadSigning.address ??
+              deriveAddress(Uint8Array.from(hexToBytes(payloadSigning.publicKey))),
+            publicKey: payloadSigning.publicKey,
+            privateKey: payloadSigning.privateKey,
+            provenance: 'adopted',
+          });
+        }
+      }
+      // Re-anchor the local self member row to the signing identity whenever
+      // they disagree — the pre-split sync bound it to this device's fresh
+      // mailbox key, which breaks resolving the user's OTHER devices'
+      // signatures here. Runs on every config receive (not only when a key
+      // was just adopted) so an interrupted heal repairs itself.
+      const signingKey = getSpaceKey(spaceId, 'signing');
+      if (signingKey?.address && userInfo?.address) {
+        const adapter = getMMKVAdapter();
+        const selfRow = await adapter.getSpaceMember(spaceId, userInfo.address);
+        if (selfRow && selfRow.inbox_address !== signingKey.address) {
+          await adapter.saveSpaceMember(spaceId, {
+            ...selfRow,
+            inbox_address: signingKey.address,
+          });
+        }
+      }
+    } catch {
+      // Heal is best-effort; retried on the next config receive.
+    }
     return true;
   }
 
@@ -99,7 +154,9 @@ export async function syncSpaceFromConfig(
       return false;
     }
 
-    // Save all keys first
+    // Save all keys first. A payload 'signing' key is marked 'adopted' (came
+    // from the blob, replaceable if the blob later offers a different one);
+    // provenance is a local-only field, never serialized back into the blob.
     for (const key of keys) {
       saveSpaceKey({
         spaceId: key.spaceId,
@@ -107,6 +164,7 @@ export async function syncSpaceFromConfig(
         address: key.address,
         publicKey: key.publicKey,
         privateKey: key.privateKey,
+        ...(key.keyId === 'signing' ? { provenance: 'adopted' as const } : {}),
       });
     }
 
@@ -224,7 +282,15 @@ export async function syncSpaceFromConfig(
       onListenRequest([inboxAddress]);
     }
 
-    // Save inbox key
+    // Save inbox key — the per-device MAILBOX key (hub registration + WS
+    // listen + inbox deletion). This deliberately overwrites the payload's
+    // 'inbox' entry (another device's mailbox, useless here). It is NOT the
+    // signing identity: that is the 'signing' key the payload loop saved
+    // above — the join-bound keypair every receiver's member table resolves
+    // signatures against. Pre-split payloads have no 'signing' entry; then
+    // this device signs with this fresh key via the getSpaceSigningKey
+    // fallback and control messages stay broken until a device holding the
+    // original promotes it (see promoteSpaceSigningKeys in configService).
     saveSpaceKey({
       spaceId,
       keyId: 'inbox',
@@ -233,14 +299,24 @@ export async function syncSpaceFromConfig(
       privateKey: bytesToHex(new Uint8Array(inboxKeypair.private_key)),
     });
 
-    // Save current user as a member of the synced space
+    // Save current user as a member of the synced space. The row's
+    // inbox_address is the SIGNING identity binding (what the join broadcast
+    // announced), never this device's fresh mailbox address — binding the
+    // mailbox key here is what used to make the user's other devices'
+    // signatures unresolvable locally. Unknown (pre-split payload) → leave
+    // empty rather than assert a wrong binding.
     if (userInfo?.address) {
+      const payloadSigning = keys.find((k) => k.keyId === 'signing');
+      const signingAddress = payloadSigning
+        ? payloadSigning.address ??
+          deriveAddress(Uint8Array.from(hexToBytes(payloadSigning.publicKey)))
+        : '';
       const adapter = getMMKVAdapter();
       await adapter.saveSpaceMember(spaceId, {
         address: userInfo.address,
         display_name: userInfo.displayName,
         profile_image: userInfo.profileImage,
-        inbox_address: inboxAddress,
+        inbox_address: signingAddress,
       });
     }
 

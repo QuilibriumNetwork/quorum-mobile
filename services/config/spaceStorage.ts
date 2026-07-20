@@ -17,6 +17,18 @@ export interface SpaceKey {
   address?: string;
   publicKey: string;
   privateKey: string;
+  /**
+   * How this device came to hold the key (LOCAL-only — deliberately not
+   * serialized into the config blob; collectSpaceKeysForSync maps explicit
+   * fields). Only meaningful for keyId 'signing':
+   * - 'origin': created by THIS device's create/join flow — provably the
+   *   join-bound identity; never replaced by a synced value.
+   * - 'adopted': taken from the config blob (another device published it).
+   * - 'promoted': self-promoted by the pre-split migration oracle, which can
+   *   misfire on devices that synced the space before the split — treated as
+   *   a guess and replaced by whatever the blob offers.
+   */
+  provenance?: 'origin' | 'adopted' | 'promoted';
 }
 
 export function getSpaceIds(): string[] {
@@ -104,6 +116,20 @@ export function getSpaceKey(spaceId: string, keyId: string): SpaceKey | null {
   } catch (e) {
     return null;
   }
+}
+
+/**
+ * The key a device must SIGN space messages with. Distinct from the per-device
+ * 'inbox' (mailbox/transport) key: receive-side verified-signer authorization
+ * resolves the signer via the member table, which binds the inbox address from
+ * the user's original JOIN broadcast — one key per user per space. The
+ * 'signing' slot holds that original join-time keypair on every device (synced
+ * through the user-config blob). Falls back to 'inbox' for the join/create
+ * device (where the two are the same keypair) and for spaces synced before the
+ * signing slot existed.
+ */
+export function getSpaceSigningKey(spaceId: string): SpaceKey | null {
+  return getSpaceKey(spaceId, 'signing') ?? getSpaceKey(spaceId, 'inbox');
 }
 
 export function getSpaceKeys(spaceId: string): SpaceKey[] {
