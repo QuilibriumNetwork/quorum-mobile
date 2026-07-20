@@ -84,7 +84,7 @@ import {
 } from '../services/space/modMuteStorage';
 import { buildListenHubFrame, buildLogSinceFrame } from '../services/space/hubLogSync';
 import { getHubLastSeq, setHubLastSeq } from '../services/space/hubLogCursor';
-import { getMMKVAdapter } from '../services/storage/mmkvAdapter';
+import { getMMKVAdapter, getConversationSync } from '../services/storage/mmkvAdapter';
 import { useAuth } from './AuthContext';
 import { useStorageAdapter } from './StorageContext';
 
@@ -501,13 +501,20 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const receiptServiceRef = useRef<ReceiptService | null>(null);
   const sendDmReceiptAckRef = useRef<((partnerAddress: string, ack: ReceiptControlMessage) => void) | null>(null);
 
-  // Global receipt master switches. Default OFF (matches desktop). Read live
-  // from the local config blob so a settings toggle takes effect immediately.
-  const isReceiptEnabled = useCallback((kind: 'delivery' | 'read'): boolean => {
+  // Effective receipt switch: per-conversation override (stored on the local
+  // Conversation, like desktop) wins over the global setting, else the global
+  // (default OFF). Read live so a settings toggle takes effect immediately.
+  // `partner` is the DM partner address (conversationId is `partner/partner`).
+  // NOTE: the per-conversation override is NOT synced across devices yet — that's
+  // the unified conversation-settings sync task (2026-07-20).
+  const isReceiptEnabled = useCallback((kind: 'delivery' | 'read', partner?: string): boolean => {
     const self = fullUserAddrRef.current;
     if (!self) return false;
     const cfg = getLocalUserConfig(self);
-    return kind === 'delivery' ? (cfg?.deliveryReceipts ?? false) : (cfg?.readReceipts ?? false);
+    const conv = partner ? getConversationSync(`${partner}/${partner}`) : undefined;
+    return kind === 'delivery'
+      ? (conv?.deliveryReceipts ?? cfg?.deliveryReceipts ?? false)
+      : (conv?.readReceipts ?? cfg?.readReceipts ?? false);
   }, []);
 
   // Intercept DM receipts on the decrypt path (both receive branches), BEFORE
@@ -525,11 +532,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     // acks (about the partner's messages) fan out to our other devices too — a
     // self-echoed read-ack would otherwise mark our own sent messages read.
     if (raw.type === 'delivery-ack') {
-      if (svc && raw.senderId !== self && isReceiptEnabled('delivery')) svc.onAckReceived(raw.messageIds ?? []);
+      if (svc && raw.senderId !== self && isReceiptEnabled('delivery', partner)) svc.onAckReceived(raw.messageIds ?? []);
       return true;
     }
     if (raw.type === 'read-ack') {
-      if (svc && raw.senderId !== self && isReceiptEnabled('read') && raw.upToMessageId && raw.upToTimestamp) {
+      if (svc && raw.senderId !== self && isReceiptEnabled('read', partner) && raw.upToMessageId && raw.upToTimestamp) {
         svc.onReadAckReceived(raw.upToMessageId, raw.upToTimestamp, partner);
       }
       return true;
@@ -539,8 +546,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     // not our own echo), then strip before persist regardless.
     if (svc) {
       const fromPartner = decryptedMessage.content?.senderId !== self;
-      if (fromPartner && raw.ackMessageIds && isReceiptEnabled('delivery')) svc.onAckReceived(raw.ackMessageIds);
-      if (fromPartner && raw.readAckUpTo && isReceiptEnabled('read')) {
+      if (fromPartner && raw.ackMessageIds && isReceiptEnabled('delivery', partner)) svc.onAckReceived(raw.ackMessageIds);
+      if (fromPartner && raw.readAckUpTo && isReceiptEnabled('read', partner)) {
         svc.onReadAckReceived(raw.readAckUpTo.messageId, raw.readAckUpTo.timestamp, partner);
       }
       delete raw.ackMessageIds;
@@ -548,7 +555,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
       // Buffer a delivery ack for an inbound post from the partner (flushed via
       // timer / background / piggyback).
-      if (fromPartner && isReceiptEnabled('delivery') && decryptedMessage.content?.type === 'post') {
+      if (fromPartner && isReceiptEnabled('delivery', partner) && decryptedMessage.content?.type === 'post') {
         svc.onMessageReceived(partner, decryptedMessage.messageId);
       }
     }
@@ -5200,7 +5207,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // Mark a partner's DM message read → buffers a read ack (5s flush). Gated on
   // the read-receipts master switch, per the ReceiptService contract.
   const notifyDmRead = useCallback((partnerAddress: string, messageId: string, timestamp: number) => {
-    if (!isReceiptEnabled('read')) return;
+    if (!isReceiptEnabled('read', partnerAddress)) return;
     receiptServiceRef.current?.onMessageRead(partnerAddress, messageId, timestamp);
   }, [isReceiptEnabled]);
 

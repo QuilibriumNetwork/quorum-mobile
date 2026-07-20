@@ -254,6 +254,16 @@ export class MMKVAdapter implements StorageAdapter {
   }
 }
 
+/**
+ * Synchronous conversation read (MMKV is sync-backed). Used where an async
+ * getConversation can't be awaited — e.g. the DM receipt gate on the inbound
+ * decrypt path.
+ */
+export function getConversationSync(conversationId: string): Conversation | undefined {
+  const data = storage.getString(KEYS.CONVERSATION(conversationId));
+  return data ? (JSON.parse(data) as Conversation) : undefined;
+}
+
 // Singleton instance
 let adapter: MMKVAdapter | null = null;
 

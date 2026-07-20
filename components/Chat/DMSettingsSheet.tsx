@@ -33,6 +33,17 @@ interface DMSettingsSheetProps {
   onToggleEditHistory?: (value: boolean) => void;
   isMuted?: boolean;
   onToggleMute?: (value: boolean) => void;
+  /** Per-conversation DM receipt override. Raw values are the override
+   *  (undefined = inherit global); the effective display value is
+   *  `override ?? global`. Local to this device for now — cross-device sync is
+   *  the unified conversation-settings task (2026-07-20). */
+  deliveryReceipts?: boolean;
+  readReceipts?: boolean;
+  globalDeliveryReceipts?: boolean;
+  globalReadReceipts?: boolean;
+  onSetDeliveryReceipts?: (value: boolean) => void;
+  onSetReadReceipts?: (value: boolean) => void;
+  onResetReceipts?: () => void;
 }
 
 export function DMSettingsSheet({
@@ -50,8 +61,21 @@ export function DMSettingsSheet({
   onToggleEditHistory,
   isMuted,
   onToggleMute,
+  deliveryReceipts,
+  readReceipts,
+  globalDeliveryReceipts = false,
+  globalReadReceipts = false,
+  onSetDeliveryReceipts,
+  onSetReadReceipts,
+  onResetReceipts,
 }: DMSettingsSheetProps) {
   const styles = createStyles(theme);
+  // Effective receipt display = per-conversation override ?? global.
+  const effectiveDelivery = deliveryReceipts ?? globalDeliveryReceipts;
+  const effectiveRead = readReceipts ?? globalReadReceipts;
+  const deliveryOverridden = deliveryReceipts !== undefined;
+  const readOverridden = readReceipts !== undefined;
+  const receiptsOverridden = deliveryOverridden || readOverridden;
   const { confirm, confirmDialog } = useConfirmDialog();
   // While a confirm dialog is open on top of this sheet, swallow the sheet's own
   // back/backdrop dismissal so an Android back cancels the confirm rather than
@@ -135,6 +159,50 @@ export function DMSettingsSheet({
                   trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
                 />
               }
+            />
+          )}
+          {onSetDeliveryReceipts && (
+            <ActionRow
+              icon="checkmark"
+              label="Delivery receipts"
+              sublabel={
+                deliveryOverridden
+                  ? 'This conversation overrides your global setting. Tap "Reset to global" to use your global preference.'
+                  : 'Uses your global setting. Toggle to override for this conversation only.'
+              }
+              trailing={
+                <Switch
+                  value={effectiveDelivery}
+                  onValueChange={onSetDeliveryReceipts}
+                  trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                />
+              }
+            />
+          )}
+          {onSetReadReceipts && effectiveDelivery && (
+            <ActionRow
+              icon="checkmark.circle"
+              label="Read receipts"
+              sublabel={
+                readOverridden
+                  ? 'This conversation overrides your global setting. Tap "Reset to global" to use your global preference.'
+                  : 'Uses your global setting. Toggle to override for this conversation only.'
+              }
+              trailing={
+                <Switch
+                  value={effectiveRead}
+                  onValueChange={onSetReadReceipts}
+                  trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                />
+              }
+            />
+          )}
+          {onResetReceipts && receiptsOverridden && (
+            <ActionRow
+              icon="arrow.counterclockwise"
+              label="Reset to global"
+              sublabel="Use your global receipt settings for this conversation"
+              onPress={onResetReceipts}
             />
           )}
           {onToggleRepudiable && (
