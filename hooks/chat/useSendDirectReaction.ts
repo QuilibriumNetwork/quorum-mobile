@@ -9,6 +9,7 @@ import { useStorageAdapter } from '@/context/StorageContext';
 import { useAuth, useWebSocket } from '@/context';
 import { getQuorumClient } from '@/services/api/quorumClient';
 import { encryptionService } from '@/services/crypto/encryption-service';
+import { ratchetMutex } from '@/services/crypto/ratchet-mutex';
 import { encryptionStateStorage } from '@/services/crypto/encryption-state-storage';
 import { getDeviceKeyset } from '@/services/onboarding/secureStorage';
 import { queryKeys, bytesToHex, hexToBytes } from '@quilibrium/quorum-shared';
@@ -489,6 +490,7 @@ async function encryptWithExistingSession(
   plaintext: string,
   cryptoProvider: any
 ): Promise<{ envelope: string; ephemeralPublicKey: string }> {
+  return ratchetMutex.runExclusive(conversationId, async () => {
   const encryptionState = encryptionStateStorage.getEncryptionState(
     conversationId,
     inboxAddress
@@ -546,4 +548,5 @@ async function encryptWithExistingSession(
   }, true);
 
   return { envelope: result.envelope, ephemeralPublicKey };
+  });
 }

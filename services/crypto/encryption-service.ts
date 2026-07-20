@@ -16,6 +16,7 @@ import {
   type SendingInbox,
   type ConversationInboxKeypair,
 } from './encryption-state-storage';
+import { ratchetMutex } from './ratchet-mutex';
 import { deriveAddress } from '../onboarding/keyService';
 
 import type {
@@ -103,6 +104,7 @@ class EncryptionService {
     plaintext: string,
     senderDeviceInboxAddress?: string
   ): Promise<EncryptedEnvelope> {
+    return ratchetMutex.runExclusive(conversationId, async () => {
     if (!this.deviceKeys) {
       throw new Error('Device keys not initialized');
     }
@@ -177,6 +179,7 @@ class EncryptionService {
       ephemeralPublicKey, // Only set for first message (new session)
       ephemeralPrivateKey, // Only set for first message (new session) - needed for sealing
     };
+    });
   }
 
   /**
@@ -199,6 +202,7 @@ class EncryptionService {
     senderDeviceInboxAddress: string,
     deviceTag: string
   ): Promise<EncryptedEnvelope> {
+    return ratchetMutex.runExclusive(conversationId, async () => {
     if (!this.deviceKeys) {
       throw new Error('Device keys not initialized');
     }
@@ -255,6 +259,7 @@ class EncryptionService {
       ephemeralPublicKey,
       ephemeralPrivateKey,
     };
+    });
   }
 
   /**
@@ -266,6 +271,7 @@ class EncryptionService {
     senderInboxAddress: string,
     envelope: string
   ): Promise<string | null> {
+    return ratchetMutex.runExclusive(conversationId, async () => {
     // Get the encryption state for this specific inbox
     // IMPORTANT: Do NOT fall back to other states - each inbox has its own session
     // If we don't have a state for this inbox, the message cannot be decrypted
@@ -332,6 +338,7 @@ class EncryptionService {
     encryptionStateStorage.saveEncryptionState(newState, false);
 
     return decryptedText;
+    });
   }
 
   /**
@@ -448,6 +455,7 @@ class EncryptionService {
       inboxAddress: string;
     }
   ): Promise<void> {
+    return ratchetMutex.runExclusive(conversationId, async () => {
     if (!this.deviceKeys) {
       throw new Error('Device keys not initialized');
     }
@@ -489,6 +497,7 @@ class EncryptionService {
 
     encryptionStateStorage.saveEncryptionState(encryptionState, true);
     encryptionStateStorage.saveInboxMapping(senderInfo.inboxAddress, conversationId);
+    });
   }
 
   /**
@@ -636,12 +645,14 @@ class EncryptionService {
       userIcon?: string;
     };
   } | null> {
+    // Derive conversation ID from sender address (needed as the mutex key
+    // before we enter the critical section).
+    const conversationId = `${unsealed.user_address}/${unsealed.user_address}`;
+
+    return ratchetMutex.runExclusive(conversationId, async () => {
     if (!this.deviceKeys) {
       throw new Error('Device keys not initialized');
     }
-
-    // Derive conversation ID from sender address
-    const conversationId = `${unsealed.user_address}/${unsealed.user_address}`;
 
     // FIRST: Check if we have a cached state for this specific ephemeral key
     // This handles multiple messages sent with the same X3DH session before our reply.
@@ -939,6 +950,7 @@ class EncryptionService {
       ourConversationInbox: conversationInboxAddress,
       userProfile,
     };
+    });
   }
 
   /**
