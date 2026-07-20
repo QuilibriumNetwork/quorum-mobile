@@ -87,7 +87,14 @@ export function DMSettingsSheet({
     overridden ? (
       <>
         This conversation overrides your global setting. Tap{' '}
-        <Text style={styles.resetLink} onPress={onReset}>Reset to global</Text>
+        <Text
+          style={styles.resetLink}
+          onPress={onReset}
+          suppressHighlighting={false}
+          accessibilityRole="link"
+        >
+          Reset to global
+        </Text>
         {' '}to use your global preference.
       </>
     ) : (
@@ -137,7 +144,7 @@ export function DMSettingsSheet({
   };
 
   return (
-    <BaseModal visible={visible} onClose={guardedClose} showHandle>
+    <BaseModal visible={visible} onClose={guardedClose} showHandle scrollable>
       <View style={styles.container}>
         <View style={styles.header}>
           {address != null && (
@@ -204,6 +211,7 @@ export function DMSettingsSheet({
                   value={effectiveDelivery}
                   onValueChange={onSetDeliveryReceipts}
                   trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                  thumbColor="#fff"
                 />
               }
             />
@@ -218,6 +226,7 @@ export function DMSettingsSheet({
                   value={effectiveRead}
                   onValueChange={onSetReadReceipts}
                   trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                  thumbColor="#fff"
                 />
               }
             />

@@ -798,9 +798,14 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       if (!isDM || item.userId !== currentUserId) return null;
       if (!item.deliveredAt && !item.readAt) return null;
       const read = !!item.readAt;
+      // U+FE0E forces text (not emoji) presentation of the check glyph on iOS.
+      const tick = read ? '✓︎✓︎' : '✓︎';
       return (
-        <Text style={[styles.receiptIndicator, read && styles.receiptIndicatorRead]}>
-          {read ? '✓✓' : '✓'}
+        <Text
+          style={[styles.receiptIndicator, read && styles.receiptIndicatorRead]}
+          accessibilityLabel={read ? 'Read' : 'Delivered'}
+        >
+          {tick}
         </Text>
       );
     },

@@ -187,15 +187,22 @@ export const DMChatArea = React.memo(function DMChatArea({
   // (5s). notifyDmRead is a no-op when the read-receipts setting is off.
   const { notifyDmRead } = useWebSocket();
   const isFocused = useIsFocused();
+  // Skip re-marking the same message on every cache-driven re-render (the effect
+  // re-runs whenever dmMessagesPages changes reference, incl. our own readAt patch).
+  const lastMarkedReadRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!isFocused || !recipientAddress || !dmMessagesPages) return;
+    if (!isFocused) { lastMarkedReadRef.current = null; return; }
+    if (!recipientAddress || !dmMessagesPages) return;
     let newest: Message | undefined;
     for (const m of flattenMessages(dmMessagesPages.pages)) {
       if (m.content?.senderId && m.content.senderId !== user?.address) {
         if (!newest || m.createdDate > newest.createdDate) newest = m;
       }
     }
-    if (newest) notifyDmRead(recipientAddress, newest.messageId, newest.createdDate);
+    if (newest && lastMarkedReadRef.current !== newest.messageId) {
+      lastMarkedReadRef.current = newest.messageId;
+      notifyDmRead(recipientAddress, newest.messageId, newest.createdDate);
+    }
   }, [isFocused, recipientAddress, dmMessagesPages, user?.address, notifyDmRead]);
 
   // Draft management
