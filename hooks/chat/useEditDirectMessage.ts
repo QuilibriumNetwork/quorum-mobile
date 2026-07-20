@@ -12,7 +12,7 @@
  *
  * Enforces a 15-minute edit window and honors the conversation's "Save Edit
  * History" setting. Stamps an `editNonce` so a duplicate delivery is a
- * receive-side no-op (see utils/editHistory).
+ * receive-side no-op (see quorum-shared editHistory).
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -22,12 +22,16 @@ import { getQuorumClient } from '@/services/api/quorumClient';
 import { encryptionService } from '@/services/crypto/encryption-service';
 import { getDeviceKeyset } from '@/services/onboarding/secureStorage';
 import { generateNonce } from '@/services/onboarding/keyService';
-import { logger, queryKeys, type Message, type EditMessage } from '@quilibrium/quorum-shared';
-import { buildLocalEdits } from '@/utils/editHistory';
+import {
+  buildLocalEdits,
+  logger,
+  MESSAGE_EDIT_WINDOW_MS,
+  queryKeys,
+  type Message,
+  type EditMessage,
+} from '@quilibrium/quorum-shared';
 import { sendEncryptedMessageToAllDevices } from './useSendDirectMessage';
 import type { InfiniteMessagesData } from './queryTypes';
-
-const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
 export interface UseEditDirectMessageParams {
   conversationId: string;
@@ -59,7 +63,7 @@ export function useEditDirectMessage() {
 
       // Enforce edit window
       const elapsed = Date.now() - params.originalCreatedDate;
-      if (elapsed > EDIT_WINDOW_MS) {
+      if (elapsed > MESSAGE_EDIT_WINDOW_MS) {
         throw new Error('Messages can only be edited within 15 minutes of sending');
       }
 
@@ -74,7 +78,7 @@ export function useEditDirectMessage() {
 
       // Single edit timestamp + nonce, shared by the local write and the wire
       // send so every device converges on the same edit metadata. The nonce is
-      // the receive-side replay guard (utils/editHistory applyReceivedEdit).
+      // the receive-side replay guard (quorum-shared applyReceivedEdit).
       const editedAt = Date.now();
       const editNonce = generateNonce();
 

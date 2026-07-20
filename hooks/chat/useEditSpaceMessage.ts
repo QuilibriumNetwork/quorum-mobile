@@ -9,10 +9,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth, useWebSocket } from '@/context';
 import { sendEditMessage } from '@/services/space/spaceMessageService';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
-import { buildLocalEdits } from '@/utils/editHistory';
-import { shouldSignEdit, type Message, type GetMessagesResult } from '@quilibrium/quorum-shared';
-
-const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+import {
+  buildLocalEdits,
+  MESSAGE_EDIT_WINDOW_MS,
+  shouldSignEdit,
+  type Message,
+  type GetMessagesResult,
+} from '@quilibrium/quorum-shared';
 
 export interface UseEditSpaceMessageParams {
   spaceId: string;
@@ -32,7 +35,7 @@ export function canEditMessage(message: { userId: string; timestamp: number }, c
   if (!currentUserId) return false;
   if (message.userId !== currentUserId) return false;
   const elapsed = Date.now() - message.timestamp;
-  return elapsed <= EDIT_WINDOW_MS;
+  return elapsed <= MESSAGE_EDIT_WINDOW_MS;
 }
 
 export function useEditSpaceMessage() {
@@ -52,7 +55,7 @@ export function useEditSpaceMessage() {
 
       // Enforce edit window
       const elapsed = Date.now() - params.originalCreatedDate;
-      if (elapsed > EDIT_WINDOW_MS) {
+      if (elapsed > MESSAGE_EDIT_WINDOW_MS) {
         throw new Error('Messages can only be edited within 15 minutes of sending');
       }
 

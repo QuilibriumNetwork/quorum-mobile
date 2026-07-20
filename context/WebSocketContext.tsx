@@ -34,7 +34,7 @@ import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { logMentionOrReply } from '@/services/notifications/logMentionOrReply';
 import { shouldNotifyForContext } from '@/services/notifications/notificationPrefs';
 import { messagePreview as getSpaceMessagePreview, messageSenderName } from '@/utils/messagePreview';
-import { applyReceivedEdit } from '@/utils/editHistory';
+import { applyReceivedEdit, MESSAGE_EDIT_WINDOW_MS } from '@quilibrium/quorum-shared';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type {
   Channel,
@@ -2904,7 +2904,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           if (authorized && targetMsg && targetMsg.content.type === 'post') {
             // Full desktop DM parity on receive: re-check the 15-min window
             // against the target's own createdDate, and reject oversized edits.
-            const withinWindow = Date.now() - targetMsg.createdDate <= 15 * 60 * 1000;
+            const withinWindow = Date.now() - targetMsg.createdDate <= MESSAGE_EDIT_WINDOW_MS;
             const editedText = Array.isArray(editContent.editedText)
               ? editContent.editedText.join('')
               : editContent.editedText;
@@ -4451,7 +4451,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           if (authorized && targetMsg && targetMsg.content.type === 'post') {
             // Full desktop DM parity on receive: 15-min window re-check against
             // the target's createdDate + reject oversized edits.
-            const withinWindow = Date.now() - targetMsg.createdDate <= 15 * 60 * 1000;
+            const withinWindow = Date.now() - targetMsg.createdDate <= MESSAGE_EDIT_WINDOW_MS;
             const editedText = Array.isArray(editContent.editedText)
               ? editContent.editedText.join('')
               : editContent.editedText;
