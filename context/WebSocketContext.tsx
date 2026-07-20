@@ -1997,7 +1997,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
             if (contentType === 'remove-message') {
               const removeContent = spaceMessage.content as RemoveMessage;
-              logger.warn(`[DELTEST live] RX remove-message target=${removeContent.removeMessageId?.slice(0, 12)} signer=${removeContent.senderId?.slice(0, 12)} signed=${!!spaceMessage.signature}`);
 
               // Receive-side permission enforcement against the VERIFIED
               // SIGNER, never the payload senderId (which any modified client
@@ -2033,8 +2032,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               if (!removeVerdict.allowed) {
                 // Unauthorized delete — drop it, but still clear the inbox
                 // entry so we don't reprocess it on every reconnect.
-                logger.warn(
-                  `[DELTEST live] DROPPED remove-message (${removeVerdict.reason}) target=${removeContent.removeMessageId?.slice(0, 12)} targetPresent=${!!targetMessage}`
+                logger.debug(
+                  `[SpaceMsg] dropped unauthorized remove-message (${removeVerdict.reason}) from ${removeContent.senderId?.slice(0, 12)} for ${removeContent.removeMessageId?.slice(0, 12)}`
                 );
                 if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
                   deleteSpaceInboxMessages(
@@ -2045,7 +2044,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 }
                 return;
               }
-              logger.warn(`[DELTEST live] APPLIED remove-message target=${removeContent.removeMessageId?.slice(0, 12)} (verdict=${removeVerdict.reason})`);
 
               // Remove message from cache and storage
               queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
@@ -3757,7 +3755,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
           if (contentType === 'remove-message') {
             const removeContent = spaceMessage.content as RemoveMessage;
-            logger.warn(`[DELTEST batch] RX remove-message target=${removeContent.removeMessageId?.slice(0, 12)} signer=${removeContent.senderId?.slice(0, 12)} signed=${!!spaceMessage.signature}`);
 
             // Verified-signer authorization — same rule as the live path
             // above: valid signature required regardless of repudiability,
@@ -3784,12 +3781,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               members: await getBatchMembers(),
             });
             if (!removeVerdict.allowed) {
-              logger.warn(
-                `[DELTEST batch] DROPPED remove-message (${removeVerdict.reason}) target=${removeContent.removeMessageId?.slice(0, 12)} targetPresent=${!!targetMessage}`
+              logger.debug(
+                `[BatchMsg] dropped unauthorized remove-message (${removeVerdict.reason}) from ${removeContent.senderId?.slice(0, 12)} for ${removeContent.removeMessageId?.slice(0, 12)}`
               );
               continue;
             }
-            logger.warn(`[DELTEST batch] APPLIED remove-message target=${removeContent.removeMessageId?.slice(0, 12)} (verdict=${removeVerdict.reason})`);
 
             queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
               if (!old) return old;
