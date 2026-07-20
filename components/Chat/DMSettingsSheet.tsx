@@ -43,7 +43,10 @@ interface DMSettingsSheetProps {
   globalReadReceipts?: boolean;
   onSetDeliveryReceipts?: (value: boolean) => void;
   onSetReadReceipts?: (value: boolean) => void;
-  onResetReceipts?: () => void;
+  /** Reset delivery override (cascades read, like desktop). */
+  onResetDelivery?: () => void;
+  /** Reset read override only. */
+  onResetRead?: () => void;
 }
 
 export function DMSettingsSheet({
@@ -67,7 +70,8 @@ export function DMSettingsSheet({
   globalReadReceipts = false,
   onSetDeliveryReceipts,
   onSetReadReceipts,
-  onResetReceipts,
+  onResetDelivery,
+  onResetRead,
 }: DMSettingsSheetProps) {
   const styles = createStyles(theme);
   // Effective receipt display = per-conversation override ?? global.
@@ -75,7 +79,20 @@ export function DMSettingsSheet({
   const effectiveRead = readReceipts ?? globalReadReceipts;
   const deliveryOverridden = deliveryReceipts !== undefined;
   const readOverridden = readReceipts !== undefined;
-  const receiptsOverridden = deliveryOverridden || readOverridden;
+
+  // Receipt row description = desktop's exact tooltip copy. When the field is
+  // overridden, "Reset to global" is an inline tappable link (desktop parity;
+  // "Click" -> "Tap" for touch), replacing the old separate reset row.
+  const receiptSublabel = (overridden: boolean, onReset?: () => void) =>
+    overridden ? (
+      <>
+        This conversation overrides your global setting. Tap{' '}
+        <Text style={styles.resetLink} onPress={onReset}>Reset to global</Text>
+        {' '}to use your global preference.
+      </>
+    ) : (
+      'Uses your global setting. Toggle to override for this conversation only.'
+    );
   const { confirm, confirmDialog } = useConfirmDialog();
   // While a confirm dialog is open on top of this sheet, swallow the sheet's own
   // back/backdrop dismissal so an Android back cancels the confirm rather than
@@ -148,6 +165,22 @@ export function DMSettingsSheet({
             dividers between rows and drops the last one; no arbitrary
             sub-grouping. */}
         <ActionRowGroup style={styles.group}>
+          {onToggleRepudiable && (
+            <ActionRow
+              icon="lock"
+              label="Always sign messages"
+              sublabel="Proves messages come from your key"
+              trailing={
+                <Switch
+                  // ON ⇔ signed ⇔ isRepudiable false. Default ON.
+                  value={!(isRepudiable ?? false)}
+                  onValueChange={(signOn) => onToggleRepudiable(!signOn)}
+                  trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
+                  thumbColor="#fff"
+                />
+              }
+            />
+          )}
           {onToggleMute && (
             <ActionRow
               icon="bell.slash"
@@ -165,11 +198,7 @@ export function DMSettingsSheet({
             <ActionRow
               icon="checkmark"
               label="Delivery receipts"
-              sublabel={
-                deliveryOverridden
-                  ? 'This conversation overrides your global setting. Tap "Reset to global" to use your global preference.'
-                  : 'Uses your global setting. Toggle to override for this conversation only.'
-              }
+              sublabel={receiptSublabel(deliveryOverridden, onResetDelivery)}
               trailing={
                 <Switch
                   value={effectiveDelivery}
@@ -183,40 +212,12 @@ export function DMSettingsSheet({
             <ActionRow
               icon="checkmark.circle"
               label="Read receipts"
-              sublabel={
-                readOverridden
-                  ? 'This conversation overrides your global setting. Tap "Reset to global" to use your global preference.'
-                  : 'Uses your global setting. Toggle to override for this conversation only.'
-              }
+              sublabel={receiptSublabel(readOverridden, onResetRead)}
               trailing={
                 <Switch
                   value={effectiveRead}
                   onValueChange={onSetReadReceipts}
                   trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
-                />
-              }
-            />
-          )}
-          {onResetReceipts && receiptsOverridden && (
-            <ActionRow
-              icon="arrow.counterclockwise"
-              label="Reset to global"
-              sublabel="Use your global receipt settings for this conversation"
-              onPress={onResetReceipts}
-            />
-          )}
-          {onToggleRepudiable && (
-            <ActionRow
-              icon="lock.fill"
-              label="Always sign messages"
-              sublabel="Proves messages come from your key"
-              trailing={
-                <Switch
-                  // ON ⇔ signed ⇔ isRepudiable false. Default ON.
-                  value={!(isRepudiable ?? false)}
-                  onValueChange={(signOn) => onToggleRepudiable(!signOn)}
-                  trackColor={{ false: theme.colors.surface5, true: theme.colors.primary }}
-                  thumbColor="#fff"
                 />
               }
             />
@@ -262,6 +263,11 @@ const createStyles = (theme: AppTheme) =>
       paddingHorizontal: Skin.space(12),
       paddingTop: Skin.space(12),
       paddingBottom: Skin.space(8),
+    },
+    // Inline "Reset to global" link inside a receipt row's description.
+    resetLink: {
+      color: theme.colors.primary,
+      fontWeight: '600',
     },
     header: {
       alignItems: 'center',

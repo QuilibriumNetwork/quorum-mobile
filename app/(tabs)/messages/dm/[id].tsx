@@ -260,8 +260,14 @@ export default function DMChatScreen() {
     (value: boolean) => updateConversationSetting({ readReceipts: value }),
     [updateConversationSetting]
   );
-  const handleResetReceipts = useCallback(
+  // Reset delivery override also clears read (read inherits when delivery does),
+  // matching desktop; reset read clears read only.
+  const handleResetDelivery = useCallback(
     () => updateConversationSetting({ deliveryReceipts: undefined, readReceipts: undefined }),
+    [updateConversationSetting]
+  );
+  const handleResetRead = useCallback(
+    () => updateConversationSetting({ readReceipts: undefined }),
     [updateConversationSetting]
   );
 
@@ -482,7 +488,8 @@ export default function DMChatScreen() {
             globalReadReceipts={globalReadReceipts}
             onSetDeliveryReceipts={handleSetDeliveryReceipts}
             onSetReadReceipts={handleSetReadReceipts}
-            onResetReceipts={handleResetReceipts}
+            onResetDelivery={handleResetDelivery}
+            onResetRead={handleResetRead}
           />
         </Suspense>
       )}
