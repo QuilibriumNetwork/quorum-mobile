@@ -807,12 +807,14 @@ export default function ProfileModal({
     setIsReceiptsToggling(true);
     try {
       await setDeliveryReceipts(enabled);
+      // Cascade: turning delivery off also turns read off (matches desktop).
+      if (!enabled) await setReadReceipts(false);
     } catch {
       Alert.alert('Error', 'Failed to update delivery receipts. Please try again.');
     } finally {
       setIsReceiptsToggling(false);
     }
-  }, [setDeliveryReceipts]);
+  }, [setDeliveryReceipts, setReadReceipts]);
   const handleToggleReadReceipts = React.useCallback(async (enabled: boolean) => {
     setIsReceiptsToggling(true);
     try {
@@ -4239,9 +4241,9 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
         </View>
         <View style={styles.settingRow}>
           <View style={styles.settingLeft}>
-            <Text style={styles.settingLabel}>Send Delivery Receipts</Text>
+            <Text style={styles.settingLabel}>Delivery receipts</Text>
             <Text style={styles.settingDescription}>
-              Let people you DM see a ✓ once their message reaches your device. Off by default.
+              When on, senders see when their messages reach your device, and you see when yours reach theirs.
             </Text>
           </View>
           <Switch
@@ -4252,21 +4254,25 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
             thumbColor={deliveryReceipts ? '#ffffff' : '#f4f3f4'}
           />
         </View>
-        <View style={styles.settingRow}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingLabel}>Send Read Receipts</Text>
-            <Text style={styles.settingDescription}>
-              Let people you DM see ✓✓ once you have read their message. Off by default.
-            </Text>
+        {/* Read receipts only make sense once delivery receipts are on (matches
+            desktop, which hides this row while delivery is off). */}
+        {deliveryReceipts && (
+          <View style={styles.settingRow}>
+            <View style={styles.settingLeft}>
+              <Text style={styles.settingLabel}>Read receipts</Text>
+              <Text style={styles.settingDescription}>
+                When on, senders see when you&apos;ve read their messages, and you see when yours are read.
+              </Text>
+            </View>
+            <Switch
+              value={readReceipts}
+              onValueChange={onToggleReadReceipts}
+              disabled={receiptsDisabled}
+              trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+              thumbColor={readReceipts ? '#ffffff' : '#f4f3f4'}
+            />
           </View>
-          <Switch
-            value={readReceipts}
-            onValueChange={onToggleReadReceipts}
-            disabled={receiptsDisabled}
-            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
-            thumbColor={readReceipts ? '#ffffff' : '#f4f3f4'}
-          />
-        </View>
+        )}
         {/* "Show Online Status" toggle removed: there is no presence/online-status
             feature behind it, so the control was a non-functional decoration
             (hardcoded on, no handler). Re-add a real toggle here if/when presence
