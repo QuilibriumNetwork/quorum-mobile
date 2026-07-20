@@ -33,6 +33,8 @@ interface UseUserConfigReturn {
   updateNotificationSettings: (
     settings: UserConfig['notificationSettings']
   ) => Promise<void>;
+  updateDeliveryReceipts: (enabled: boolean) => Promise<void>;
+  updateReadReceipts: (enabled: boolean) => Promise<void>;
 }
 
 export function useUserConfig(): UseUserConfigReturn {
@@ -117,6 +119,26 @@ export function useUserConfig(): UseUserConfigReturn {
     [user?.address, config]
   );
 
+  // DM receipt master switches. Persisted to the config blob (typed in shared
+  // 2.1.0-34+) and synced cross-device via saveConfig like every other setting.
+  const updateDeliveryReceipts = useCallback(
+    async (enabled: boolean) => {
+      if (!user?.address) return;
+      const updated = await updateConfig(user.address, { deliveryReceipts: enabled });
+      setConfig(updated);
+    },
+    [user?.address]
+  );
+
+  const updateReadReceipts = useCallback(
+    async (enabled: boolean) => {
+      if (!user?.address) return;
+      const updated = await updateConfig(user.address, { readReceipts: enabled });
+      setConfig(updated);
+    },
+    [user?.address]
+  );
+
   return {
     config,
     isLoading,
@@ -124,6 +146,25 @@ export function useUserConfig(): UseUserConfigReturn {
     refreshConfig,
     updateAllowSync,
     updateNotificationSettings,
+    updateDeliveryReceipts,
+    updateReadReceipts,
+  };
+}
+
+/**
+ * Hook for DM delivery + read receipt settings. Both default OFF (matches
+ * desktop). Turning delivery off implicitly disables read (you can't confirm
+ * reads without confirming delivery).
+ */
+export function useReceiptSettings() {
+  const { config, isLoading, updateDeliveryReceipts, updateReadReceipts } = useUserConfig();
+
+  return {
+    deliveryReceipts: config?.deliveryReceipts ?? false,
+    readReceipts: config?.readReceipts ?? false,
+    isLoading,
+    setDeliveryReceipts: updateDeliveryReceipts,
+    setReadReceipts: updateReadReceipts,
   };
 }
 
