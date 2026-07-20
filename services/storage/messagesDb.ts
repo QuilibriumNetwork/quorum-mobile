@@ -606,6 +606,54 @@ export async function deleteMessage(messageId: string): Promise<void> {
 }
 
 /**
+ * DM delivery receipt: stamp deliveredAt on a single sent message. Patches
+ * the JSON payload (deliveredAt is not a dedicated column). No-op if the row
+ * is gone or already delivered.
+ */
+export async function updateMessageDeliveredAt(messageId: string, deliveredAt: number): Promise<void> {
+  const db = await ensureDb();
+  if (!db) return;
+  const row = db.getFirstSync<{ payload: string }>(
+    `SELECT payload FROM messages WHERE message_id = ? LIMIT 1;`,
+    [messageId]
+  );
+  if (!row) return;
+  let msg: Message;
+  try { msg = JSON.parse(row.payload) as Message; } catch { return; }
+  if (msg.deliveredAt) return;
+  msg.deliveredAt = deliveredAt;
+  db.runSync(`UPDATE messages SET payload = ? WHERE message_id = ?;`, [JSON.stringify(msg), messageId]);
+}
+
+/**
+ * DM read receipt: stamp readAt (and deliveredAt if missing) on all OWN
+ * messages in a conversation up to a high-water timestamp. DM spaceId and
+ * channelId are both the partner address.
+ */
+export async function updateMessagesReadAt(
+  conversationAddress: string,
+  selfAddress: string,
+  upToTimestamp: number,
+  readAt: number
+): Promise<void> {
+  const db = await ensureDb();
+  if (!db) return;
+  const rows = db.getAllSync<{ message_id: string; payload: string }>(
+    `SELECT message_id, payload FROM messages
+     WHERE space_id = ? AND channel_id = ? AND created_date <= ?;`,
+    [conversationAddress, conversationAddress, upToTimestamp]
+  );
+  for (const row of rows) {
+    let msg: Message;
+    try { msg = JSON.parse(row.payload) as Message; } catch { continue; }
+    if (msg.content?.senderId !== selfAddress || msg.readAt) continue;
+    msg.readAt = readAt;
+    if (!msg.deliveredAt) msg.deliveredAt = readAt;
+    db.runSync(`UPDATE messages SET payload = ? WHERE message_id = ?;`, [JSON.stringify(msg), row.message_id]);
+  }
+}
+
+/**
  * Per-space "we already asked the server to replay the full hub log"
  * flag. Synchronous because the open-empty-channel detector in
  * useMessages needs to short-circuit without waiting on a microtask.

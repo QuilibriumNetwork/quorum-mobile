@@ -15,6 +15,7 @@ import {
   logger,
   MAX_MESSAGE_LENGTH,
   queryKeys,
+  ReceiptService,
 } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { PERSISTABLE_TYPES, DM_GUARD_PASSTHROUGH_TYPES } from '@/components/Chat/types';
@@ -43,6 +44,7 @@ import type {
   KickMessage,
   Message,
   MuteMessage,
+  ReceiptControlMessage,
   RemoveMessage,
   SealedMessage,
   Space,
@@ -51,6 +53,10 @@ import type {
   WebSocketClient,
   WebSocketConnectionState,
 } from '@quilibrium/quorum-shared';
+import { getLocalUserConfig } from '../services/config/configService';
+import { updateMessageDeliveredAt, updateMessagesReadAt } from '../services/storage/messagesDb';
+import { sendEncryptedMessageToAllDevices } from '../hooks/chat/useSendDirectMessage';
+import { toAllDeviceInfos, type DeviceInfo } from '../hooks/chat/useRecipientRegistration';
 import { getQuorumClient } from '../services/api/quorumClient';
 import { getAllSpaceInboxAddresses, getInboxToSpaceMap, getSpace, getSpaceByHubAddress, getSpaceIds, getSpaceKey, saveSpace, saveSpaceKey } from '../services/config/spaceStorage';
 import { encryptionService } from '../services/crypto/encryption-service';
@@ -101,6 +107,9 @@ interface WebSocketContextValue {
   // Inbox subscriptions
   subscribe: (inboxAddresses: string[]) => Promise<void>;
   unsubscribe: (inboxAddresses: string[]) => Promise<void>;
+
+  // DM read receipts — mark a partner's message read (gated on the read setting)
+  notifyDmRead: (partnerAddress: string, messageId: string, timestamp: number) => void;
 
   // Kick events - space ID that user was kicked from, null when acknowledged
   kickedFromSpaceId: string | null;
@@ -484,6 +493,67 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       );
     }, CONVERSATION_REFRESH_DEBOUNCE_MS);
   }, [queryClient]);
+
+  // ── DM delivery + read receipts (WhatsApp-style ✓ / ✓✓) ──────────────────
+  // One ReceiptService per session buffers acks and flushes them (10s delivery,
+  // 5s read timers + flush on background). Created + wired to the send transport
+  // and cache below, after enqueueOutbound/subscribe are defined.
+  const receiptServiceRef = useRef<ReceiptService | null>(null);
+  const sendDmReceiptAckRef = useRef<((partnerAddress: string, ack: ReceiptControlMessage) => void) | null>(null);
+
+  // Global receipt master switches. Default OFF (matches desktop). Read live
+  // from the local config blob so a settings toggle takes effect immediately.
+  const isReceiptEnabled = useCallback((kind: 'delivery' | 'read'): boolean => {
+    const self = fullUserAddrRef.current;
+    if (!self) return false;
+    const cfg = getLocalUserConfig(self);
+    return kind === 'delivery' ? (cfg?.deliveryReceipts ?? false) : (cfg?.readReceipts ?? false);
+  }, []);
+
+  // Intercept DM receipts on the decrypt path (both receive branches), BEFORE
+  // the self-echo drop. Flat delivery-ack/read-ack (top-level `type`, no
+  // `content`) are processed and reported as handled (never saved). Normal
+  // messages have their piggybacked acks processed + stripped, are buffered for
+  // an outbound delivery ack, and fall through (returns false). `partner` is the
+  // conversation owner (pre self-sync rewrite).
+  const handleDmReceipt = useCallback((decryptedMessage: Message, partner: string): boolean => {
+    const raw = decryptedMessage as any;
+    const svc = receiptServiceRef.current;
+    const self = fullUserAddrRef.current;
+
+    // Only acks the PARTNER sent (about OUR messages) are actionable. Our own
+    // acks (about the partner's messages) fan out to our other devices too — a
+    // self-echoed read-ack would otherwise mark our own sent messages read.
+    if (raw.type === 'delivery-ack') {
+      if (svc && raw.senderId !== self && isReceiptEnabled('delivery')) svc.onAckReceived(raw.messageIds ?? []);
+      return true;
+    }
+    if (raw.type === 'read-ack') {
+      if (svc && raw.senderId !== self && isReceiptEnabled('read') && raw.upToMessageId && raw.upToTimestamp) {
+        svc.onReadAckReceived(raw.upToMessageId, raw.upToTimestamp, partner);
+      }
+      return true;
+    }
+
+    // Piggybacked acks on a normal message — process (only if from the partner,
+    // not our own echo), then strip before persist regardless.
+    if (svc) {
+      const fromPartner = decryptedMessage.content?.senderId !== self;
+      if (fromPartner && raw.ackMessageIds && isReceiptEnabled('delivery')) svc.onAckReceived(raw.ackMessageIds);
+      if (fromPartner && raw.readAckUpTo && isReceiptEnabled('read')) {
+        svc.onReadAckReceived(raw.readAckUpTo.messageId, raw.readAckUpTo.timestamp, partner);
+      }
+      delete raw.ackMessageIds;
+      delete raw.readAckUpTo;
+
+      // Buffer a delivery ack for an inbound post from the partner (flushed via
+      // timer / background / piggyback).
+      if (fromPartner && isReceiptEnabled('delivery') && decryptedMessage.content?.type === 'post') {
+        svc.onMessageReceived(partner, decryptedMessage.messageId);
+      }
+    }
+    return false;
+  }, [isReceiptEnabled]);
 
   // Receive side of DM profile sync. A `dm-update-profile` control message
   // carries a partner's GLOBAL profile change (displayName / userIcon / bio)
@@ -2808,6 +2878,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             return;
           }
 
+          // DM receipts (before the self-echo guard): flat delivery/read-ack are
+          // consumed here and never saved; normal messages buffer + strip acks.
+          if (handleDmReceipt(decryptedMessage, conversationId.split('/')[0])) {
+            getDeviceKeyset().then(dk => {
+              if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
+            });
+            return;
+          }
+
           // Handle same-user multi-device sync:
           // When receiving a message from our own address (different device),
           // the conversation should be with the actual recipient (channelId), not ourselves.
@@ -4187,6 +4266,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           continue;
         }
 
+        // DM receipts (before the self-echo guard): flat delivery/read-ack are
+        // consumed here and never saved; normal messages buffer + strip acks.
+        if (handleDmReceipt(decryptedMessage, conversationId.split('/')[0])) {
+          const originalMsg = batch.find(m => m.timestamp === msgResult.timestamp);
+          if (originalMsg) {
+            getDeviceKeyset().then(dk => {
+              if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
+            });
+          }
+          continue;
+        }
+
         // Handle same-user multi-device sync. A true (pre-rewrite) sender === us
         // means our own message echoed from another device; its user_profile is
         // OURS, not the partner's (see the JS path's self-sync guard).
@@ -5054,6 +5145,142 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     inboxAddresses.forEach((addr) => subscribedInboxesRef.current.delete(addr));
   }, []);
 
+  // ── DM receipt transport ──────────────────────────────────────────────────
+  // Send a flat receipt control message to the partner's every device (+ our
+  // own other devices), mirroring the delete/edit fan-out. The flat ack is
+  // JSON-serialized on the wire and intercepted by handleDmReceipt (no `content`
+  // wrapper). Stored in a ref so the ReceiptService below never needs recreating.
+  const sendDmReceiptAck = useCallback(
+    async (partnerAddress: string, ack: ReceiptControlMessage) => {
+      try {
+        const senderId = fullUserAddrRef.current;
+        if (!senderId || !encryptionService.hasDeviceKeys()) return;
+        const deviceKeyset = await getDeviceKeyset();
+        if (!deviceKeyset) return;
+
+        const apiClient = getQuorumClient();
+        const allTargetDevices: DeviceInfo[] = [];
+        try {
+          const recipientReg = await apiClient.fetchUserRegistration(partnerAddress);
+          if (recipientReg) allTargetDevices.push(...toAllDeviceInfos(recipientReg));
+          const senderReg = await apiClient.fetchUserRegistration(senderId);
+          if (senderReg) {
+            allTargetDevices.push(
+              ...toAllDeviceInfos(senderReg).filter((d) => d.inboxAddress !== deviceKeyset.inboxAddress)
+            );
+          }
+        } catch {
+          // Registration fetch failed — with no devices the send is skipped below.
+        }
+        if (allTargetDevices.length === 0) return;
+
+        await sendEncryptedMessageToAllDevices(
+          `${partnerAddress}/${partnerAddress}`,
+          partnerAddress,
+          ack as unknown as Message,
+          allTargetDevices,
+          enqueueOutbound,
+          subscribe,
+          {
+            identityPublicKey: deviceKeyset.identityPublicKey,
+            inboxAddress: deviceKeyset.inboxAddress,
+            inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
+          },
+          senderId,
+          user?.displayName,
+        );
+      } catch (err) {
+        logger.debug('[DM-receipts] ack send failed', err);
+      }
+    },
+    [enqueueOutbound, subscribe, user?.displayName],
+  );
+  sendDmReceiptAckRef.current = sendDmReceiptAck;
+
+  // Mark a partner's DM message read → buffers a read ack (5s flush). Gated on
+  // the read-receipts master switch, per the ReceiptService contract.
+  const notifyDmRead = useCallback((partnerAddress: string, messageId: string, timestamp: number) => {
+    if (!isReceiptEnabled('read')) return;
+    receiptServiceRef.current?.onMessageRead(partnerAddress, messageId, timestamp);
+  }, [isReceiptEnabled]);
+
+  // Build the ReceiptService once per session. Callbacks bridge to the send
+  // transport (via ref, so display-name changes don't recreate it), the React
+  // Query cache and SQLite. Display is unconditional; the master switch only
+  // gates whether acks are sent/consumed (in handleDmReceipt + onMessageRead).
+  useEffect(() => {
+    const self = user?.address;
+    if (!self) return;
+
+    const service = new ReceiptService({
+      onFlush: (address, messageIds) => {
+        sendDmReceiptAckRef.current?.(address, { senderId: self, type: 'delivery-ack', messageIds });
+      },
+      onAckProcessed: (messageIds) => {
+        const now = Date.now();
+        const ids = new Set(messageIds);
+        // We don't know which conversation — patch deliveredAt across all DM caches.
+        queryClient.setQueriesData<InfiniteMessagesData>({ queryKey: ['messages', 'infinite'] }, (old) => {
+          if (!old?.pages) return old;
+          let changed = false;
+          const pages = old.pages.map((page) => {
+            let pageChanged = false;
+            const messages = page.messages.map((m) => {
+              if (ids.has(m.messageId) && !m.deliveredAt) { changed = true; pageChanged = true; return { ...m, deliveredAt: now }; }
+              return m;
+            });
+            return pageChanged ? { ...page, messages } : page;
+          });
+          return changed ? { ...old, pages } : old;
+        });
+        for (const id of messageIds) updateMessageDeliveredAt(id, now).catch(() => {});
+      },
+      onReadFlush: (address, hwm) => {
+        sendDmReceiptAckRef.current?.(address, {
+          senderId: self, type: 'read-ack', upToMessageId: hwm.messageId, upToTimestamp: hwm.timestamp,
+        });
+      },
+      onReadAckProcessed: (upToMessageId, upToTimestamp, conversationAddress) => {
+        const now = Date.now();
+        const key = queryKeys.messages.infinite(conversationAddress, conversationAddress);
+        queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {
+          if (!old?.pages) return old;
+          let changed = false;
+          const pages = old.pages.map((page) => {
+            let pageChanged = false;
+            const messages = page.messages.map((m) => {
+              if (m.content?.senderId === self && m.createdDate <= upToTimestamp && !m.readAt) {
+                changed = true; pageChanged = true;
+                return { ...m, readAt: now, deliveredAt: m.deliveredAt || now };
+              }
+              return m;
+            });
+            return pageChanged ? { ...page, messages } : page;
+          });
+          return changed ? { ...old, pages } : old;
+        });
+        updateMessagesReadAt(conversationAddress, self, upToTimestamp, now).catch(() => {});
+      },
+    });
+
+    receiptServiceRef.current = service;
+    return () => {
+      service.destroy();
+      receiptServiceRef.current = null;
+    };
+  }, [user?.address, queryClient]);
+
+  // Flush pending acks when the app backgrounds (RN has no visibilitychange, so
+  // the ReceiptService relies on this signal — see its docstring).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'background' || state === 'inactive') {
+        receiptServiceRef.current?.flushAll();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   // triggerSyncRequest removed — peer-to-peer mesh sync is gone. Catch-up
   // is handled exclusively by the per-hub log transport (listen-hub +
   // log-since). Joiners do not request history from peers.
@@ -5378,12 +5605,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       enqueueOutbound,
       subscribe,
       unsubscribe,
+      notifyDmRead,
       kickedFromSpaceId,
       clearKickedFromSpace,
       registerCallSignalingHandler,
       registerLogFrameHandler,
     }),
-    [connectionState, connect, disconnect, enqueueOutbound, subscribe, unsubscribe, kickedFromSpaceId, clearKickedFromSpace, registerCallSignalingHandler, registerLogFrameHandler]
+    [connectionState, connect, disconnect, enqueueOutbound, subscribe, unsubscribe, notifyDmRead, kickedFromSpaceId, clearKickedFromSpace, registerCallSignalingHandler, registerLogFrameHandler]
   );
 
   return (
