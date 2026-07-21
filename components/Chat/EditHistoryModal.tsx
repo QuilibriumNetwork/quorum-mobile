@@ -29,8 +29,13 @@ interface EditEntry {
 interface EditHistoryModalProps {
   visible: boolean;
   onClose: () => void;
-  originalText: string;
-  originalDate: number;
+  /** Current (live) message text — appended as the latest timeline entry. */
+  currentText: string;
+  /** Current message modifiedDate (the timestamp of the latest edit). */
+  currentDate: number;
+  /** Original message createdDate — identifies which entry is the Original. */
+  createdDate: number;
+  /** Prior versions, oldest first (edits[0] is the seeded original). */
   edits: EditEntry[];
   theme: AppTheme;
 }
@@ -38,34 +43,35 @@ interface EditHistoryModalProps {
 export const EditHistoryModal = React.memo(function EditHistoryModal({
   visible,
   onClose,
-  originalText,
-  originalDate,
+  currentText,
+  currentDate,
+  createdDate,
   edits,
   theme,
 }: EditHistoryModalProps) {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
 
-  // Build timeline: original + all edits, newest first
+  // Build timeline oldest → newest, mirroring desktop: the prior versions in
+  // edits[] (oldest first, with edits[0] the seeded original) followed by the
+  // CURRENT message text appended as the latest entry. This never loses the
+  // original and never duplicates the current version. The "Original" label is
+  // whichever entry's modifiedDate equals the message createdDate (edits[0]).
   const timeline = useMemo(() => {
-    const entries = [
-      ...edits.map((edit, index) => ({
-        text: Array.isArray(edit.text) ? edit.text.join('\n') : edit.text,
-        date: edit.modifiedDate,
-        isOriginal: false,
-        index: index + 1,
-      })),
-      {
-        text: originalText,
-        date: originalDate,
-        isOriginal: true,
-        index: 0,
-      },
-    ];
-    // Sort newest first
-    entries.sort((a, b) => b.date - a.date);
+    const entries = edits.map((edit) => ({
+      text: Array.isArray(edit.text) ? edit.text.join('\n') : edit.text,
+      date: edit.modifiedDate,
+      isOriginal: edit.modifiedDate === createdDate,
+      isCurrent: false,
+    }));
+    entries.push({
+      text: Array.isArray(currentText) ? currentText.join('\n') : currentText,
+      date: currentDate,
+      isOriginal: edits.length === 0 && currentDate === createdDate,
+      isCurrent: true,
+    });
     return entries;
-  }, [originalText, originalDate, edits]);
+  }, [currentText, currentDate, createdDate, edits]);
 
   if (!visible) return null;
 
@@ -93,14 +99,22 @@ export const EditHistoryModal = React.memo(function EditHistoryModal({
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {timeline.map((entry) => (
+            {timeline.map((entry, index) => (
               <View
-                key={`${entry.date}-${entry.index}`}
-                style={[styles.editCard, entry.isOriginal && styles.originalCard]}
+                key={`${entry.date}-${index}`}
+                style={[
+                  styles.editCard,
+                  entry.isOriginal && styles.originalCard,
+                  entry.isCurrent && styles.currentCard,
+                ]}
               >
                 <View style={styles.editHeader}>
                   <Text style={styles.editLabel}>
-                    {entry.isOriginal ? 'Original' : `Edit #${entry.index}`}
+                    {entry.isCurrent
+                      ? 'Current'
+                      : entry.isOriginal
+                        ? 'Original'
+                        : `Edit #${index}`}
                   </Text>
                   <Text style={styles.editTimestamp}>
                     {formatTime(entry.date)}
@@ -170,6 +184,12 @@ const createStyles = (theme: AppTheme) =>
     // background so it reads as the baseline the edits diverge from.
     originalCard: {
       backgroundColor: theme.colors.accentSoft,
+    },
+    // The Current (live) version gets an accent border so it reads as the
+    // message as it stands now, mirroring desktop's bordered "Current" card.
+    currentCard: {
+      borderWidth: 1,
+      borderColor: theme.colors.primary,
     },
     editHeader: {
       flexDirection: 'row',

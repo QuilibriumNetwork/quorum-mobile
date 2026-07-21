@@ -23,7 +23,7 @@ import { encryptionService } from '@/services/crypto/encryption-service';
 import { getDeviceKeyset } from '@/services/onboarding/secureStorage';
 import { generateNonce } from '@/services/onboarding/keyService';
 import {
-  buildLocalEdits,
+  applyEdit,
   logger,
   MESSAGE_EDIT_WINDOW_MS,
   queryKeys,
@@ -78,7 +78,7 @@ export function useEditDirectMessage() {
 
       // Single edit timestamp + nonce, shared by the local write and the wire
       // send so every device converges on the same edit metadata. The nonce is
-      // the receive-side replay guard (quorum-shared applyReceivedEdit).
+      // the receive-side replay guard (quorum-shared applyEdit).
       const editedAt = Date.now();
       const editNonce = generateNonce();
 
@@ -91,15 +91,26 @@ export function useEditDirectMessage() {
         for (const page of existingData.pages) {
           const msg = page.messages.find(m => m.messageId === params.messageId);
           if (msg && (msg.content.type === 'post' || msg.content.type === 'event')) {
+            const applied = applyEdit(
+              {
+                text: msg.content.text,
+                createdDate: msg.createdDate,
+                modifiedDate: msg.modifiedDate,
+                nonce: msg.nonce,
+                lastModifiedHash: msg.lastModifiedHash,
+                edits: msg.edits,
+              },
+              { editedAt, editNonce, saveEditHistory },
+            );
             const updatedMsg: Message = {
               ...msg,
-              modifiedDate: editedAt,
-              lastModifiedHash: editNonce,
+              modifiedDate: applied.modifiedDate,
+              lastModifiedHash: applied.lastModifiedHash,
               content: {
                 ...msg.content,
                 text: params.newText,
               } as Message['content'],
-              edits: buildLocalEdits(msg.edits, params.newText, editedAt, saveEditHistory),
+              edits: applied.edits,
             };
             await storage.saveMessage(
               updatedMsg,
@@ -214,6 +225,12 @@ export function useEditDirectMessage() {
       const conversation = await storage.getConversation(params.conversationId);
       const saveEditHistory = conversation?.saveEditHistory ?? false;
 
+      // Single edit timestamp for this optimistic pass so modifiedDate and the
+      // retained prior version share one time. The authoritative editNonce is
+      // generated in mutationFn; the optimistic edits[] is transient and gets
+      // reconciled by the storage write + query invalidation.
+      const editedAt = Date.now();
+
       // Optimistically update the message text in cache
       queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {
         if (!old) return old;
@@ -224,14 +241,25 @@ export function useEditDirectMessage() {
             ...page,
             messages: page.messages.map((m) => {
               if (m.messageId === params.messageId && m.content.type === 'post') {
+                const applied = applyEdit(
+                  {
+                    text: m.content.text,
+                    createdDate: m.createdDate,
+                    modifiedDate: m.modifiedDate,
+                    nonce: m.nonce,
+                    lastModifiedHash: m.lastModifiedHash,
+                    edits: m.edits,
+                  },
+                  { editedAt, saveEditHistory },
+                );
                 return {
                   ...m,
-                  modifiedDate: Date.now(),
+                  modifiedDate: applied.modifiedDate,
                   content: {
                     ...m.content,
                     text: params.newText,
                   },
-                  edits: buildLocalEdits(m.edits, params.newText, Date.now(), saveEditHistory),
+                  edits: applied.edits,
                 };
               }
               return m;

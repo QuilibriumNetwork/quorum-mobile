@@ -35,7 +35,7 @@ import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { logMentionOrReply } from '@/services/notifications/logMentionOrReply';
 import { shouldNotifyForContext } from '@/services/notifications/notificationPrefs';
 import { messagePreview as getSpaceMessagePreview, messageSenderName } from '@/utils/messagePreview';
-import { applyReceivedEdit, MESSAGE_EDIT_WINDOW_MS } from '@quilibrium/quorum-shared';
+import { applyEdit, MESSAGE_EDIT_WINDOW_MS } from '@quilibrium/quorum-shared';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type {
   Channel,
@@ -2018,12 +2018,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     ...page,
                     messages: page.messages.map((msg) => {
                       if (msg.messageId === editContent.originalMessageId && msg.content.type === 'post') {
-                        const applied = applyReceivedEdit(msg, {
-                          newText: editContent.editedText,
-                          editedAt: editContent.editedAt,
-                          editNonce: editContent.editNonce,
-                          saveEditHistory,
-                        });
+                        const applied = applyEdit(
+                          {
+                            text: msg.content.text,
+                            createdDate: msg.createdDate,
+                            modifiedDate: msg.modifiedDate,
+                            nonce: msg.nonce,
+                            lastModifiedHash: msg.lastModifiedHash,
+                            edits: msg.edits,
+                          },
+                          {
+                            editedAt: editContent.editedAt,
+                            editNonce: editContent.editNonce,
+                            saveEditHistory,
+                          },
+                        );
                         if (!applied.changed) return msg;
                         return {
                           ...msg,
@@ -2047,12 +2056,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // update above gets overwritten the next time the infinite
               // query refetches from MMKV.
               if (existingMsg && existingMsg.content.type === 'post') {
-                const applied = applyReceivedEdit(existingMsg, {
-                  newText: editContent.editedText,
-                  editedAt: editContent.editedAt,
-                  editNonce: editContent.editNonce,
-                  saveEditHistory,
-                });
+                const applied = applyEdit(
+                  {
+                    text: existingMsg.content.text,
+                    createdDate: existingMsg.createdDate,
+                    modifiedDate: existingMsg.modifiedDate,
+                    nonce: existingMsg.nonce,
+                    lastModifiedHash: existingMsg.lastModifiedHash,
+                    edits: existingMsg.edits,
+                  },
+                  {
+                    editedAt: editContent.editedAt,
+                    editNonce: editContent.editNonce,
+                    saveEditHistory,
+                  },
+                );
                 // Skip the write when the edit was already applied — a replayed
                 // edit-message must not clobber stored history.
                 if (applied.changed) {
@@ -2999,12 +3017,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             if (withinWindow && withinLength) {
               const conversation = await storage.getConversation(conversationId);
               const saveEditHistory = conversation?.saveEditHistory ?? false;
-              const applied = applyReceivedEdit(targetMsg, {
-                newText: editContent.editedText,
-                editedAt: editContent.editedAt,
-                editNonce: editContent.editNonce,
-                saveEditHistory,
-              });
+              const applied = applyEdit(
+                {
+                  text: targetMsg.content.text,
+                  createdDate: targetMsg.createdDate,
+                  modifiedDate: targetMsg.modifiedDate,
+                  nonce: targetMsg.nonce,
+                  lastModifiedHash: targetMsg.lastModifiedHash,
+                  edits: targetMsg.edits,
+                },
+                {
+                  editedAt: editContent.editedAt,
+                  editNonce: editContent.editNonce,
+                  saveEditHistory,
+                },
+              );
               // Replayed edit already applied → no-op (don't clobber history).
               if (applied.changed) {
                 const key = queryKeys.messages.infinite(senderAddress, senderAddress);
@@ -3808,14 +3835,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // Honor the space's "Save Edit History" setting, matching desktop:
             // when OFF, don't retain prior versions (edits: []). Default false.
             const saveEditHistory = space?.saveEditHistory ?? false;
-            const applyEdit = (msg: Message): Message => {
+            const transformEdit = (msg: Message): Message => {
               if (msg.content.type !== 'post') return msg;
-              const applied = applyReceivedEdit(msg, {
-                newText: editContent.editedText,
-                editedAt: editContent.editedAt,
-                editNonce: editContent.editNonce,
-                saveEditHistory,
-              });
+              const applied = applyEdit(
+                {
+                  text: msg.content.text,
+                  createdDate: msg.createdDate,
+                  modifiedDate: msg.modifiedDate,
+                  nonce: msg.nonce,
+                  lastModifiedHash: msg.lastModifiedHash,
+                  edits: msg.edits,
+                },
+                {
+                  editedAt: editContent.editedAt,
+                  editNonce: editContent.editNonce,
+                  saveEditHistory,
+                },
+              );
               // Replayed edit already applied → leave the message untouched so a
               // duplicate delivery can't wipe stored history.
               if (!applied.changed) return msg;
@@ -3828,13 +3864,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 ...editSignatureFields,
               };
             };
-            queueCacheTransform(messagesKey, editContent.originalMessageId, applyEdit);
+            queueCacheTransform(messagesKey, editContent.originalMessageId, transformEdit);
             // Persist to storage too. Cache-only updates revert as soon as the
             // query refetches from disk (e.g. on remount, invalidate, or when
             // the user navigates away and back), so the edit appears to "snap
             // back" to the original. Match what the cache update did above.
             if (baseMsg && baseMsg.content.type === 'post') {
-              pendingStorageUpdates.set(editContent.originalMessageId, applyEdit(baseMsg));
+              pendingStorageUpdates.set(editContent.originalMessageId, transformEdit(baseMsg));
             }
             continue;
           }
@@ -4558,12 +4594,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             if (withinWindow && withinLength) {
               const conversation = await storage.getConversation(conversationId);
               const saveEditHistory = conversation?.saveEditHistory ?? false;
-              const applied = applyReceivedEdit(targetMsg, {
-                newText: editContent.editedText,
-                editedAt: editContent.editedAt,
-                editNonce: editContent.editNonce,
-                saveEditHistory,
-              });
+              const applied = applyEdit(
+                {
+                  text: targetMsg.content.text,
+                  createdDate: targetMsg.createdDate,
+                  modifiedDate: targetMsg.modifiedDate,
+                  nonce: targetMsg.nonce,
+                  lastModifiedHash: targetMsg.lastModifiedHash,
+                  edits: targetMsg.edits,
+                },
+                {
+                  editedAt: editContent.editedAt,
+                  editNonce: editContent.editNonce,
+                  saveEditHistory,
+                },
+              );
               // Replayed edit already applied → no-op (don't clobber history).
               if (applied.changed) {
                 queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
