@@ -65,6 +65,12 @@ import { NativeCryptoProvider, SyncSealedMessage, type BatchSpaceGroup, type Bat
 import { NativeSigningProvider } from '../services/crypto/native-signing-provider';
 import { mmkvStorage } from '../services/offline/storage';
 import { getDeviceKeyset, type DeviceKeyset } from '../services/onboarding/secureStorage';
+import { getPrivateKey, getPublicKey } from '../services/onboarding/secureStorage';
+import {
+  buildAnnounceKeysFrame,
+  processDeviceKeyStatement,
+} from '../services/space/deviceKeyStatements';
+import type { DeviceKeyStatement } from '@quilibrium/quorum-shared';
 import {
   clearSentEnvelope,
   isSentEnvelope,
@@ -1187,6 +1193,20 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                       });
                     }
                   } catch (verifyError) {
+                  }
+                  break;
+                }
+
+                case 'announce-keys':
+                case 'revoke-device': {
+                  // Per-device signing-key admission / revocation. Verified and
+                  // stored by the shared statement logic; fails closed. Inert
+                  // until the send-side flip is live on both platforms.
+                  if (spaceId) {
+                    await processDeviceKeyStatement(
+                      controlPayload.message as unknown as DeviceKeyStatement,
+                      spaceId
+                    );
                   }
                   break;
                 }
@@ -5470,6 +5490,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       if (cancelled) return;
       try {
         const spaceIds = getSpaceIds();
+        // Master keys + this device's inbox tag for the per-space announce-keys
+        // broadcast (self-healing for receivers that missed a prior announce).
+        const [annPriv, annPub, annDeviceKeyset] = await Promise.all([
+          getPrivateKey(),
+          getPublicKey(),
+          getDeviceKeyset(),
+        ]);
+        const announceMaster =
+          annPriv && annPub ? { privateKeyHex: annPriv, publicKeyHex: annPub } : null;
+        const announceDeviceInbox = annDeviceKeyset?.inboxAddress;
         for (const spaceId of spaceIds) {
           if (cancelled) break;
           const hubKey = getSpaceKey(spaceId, 'hub');
@@ -5494,6 +5524,20 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             await requestLogSince(hubKey.address, lastSeq);
           } catch (e) {
             logger.warn('[hub-log] log-since build failed', e);
+          }
+          // Re-announce this device's per-space signing key. Idempotent,
+          // fire-and-forget; behaviour-neutral until the flip is live.
+          if (announceMaster && announceDeviceInbox) {
+            try {
+              const frame = await buildAnnounceKeysFrame(
+                spaceId,
+                announceMaster,
+                announceDeviceInbox
+              );
+              if (frame) enqueueOutbound(async () => [frame]);
+            } catch (e) {
+              logger.warn('[DeviceKeys] announce build failed', e);
+            }
           }
         }
       } catch (e) {

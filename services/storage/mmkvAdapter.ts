@@ -16,6 +16,7 @@ import type {
   Conversation,
   UserConfig,
   SpaceMember,
+  SpaceMemberDevice,
 } from '@quilibrium/quorum-shared';
 
 // Key prefixes for organized storage.
@@ -29,6 +30,7 @@ const KEYS = {
   CONVERSATION: (id: string) => `conversation:${id}`,
   USER_CONFIG: (address: string) => `userConfig:${address}`,
   SPACE_MEMBERS: (spaceId: string) => `spaceMembers:${spaceId}`,
+  SPACE_MEMBER_DEVICES: (spaceId: string) => `spaceMemberDevices:${spaceId}`,
   SYNC_TIME: (key: string) => `sync:${key}`,
 } as const;
 
@@ -240,6 +242,36 @@ export class MMKVAdapter implements StorageAdapter {
     }
     storage.set(KEYS.SPACE_MEMBERS(spaceId), JSON.stringify(members));
     this.memberIndexCache.delete(spaceId);
+  }
+
+  // Per-device signing-key admissions (mirrors desktop's space_member_devices
+  // store). Keyed by (spaceId, deviceInboxAddress); one JSON array per space.
+  // Never touches the member row's join binding.
+
+  async getSpaceMemberDevices(spaceId: string): Promise<SpaceMemberDevice[]> {
+    const data = storage.getString(KEYS.SPACE_MEMBER_DEVICES(spaceId));
+    return data ? JSON.parse(data) : [];
+  }
+
+  async getSpaceMemberDevice(
+    spaceId: string,
+    deviceInboxAddress: string
+  ): Promise<SpaceMemberDevice | undefined> {
+    const devices = await this.getSpaceMemberDevices(spaceId);
+    return devices.find((d) => d.deviceInboxAddress === deviceInboxAddress);
+  }
+
+  async saveSpaceMemberDevice(device: SpaceMemberDevice): Promise<void> {
+    const devices = await this.getSpaceMemberDevices(device.spaceId);
+    const idx = devices.findIndex(
+      (d) => d.deviceInboxAddress === device.deviceInboxAddress
+    );
+    if (idx >= 0) devices[idx] = device;
+    else devices.push(device);
+    storage.set(
+      KEYS.SPACE_MEMBER_DEVICES(device.spaceId),
+      JSON.stringify(devices)
+    );
   }
 
   // Sync Metadata

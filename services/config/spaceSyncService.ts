@@ -84,41 +84,14 @@ export async function syncSpaceFromConfig(
   // Check if space already exists locally
   const existingSpace = getSpace(spaceId);
   if (existingSpace) {
-    // Heal path: a space synced before the signing-key split has only its
-    // per-device (fresh) inbox key, whose signatures no receiver's member
-    // table can resolve — so control messages (delete/edit/mute/…) from this
-    // device get dropped fleet-wide. When another device has since published
-    // the original join-bound keypair under 'signing', adopt it.
-    //
-    // Adoption rule: a key this device holds with 'origin' provenance (its
-    // own create/join flow — provably correct) is NEVER replaced. Anything
-    // else ('promoted' = migration guess that misfires on pre-split synced
-    // devices, 'adopted', or unmarked) yields to the blob, so a device that
-    // wrongly self-promoted converges to the join device's published key as
-    // soon as that device's config save reaches the blob.
-    // Best-effort: storage failures are swallowed and the whole block re-runs
-    // on the next config receive; all steps are idempotent.
+    // Heal path (Option A): no longer ADOPTS the shared join key from the blob.
+    // A device without a `signing` slot (fresh second device) signs with its own
+    // per-device `inbox` key and announces it via announce-keys; a device that
+    // already holds a `signing` slot keeps it (getSpaceSigningKey reads
+    // `signing ?? inbox`), so existing setups don't regress. The only heal still
+    // done here: re-anchor the self member row to the signing identity when they
+    // disagree. Best-effort + idempotent; re-runs on every config receive.
     try {
-      const localSigning = getSpaceKey(spaceId, 'signing');
-      if (!localSigning || localSigning.provenance !== 'origin') {
-        const payloadSigning = keys.find((k) => k.keyId === 'signing');
-        if (
-          payloadSigning?.privateKey &&
-          payloadSigning.publicKey &&
-          payloadSigning.publicKey !== localSigning?.publicKey
-        ) {
-          saveSpaceKey({
-            spaceId,
-            keyId: 'signing',
-            address:
-              payloadSigning.address ??
-              deriveAddress(Uint8Array.from(hexToBytes(payloadSigning.publicKey))),
-            publicKey: payloadSigning.publicKey,
-            privateKey: payloadSigning.privateKey,
-            provenance: 'adopted',
-          });
-        }
-      }
       // Re-anchor the local self member row to the signing identity whenever
       // they disagree — the pre-split sync bound it to this device's fresh
       // mailbox key, which breaks resolving the user's OTHER devices'
@@ -154,17 +127,17 @@ export async function syncSpaceFromConfig(
       return false;
     }
 
-    // Save all keys first. A payload 'signing' key is marked 'adopted' (came
-    // from the blob, replaceable if the blob later offers a different one);
-    // provenance is a local-only field, never serialized back into the blob.
+    // Save all keys first. Per-device-signing flip (Option A): skip the shared
+    // `signing` key so a fresh device falls through to its own per-device
+    // `inbox` key (getSpaceSigningKey = signing ?? inbox) and announces it.
     for (const key of keys) {
+      if (key.keyId === 'signing') continue;
       saveSpaceKey({
         spaceId: key.spaceId,
         keyId: key.keyId,
         address: key.address,
         publicKey: key.publicKey,
         privateKey: key.privateKey,
-        ...(key.keyId === 'signing' ? { provenance: 'adopted' as const } : {}),
       });
     }
 
@@ -283,14 +256,10 @@ export async function syncSpaceFromConfig(
     }
 
     // Save inbox key — the per-device MAILBOX key (hub registration + WS
-    // listen + inbox deletion). This deliberately overwrites the payload's
-    // 'inbox' entry (another device's mailbox, useless here). It is NOT the
-    // signing identity: that is the 'signing' key the payload loop saved
-    // above — the join-bound keypair every receiver's member table resolves
-    // signatures against. Pre-split payloads have no 'signing' entry; then
-    // this device signs with this fresh key via the getSpaceSigningKey
-    // fallback and control messages stay broken until a device holding the
-    // original promotes it (see promoteSpaceSigningKeys in configService).
+    // listen + inbox deletion), overwriting the payload's 'inbox' entry
+    // (another device's mailbox). Post-flip (Option A) this fresh key is ALSO
+    // this device's signing key: getSpaceSigningKey falls through to it, and
+    // announce-keys admits it on receivers.
     saveSpaceKey({
       spaceId,
       keyId: 'inbox',

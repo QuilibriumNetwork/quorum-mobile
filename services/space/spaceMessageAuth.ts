@@ -133,9 +133,11 @@ export async function resolveVerifiedSpaceSender(
 ): Promise<VerifiedSender | null> {
   const publicKey = await verifySpaceMessageSignature(message, spaceId);
   if (!publicKey) return null;
-  const memberList =
-    members ?? (await getMMKVAdapter().getSpaceMembers(spaceId));
-  return resolveVerifiedSender(publicKey, memberList);
+  const adapter = getMMKVAdapter();
+  const memberList = members ?? (await adapter.getSpaceMembers(spaceId));
+  // Also admit per-device signing keys announced via master-signed statements.
+  const deviceKeys = await adapter.getSpaceMemberDevices(spaceId);
+  return resolveVerifiedSender(publicKey, memberList, deviceKeys);
 }
 
 /**
