@@ -22,8 +22,12 @@ jest.mock('../services/crypto/native-signing-provider', () => ({
   NativeSigningProvider: jest.fn(() => ({ verifyEd448: mockVerifyEd448 })),
 }));
 const mockGetSpaceMembers = jest.fn();
+const mockGetSpaceMemberDevices = jest.fn(async () => []);
 jest.mock('../services/storage/mmkvAdapter', () => ({
-  getMMKVAdapter: () => ({ getSpaceMembers: mockGetSpaceMembers }),
+  getMMKVAdapter: () => ({
+    getSpaceMembers: mockGetSpaceMembers,
+    getSpaceMemberDevices: mockGetSpaceMemberDevices,
+  }),
 }));
 
 import {

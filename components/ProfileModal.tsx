@@ -54,7 +54,8 @@ import {
 } from '@/services/translation/translationPrefs';
 import { languageName } from '@/components/translation/languages';
 import { TranslateLanguageModal } from '@/components/translation/TranslateLanguageModal';
-import { getAllSpaces } from '@/services/config/spaceStorage';
+import { getAllSpaces, getSpaceIds } from '@/services/config/spaceStorage';
+import { buildRevokeDeviceFrames } from '@/services/space/deviceKeyStatements';
 import { encryptionStateStorage } from '@/services/crypto/encryption-state-storage';
 import {
   deriveFarcasterKeys,
@@ -641,6 +642,11 @@ export default function ProfileModal({
           throw new Error('Missing keys for device removal');
         }
 
+        // The removed device's DM inbox address is its revocation handle.
+        const removedInbox = deviceRegistrations.find(
+          (d) => d.identity_public_key === identityPublicKey
+        )?.inbox_registration?.inbox_address;
+
         // Filter out the device to remove
         const remainingDevices = deviceRegistrations.filter(
           (d) => d.identity_public_key !== identityPublicKey
@@ -654,6 +660,21 @@ export default function ProfileModal({
           remainingDevices
         );
 
+        // Broadcast master-signed revoke-device tombstones across every space so
+        // receivers stop admitting the removed device's per-device signing key.
+        if (removedInbox) {
+          try {
+            const frames = await buildRevokeDeviceFrames(
+              getSpaceIds(),
+              [removedInbox],
+              { privateKeyHex: userPrivateKey, publicKeyHex: userPublicKey }
+            );
+            for (const frame of frames) enqueueOutbound(async () => [frame]);
+          } catch {
+            // Best-effort; receivers also drop the device on the next re-announce.
+          }
+        }
+
         // Update local state
         setDeviceRegistrations(remainingDevices);
         Alert.alert('Success', 'Device removed successfully.');
@@ -663,7 +684,7 @@ export default function ProfileModal({
         setIsRemovingDevice(false);
       }
     })();
-  }, [user?.address, deviceRegistrations, confirm]);
+  }, [user?.address, deviceRegistrations, confirm, enqueueOutbound]);
 
   // Handle reset all DM sessions
   const handleResetAllSessions = React.useCallback(() => {
