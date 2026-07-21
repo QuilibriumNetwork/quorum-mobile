@@ -423,6 +423,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // Above this queue depth, skip the per-message sleep so a catch-up
   // backlog drains instead of accumulating toward the cap.
   const FAST_DRAIN_THRESHOLD = 500;
+  // [CATCHUP-DIAG] temp counters, written to files/catchup-diag.json by the
+  // diag effect below so drain progress is readable over adb — revert before PR.
+  const catchupDiagRef = useRef({
+    liveIn: 0,
+    liveDropped: 0,
+    ingested: 0,
+    truncated: 0,
+    drained: 0,
+    inflight: 0,
+    defers: 0,
+  });
   // Gate for verbose per-message / per-batch diagnostics. These build
   // JSON.stringify(batch.map(...)) payloads that are NEVER printed
   // (logger.debug sits below the logger's "log" minLevel), yet the
@@ -4835,6 +4846,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // empty; see MAX_BATCH_DRAIN_SIZE for why this matters on small
       // devices.
       const batch = messageQueueRef.current.splice(0, MAX_BATCH_DRAIN_SIZE);
+      catchupDiagRef.current.drained += batch.length; // [CATCHUP-DIAG]
 
       try {
         // Classify messages and gather crypto state
@@ -5008,8 +5020,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     );
     // Backpressure: drop oldest messages if queue is overloaded
     if (messageQueueRef.current.length >= MAX_MESSAGE_QUEUE_SIZE) {
-      messageQueueRef.current.splice(0, messageQueueRef.current.length - MAX_MESSAGE_QUEUE_SIZE + 1);
+      const excess = messageQueueRef.current.length - MAX_MESSAGE_QUEUE_SIZE + 1;
+      messageQueueRef.current.splice(0, excess);
+      catchupDiagRef.current.liveDropped += excess; // [CATCHUP-DIAG]
     }
+    catchupDiagRef.current.liveIn += 1; // [CATCHUP-DIAG]
     messageQueueRef.current.push(message);
     // Start processing if not already in progress
     processMessageQueue();
@@ -5418,6 +5433,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     const INFLIGHT_TIMEOUT_MS = 30000;
     const DEFER_RETRY_MS = 250;
 
+    // [CATCHUP-DIAG]
+    const syncDiag = () => {
+      catchupDiagRef.current.inflight = inflight.size;
+      catchupDiagRef.current.defers = deferTimers.size;
+    };
+
     const requestLogSince = async (hubAddress: string, since: number) => {
       if (cancelled) return;
       // Expire in-flight requests whose result never came back so they
@@ -5443,6 +5464,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }, DEFER_RETRY_MS),
           );
         }
+        syncDiag(); // [CATCHUP-DIAG]
         return;
       }
       const space = getSpaceByHubAddress(hubAddress);
@@ -5460,6 +5482,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       } catch {
         inflight.delete(hubAddress);
       }
+      syncDiag(); // [CATCHUP-DIAG]
     };
 
     const ingestEntries = (
@@ -5482,11 +5505,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // cursor; the caller refetches from lastVisited. Dropping oldest
           // here punched the seq gap that wedged the cursor.
           truncated = true;
+          catchupDiagRef.current.truncated += 1; // [CATCHUP-DIAG]
           break;
         }
         lastVisited = entry.seq;
         const sealedEnvelope = entry.payload?.data;
         if (!sealedEnvelope) continue;
+        catchupDiagRef.current.ingested += 1; // [CATCHUP-DIAG]
         // Tag with __logSeq / __logHub so processMessageQueue can advance the
         // hub cursor only after persistence — see post-batch hook there.
         const synthetic = {
@@ -5512,6 +5537,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       if (!hubAddress) return;
       if (frame.type === 'log-since-result') {
         inflight.delete(hubAddress);
+        syncDiag(); // [CATCHUP-DIAG]
         const { lastVisited, truncated } = ingestEntries(hubAddress, frame.entries);
         if (truncated) {
           // Queue filled mid-page: refetch the tail we didn't enqueue.
@@ -5601,6 +5627,31 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       unsubscribe();
     };
   }, [connectionState, registerLogFrameHandler, enqueueOutbound, processMessageQueue]);
+
+  // [CATCHUP-DIAG] Write catch-up state to files/catchup-diag.json every 5s so
+  // drain progress is readable over adb (read-catchup-diag.ps1) — revert before PR.
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const { File, Paths } = await import('expo-file-system');
+        const cursors: Record<string, number> = {};
+        for (const spaceId of getSpaceIds()) {
+          const hub = getSpaceKey(spaceId, 'hub');
+          if (hub?.address) {
+            cursors[hub.address.slice(0, 8)] = getHubLastSeq(hub.address);
+          }
+        }
+        const payload = JSON.stringify({
+          updated: Date.now(),
+          queue: messageQueueRef.current.length,
+          ...catchupDiagRef.current,
+          cursors,
+        });
+        new File(Paths.document, 'catchup-diag.json').write(payload);
+      } catch { /* diag only */ }
+    }, 5000);
+    return () => clearInterval(id);
+  }, []);
 
   // On-connect catch-up is handled exclusively by the per-hub log effect
   // above — listen-hub + log-since fetches everything since the stored
