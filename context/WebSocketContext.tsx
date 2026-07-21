@@ -423,6 +423,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // Above this queue depth, skip the per-message sleep so a catch-up
   // backlog drains instead of accumulating toward the cap.
   const FAST_DRAIN_THRESHOLD = 500;
+  // Watchdog for the native batch call. A poison message can hang the
+  // native side forever (observed: a DM group never resolving), which
+  // freezes the entire drain loop — nothing lands after that. On timeout
+  // we throw into the individual-processing fallback (which completes)
+  // and stop native-batching DMs for the rest of the session.
+  const NATIVE_BATCH_TIMEOUT_MS = 30000;
+  const dmBatchDisabledRef = useRef(false);
   // [CATCHUP-DIAG] temp counters, written to files/catchup-diag.json by the
   // diag effect below so drain progress is readable over adb — revert before PR.
   const catchupDiagRef = useRef({
@@ -433,7 +440,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     drained: 0,
     inflight: 0,
     defers: 0,
+    stage: 'init',
+    stageTs: 0,
   });
+  // [CATCHUP-DIAG] mark the drain loop's current await so a hang is visible.
+  const setDrainStage = useCallback((s: string) => {
+    catchupDiagRef.current.stage = s;
+    catchupDiagRef.current.stageTs = Date.now();
+  }, []);
   // Gate for verbose per-message / per-batch diagnostics. These build
   // JSON.stringify(batch.map(...)) payloads that are NEVER printed
   // (logger.debug sits below the logger's "log" minLevel), yet the
@@ -3438,6 +3452,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       const isSpaceInbox = spaceInboxSet.has(msg.inboxAddress);
       const isOnDeviceInbox = msg.inboxAddress === ownInboxAddressRef.current;
 
+      // DM native batching hung this session (poison watchdog tripped) —
+      // route all non-space messages through the individual JS path.
+      if (dmBatchDisabledRef.current && !isSpaceInbox) {
+        nonBatchMessages.push(msg);
+        continue;
+      }
+
       if (isSpaceInbox) {
         // Space message - add to space group
         const spaceId = inboxToSpaceMap.get(msg.inboxAddress);
@@ -4847,6 +4868,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // devices.
       const batch = messageQueueRef.current.splice(0, MAX_BATCH_DRAIN_SIZE);
       catchupDiagRef.current.drained += batch.length; // [CATCHUP-DIAG]
+      setDrainStage(`preclassify(batch=${batch.length})`); // [CATCHUP-DIAG]
 
       try {
         // Classify messages and gather crypto state
@@ -4881,7 +4903,45 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // Process batch natively if there are batchable messages
         if (batchInput.space_groups.length > 0 || batchInput.dm_groups.length > 0) {
           const cryptoProvider = new NativeCryptoProvider();
-          const batchOutput = await cryptoProvider.batchProcessMessages(batchInput);
+          setDrainStage(`native-batch(sp=${batchInput.space_groups.length},dm=${batchInput.dm_groups.length})`); // [CATCHUP-DIAG]
+          // Watchdog: a hung native call must not freeze the drain forever.
+          let batchTimeoutId: ReturnType<typeof setTimeout> | undefined;
+          const batchTimeout = new Promise<never>((_, reject) => {
+            batchTimeoutId = setTimeout(
+              () => reject(new Error('native batchProcessMessages timeout')),
+              NATIVE_BATCH_TIMEOUT_MS,
+            );
+          });
+          let batchOutput: BatchProcessOutput;
+          try {
+            batchOutput = await Promise.race([
+              cryptoProvider.batchProcessMessages(batchInput),
+              batchTimeout,
+            ]);
+          } catch (raceErr) {
+            if (batchInput.dm_groups.length > 0) {
+              dmBatchDisabledRef.current = true;
+              const summary = batchInput.dm_groups.map((gp) => ({
+                conv: gp.conversation_id?.slice(0, 12),
+                type: gp.message_type,
+                states: gp.dr_states.length,
+                msgs: gp.messages.map((mm) => ({
+                  ts: mm.timestamp,
+                  init: mm.is_init_envelope,
+                  dr: mm.is_double_ratchet_envelope,
+                  len: mm.encrypted_content?.length,
+                })),
+              }));
+              logger.warn(
+                '[poison-guard] native batch timed out — DM batching disabled for this session',
+                JSON.stringify(summary),
+              );
+              (catchupDiagRef.current as Record<string, unknown>).poison = summary; // [CATCHUP-DIAG]
+            }
+            throw raceErr; // outer catch routes the batch to individual processing
+          } finally {
+            clearTimeout(batchTimeoutId);
+          }
 
           if (WS_TRACE && batchOutput.dm_results.length > 0) {
             logger.debug(
@@ -4901,9 +4961,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
           // Apply results
           if (batchOutput.space_results.length > 0) {
+            setDrainStage('apply-space'); // [CATCHUP-DIAG]
             await applySpaceGroupResults(batchOutput.space_results, batch);
           }
           if (batchOutput.dm_results.length > 0) {
+            setDrainStage('apply-dm'); // [CATCHUP-DIAG]
             await applyDMGroupResults(batchOutput.dm_results, batch);
           }
         }
@@ -4912,12 +4974,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         for (let i = 0; i < nonBatchMessages.length; i++) {
           // Yield to UI thread every 5 messages to prevent jank
           if (i % 5 === 0) {
+            setDrainStage(`nb-im(${i}/${nonBatchMessages.length})`); // [CATCHUP-DIAG]
             await new Promise<void>(resolve => {
               InteractionManager.runAfterInteractions(() => resolve());
             });
           }
 
           try {
+            setDrainStage(`nb-msg(${i}/${nonBatchMessages.length})`); // [CATCHUP-DIAG]
             await handleIncomingMessage(nonBatchMessages[i]);
           } catch { /* ignore */ }
 
@@ -4934,14 +4998,19 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
       } catch (batchError) {
         // Fallback: if batch processing fails entirely, process all individually
+        setDrainStage('fallback-preunseal'); // [CATCHUP-DIAG]
         await batchPreUnsealSpaceMessages(batch);
+        let fbIdx = 0; // [CATCHUP-DIAG]
         for (const message of batch) {
+          setDrainStage(`fallback-im(${fbIdx}/${batch.length})`); // [CATCHUP-DIAG]
           await new Promise<void>(resolve => {
             InteractionManager.runAfterInteractions(() => resolve());
           });
           try {
+            setDrainStage(`fallback-msg(${fbIdx}/${batch.length})`); // [CATCHUP-DIAG]
             await handleIncomingMessage(message);
           } catch { /* ignore */ }
+          fbIdx += 1; // [CATCHUP-DIAG]
         }
       }
 
@@ -4975,10 +5044,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // allocations are reclaimed before the next slice builds — keeps
       // peak RSS flat across a large catch-up instead of stacking.
       if (messageQueueRef.current.length > 0) {
+        setDrainStage('drain-yield'); // [CATCHUP-DIAG]
         await new Promise(resolve => setTimeout(resolve, 0));
       }
     }
 
+    setDrainStage('idle'); // [CATCHUP-DIAG]
     isProcessingQueueRef.current = false;
   }, [handleIncomingMessage, batchPreUnsealSpaceMessages, preclassifyAndGatherState, applySpaceGroupResults, applyDMGroupResults]);
 
