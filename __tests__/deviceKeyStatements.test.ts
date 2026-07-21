@@ -15,7 +15,9 @@ import {
 } from '@quilibrium/quorum-shared';
 
 // --- mocks (must be prefixed `mock*` for jest.mock factories) ---
-const mockSignEd448 = jest.fn(async () => btoa('mock-signature'));
+const mockSignEd448 = jest.fn<Promise<string>, [string, string]>(
+  async () => btoa('mock-signature')
+);
 const mockSealHubEnvelope = jest.fn(async (_addr: string, _kp: unknown, payload: string) => ({
   sealed: 'envelope',
   payload,

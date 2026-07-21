@@ -33,6 +33,7 @@ import {
   deriveInboxAddress,
   hexToBytes,
   isControlMessageType,
+  logger,
   resolveVerifiedSender,
   type Channel,
   type ControlMessageContent,
@@ -137,7 +138,21 @@ export async function resolveVerifiedSpaceSender(
   const memberList = members ?? (await adapter.getSpaceMembers(spaceId));
   // Also admit per-device signing keys announced via master-signed statements.
   const deviceKeys = await adapter.getSpaceMemberDevices(spaceId);
-  return resolveVerifiedSender(publicKey, memberList, deviceKeys);
+  const resolved = resolveVerifiedSender(publicKey, memberList, deviceKeys);
+  // Diagnostic: flag when a signer resolved via a per-device key rather than the
+  // member join binding (rollout monitoring; remove at cleanup).
+  if (resolved) {
+    const signingAddr = deriveInboxAddress(publicKey);
+    const viaMember = memberList.some(
+      (m) => m.inbox_address === signingAddr && !(m as { isKicked?: boolean }).isKicked
+    );
+    if (!viaMember) {
+      logger.log(
+        `[DeviceKeys] signature accepted via per-device key signingAddr=${signingAddr.slice(0, 12)} sender=${String(resolved).slice(0, 12)}`
+      );
+    }
+  }
+  return resolved;
 }
 
 /**

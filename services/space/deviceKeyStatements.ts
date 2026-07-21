@@ -17,6 +17,7 @@ import {
   buildDeviceKeyStatementBytes,
   deriveInboxAddress,
   hexToBytes,
+  logger,
   verifyDeviceKeyStatement,
   type AnnounceKeysStatement,
   type DeviceKeyStatement,
@@ -179,5 +180,12 @@ export async function processDeviceKeyStatement(
       timestamp: verdict.timestamp,
       revoked: true,
     });
+  } else if (verdict.reason !== 'stale') {
+    // Only surface GENUINE verification failures. `stale` is normal LWW dedup —
+    // hub-log replays every prior announce on each connect, so the same statement
+    // is re-seen constantly; logging those would drown the console.
+    logger.warn(
+      `[DeviceKeys] rejected ${statement?.type} reason=${verdict.reason} space=${contextSpaceId.slice(0, 12)}`
+    );
   }
 }
