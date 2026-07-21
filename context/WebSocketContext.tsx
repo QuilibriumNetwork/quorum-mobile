@@ -420,6 +420,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const isProcessingQueueRef = useRef(false);
   const MESSAGE_PROCESS_DELAY_MS = 10; // 10ms delay between non-batch messages (brief yield to UI thread)
   const MAX_MESSAGE_QUEUE_SIZE = 2000;
+  // Above this queue depth, skip the per-message sleep so a catch-up
+  // backlog drains instead of accumulating toward the cap.
+  const FAST_DRAIN_THRESHOLD = 500;
   // Gate for verbose per-message / per-batch diagnostics. These build
   // JSON.stringify(batch.map(...)) payloads that are NEVER printed
   // (logger.debug sits below the logger's "log" minLevel), yet the
@@ -4906,8 +4909,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             await handleIncomingMessage(nonBatchMessages[i]);
           } catch { /* ignore */ }
 
-          // Brief yield between messages only if more work remains
-          if (i < nonBatchMessages.length - 1 || messageQueueRef.current.length > 0) {
+          // Brief yield between messages only if more work remains. Skipped
+          // while a large backlog waits (catch-up storms) — the per-message
+          // sleep starves the drain; the every-5 InteractionManager yield
+          // above still protects the UI thread.
+          if (
+            (i < nonBatchMessages.length - 1 || messageQueueRef.current.length > 0) &&
+            messageQueueRef.current.length < FAST_DRAIN_THRESHOLD
+          ) {
             await new Promise(resolve => setTimeout(resolve, MESSAGE_PROCESS_DELAY_MS));
           }
         }
@@ -5403,20 +5412,49 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     if (connectionState !== 'connected') return;
 
     let cancelled = false;
-    const inflight = new Set<string>(); // hubAddress with an in-flight log-since
+    const inflight = new Map<string, number>(); // hubAddress → request ts
+    const deferTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    const LOG_SINCE_PAGE_SIZE = 200;
+    const INFLIGHT_TIMEOUT_MS = 30000;
+    const DEFER_RETRY_MS = 250;
 
     const requestLogSince = async (hubAddress: string, since: number) => {
-      if (cancelled || inflight.has(hubAddress)) return;
+      if (cancelled) return;
+      // Expire in-flight requests whose result never came back so they
+      // don't block this hub (or the depth budget below) forever.
+      const now = Date.now();
+      inflight.forEach((ts, hub) => {
+        if (now - ts > INFLIGHT_TIMEOUT_MS) inflight.delete(hub);
+      });
+      if (inflight.has(hubAddress)) return;
+      // Flow-control: if the queue plus every page already in flight could
+      // overflow the cap, defer — an overflow drop punches a seq gap that
+      // wedges the hub cursor into a refetch storm.
+      const projected =
+        messageQueueRef.current.length +
+        (inflight.size + 1) * LOG_SINCE_PAGE_SIZE;
+      if (projected > MAX_MESSAGE_QUEUE_SIZE) {
+        if (!deferTimers.has(hubAddress)) {
+          deferTimers.set(
+            hubAddress,
+            setTimeout(() => {
+              deferTimers.delete(hubAddress);
+              requestLogSince(hubAddress, since);
+            }, DEFER_RETRY_MS),
+          );
+        }
+        return;
+      }
       const space = getSpaceByHubAddress(hubAddress);
       if (!space) return;
       const hubKey = getSpaceKey(space.spaceId, 'hub');
       if (!hubKey?.address || !hubKey.privateKey || !hubKey.publicKey) return;
-      inflight.add(hubAddress);
+      inflight.set(hubAddress, Date.now());
       try {
         const frame = await buildLogSinceFrame(
           { address: hubKey.address, publicKey: hubKey.publicKey, privateKey: hubKey.privateKey },
           since,
-          200,
+          LOG_SINCE_PAGE_SIZE,
         );
         enqueueOutbound(async () => [frame]);
       } catch {
@@ -5427,15 +5465,26 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     const ingestEntries = (
       hubAddress: string,
       entries: Array<{ seq: number; ts: number; payload: { ts: number; data: any } }>,
-    ) => {
+    ): { lastVisited: number | null; truncated: boolean } => {
       // Find which space this hub belongs to and its inbox address — the
       // existing decrypt path indexes by inbox address.
+      let lastVisited: number | null = null;
+      let truncated = false;
       const space = getSpaceByHubAddress(hubAddress);
-      if (!space) return;
+      if (!space) return { lastVisited, truncated };
       const inboxKey = getSpaceKey(space.spaceId, 'inbox');
-      if (!inboxKey?.address) return;
+      if (!inboxKey?.address) return { lastVisited, truncated };
 
       for (const entry of entries) {
+        if (messageQueueRef.current.length >= MAX_MESSAGE_QUEUE_SIZE) {
+          // Full: stop enqueuing this page instead of dropping older queued
+          // items. The contiguous head we did enqueue still advances the
+          // cursor; the caller refetches from lastVisited. Dropping oldest
+          // here punched the seq gap that wedged the cursor.
+          truncated = true;
+          break;
+        }
+        lastVisited = entry.seq;
         const sealedEnvelope = entry.payload?.data;
         if (!sealedEnvelope) continue;
         // Tag with __logSeq / __logHub so processMessageQueue can advance the
@@ -5450,17 +5499,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           __logHub: hubAddress,
         } as EncryptedWebSocketMessage & { __logSeq: number; __logHub: string };
 
-        if (messageQueueRef.current.length >= MAX_MESSAGE_QUEUE_SIZE) {
-          messageQueueRef.current.splice(
-            0,
-            messageQueueRef.current.length - MAX_MESSAGE_QUEUE_SIZE + 1,
-          );
-        }
         messageQueueRef.current.push(synthetic);
       }
       if (entries.length > 0) {
         processMessageQueue();
       }
+      return { lastVisited, truncated };
     };
 
     const unsubscribe = registerLogFrameHandler((frame) => {
@@ -5468,8 +5512,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       if (!hubAddress) return;
       if (frame.type === 'log-since-result') {
         inflight.delete(hubAddress);
-        ingestEntries(hubAddress, frame.entries);
-        if (frame.has_more && frame.entries.length > 0) {
+        const { lastVisited, truncated } = ingestEntries(hubAddress, frame.entries);
+        if (truncated) {
+          // Queue filled mid-page: refetch the tail we didn't enqueue.
+          // The flow-control gate defers this until the queue drains.
+          requestLogSince(hubAddress, lastVisited ?? getHubLastSeq(hubAddress));
+        } else if (frame.has_more && frame.entries.length > 0) {
           const last = frame.entries[frame.entries.length - 1].seq;
           requestLogSince(hubAddress, last);
         }
@@ -5548,6 +5596,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     return () => {
       cancelled = true;
       clearTimeout(setupTimeout);
+      deferTimers.forEach((t) => clearTimeout(t));
+      deferTimers.clear();
       unsubscribe();
     };
   }, [connectionState, registerLogFrameHandler, enqueueOutbound, processMessageQueue]);
