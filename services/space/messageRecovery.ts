@@ -11,7 +11,7 @@ import {
   hasAttemptedRecovery as hasAttemptedRecoveryDb,
   markRecoveryAttempted as markRecoveryAttemptedDb,
 } from '@/services/storage/messagesDb';
-import { setHubLastSeq } from './hubLogCursor';
+import { clearHubCursor } from './hubLogCursor';
 import { buildLogSinceFrame, type HubKey } from './hubLogSync';
 import { logger } from '@quilibrium/quorum-shared';
 const RECOVERY_FETCH_LIMIT = 1000;
@@ -35,7 +35,9 @@ export async function attemptHubLogRecovery(
   // Mark first so concurrent channel-opens in the same space coalesce.
   markRecoveryAttemptedDb(spaceId);
 
-  setHubLastSeq(hubKey.address, 0);
+  // clearHubCursor, not setHubLastSeq(addr, 0) — the setter only advances,
+  // so a "reset to 0" was a silent no-op.
+  clearHubCursor(hubKey.address);
 
   const key: HubKey = {
     address: hubKey.address,
