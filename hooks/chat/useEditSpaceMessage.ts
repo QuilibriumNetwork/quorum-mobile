@@ -10,7 +10,7 @@ import { useAuth, useWebSocket } from '@/context';
 import { sendEditMessage } from '@/services/space/spaceMessageService';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import {
-  buildLocalEdits,
+  applyEdit,
   MESSAGE_EDIT_WINDOW_MS,
   shouldSignEdit,
   type Message,
@@ -132,14 +132,26 @@ export function useEditSpaceMessage() {
               ...page,
               messages: page.messages.map((m: Message) => {
                 if (m.messageId === params.messageId && m.content.type === 'post') {
+                  const applied = applyEdit(
+                    {
+                      text: m.content.text,
+                      createdDate: m.createdDate,
+                      modifiedDate: m.modifiedDate,
+                      nonce: m.nonce,
+                      lastModifiedHash: m.lastModifiedHash,
+                      edits: m.edits,
+                    },
+                    { editedAt, saveEditHistory },
+                  );
                   return {
                     ...m,
-                    modifiedDate: editedAt,
+                    modifiedDate: applied.modifiedDate,
+                    lastModifiedHash: applied.lastModifiedHash,
                     content: {
                       ...m.content,
                       text: params.newText,
                     },
-                    edits: buildLocalEdits(m.edits, params.newText, editedAt, saveEditHistory),
+                    edits: applied.edits,
                   };
                 }
                 return m;
@@ -154,11 +166,23 @@ export function useEditSpaceMessage() {
       // MMKV, since storage still held the original text. Writing here
       // keeps disk and cache in sync.
       if (previousStored && previousStored.content.type === 'post') {
+        const applied = applyEdit(
+          {
+            text: previousStored.content.text,
+            createdDate: previousStored.createdDate,
+            modifiedDate: previousStored.modifiedDate,
+            nonce: previousStored.nonce,
+            lastModifiedHash: previousStored.lastModifiedHash,
+            edits: previousStored.edits,
+          },
+          { editedAt, saveEditHistory },
+        );
         const updated: Message = {
           ...previousStored,
-          modifiedDate: editedAt,
+          modifiedDate: applied.modifiedDate,
+          lastModifiedHash: applied.lastModifiedHash,
           content: { ...previousStored.content, text: params.newText },
-          edits: buildLocalEdits(previousStored.edits, params.newText, editedAt, saveEditHistory),
+          edits: applied.edits,
         };
         await adapter.saveMessage(updated, updated.createdDate, '', '', '', '');
       }

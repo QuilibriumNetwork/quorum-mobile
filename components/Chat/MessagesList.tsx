@@ -1419,8 +1419,13 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     <EditHistoryModal
       visible={!!editHistoryMessage}
       onClose={() => setEditHistoryMessage(null)}
-      originalText={editHistoryMessage?.content ?? ''}
-      originalDate={editHistoryMessage?.timestamp ?? 0}
+      currentText={editHistoryMessage?.content ?? ''}
+      currentDate={
+        editHistoryMessage?.originalMessage?.modifiedDate ??
+        editHistoryMessage?.timestamp ??
+        0
+      }
+      createdDate={editHistoryMessage?.timestamp ?? 0}
       edits={editHistoryMessage?.originalMessage?.edits ?? []}
       theme={theme}
     />
