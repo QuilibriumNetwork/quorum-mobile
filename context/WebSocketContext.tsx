@@ -94,6 +94,7 @@ import {
   isInboxEnvelopePoisoned,
   recordInboxAttempt,
   clearInboxAttempt,
+  getInboxAttempts,
 } from '../services/space/inboxAttemptTracker';
 import { INIT_ENVELOPE_STALENESS_TOLERANCE_MS } from '../services/crypto/initEnvelopeGuard';
 import { getMMKVAdapter, getConversationSync } from '../services/storage/mmkvAdapter';
@@ -5006,6 +5007,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           const deleteKey = `${m.inboxAddress}:${m.timestamp}`;
           if (
             Date.now() - m.timestamp > 7 * 24 * 60 * 60 * 1000 &&
+            // ≥2 independent failed decrypt attempts: a single transient
+            // failure (e.g. keys not loaded yet at startup) is retried on the
+            // next pass, never deleted.
+            getInboxAttempts(m.inboxAddress, m.timestamp) >= 2 &&
             !poisonDeletedKeys.has(deleteKey)
           ) {
             poisonDeletedKeys.add(deleteKey);
