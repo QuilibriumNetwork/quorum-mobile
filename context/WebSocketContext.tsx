@@ -2767,6 +2767,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // The message should now be properly decrypted plaintext JSON
             decryptedMessage = JSON.parse(sessionResult.message) as Message;
 
+            // Receipt interception — parity with Path 2 and the native batch
+            // path (applyDMGroupResults): flat delivery/read acks arrive
+            // init-wrapped whenever the peer's session is unconfirmed. Without
+            // this check they fell through toward persistence and receipts
+            // never rendered on this path.
+            if (handleDmReceipt(decryptedMessage, conversationId.split('/')[0])) {
+              getDeviceKeyset().then(dk => {
+                if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
+              });
+              return;
+            }
+
             // Self-echo init guard: if the sender is our own address and the
             // message carries no channelId, we cannot determine the real partner.
             // Drop it to prevent a phantom selfAddress/selfAddress conversation row.
