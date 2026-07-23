@@ -17,6 +17,11 @@ import {
   type ConversationInboxKeypair,
 } from './encryption-state-storage';
 import { ratchetMutex } from './ratchet-mutex';
+import {
+  isStaleInitEnvelope,
+  getInstalledInitEnvelopeTs,
+  recordInstalledInitEnvelopeTs,
+} from './initEnvelopeGuard';
 import { deriveAddress } from '../onboarding/keyService';
 
 import type {
@@ -626,8 +631,12 @@ class EncryptionService {
    */
   async initializeRecipientSession(
     unsealed: UnsealedEnvelope,
-    receivedOnInboxAddress: string  // The inbox where we received this init message
-  ): Promise<{
+    receivedOnInboxAddress: string,  // The inbox where we received this init message
+    // Server-assigned envelope timestamp; when provided, the staleness guard
+    // refuses redelivered/zombie init envelopes (returns 'stale') instead of
+    // letting them re-run X3DH over a newer session.
+    envelopeTimestamp?: number
+  ): Promise<'stale' | {
     conversationId: string;
     message: string;
     senderAddress: string;
@@ -809,7 +818,23 @@ class EncryptionService {
       }
     }
 
-    // No existing session - perform full X3DH initialization
+    // No existing session usable (or existing-session decrypt failed) — the
+    // code below runs full X3DH, which INSTALLS session state and repoints
+    // latestState for this conversation. Staleness guard (desktop parity,
+    // see initEnvelopeGuard.ts): a redelivered or zombie init envelope must
+    // never re-run X3DH over a newer session — that resurrects a ratchet the
+    // sender no longer holds and forks the pair. Refuse anything not strictly
+    // newer than what we already hold; the caller deletes the refused
+    // envelope from the server so it cannot be redelivered (mine defused).
+    if (envelopeTimestamp !== undefined) {
+      const knownTimestamps = [
+        ...allStates.map((s) => s.timestamp),
+        ...getInstalledInitEnvelopeTs(conversationId),
+      ];
+      if (isStaleInitEnvelope(envelopeTimestamp, knownTimestamps)) {
+        return 'stale';
+      }
+    }
 
     // Parse keys from hex strings to byte arrays
     const senderIdentityKey = this.hexToBytes(unsealed.identity_public_key);
@@ -918,6 +943,13 @@ class EncryptionService {
     // Save encryption state - this is the PRIMARY state for this conversation
     // The sendingInbox field tells us where to send, so we don't need a separate "latest" state
     encryptionStateStorage.saveEncryptionState(encryptionState, true);
+
+    // Remember this envelope's server timestamp so an exact redelivery is
+    // recognized as stale even inside the skew tolerance window (state rows
+    // carry local Date.now, not the envelope timestamp desktop keys off).
+    if (envelopeTimestamp !== undefined) {
+      recordInstalledInitEnvelopeTs(conversationId, envelopeTimestamp);
+    }
 
     // IMPORTANT: Also save to ephemeral key cache so subsequent messages with same
     // ephemeral key can use this advanced ratchet state instead of re-doing X3DH

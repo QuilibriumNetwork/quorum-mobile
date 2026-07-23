@@ -2722,11 +2722,31 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // Returns null if decryption fails (expected for multi-device)
             const sessionResult = await encryptionService.initializeRecipientSession(
               unsealed,
-              message.inboxAddress  // Our device inbox where we received this init
+              message.inboxAddress,  // Our device inbox where we received this init
+              message.timestamp
             );
 
+            if (sessionResult === 'stale') {
+              // Redelivered/zombie init envelope refused by the staleness
+              // guard — installing it would replace the current session with
+              // a ratchet the sender no longer holds. Delete it server-side
+              // so it cannot be redelivered (defuse the mine), keep the
+              // current session.
+              logger.warn('[stale-init] refused zombie init envelope (device inbox)', JSON.stringify({
+                inbox: message.inboxAddress?.slice(0, 10),
+                ts: message.timestamp,
+                ageSec: Math.round((Date.now() - message.timestamp) / 1000),
+              }));
+              getDeviceKeyset().then(dk => {
+                if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
+              });
+              return;
+            }
             if (!sessionResult) {
-              // Decryption failed - message was likely for a different device
+              // Decryption failed - message was likely for a different device.
+              // Count toward the bounded-retry skip-list so an undecryptable
+              // init envelope can't replay through this path unbounded.
+              recordInboxAttempt(message.inboxAddress, message.timestamp);
               return;
             }
 
@@ -2899,11 +2919,30 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     // Returns null if decryption fails (expected for multi-device)
                     const sessionResult = await encryptionService.initializeRecipientSession(
                       unsealed,
-                      message.inboxAddress  // Our conversation inbox where we received this
+                      message.inboxAddress,  // Our conversation inbox where we received this
+                      message.timestamp
                     );
 
+                    if (sessionResult === 'stale') {
+                      // Redelivered/zombie init envelope refused by the
+                      // staleness guard — see the device-inbox twin above.
+                      logger.warn('[stale-init] refused zombie init envelope (conversation inbox)', JSON.stringify({
+                        inbox: message.inboxAddress?.slice(0, 10),
+                        ts: message.timestamp,
+                        ageSec: Math.round((Date.now() - message.timestamp) / 1000),
+                      }));
+                      if (conversationKeypair.signingPrivateKey && conversationKeypair.signingPublicKey) {
+                        const signingKey = {
+                          publicKey: bytesToHex(conversationKeypair.signingPublicKey),
+                          privateKey: bytesToHex(conversationKeypair.signingPrivateKey),
+                        };
+                        deleteConversationInboxMessages(message.inboxAddress, [message.timestamp], signingKey).catch(() => {});
+                      }
+                      return;
+                    }
                     if (!sessionResult) {
                       // Decryption failed - message was likely for a different device
+                      recordInboxAttempt(message.inboxAddress, message.timestamp);
                       return;
                     }
 
@@ -3595,7 +3634,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         const isDoubleRatchetEnvelope = envelopeData && 'protocol_identifier' in envelopeData;
         const isInitEnvelope = envelopeData && 'ciphertext' in envelopeData && 'initialization_vector' in envelopeData;
 
-        // Both DR and init envelopes on device inbox go through native batch
+        if (isInitEnvelope) {
+          // Init envelopes install/replace Double Ratchet sessions, so they
+          // must pass the staleness guard in initializeRecipientSession —
+          // which only the JS path runs (the native batch writes session
+          // state to MMKV directly, bypassing any JS-side check). Routing
+          // them here also keeps init-heavy hoards out of the native call,
+          // the known freeze trigger the batch watchdog guards against.
+          nonBatchMessages.push(msg);
+          continue;
+        }
+
+        // DR envelopes on device inbox go through native batch
         const groupKey = `device_inbox:${msg.inboxAddress}`;
         if (!dmGroupMap.has(groupKey)) {
           // Gather all DR states for this inbox
