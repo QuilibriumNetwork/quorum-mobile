@@ -791,19 +791,46 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     [styles, theme, renderUnsignedWarning]
   );
 
-  // DM delivery/read receipt on own messages (one check delivered / two read).
-  // Returns a <ReceiptTicks> node meant to be threaded into the message text as
-  // an inline trailing element (via MessageRenderer's `receipt` prop) so it
-  // flows on the same line and wraps with the text — matching desktop. Muted
-  // color for both states (not accent); delivered vs read differ only by one vs
-  // two checks. Display is unconditional — the master switch gates persistence.
-  const renderReceipt = useCallback(
-    (item: DisplayMessage): React.ReactNode => {
+  // Whether an own DM message should show a receipt, and its state. Returns
+  // true (read) / false (delivered) / null (no receipt). Display is
+  // unconditional — the master switch gates persistence, not rendering.
+  const receiptRead = useCallback(
+    (item: DisplayMessage): boolean | null => {
       if (!isDM || item.userId !== currentUserId) return null;
       if (!item.deliveredAt && !item.readAt) return null;
-      return <ReceiptTicks read={!!item.readAt} color={theme.colors.textMuted} />;
+      return !!item.readAt;
     },
-    [isDM, currentUserId, theme]
+    [isDM, currentUserId]
+  );
+
+  // Inline text receipt (one check delivered / two read), threaded into the
+  // message text via MessageRenderer's `receipt` prop so it trails the last word
+  // and wraps with it — matching desktop. Muted color for both states.
+  const renderReceipt = useCallback(
+    (item: DisplayMessage): React.ReactNode => {
+      const read = receiptRead(item);
+      if (read === null) return null;
+      return <ReceiptTicks read={read} color={theme.colors.textMuted} />;
+    },
+    [receiptRead, theme]
+  );
+
+  // Media (image/video embed) receipt: a rounded-square scrim badge in the
+  // bottom-right corner of the media. The ticks use the same muted color as the
+  // inline text receipts (not white) so the two read the same; the dark scrim
+  // keeps them legible over any image. Positioned absolutely inside the media
+  // container, so the container must be the positioning context.
+  const renderMediaReceipt = useCallback(
+    (item: DisplayMessage): React.ReactNode => {
+      const read = receiptRead(item);
+      if (read === null) return null;
+      return (
+        <View style={styles.receiptOverlay} pointerEvents="none">
+          <ReceiptTicks read={read} color={theme.colors.textMuted} inline={false} size={9} />
+        </View>
+      );
+    },
+    [receiptRead, styles, theme]
   );
 
   const renderReactions = useCallback(
@@ -967,6 +994,11 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       const isHighlighted = highlightedMessageId === item.id;
       const isCompact = compactMessageIds.has(item.id);
 
+      // DM receipt: a corner overlay on the media (image/video). Only if the
+      // embed carries no media at all (caption-only) does it fall back to a row.
+      const receiptNode = renderReceipt(item);
+      const hasMedia = !!imageUrl || !!item.videoUrl;
+
       return (
         <Pressable onLongPress={handleLongPress} delayLongPress={300}>
           <Animated.View style={[styles.message, isCompact && styles.messageCompact, isHighlighted && highlightAnimStyle]}>
@@ -989,12 +1021,14 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                     onImagePress={handleImagePress}
                     onMessageLongPress={handleMessageLongPress}
                   />
+                  {renderMediaReceipt(item)}
                 </View>
               )}
               {item.videoUrl && (
                 <View style={styles.videoPlaceholder}>
                   <IconSymbol name="play.circle.fill" size={40} color="#fff" />
                   <Text style={styles.videoPlaceholderText}>Video</Text>
+                  {renderMediaReceipt(item)}
                 </View>
               )}
               {/* Caption — embeds can carry text alongside the image.
@@ -1017,6 +1051,10 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   onLinkPress={onLinkPress}
                 />
               ) : null}
+              {/* Caption-only embed (no media to overlay) — fall back to a row. */}
+              {!hasMedia && receiptNode ? (
+                <View style={styles.receiptRow}>{receiptNode}</View>
+              ) : null}
               {/* Per-message indicators on grouped continuation rows (header hidden) */}
               {isCompact && renderCompactIndicators(item)}
               {renderReactions(item.reactions || [], item.id)}
@@ -1025,7 +1063,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, renderAvatar, renderUnsignedWarning, renderCompactIndicators, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, compactMessageIds]
+    [styles, renderReactions, renderAvatar, renderUnsignedWarning, renderCompactIndicators, renderReceipt, renderMediaReceipt, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, compactMessageIds]
   );
 
   // Render sticker message
@@ -1063,6 +1101,8 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   <Text style={styles.stickerPlaceholderText}>[Sticker]</Text>
                 </View>
               )}
+              {/* No receipt here: stickers aren't sendable in DMs, and receipts
+                  are DM-only, so a media receipt would never render. */}
               {/* Per-message indicators on grouped continuation rows (header hidden) */}
               {isCompact && renderCompactIndicators(item)}
               {renderReactions(item.reactions || [], item.id)}
@@ -1661,6 +1701,21 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: Skin.space(2),
+  },
+  // DM receipt corner overlay on media (image/sticker/video): a rounded-square
+  // dark scrim badge pinned bottom-right, muted ticks centered on top (legible
+  // over any image, and the same color as the inline text receipts). The parent
+  // media container is the positioning context.
+  receiptOverlay: {
+    position: 'absolute',
+    bottom: Skin.space(6),
+    right: Skin.space(6),
+    width: Skin.space(22),
+    height: Skin.space(22),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: Skin.radius(6),
   },
   // Row below a compact continuation message holding its per-message indicators
   // ((edited) + unsigned + sending), since the header is hidden when grouped.
