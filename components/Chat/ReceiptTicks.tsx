@@ -25,36 +25,44 @@ import {
 interface ReceiptTicksProps {
   /** true → double check (read); false → single check (delivered). */
   read: boolean;
-  /** Tint colour — pass the muted theme token. */
+  /** Tint colour — muted theme token inline; white on a media overlay. */
   color: string;
   /** Rendered height in dp. Width is derived from the asset aspect. Default 9. */
   size?: number;
+  /**
+   * Inline (in message text) vs standalone (media corner overlay).
+   * - inline (default): wrapped in a <Text> with a leading space so it gaps from
+   *   the last word and flows/wraps with the text; margins on an inline <Image>
+   *   in <Text> are ignored on Android, so a real space is the reliable gap. The
+   *   <Text> wrapper is valid both inside a parent <Text> and inside a <View>.
+   * - standalone: a bare <Image>, tightly packed for an overlay pill (no leading
+   *   space, no baseline nudge).
+   */
+  inline?: boolean;
 }
 
-// Wrapped in a <Text> with a leading space for two reasons:
-//  1. margins on an inline <Image> inside <Text> are ignored on Android, so a
-//     real space character is the reliable way to gap the tick from the last
-//     word. It scales with the text font, which looks natural.
-//  2. a <Text> wrapper is valid both inside a parent <Text> (inline flow) and
-//     inside a <View> (the fallback row) — so one component fits both call sites.
-function ReceiptTicksBase({ read, color, size = 9 }: ReceiptTicksProps) {
+function ReceiptTicksBase({ read, color, size = 9, inline = true }: ReceiptTicksProps) {
   const aspect = read ? RECEIPT_CHECK_DOUBLE_ASPECT : RECEIPT_CHECK_SINGLE_ASPECT;
+  // width from aspect so the check glyph is never stretched; both states share
+  // the same glyph size, so delivered→read doesn't appear to resize.
+  const img = (
+    <Image
+      source={{ uri: read ? RECEIPT_CHECK_DOUBLE_URI : RECEIPT_CHECK_SINGLE_URI }}
+      style={[inline && styles.tickInline, { width: size * aspect, height: size, tintColor: color }]}
+      accessibilityLabel={read ? 'Read' : 'Delivered'}
+    />
+  );
+  if (!inline) return img;
   return (
     <Text>
       {' '}
-      <Image
-        source={{ uri: read ? RECEIPT_CHECK_DOUBLE_URI : RECEIPT_CHECK_SINGLE_URI }}
-        // width from aspect so the check glyph is never stretched; both states
-        // share the same glyph size, so delivered→read doesn't appear to resize.
-        style={[styles.tick, { width: size * aspect, height: size, tintColor: color }]}
-        accessibilityLabel={read ? 'Read' : 'Delivered'}
-      />
+      {img}
     </Text>
   );
 }
 
 const styles = StyleSheet.create({
-  tick: {
+  tickInline: {
     // Baseline nudge so the glyph sits level with the text rather than on the
     // descender line (inline <Image> in <Text> rides slightly low). Tune on device.
     transform: [{ translateY: 1 }],
