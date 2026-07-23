@@ -43,6 +43,13 @@ export interface MessageMarkdownRendererProps {
   onMentionPress?: (userId: string) => void;
   onChannelPress?: (channelId: string) => void;
   onLinkPress?: (url: string) => void;
+  /**
+   * Inline trailing node (e.g. a DM receipt). Appended after the last inline run
+   * when the final block is text (paragraph/heading/list) so it flows on the
+   * same line and wraps with it; otherwise (code/quote/hr) it drops to a compact
+   * trailing row beneath the content.
+   */
+  receipt?: React.ReactNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -285,6 +292,7 @@ function MessageMarkdownRendererBase({
   onMentionPress,
   onChannelPress,
   onLinkPress,
+  receipt,
 }: MessageMarkdownRendererProps) {
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -438,21 +446,33 @@ function MessageMarkdownRendererBase({
     [emojiMap, memberByAddress, onMentionPress, onChannelPress, onLinkPress, styles, theme, mentionStyle, channelStyle, linkStyle]
   );
 
+  // Inline the receipt after the last block's text so it trails the last word
+  // and wraps with it — but only when that block IS text (paragraph/heading/
+  // list). If the message ends in a code block / quote / hr there's no trailing
+  // inline run, so the receipt drops to a compact row beneath (below).
+  const lastIdx = blocks.length - 1;
+  const lastType = lastIdx >= 0 ? blocks[lastIdx].type : undefined;
+  const receiptInlineable =
+    lastType === 'paragraph' || lastType === 'heading' || lastType === 'list';
+
   return (
     <View style={styles.container}>
       {blocks.map((block, bi) => {
         const key = `block-${bi}`;
+        const isLast = bi === lastIdx;
         switch (block.type) {
           case 'heading':
             return (
               <Text key={key} style={[baseTextStyle, styles.heading]}>
                 {renderInline(block.text, key)}
+                {isLast ? receipt : null}
               </Text>
             );
           case 'paragraph':
             return (
               <Text key={key} style={baseTextStyle}>
                 {renderInline(block.text, key)}
+                {isLast ? receipt : null}
               </Text>
             );
           case 'blockquote':
@@ -469,6 +489,7 @@ function MessageMarkdownRendererBase({
                     <Text style={[baseTextStyle, styles.listMarker]}>{item.marker}</Text>
                     <Text style={[baseTextStyle, styles.listText]}>
                       {renderInline(item.text, `${key}-${ii}`)}
+                      {isLast && ii === block.items.length - 1 ? receipt : null}
                     </Text>
                   </View>
                 ))}
@@ -489,6 +510,9 @@ function MessageMarkdownRendererBase({
             return null;
         }
       })}
+      {receipt && !receiptInlineable ? (
+        <View style={styles.receiptRow}>{receipt}</View>
+      ) : null}
     </View>
   );
 }
@@ -649,6 +673,13 @@ const createStyles = (theme: AppTheme) =>
     customEmoji: {
       width: 20,
       height: 20,
+    },
+    // Fallback row for the receipt when the last block isn't inline text
+    // (code/quote/hr) — a compact row beneath the content, left-aligned with it.
+    receiptRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: Skin.space(2),
     },
   });
 

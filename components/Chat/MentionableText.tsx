@@ -43,6 +43,12 @@ interface MentionableTextProps {
   theme?: AppTheme;
   /** Show an on-device "See translation" toggle for non-target-language text. */
   enableTranslate?: boolean;
+  /**
+   * Inline trailing node (e.g. a DM receipt) rendered as the last child inside
+   * the terminal <Text> so it flows on the same line as the message text and
+   * wraps with it. Sits before the translation toggle when both are present.
+   */
+  receipt?: React.ReactNode;
 }
 
 // Regex patterns for @mentions, URLs, and :emoji:
@@ -118,6 +124,7 @@ function MentionableTextBase({
   onLinkPress,
   theme,
   enableTranslate = false,
+  receipt,
 }: MentionableTextProps) {
   // On-device translation. `text` below is the displayed copy (original or
   // translated), so all parsing/rendering downstream is unchanged.
@@ -452,10 +459,18 @@ function MentionableTextBase({
       // gets an oversized line box on Android (extra emoji-font ascent/descent),
       // which showed as a big empty gap below emoji-only messages.
       return renderWithToggle(
-        <Text style={[style, { fontSize: size, lineHeight: size }]}>{text}</Text>
+        <Text style={[style, { fontSize: size, lineHeight: size }]}>
+          {text}
+          {receipt}
+        </Text>
       );
     }
-    return renderWithToggle(<Text style={style}>{text}</Text>);
+    return renderWithToggle(
+      <Text style={style}>
+        {text}
+        {receipt}
+      </Text>
+    );
   }
 
   // Check if message is emoji-only
@@ -605,6 +620,7 @@ function MentionableTextBase({
 
         return <Text key={`text-${index}`}>{part.content}</Text>;
       })}
+      {receipt}
     </Text>
   );
 }

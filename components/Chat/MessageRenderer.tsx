@@ -40,6 +40,12 @@ interface MessageRendererProps {
   onLinkPress?: (url: string) => void;
   /** Show an on-device "See translation" toggle (MentionableText path only). */
   enableTranslate?: boolean;
+  /**
+   * Inline trailing node (e.g. a DM read/delivery receipt) appended after the
+   * last text run so it flows on the same line as the end of the message and
+   * wraps with it. Threaded into the terminal <Text> by the underlying renderer.
+   */
+  receipt?: React.ReactNode;
 }
 
 function MessageRendererBase({
@@ -56,6 +62,7 @@ function MessageRendererBase({
   onChannelPress,
   onLinkPress,
   enableTranslate = false,
+  receipt,
 }: MessageRendererProps) {
   const isMarkdown = useMemo(() => hasMarkdown(text), [text]);
 
@@ -83,6 +90,7 @@ function MessageRendererBase({
         onMentionPress={onMentionPress}
         onChannelPress={onChannelPress}
         onLinkPress={onLinkPress}
+        receipt={receipt}
       />
     );
   }
@@ -104,6 +112,7 @@ function MessageRendererBase({
         onMentionPress={onMentionPress}
         onChannelPress={onChannelPress}
         onLinkPress={onLinkPress}
+        receipt={receipt}
       />
     );
   }
@@ -118,6 +127,7 @@ function MessageRendererBase({
       onMentionPress={onMentionPress}
       onChannelPress={onChannelPress}
       onLinkPress={onLinkPress}
+      receipt={receipt}
     />
   );
 }
