@@ -170,6 +170,10 @@ function shortAddr(address: string | undefined): string {
 // [RECEIPT-DIAG] temp, revert before PR — log each failing envelope once, not per redelivery
 const receiptDiagLogged = new Set<string>();
 
+// Envelopes already queued for server-side poison deletion this session (the
+// node may redeliver before the delete lands; don't re-request each reflood).
+const poisonDeletedKeys = new Set<string>();
+
 async function deleteInboxMessages(
   inboxAddress: string,
   timestamps: number[],
@@ -4988,11 +4992,27 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // Only DM-batch messages ever accrue attempts (see the result/timeout
       // handling below), so nothing else can ever be poisoned here.
       let poisonSkippedThisBatch = 0; // [CATCHUP-DIAG]
+      // Poisoned envelopes that are ALSO old get deleted from the server so
+      // they stop re-downloading on every connect (the reflood that makes the
+      // drain minutes-slow). Double condition: poisoned (5 failed attempts, or
+      // ≥1 failure + 7 days old) AND >7 days old — nothing recent is ever
+      // deleted, so an envelope under active investigation can't be lost.
+      const poisonDeleteByInbox = new Map<string, number[]>();
       batch = batch.filter((m) => {
         const isHubLog = !!(m as { __logSeq?: number }).__logSeq;
         if (isHubLog) return true;
         if (isInboxEnvelopePoisoned(m.inboxAddress, m.timestamp)) {
           poisonSkippedThisBatch += 1; // [CATCHUP-DIAG]
+          const deleteKey = `${m.inboxAddress}:${m.timestamp}`;
+          if (
+            Date.now() - m.timestamp > 7 * 24 * 60 * 60 * 1000 &&
+            !poisonDeletedKeys.has(deleteKey)
+          ) {
+            poisonDeletedKeys.add(deleteKey);
+            const list = poisonDeleteByInbox.get(m.inboxAddress) ?? [];
+            list.push(m.timestamp);
+            poisonDeleteByInbox.set(m.inboxAddress, list);
+          }
           return false;
         }
         return true;
@@ -5003,6 +5023,24 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           `[poison-guard] skipped ${poisonSkippedThisBatch} dead DM envelope(s) this batch ` +
             `(cumulative ${catchupDiagRef.current.poisonSkipped})`,
         );
+      }
+      if (poisonDeleteByInbox.size > 0) {
+        // Best-effort, fire-and-forget: sign with the right key per inbox type.
+        poisonDeleteByInbox.forEach((timestamps, inboxAddress) => {
+          const convKeypair = encryptionStateStorage.getConversationInboxKeypairByAddress(inboxAddress);
+          if (convKeypair?.signingPrivateKey && convKeypair.signingPublicKey) {
+            const signingKey = {
+              publicKey: bytesToHex(convKeypair.signingPublicKey),
+              privateKey: bytesToHex(convKeypair.signingPrivateKey),
+            };
+            deleteConversationInboxMessages(inboxAddress, timestamps, signingKey).catch(() => {});
+          } else {
+            getDeviceKeyset().then(dk => {
+              if (dk) deleteInboxMessages(inboxAddress, timestamps, dk).catch(() => {});
+            });
+          }
+          logger.warn(`[poison-guard] deleting ${timestamps.length} dead envelope(s) >7d old from server inbox ${inboxAddress.slice(0, 10)}…`);
+        });
       }
 
       catchupDiagRef.current.drained += batch.length; // [CATCHUP-DIAG]
