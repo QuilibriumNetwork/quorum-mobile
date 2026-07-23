@@ -95,6 +95,7 @@ import {
   recordInboxAttempt,
   clearInboxAttempt,
 } from '../services/space/inboxAttemptTracker';
+import { INIT_ENVELOPE_STALENESS_TOLERANCE_MS } from '../services/crypto/initEnvelopeGuard';
 import { getMMKVAdapter, getConversationSync } from '../services/storage/mmkvAdapter';
 import { useAuth } from './AuthContext';
 import { useStorageAdapter } from './StorageContext';
@@ -166,6 +167,9 @@ function shortAddr(address: string | undefined): string {
  * Delete messages from inbox after successful decryption
  * This prevents the same messages from being re-delivered on reconnect
  */
+// [RECEIPT-DIAG] temp, revert before PR — log each failing envelope once, not per redelivery
+const receiptDiagLogged = new Set<string>();
+
 async function deleteInboxMessages(
   inboxAddress: string,
   timestamps: number[],
@@ -2736,6 +2740,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 inbox: message.inboxAddress?.slice(0, 10),
                 ts: message.timestamp,
                 ageSec: Math.round((Date.now() - message.timestamp) / 1000),
+                tolMin: INIT_ENVELOPE_STALENESS_TOLERANCE_MS / 60000,
               }));
               getDeviceKeyset().then(dk => {
                 if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
@@ -2982,11 +2987,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   sealedMessage.envelope
                 );
               } catch (decryptError) {
-                // [RECEIPT-DIAG] temp, revert before PR — fresh envelopes only (skip hoard reflood noise)
-                if (Date.now() - message.timestamp < 600_000) {
+                // Bound the redelivery loop: an undecryptable envelope replays
+                // forever otherwise (JS path had no attempt counting).
+                recordInboxAttempt(message.inboxAddress, message.timestamp);
+                // [RECEIPT-DIAG] temp, revert before PR — fresh envelopes only, once per envelope
+                const diagKey = `${message.inboxAddress}:${message.timestamp}`;
+                if (Date.now() - message.timestamp < 600_000 && !receiptDiagLogged.has(diagKey)) {
+                  receiptDiagLogged.add(diagKey);
                   logger.warn('[RECEIPT-DIAG] fresh DM decrypt FAILED', JSON.stringify({
                     inbox: message.inboxAddress?.slice(0, 10), ts: message.timestamp,
-                    err: decryptError instanceof Error ? decryptError.message.slice(0, 80) : 'unknown',
+                    err: decryptError instanceof Error ? decryptError.message.slice(0, 120) : 'unknown',
                   }));
                 }
                 // If this is a "no state" error, it's likely stale data - skip gracefully
@@ -3000,10 +3010,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
 
           if (!decryptedText || decryptedText.length === 0 || decryptedText.startsWith('Decryption failed')) {
-            // [RECEIPT-DIAG] temp, revert before PR — fresh envelopes only
-            if (Date.now() - message.timestamp < 600_000) {
+            // Bound the redelivery loop: an undecryptable envelope replays
+            // forever otherwise (JS path had no attempt counting).
+            recordInboxAttempt(message.inboxAddress, message.timestamp);
+            // [RECEIPT-DIAG] temp, revert before PR — fresh envelopes only, once per envelope
+            const diagKey = `${message.inboxAddress}:${message.timestamp}`;
+            if (Date.now() - message.timestamp < 600_000 && !receiptDiagLogged.has(diagKey)) {
+              receiptDiagLogged.add(diagKey);
               logger.warn('[RECEIPT-DIAG] fresh DM decrypt EMPTY/FAILED', JSON.stringify({
                 inbox: message.inboxAddress?.slice(0, 10), ts: message.timestamp,
+                reason: decryptedText ? decryptedText.slice(0, 120) : 'empty',
               }));
             }
             return;
