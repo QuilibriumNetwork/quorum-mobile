@@ -90,6 +90,12 @@ import {
 } from '../services/space/modMuteStorage';
 import { buildListenHubFrame, buildLogSinceFrame } from '../services/space/hubLogSync';
 import { getHubLastSeq, setHubLastSeq } from '../services/space/hubLogCursor';
+import {
+  isInboxEnvelopePoisoned,
+  recordInboxAttempt,
+  clearInboxAttempt,
+  getInboxAttempts,
+} from '../services/space/inboxAttemptTracker';
 import { getMMKVAdapter, getConversationSync } from '../services/storage/mmkvAdapter';
 import { useAuth } from './AuthContext';
 import { useStorageAdapter } from './StorageContext';
@@ -161,6 +167,31 @@ function shortAddr(address: string | undefined): string {
  * Delete messages from inbox after successful decryption
  * This prevents the same messages from being re-delivered on reconnect
  */
+// Envelopes already queued for server-side poison deletion this session (the
+// node may redeliver before the delete lands; don't re-request each reflood).
+const poisonDeletedKeys = new Set<string>();
+
+/**
+ * Best-effort ack-by-delete that signs with the key matching the inbox type.
+ * A conversation-inbox envelope deleted with the DEVICE key fails signature
+ * verification server-side and the envelope redelivers forever — observed as
+ * an endless storm of the same delivery/read acks starving fresh ones.
+ */
+function deleteProcessedEnvelope(inboxAddress: string, timestamp: number): void {
+  const convKeypair = encryptionStateStorage.getConversationInboxKeypairByAddress(inboxAddress);
+  if (convKeypair?.signingPrivateKey && convKeypair.signingPublicKey) {
+    const signingKey = {
+      publicKey: bytesToHex(convKeypair.signingPublicKey),
+      privateKey: bytesToHex(convKeypair.signingPrivateKey),
+    };
+    deleteConversationInboxMessages(inboxAddress, [timestamp], signingKey).catch(() => {});
+  } else {
+    getDeviceKeyset().then(dk => {
+      if (dk) deleteInboxMessages(inboxAddress, [timestamp], dk).catch(() => {});
+    });
+  }
+}
+
 async function deleteInboxMessages(
   inboxAddress: string,
   timestamps: number[],
@@ -423,6 +454,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // Above this queue depth, skip the per-message sleep so a catch-up
   // backlog drains instead of accumulating toward the cap.
   const FAST_DRAIN_THRESHOLD = 500;
+  // Watchdog for the native batch call. A poison message can hang the
+  // native side forever (observed: a DM group never resolving), which
+  // freezes the entire drain loop — nothing lands after that. On timeout
+  // we throw into the individual-processing fallback (which completes)
+  // and stop native-batching DMs for the rest of the session.
+  const NATIVE_BATCH_TIMEOUT_MS = 30000;
+  const dmBatchDisabledRef = useRef(false);
   // Gate for verbose per-message / per-batch diagnostics. These build
   // JSON.stringify(batch.map(...)) payloads that are NEVER printed
   // (logger.debug sits below the logger's "log" minLevel), yet the
@@ -2678,11 +2716,31 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // Returns null if decryption fails (expected for multi-device)
             const sessionResult = await encryptionService.initializeRecipientSession(
               unsealed,
-              message.inboxAddress  // Our device inbox where we received this init
+              message.inboxAddress,  // Our device inbox where we received this init
+              message.timestamp
             );
 
+            if (sessionResult === 'stale') {
+              // Redelivered/zombie init envelope refused by the staleness
+              // guard — installing it would replace the current session with
+              // a ratchet the sender no longer holds. Delete it server-side
+              // so it cannot be redelivered (defuse the mine), keep the
+              // current session.
+              logger.warn('[stale-init] refused zombie init envelope (device inbox)', JSON.stringify({
+                inbox: message.inboxAddress?.slice(0, 10),
+                ts: message.timestamp,
+                ageSec: Math.round((Date.now() - message.timestamp) / 1000),
+              }));
+              getDeviceKeyset().then(dk => {
+                if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
+              });
+              return;
+            }
             if (!sessionResult) {
-              // Decryption failed - message was likely for a different device
+              // Decryption failed - message was likely for a different device.
+              // Count toward the bounded-retry skip-list so an undecryptable
+              // init envelope can't replay through this path unbounded.
+              recordInboxAttempt(message.inboxAddress, message.timestamp);
               return;
             }
 
@@ -2692,6 +2750,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
             // The message should now be properly decrypted plaintext JSON
             decryptedMessage = JSON.parse(sessionResult.message) as Message;
+
+            // Receipt interception — parity with Path 2 and the native batch
+            // path (applyDMGroupResults): flat delivery/read acks arrive
+            // init-wrapped whenever the peer's session is unconfirmed. Without
+            // this check they fell through toward persistence and receipts
+            // never rendered on this path.
+            if (handleDmReceipt(decryptedMessage, conversationId.split('/')[0])) {
+              deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
+              return;
+            }
 
             // Self-echo init guard: if the sender is our own address and the
             // message carries no channelId, we cannot determine the real partner.
@@ -2803,7 +2871,26 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   const existingStates = encryptionStateStorage.getEncryptionStates(conversationId);
                   const hasExistingSession = existingStates.length > 0;
 
-                  if (hasExistingSession) {
+                  // === Session CONFIRMATION (SDK/desktop parity) ===
+                  // If this inbox holds an UNCONFIRMED sender session (we
+                  // initiated; sendingInbox pub key still ''), the peer's
+                  // first init-wrapped reply confirms it: fills the peer's
+                  // real return inbox + sets sentAccept, ending the
+                  // init-wrapping churn on both sides. Falls through to the
+                  // pre-existing paths whenever this isn't a confirm case.
+                  const confirmResult = await encryptionService.confirmSenderSession(
+                    conversationId,
+                    message.inboxAddress,
+                    unsealed
+                  );
+                  if (confirmResult) {
+                    logger.warn('[session-confirm] sender session CONFIRMED', JSON.stringify({
+                      conv: conversationId?.slice(0, 10),
+                      inbox: message.inboxAddress?.slice(0, 10),
+                    }));
+                    decryptedText = confirmResult.message;
+                    userProfileFromEnvelope = confirmResult.userProfile;
+                  } else if (hasExistingSession) {
                     // === Use existing session to decrypt ===
                     // The message is wrapped in InitEnvelope but we already have a session
                     // Try to decrypt with existing states (trial decryption)
@@ -2834,18 +2921,29 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
                     // IMPORTANT: Update sendingInbox from the InitEnvelope
                     // This tells us where to send future replies (the sender's return inbox)
-                    if (unsealed.return_inbox_address && unsealed.return_inbox_encryption_key) {
+                    // SDK-parity: only patch the sendingInbox when the envelope
+                    // carries the FULL field set (a partial envelope must not
+                    // half-confirm the session), store the private key too, and
+                    // mark sentAccept — semantically identical to
+                    // confirmSenderSession's save.
+                    if (
+                      unsealed.return_inbox_address &&
+                      unsealed.return_inbox_encryption_key &&
+                      unsealed.return_inbox_public_key &&
+                      unsealed.return_inbox_private_key
+                    ) {
                       const currentState = encryptionStateStorage.getEncryptionState(conversationId, successInboxId);
                       if (currentState) {
                         const updatedSendingInbox = {
                           inbox_address: unsealed.return_inbox_address,
                           inbox_encryption_key: unsealed.return_inbox_encryption_key,
-                          inbox_public_key: unsealed.return_inbox_public_key || '',
-                          inbox_private_key: '',
+                          inbox_public_key: unsealed.return_inbox_public_key,
+                          inbox_private_key: unsealed.return_inbox_private_key,
                         };
                         encryptionStateStorage.saveEncryptionState({
                           ...currentState,
                           sendingInbox: updatedSendingInbox,
+                          sentAccept: true,
                         }, false);
                         ratchetStateCacheRef.current.clear();
                       }
@@ -2855,11 +2953,30 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     // Returns null if decryption fails (expected for multi-device)
                     const sessionResult = await encryptionService.initializeRecipientSession(
                       unsealed,
-                      message.inboxAddress  // Our conversation inbox where we received this
+                      message.inboxAddress,  // Our conversation inbox where we received this
+                      message.timestamp
                     );
 
+                    if (sessionResult === 'stale') {
+                      // Redelivered/zombie init envelope refused by the
+                      // staleness guard — see the device-inbox twin above.
+                      logger.warn('[stale-init] refused zombie init envelope (conversation inbox)', JSON.stringify({
+                        inbox: message.inboxAddress?.slice(0, 10),
+                        ts: message.timestamp,
+                        ageSec: Math.round((Date.now() - message.timestamp) / 1000),
+                      }));
+                      if (conversationKeypair.signingPrivateKey && conversationKeypair.signingPublicKey) {
+                        const signingKey = {
+                          publicKey: bytesToHex(conversationKeypair.signingPublicKey),
+                          privateKey: bytesToHex(conversationKeypair.signingPrivateKey),
+                        };
+                        deleteConversationInboxMessages(message.inboxAddress, [message.timestamp], signingKey).catch(() => {});
+                      }
+                      return;
+                    }
                     if (!sessionResult) {
                       // Decryption failed - message was likely for a different device
+                      recordInboxAttempt(message.inboxAddress, message.timestamp);
                       return;
                     }
 
@@ -2899,6 +3016,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   sealedMessage.envelope
                 );
               } catch (decryptError) {
+                // Bound the redelivery loop: an undecryptable envelope replays
+                // forever otherwise (JS path had no attempt counting).
+                recordInboxAttempt(message.inboxAddress, message.timestamp);
                 // If this is a "no state" error, it's likely stale data - skip gracefully
                 if (decryptError instanceof Error && decryptError.message.includes('No encryption state')) {
                   return;
@@ -2910,6 +3030,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
 
           if (!decryptedText || decryptedText.length === 0 || decryptedText.startsWith('Decryption failed')) {
+            // Bound the redelivery loop: an undecryptable envelope replays
+            // forever otherwise (JS path had no attempt counting).
+            recordInboxAttempt(message.inboxAddress, message.timestamp);
             return;
           }
 
@@ -2929,9 +3052,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // DM receipts (before the self-echo guard): flat delivery/read-ack are
           // consumed here and never saved; normal messages buffer + strip acks.
           if (handleDmReceipt(decryptedMessage, conversationId.split('/')[0])) {
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
             return;
           }
 
@@ -3427,6 +3548,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       const isSpaceInbox = spaceInboxSet.has(msg.inboxAddress);
       const isOnDeviceInbox = msg.inboxAddress === ownInboxAddressRef.current;
 
+      // DM native batching hung this session (poison watchdog tripped) —
+      // route all non-space messages through the individual JS path.
+      if (dmBatchDisabledRef.current && !isSpaceInbox) {
+        nonBatchMessages.push(msg);
+        continue;
+      }
+
       if (isSpaceInbox) {
         // Space message - add to space group
         const spaceId = inboxToSpaceMap.get(msg.inboxAddress);
@@ -3523,7 +3651,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         const isDoubleRatchetEnvelope = envelopeData && 'protocol_identifier' in envelopeData;
         const isInitEnvelope = envelopeData && 'ciphertext' in envelopeData && 'initialization_vector' in envelopeData;
 
-        // Both DR and init envelopes on device inbox go through native batch
+        if (isInitEnvelope) {
+          // Init envelopes install/replace Double Ratchet sessions, so they
+          // must pass the staleness guard in initializeRecipientSession —
+          // which only the JS path runs (the native batch writes session
+          // state to MMKV directly, bypassing any JS-side check). Routing
+          // them here also keeps init-heavy hoards out of the native call,
+          // the known freeze trigger the batch watchdog guards against.
+          nonBatchMessages.push(msg);
+          continue;
+        }
+
+        // DR envelopes on device inbox go through native batch
         const groupKey = `device_inbox:${msg.inboxAddress}`;
         if (!dmGroupMap.has(groupKey)) {
           // Gather all DR states for this inbox
@@ -4834,7 +4973,69 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // results — stays flat. The loop keeps going until the queue is
       // empty; see MAX_BATCH_DRAIN_SIZE for why this matters on small
       // devices.
-      const batch = messageQueueRef.current.splice(0, MAX_BATCH_DRAIN_SIZE);
+      let batch = messageQueueRef.current.splice(0, MAX_BATCH_DRAIN_SIZE);
+
+      // Bounded-retry poison guard (DM / device-inbox only). Drop envelopes that
+      // have already failed too many times, or are old and still failing, so a
+      // permanently-undecryptable hoard can't re-enter — and re-freeze — the
+      // native batch. Channel (hub-log) entries carry __logSeq and are exempt:
+      // skipping one would gap the contiguous cursor advance later in this loop.
+      // Only DM-batch messages ever accrue attempts (see the result/timeout
+      // handling below), so nothing else can ever be poisoned here.
+      let poisonSkippedThisBatch = 0;
+      // Poisoned envelopes that are ALSO old get deleted from the server so
+      // they stop re-downloading on every connect (the reflood that makes the
+      // drain minutes-slow). Double condition: poisoned (5 failed attempts, or
+      // ≥1 failure + 7 days old) AND >7 days old — nothing recent is ever
+      // deleted, so an envelope under active investigation can't be lost.
+      const poisonDeleteByInbox = new Map<string, number[]>();
+      batch = batch.filter((m) => {
+        const isHubLog = !!(m as { __logSeq?: number }).__logSeq;
+        if (isHubLog) return true;
+        if (isInboxEnvelopePoisoned(m.inboxAddress, m.timestamp)) {
+          poisonSkippedThisBatch += 1;
+          const deleteKey = `${m.inboxAddress}:${m.timestamp}`;
+          if (
+            Date.now() - m.timestamp > 7 * 24 * 60 * 60 * 1000 &&
+            // ≥2 independent failed decrypt attempts: a single transient
+            // failure (e.g. keys not loaded yet at startup) is retried on the
+            // next pass, never deleted.
+            getInboxAttempts(m.inboxAddress, m.timestamp) >= 2 &&
+            !poisonDeletedKeys.has(deleteKey)
+          ) {
+            poisonDeletedKeys.add(deleteKey);
+            const list = poisonDeleteByInbox.get(m.inboxAddress) ?? [];
+            list.push(m.timestamp);
+            poisonDeleteByInbox.set(m.inboxAddress, list);
+          }
+          return false;
+        }
+        return true;
+      });
+      if (poisonSkippedThisBatch > 0) {
+        logger.warn(
+          `[poison-guard] skipped ${poisonSkippedThisBatch} undecryptable DM envelope(s) this batch`,
+        );
+      }
+      if (poisonDeleteByInbox.size > 0) {
+        // Best-effort, fire-and-forget: sign with the right key per inbox type.
+        poisonDeleteByInbox.forEach((timestamps, inboxAddress) => {
+          const convKeypair = encryptionStateStorage.getConversationInboxKeypairByAddress(inboxAddress);
+          if (convKeypair?.signingPrivateKey && convKeypair.signingPublicKey) {
+            const signingKey = {
+              publicKey: bytesToHex(convKeypair.signingPublicKey),
+              privateKey: bytesToHex(convKeypair.signingPrivateKey),
+            };
+            deleteConversationInboxMessages(inboxAddress, timestamps, signingKey).catch(() => {});
+          } else {
+            getDeviceKeyset().then(dk => {
+              if (dk) deleteInboxMessages(inboxAddress, timestamps, dk).catch(() => {});
+            });
+          }
+          logger.warn(`[poison-guard] deleting ${timestamps.length} dead envelope(s) >7d old from server inbox ${inboxAddress.slice(0, 10)}…`);
+        });
+      }
+
 
       try {
         // Classify messages and gather crypto state
@@ -4869,7 +5070,44 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // Process batch natively if there are batchable messages
         if (batchInput.space_groups.length > 0 || batchInput.dm_groups.length > 0) {
           const cryptoProvider = new NativeCryptoProvider();
-          const batchOutput = await cryptoProvider.batchProcessMessages(batchInput);
+          // Map each DM envelope's timestamp to its inbox so the bounded-retry
+          // tracker can be updated from the native result (or a timeout) below.
+          const dmInboxByTs = new Map<number, string>();
+          for (const gp of batchInput.dm_groups) {
+            for (const mm of gp.messages) dmInboxByTs.set(mm.timestamp, mm.inbox_address);
+          }
+          // Watchdog: a hung native call must not freeze the drain forever.
+          let batchTimeoutId: ReturnType<typeof setTimeout> | undefined;
+          const batchTimeout = new Promise<never>((_, reject) => {
+            batchTimeoutId = setTimeout(
+              () => reject(new Error('native batchProcessMessages timeout')),
+              NATIVE_BATCH_TIMEOUT_MS,
+            );
+          });
+          let batchOutput: BatchProcessOutput;
+          try {
+            batchOutput = await Promise.race([
+              cryptoProvider.batchProcessMessages(batchInput),
+              batchTimeout,
+            ]);
+          } catch (raceErr) {
+            if (batchInput.dm_groups.length > 0) {
+              dmBatchDisabledRef.current = true;
+              // Count a failed attempt for every DM envelope in the hung batch so
+              // a permanently-freezing envelope accrues toward the skip threshold
+              // and stops re-entering (and re-freezing) the batch on later
+              // connects. Each connect tags one batch (up to MAX_BATCH_DRAIN_SIZE)
+              // of the hoard, so it converges over as many connects as the hoard
+              // spans batches, then no longer stalls.
+              dmInboxByTs.forEach((inbox, ts) => recordInboxAttempt(inbox, ts));
+              logger.warn(
+                '[poison-guard] native batch timed out — DM batching disabled for this session',
+              );
+            }
+            throw raceErr; // outer catch routes the batch to individual processing
+          } finally {
+            clearTimeout(batchTimeoutId);
+          }
 
           if (WS_TRACE && batchOutput.dm_results.length > 0) {
             logger.debug(
@@ -4893,6 +5131,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           }
           if (batchOutput.dm_results.length > 0) {
             await applyDMGroupResults(batchOutput.dm_results, batch);
+            // Update the bounded-retry tracker from authoritative native statuses:
+            // clear on success (resets a recovered transient failure); count on a
+            // hard failure. 'unseal_failed' is intentionally NOT counted — those
+            // route to the JS init-envelope fallback and usually succeed there, so
+            // counting them would penalise legitimate DMs.
+            for (const gr of batchOutput.dm_results) {
+              for (const mr of gr.messages) {
+                if (mr.timestamp == null) continue;
+                const inbox = dmInboxByTs.get(mr.timestamp);
+                if (!inbox) continue;
+                if (mr.status === 'decrypted' || mr.status === 'init_decrypted') {
+                  clearInboxAttempt(inbox, mr.timestamp);
+                } else if (mr.status === 'decrypt_failed' || mr.status === 'no_state') {
+                  recordInboxAttempt(inbox, mr.timestamp);
+                }
+              }
+            }
           }
         }
 
@@ -5008,7 +5263,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     );
     // Backpressure: drop oldest messages if queue is overloaded
     if (messageQueueRef.current.length >= MAX_MESSAGE_QUEUE_SIZE) {
-      messageQueueRef.current.splice(0, messageQueueRef.current.length - MAX_MESSAGE_QUEUE_SIZE + 1);
+      const excess = messageQueueRef.current.length - MAX_MESSAGE_QUEUE_SIZE + 1;
+      messageQueueRef.current.splice(0, excess);
     }
     messageQueueRef.current.push(message);
     // Start processing if not already in progress

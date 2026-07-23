@@ -17,6 +17,11 @@ import {
   type ConversationInboxKeypair,
 } from './encryption-state-storage';
 import { ratchetMutex } from './ratchet-mutex';
+import {
+  isStaleInitEnvelope,
+  getInstalledInitEnvelopeTs,
+  recordInstalledInitEnvelopeTs,
+} from './initEnvelopeGuard';
 import { deriveAddress } from '../onboarding/keyService';
 
 import type {
@@ -501,6 +506,94 @@ class EncryptionService {
   }
 
   /**
+   * Confirm an unconfirmed Double Ratchet SENDER session from the peer's
+   * first reply — mobile port of the SDK's ConfirmDoubleRatchetSenderSession
+   * (quilibrium-js-sdk-channels channel.ts) as used by desktop
+   * (MessageService.ts Confirm branch).
+   *
+   * The initiator's state starts with sendingInbox.inbox_public_key === ''
+   * ("unconfirmed"); while unconfirmed, every send is wrapped in an
+   * InitializationEnvelope. The peer's first reply (itself init-wrapped)
+   * carries the peer's full return_inbox_* — processing it here fills the
+   * sendingInbox, sets sentAccept, and ends the init-wrapping on both sides.
+   *
+   * Composed entirely from existing primitives (DR decrypt + state
+   * bookkeeping); no new cryptography. Returns null whenever this is not a
+   * confirmable case, so callers fall back to the pre-existing behavior.
+   */
+  async confirmSenderSession(
+    conversationId: string,
+    receivedOnInboxAddress: string,
+    unsealed: UnsealedEnvelope
+  ): Promise<{ message: string; userProfile?: { displayName?: string; userIcon?: string } } | null> {
+    return ratchetMutex.runExclusive(conversationId, async () => {
+      const state = encryptionStateStorage.getEncryptionState(conversationId, receivedOnInboxAddress);
+      // Only an UNCONFIRMED sender session is a confirm case (SDK throws
+      // 'inbox key already set' otherwise; we return null and let the
+      // normal DR/init paths handle it).
+      if (!state) return null;
+      if (state.sendingInbox?.inbox_public_key) return null;
+
+      // SDK validation: ALL initialization fields must be present — a
+      // partial envelope must not half-confirm the session.
+      if (
+        !unsealed.return_inbox_address ||
+        !unsealed.return_inbox_encryption_key ||
+        !unsealed.return_inbox_private_key ||
+        !unsealed.return_inbox_public_key ||
+        !unsealed.tag ||
+        !unsealed.message ||
+        !unsealed.user_address
+      ) {
+        return null;
+      }
+
+      // Decrypt the inner DR envelope with the sender session's ratchet.
+      let envelopeStr = unsealed.message;
+      if (envelopeStr.includes('\\')) {
+        envelopeStr = envelopeStr.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      }
+      const decryptResult = await this.cryptoProvider.doubleRatchetDecrypt({
+        ratchet_state: state.state,
+        envelope: envelopeStr,
+      });
+      const resultWithError = decryptResult as typeof decryptResult & { decryptionError?: string };
+      if (resultWithError.decryptionError || decryptResult.message.length === 0) {
+        // Signal rule: a bad frame never destroys the session — leave the
+        // state untouched and let the caller fall back.
+        return null;
+      }
+      const decryptedMessage = textDecoder.decode(new Uint8Array(decryptResult.message));
+
+      // Persist the CONFIRMED state immediately, inside the lock (desktop
+      // parity: accept plaintext + store state changes is one atomic step).
+      const confirmedState: EncryptionState = {
+        state: decryptResult.ratchet_state,
+        timestamp: Date.now(),
+        conversationId,
+        inboxId: state.inboxId,
+        sentAccept: true,
+        sendingInbox: {
+          inbox_address: unsealed.return_inbox_address,
+          inbox_encryption_key: unsealed.return_inbox_encryption_key,
+          inbox_public_key: unsealed.return_inbox_public_key,
+          inbox_private_key: unsealed.return_inbox_private_key,
+        },
+        tag: unsealed.tag,
+      };
+      encryptionStateStorage.saveEncryptionState(confirmedState, true);
+      // Route future received replies on the peer's return inbox to this
+      // conversation.
+      encryptionStateStorage.saveInboxMapping(unsealed.return_inbox_address, conversationId);
+
+      const userProfile = (unsealed.display_name || unsealed.user_icon)
+        ? { displayName: unsealed.display_name, userIcon: unsealed.user_icon }
+        : undefined;
+      return { message: decryptedMessage, userProfile };
+    });
+  }
+
+  /**
    * Check if a session exists for a conversation
    */
   hasSession(conversationId: string): boolean {
@@ -626,8 +719,12 @@ class EncryptionService {
    */
   async initializeRecipientSession(
     unsealed: UnsealedEnvelope,
-    receivedOnInboxAddress: string  // The inbox where we received this init message
-  ): Promise<{
+    receivedOnInboxAddress: string,  // The inbox where we received this init message
+    // Server-assigned envelope timestamp; when provided, the staleness guard
+    // refuses redelivered/zombie init envelopes (returns 'stale') instead of
+    // letting them re-run X3DH over a newer session.
+    envelopeTimestamp?: number
+  ): Promise<'stale' | {
     conversationId: string;
     message: string;
     senderAddress: string;
@@ -809,7 +906,23 @@ class EncryptionService {
       }
     }
 
-    // No existing session - perform full X3DH initialization
+    // No existing session usable (or existing-session decrypt failed) — the
+    // code below runs full X3DH, which INSTALLS session state and repoints
+    // latestState for this conversation. Staleness guard (desktop parity,
+    // see initEnvelopeGuard.ts): a redelivered or zombie init envelope must
+    // never re-run X3DH over a newer session — that resurrects a ratchet the
+    // sender no longer holds and forks the pair. Refuse anything not strictly
+    // newer than what we already hold; the caller deletes the refused
+    // envelope from the server so it cannot be redelivered (mine defused).
+    if (envelopeTimestamp !== undefined) {
+      const knownTimestamps = [
+        ...allStates.map((s) => s.timestamp),
+        ...getInstalledInitEnvelopeTs(conversationId),
+      ];
+      if (isStaleInitEnvelope(envelopeTimestamp, knownTimestamps)) {
+        return 'stale';
+      }
+    }
 
     // Parse keys from hex strings to byte arrays
     const senderIdentityKey = this.hexToBytes(unsealed.identity_public_key);
@@ -918,6 +1031,13 @@ class EncryptionService {
     // Save encryption state - this is the PRIMARY state for this conversation
     // The sendingInbox field tells us where to send, so we don't need a separate "latest" state
     encryptionStateStorage.saveEncryptionState(encryptionState, true);
+
+    // Remember this envelope's server timestamp so an exact redelivery is
+    // recognized as stale even inside the skew tolerance window (state rows
+    // carry local Date.now, not the envelope timestamp desktop keys off).
+    if (envelopeTimestamp !== undefined) {
+      recordInstalledInitEnvelopeTs(conversationId, envelopeTimestamp);
+    }
 
     // IMPORTANT: Also save to ephemeral key cache so subsequent messages with same
     // ephemeral key can use this advanced ratchet state instead of re-doing X3DH
