@@ -175,6 +175,27 @@ const receiptDiagLogged = new Set<string>();
 // node may redeliver before the delete lands; don't re-request each reflood).
 const poisonDeletedKeys = new Set<string>();
 
+/**
+ * Best-effort ack-by-delete that signs with the key matching the inbox type.
+ * A conversation-inbox envelope deleted with the DEVICE key fails signature
+ * verification server-side and the envelope redelivers forever — observed as
+ * an endless storm of the same delivery/read acks starving fresh ones.
+ */
+function deleteProcessedEnvelope(inboxAddress: string, timestamp: number): void {
+  const convKeypair = encryptionStateStorage.getConversationInboxKeypairByAddress(inboxAddress);
+  if (convKeypair?.signingPrivateKey && convKeypair.signingPublicKey) {
+    const signingKey = {
+      publicKey: bytesToHex(convKeypair.signingPublicKey),
+      privateKey: bytesToHex(convKeypair.signingPrivateKey),
+    };
+    deleteConversationInboxMessages(inboxAddress, [timestamp], signingKey).catch(() => {});
+  } else {
+    getDeviceKeyset().then(dk => {
+      if (dk) deleteInboxMessages(inboxAddress, [timestamp], dk).catch(() => {});
+    });
+  }
+}
+
 async function deleteInboxMessages(
   inboxAddress: string,
   timestamps: number[],
@@ -581,17 +602,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     // acks (about the partner's messages) fan out to our other devices too — a
     // self-echoed read-ack would otherwise mark our own sent messages read.
     if (raw.type === 'delivery-ack' || raw.type === 'read-ack') {
-      // [RECEIPT-DIAG] temp, revert before PR
-      logger.warn('[RECEIPT-DIAG] ack ARRIVED on mobile', JSON.stringify({
-        type: raw.type,
-        from: raw.senderId?.slice(0, 10),
-        self: self?.slice(0, 10),
-        partner: partner?.slice(0, 10),
-        selfEcho: raw.senderId === self,
-        gateDelivery: isReceiptEnabled('delivery', partner),
-        gateRead: isReceiptEnabled('read', partner),
-        hasSvc: !!svc,
-      }));
+      // [RECEIPT-DIAG] temp, revert before PR — once per unique ack (redeliveries silent)
+      const ackKey = `${raw.type}:${raw.senderId}:${raw.upToMessageId ?? (raw.messageIds ?? []).join(',')}`;
+      if (!receiptDiagLogged.has(ackKey)) {
+        receiptDiagLogged.add(ackKey);
+        logger.warn('[RECEIPT-DIAG] ack ARRIVED on mobile', JSON.stringify({
+          type: raw.type,
+          from: raw.senderId?.slice(0, 10),
+          self: self?.slice(0, 10),
+          partner: partner?.slice(0, 10),
+          selfEcho: raw.senderId === self,
+          gateDelivery: isReceiptEnabled('delivery', partner),
+          gateRead: isReceiptEnabled('read', partner),
+          hasSvc: !!svc,
+        }));
+      }
     }
     if (raw.type === 'delivery-ack') {
       if (svc && raw.senderId !== self && isReceiptEnabled('delivery', partner)) svc.onAckReceived(raw.messageIds ?? []);
@@ -2773,9 +2798,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // this check they fell through toward persistence and receipts
             // never rendered on this path.
             if (handleDmReceipt(decryptedMessage, conversationId.split('/')[0])) {
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
               return;
             }
 
@@ -3102,9 +3125,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // DM receipts (before the self-echo guard): flat delivery/read-ack are
           // consumed here and never saved; normal messages buffer + strip acks.
           if (handleDmReceipt(decryptedMessage, conversationId.split('/')[0])) {
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
             return;
           }
 
