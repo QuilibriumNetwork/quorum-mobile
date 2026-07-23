@@ -95,7 +95,7 @@ const EMOJI_CLUSTER_REGEX =
 //   4+       → default inline size (a wall of emoji shouldn't dominate the row)
 // Multipliers are applied to the base body font size.
 function emojiOnlyScale(count: number): number {
-  if (count <= 1) return 3;
+  if (count <= 1) return 6; // a lone emoji renders extra-large (2x the old size)
   if (count <= 3) return 2;
   return 1;
 }
@@ -458,11 +458,14 @@ function MentionableTextBase({
       // Pin lineHeight to the font size: a large emoji Text with no lineHeight
       // gets an oversized line box on Android (extra emoji-font ascent/descent),
       // which showed as a big empty gap below emoji-only messages.
+      // Emoji-only: lay out in a bottom-aligned row so the (small) trailing
+      // indicators sit at the bottom of the (large) emoji rather than floating
+      // up the tall line box. `receipt` is a <Text>-wrapped node, valid here.
       return renderWithToggle(
-        <Text style={[style, { fontSize: size, lineHeight: size }]}>
-          {text}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+          <Text style={[style, { fontSize: size, lineHeight: size }]}>{text}</Text>
           {receipt}
-        </Text>
+        </View>
       );
     }
     return renderWithToggle(
@@ -529,9 +532,7 @@ function MentionableTextBase({
     textDecorationLine: 'underline',
   };
 
-  return renderWithToggle(
-    <Text style={effectiveStyle}>
-      {parts.map((part, index) => {
+  const renderedParts = parts.map((part, index) => {
         if (part.type === 'mention') {
           const isEveryone = part.userId === 'everyone';
           // Role mentions are styled like a mention but not tappable (the
@@ -619,7 +620,22 @@ function MentionableTextBase({
         }
 
         return <Text key={`text-${index}`}>{part.content}</Text>;
-      })}
+  });
+
+  // Emoji-only (custom/shortcode): bottom-align the trailing indicators against
+  // the large emoji, same as the plain emoji path above. Otherwise keep them
+  // inline in the text so they flow and wrap with it.
+  if (isEmojiOnlyMessage) {
+    return renderWithToggle(
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+        <Text style={effectiveStyle}>{renderedParts}</Text>
+        {receipt}
+      </View>
+    );
+  }
+  return renderWithToggle(
+    <Text style={effectiveStyle}>
+      {renderedParts}
       {receipt}
     </Text>
   );
