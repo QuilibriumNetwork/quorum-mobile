@@ -30,7 +30,14 @@
 
 import type { MMKV } from 'react-native-mmkv';
 
-export const INIT_ENVELOPE_STALENESS_TOLERANCE_MS = 120_000;
+// Desktop uses 120s. Mobile needs a much wider window: state rows are
+// re-stamped with local Date.now() on every save, and the receive drain can
+// delay an envelope by several minutes (catch-up refloods; dev throttling) —
+// observed live 2026-07-23: a legitimately fresh ack-as-init envelope surfaced
+// ~2 minutes after send and was falsely refused under the 120s tolerance.
+// The zombies this guard exists for are DAYS to WEEKS old, so 30 minutes
+// keeps the full protection margin while absorbing worst-case drain latency.
+export const INIT_ENVELOPE_STALENESS_TOLERANCE_MS = 30 * 60 * 1000;
 
 export function isStaleInitEnvelope(
   envelopeTimestamp: number,
