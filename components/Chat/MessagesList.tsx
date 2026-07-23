@@ -20,6 +20,7 @@ import { FarcasterCastCard, containsFarcasterLink, extractFarcasterLink, stripFa
 import { EmojiPicker } from './EmojiPicker';
 import { MessageActionSheet } from './MessageActionSheet';
 import { MessageRenderer } from './MessageRenderer';
+import { ReceiptTicks } from './ReceiptTicks';
 import { EditHistoryModal } from './EditHistoryModal';
 import { ReactionDetailsModal } from './ReactionDetailsModal';
 import { SpaceCallBubble } from './SpaceCallBubble';
@@ -790,26 +791,19 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     [styles, theme, renderUnsignedWarning]
   );
 
-  // DM delivery/read receipt tick on own messages (✓ delivered / ✓✓ read). A
-  // text glyph so it flows inline natively (IconSymbol SVGs can't sit in a
-  // <Text>). Display is unconditional — the master switch gates persistence.
+  // DM delivery/read receipt on own messages (one check delivered / two read).
+  // Returns a <ReceiptTicks> node meant to be threaded into the message text as
+  // an inline trailing element (via MessageRenderer's `receipt` prop) so it
+  // flows on the same line and wraps with the text — matching desktop. Muted
+  // color for both states (not accent); delivered vs read differ only by one vs
+  // two checks. Display is unconditional — the master switch gates persistence.
   const renderReceipt = useCallback(
-    (item: DisplayMessage) => {
+    (item: DisplayMessage): React.ReactNode => {
       if (!isDM || item.userId !== currentUserId) return null;
       if (!item.deliveredAt && !item.readAt) return null;
-      const read = !!item.readAt;
-      // U+FE0E forces text (not emoji) presentation of the check glyph on iOS.
-      const tick = read ? '✓︎✓︎' : '✓︎';
-      return (
-        <Text
-          style={[styles.receiptIndicator, read && styles.receiptIndicatorRead]}
-          accessibilityLabel={read ? 'Read' : 'Delivered'}
-        >
-          {tick}
-        </Text>
-      );
+      return <ReceiptTicks read={!!item.readAt} color={theme.colors.textMuted} />;
     },
-    [isDM, currentUserId, styles]
+    [isDM, currentUserId, theme]
   );
 
   const renderReactions = useCallback(
@@ -1127,6 +1121,12 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
 
       const isCompact = compactMessageIds.has(item.id);
 
+      // DM receipt. Inlined into the plain-text branch (trails the last word);
+      // for the link-card branch (ends in a BrowserLink) or a bodyless message,
+      // it falls back to a compact row beneath the content.
+      const receiptNode = renderReceipt(item);
+      const receiptInlined = !(item.hasLink && item.link) && !!messageTextWithoutLink;
+
       return (
         <Pressable
           onLongPress={handleLongPress}
@@ -1202,9 +1202,12 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   onMentionPress={onUserPress ? handleMentionPress : undefined}
                   onChannelPress={onChannelLinkPress}
                   onLinkPress={onLinkPress}
+                  receipt={receiptNode}
                 />
               ) : null}
-              {renderReceipt(item)}
+              {!receiptInlined && receiptNode ? (
+                <View style={styles.receiptRow}>{receiptNode}</View>
+              ) : null}
               {/* Per-message indicators on grouped continuation rows (header hidden) */}
               {isCompact && renderCompactIndicators(item, { isSending })}
               {/* Render invite link card if detected */}
@@ -1652,16 +1655,12 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontFamily: theme.fonts.regular.fontFamily,
     marginLeft: Skin.space(6),
   },
-  // DM receipt tick — trailing, bottom-right of own message content.
-  receiptIndicator: {
-    alignSelf: 'flex-end',
-    color: theme.colors.textSubtle,
-    fontSize: Skin.font(11),
-    fontFamily: theme.fonts.regular.fontFamily,
+  // DM receipt fallback row — used when the tick can't inline into the message
+  // text (link card / bodyless message). Left-aligned beneath the content.
+  receiptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: Skin.space(2),
-  },
-  receiptIndicatorRead: {
-    color: theme.colors.primary,
   },
   // Row below a compact continuation message holding its per-message indicators
   // ((edited) + unsigned + sending), since the header is hidden when grouped.
