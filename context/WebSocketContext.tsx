@@ -90,6 +90,11 @@ import {
 } from '../services/space/modMuteStorage';
 import { buildListenHubFrame, buildLogSinceFrame } from '../services/space/hubLogSync';
 import { getHubLastSeq, setHubLastSeq } from '../services/space/hubLogCursor';
+import {
+  isInboxEnvelopePoisoned,
+  recordInboxAttempt,
+  clearInboxAttempt,
+} from '../services/space/inboxAttemptTracker';
 import { getMMKVAdapter, getConversationSync } from '../services/storage/mmkvAdapter';
 import { useAuth } from './AuthContext';
 import { useStorageAdapter } from './StorageContext';
@@ -440,6 +445,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     drained: 0,
     inflight: 0,
     defers: 0,
+    poisonSkipped: 0, // [CATCHUP-DIAG] cumulative DM envelopes dropped by the poison gate
     stage: 'init',
     stageTs: 0,
   });
@@ -565,6 +571,19 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     // Only acks the PARTNER sent (about OUR messages) are actionable. Our own
     // acks (about the partner's messages) fan out to our other devices too — a
     // self-echoed read-ack would otherwise mark our own sent messages read.
+    if (raw.type === 'delivery-ack' || raw.type === 'read-ack') {
+      // [RECEIPT-DIAG] temp, revert before PR
+      logger.warn('[RECEIPT-DIAG] ack ARRIVED on mobile', JSON.stringify({
+        type: raw.type,
+        from: raw.senderId?.slice(0, 10),
+        self: self?.slice(0, 10),
+        partner: partner?.slice(0, 10),
+        selfEcho: raw.senderId === self,
+        gateDelivery: isReceiptEnabled('delivery', partner),
+        gateRead: isReceiptEnabled('read', partner),
+        hasSvc: !!svc,
+      }));
+    }
     if (raw.type === 'delivery-ack') {
       if (svc && raw.senderId !== self && isReceiptEnabled('delivery', partner)) svc.onAckReceived(raw.messageIds ?? []);
       return true;
@@ -2924,6 +2943,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   sealedMessage.envelope
                 );
               } catch (decryptError) {
+                // [RECEIPT-DIAG] temp, revert before PR — fresh envelopes only (skip hoard reflood noise)
+                if (Date.now() - message.timestamp < 600_000) {
+                  logger.warn('[RECEIPT-DIAG] fresh DM decrypt FAILED', JSON.stringify({
+                    inbox: message.inboxAddress?.slice(0, 10), ts: message.timestamp,
+                    err: decryptError instanceof Error ? decryptError.message.slice(0, 80) : 'unknown',
+                  }));
+                }
                 // If this is a "no state" error, it's likely stale data - skip gracefully
                 if (decryptError instanceof Error && decryptError.message.includes('No encryption state')) {
                   return;
@@ -2935,10 +2961,24 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
 
           if (!decryptedText || decryptedText.length === 0 || decryptedText.startsWith('Decryption failed')) {
+            // [RECEIPT-DIAG] temp, revert before PR — fresh envelopes only
+            if (Date.now() - message.timestamp < 600_000) {
+              logger.warn('[RECEIPT-DIAG] fresh DM decrypt EMPTY/FAILED', JSON.stringify({
+                inbox: message.inboxAddress?.slice(0, 10), ts: message.timestamp,
+              }));
+            }
             return;
           }
 
           decryptedMessage = JSON.parse(decryptedText) as Message;
+          // [RECEIPT-DIAG] temp, revert before PR — fresh envelopes only
+          if (Date.now() - message.timestamp < 600_000) {
+            logger.warn('[RECEIPT-DIAG] fresh DM decrypted OK', JSON.stringify({
+              inbox: message.inboxAddress?.slice(0, 10), ts: message.timestamp,
+              type: (decryptedMessage as unknown as { type?: string }).type ?? decryptedMessage.content?.type,
+              conv: conversationId?.slice(0, 10),
+            }));
+          }
 
           // Intercept call signaling messages — forward to CallContext, don't display in chat.
           // call-event is the exception: it renders in chat history as a system message.
@@ -4866,7 +4906,33 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // results — stays flat. The loop keeps going until the queue is
       // empty; see MAX_BATCH_DRAIN_SIZE for why this matters on small
       // devices.
-      const batch = messageQueueRef.current.splice(0, MAX_BATCH_DRAIN_SIZE);
+      let batch = messageQueueRef.current.splice(0, MAX_BATCH_DRAIN_SIZE);
+
+      // Bounded-retry poison guard (DM / device-inbox only). Drop envelopes that
+      // have already failed too many times, or are old and still failing, so a
+      // permanently-undecryptable hoard can't re-enter — and re-freeze — the
+      // native batch. Channel (hub-log) entries carry __logSeq and are exempt:
+      // skipping one would gap the contiguous cursor advance later in this loop.
+      // Only DM-batch messages ever accrue attempts (see the result/timeout
+      // handling below), so nothing else can ever be poisoned here.
+      let poisonSkippedThisBatch = 0; // [CATCHUP-DIAG]
+      batch = batch.filter((m) => {
+        const isHubLog = !!(m as { __logSeq?: number }).__logSeq;
+        if (isHubLog) return true;
+        if (isInboxEnvelopePoisoned(m.inboxAddress, m.timestamp)) {
+          poisonSkippedThisBatch += 1; // [CATCHUP-DIAG]
+          return false;
+        }
+        return true;
+      });
+      if (poisonSkippedThisBatch > 0) {
+        catchupDiagRef.current.poisonSkipped += poisonSkippedThisBatch; // [CATCHUP-DIAG]
+        logger.warn( // [CATCHUP-DIAG]
+          `[poison-guard] skipped ${poisonSkippedThisBatch} dead DM envelope(s) this batch ` +
+            `(cumulative ${catchupDiagRef.current.poisonSkipped})`,
+        );
+      }
+
       catchupDiagRef.current.drained += batch.length; // [CATCHUP-DIAG]
       setDrainStage(`preclassify(batch=${batch.length})`); // [CATCHUP-DIAG]
 
@@ -4904,6 +4970,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         if (batchInput.space_groups.length > 0 || batchInput.dm_groups.length > 0) {
           const cryptoProvider = new NativeCryptoProvider();
           setDrainStage(`native-batch(sp=${batchInput.space_groups.length},dm=${batchInput.dm_groups.length})`); // [CATCHUP-DIAG]
+          // Map each DM envelope's timestamp to its inbox so the bounded-retry
+          // tracker can be updated from the native result (or a timeout) below.
+          const dmInboxByTs = new Map<number, string>();
+          for (const gp of batchInput.dm_groups) {
+            for (const mm of gp.messages) dmInboxByTs.set(mm.timestamp, mm.inbox_address);
+          }
           // Watchdog: a hung native call must not freeze the drain forever.
           let batchTimeoutId: ReturnType<typeof setTimeout> | undefined;
           const batchTimeout = new Promise<never>((_, reject) => {
@@ -4921,6 +4993,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           } catch (raceErr) {
             if (batchInput.dm_groups.length > 0) {
               dmBatchDisabledRef.current = true;
+              // Count a failed attempt for every DM envelope in the hung batch so
+              // a permanently-freezing envelope accrues toward the skip threshold
+              // and stops re-entering (and re-freezing) the batch on later
+              // connects. Each connect tags one batch (up to MAX_BATCH_DRAIN_SIZE)
+              // of the hoard, so it converges over as many connects as the hoard
+              // spans batches, then no longer stalls.
+              dmInboxByTs.forEach((inbox, ts) => recordInboxAttempt(inbox, ts));
               const summary = batchInput.dm_groups.map((gp) => ({
                 conv: gp.conversation_id?.slice(0, 12),
                 type: gp.message_type,
@@ -4967,6 +5046,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           if (batchOutput.dm_results.length > 0) {
             setDrainStage('apply-dm'); // [CATCHUP-DIAG]
             await applyDMGroupResults(batchOutput.dm_results, batch);
+            // Update the bounded-retry tracker from authoritative native statuses:
+            // clear on success (resets a recovered transient failure); count on a
+            // hard failure. 'unseal_failed' is intentionally NOT counted — those
+            // route to the JS init-envelope fallback and usually succeed there, so
+            // counting them would penalise legitimate DMs.
+            for (const gr of batchOutput.dm_results) {
+              for (const mr of gr.messages) {
+                if (mr.timestamp == null) continue;
+                const inbox = dmInboxByTs.get(mr.timestamp);
+                if (!inbox) continue;
+                if (mr.status === 'decrypted' || mr.status === 'init_decrypted') {
+                  clearInboxAttempt(inbox, mr.timestamp);
+                } else if (mr.status === 'decrypt_failed' || mr.status === 'no_state') {
+                  recordInboxAttempt(inbox, mr.timestamp);
+                }
+              }
+            }
           }
         }
 
