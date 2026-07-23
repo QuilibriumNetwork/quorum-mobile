@@ -3017,9 +3017,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             const diagKey = `${message.inboxAddress}:${message.timestamp}`;
             if (Date.now() - message.timestamp < 600_000 && !receiptDiagLogged.has(diagKey)) {
               receiptDiagLogged.add(diagKey);
+              const diagState = encryptionStateStorage.getEncryptionState(conversationId, message.inboxAddress);
               logger.warn('[RECEIPT-DIAG] fresh DM decrypt EMPTY/FAILED', JSON.stringify({
                 inbox: message.inboxAddress?.slice(0, 10), ts: message.timestamp,
                 reason: decryptedText ? decryptedText.slice(0, 120) : 'empty',
+                conv: conversationId?.slice(0, 10),
+                state: diagState
+                  ? { inboxId: diagState.inboxId?.slice(0, 10), tag: diagState.tag?.slice(0, 10), ts: diagState.timestamp, sentAccept: diagState.sentAccept }
+                  : 'NONE',
+                allStatesForConv: encryptionStateStorage.getEncryptionStates(conversationId).map(s => s.inboxId?.slice(0, 10)),
               }));
             }
             return;

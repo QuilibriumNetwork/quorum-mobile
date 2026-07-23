@@ -832,6 +832,15 @@ class EncryptionService {
         ...getInstalledInitEnvelopeTs(conversationId),
       ];
       if (isStaleInitEnvelope(envelopeTimestamp, knownTimestamps)) {
+        // [RECEIPT-DIAG] temp, revert before PR — show WHICH rule refused it
+        console.warn('[stale-init-detail]', JSON.stringify({
+          envTs: envelopeTimestamp,
+          exactMatch: knownTimestamps.includes(envelopeTimestamp),
+          newestKnown: Math.max(...knownTimestamps),
+          newestMinusEnvSec: Math.round((Math.max(...knownTimestamps) - envelopeTimestamp) / 1000),
+          stateRows: allStates.length,
+          recordedInitTs: getInstalledInitEnvelopeTs(conversationId),
+        }));
         return 'stale';
       }
     }
