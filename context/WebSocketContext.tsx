@@ -96,7 +96,6 @@ import {
   clearInboxAttempt,
   getInboxAttempts,
 } from '../services/space/inboxAttemptTracker';
-import { INIT_ENVELOPE_STALENESS_TOLERANCE_MS } from '../services/crypto/initEnvelopeGuard';
 import { getMMKVAdapter, getConversationSync } from '../services/storage/mmkvAdapter';
 import { useAuth } from './AuthContext';
 import { useStorageAdapter } from './StorageContext';
@@ -168,9 +167,6 @@ function shortAddr(address: string | undefined): string {
  * Delete messages from inbox after successful decryption
  * This prevents the same messages from being re-delivered on reconnect
  */
-// [RECEIPT-DIAG] temp, revert before PR — log each failing envelope once, not per redelivery
-const receiptDiagLogged = new Set<string>();
-
 // Envelopes already queued for server-side poison deletion this session (the
 // node may redeliver before the delete lands; don't re-request each reflood).
 const poisonDeletedKeys = new Set<string>();
@@ -465,25 +461,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // and stop native-batching DMs for the rest of the session.
   const NATIVE_BATCH_TIMEOUT_MS = 30000;
   const dmBatchDisabledRef = useRef(false);
-  // [CATCHUP-DIAG] temp counters, written to files/catchup-diag.json by the
-  // diag effect below so drain progress is readable over adb — revert before PR.
-  const catchupDiagRef = useRef({
-    liveIn: 0,
-    liveDropped: 0,
-    ingested: 0,
-    truncated: 0,
-    drained: 0,
-    inflight: 0,
-    defers: 0,
-    poisonSkipped: 0, // [CATCHUP-DIAG] cumulative DM envelopes dropped by the poison gate
-    stage: 'init',
-    stageTs: 0,
-  });
-  // [CATCHUP-DIAG] mark the drain loop's current await so a hang is visible.
-  const setDrainStage = useCallback((s: string) => {
-    catchupDiagRef.current.stage = s;
-    catchupDiagRef.current.stageTs = Date.now();
-  }, []);
   // Gate for verbose per-message / per-batch diagnostics. These build
   // JSON.stringify(batch.map(...)) payloads that are NEVER printed
   // (logger.debug sits below the logger's "log" minLevel), yet the
@@ -601,23 +578,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     // Only acks the PARTNER sent (about OUR messages) are actionable. Our own
     // acks (about the partner's messages) fan out to our other devices too — a
     // self-echoed read-ack would otherwise mark our own sent messages read.
-    if (raw.type === 'delivery-ack' || raw.type === 'read-ack') {
-      // [RECEIPT-DIAG] temp, revert before PR — once per unique ack (redeliveries silent)
-      const ackKey = `${raw.type}:${raw.senderId}:${raw.upToMessageId ?? (raw.messageIds ?? []).join(',')}`;
-      if (!receiptDiagLogged.has(ackKey)) {
-        receiptDiagLogged.add(ackKey);
-        logger.warn('[RECEIPT-DIAG] ack ARRIVED on mobile', JSON.stringify({
-          type: raw.type,
-          from: raw.senderId?.slice(0, 10),
-          self: self?.slice(0, 10),
-          partner: partner?.slice(0, 10),
-          selfEcho: raw.senderId === self,
-          gateDelivery: isReceiptEnabled('delivery', partner),
-          gateRead: isReceiptEnabled('read', partner),
-          hasSvc: !!svc,
-        }));
-      }
-    }
     if (raw.type === 'delivery-ack') {
       if (svc && raw.senderId !== self && isReceiptEnabled('delivery', partner)) svc.onAckReceived(raw.messageIds ?? []);
       return true;
@@ -2770,7 +2730,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 inbox: message.inboxAddress?.slice(0, 10),
                 ts: message.timestamp,
                 ageSec: Math.round((Date.now() - message.timestamp) / 1000),
-                tolMin: INIT_ENVELOPE_STALENESS_TOLERANCE_MS / 60000,
               }));
               getDeviceKeyset().then(dk => {
                 if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
@@ -3060,15 +3019,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 // Bound the redelivery loop: an undecryptable envelope replays
                 // forever otherwise (JS path had no attempt counting).
                 recordInboxAttempt(message.inboxAddress, message.timestamp);
-                // [RECEIPT-DIAG] temp, revert before PR — fresh envelopes only, once per envelope
-                const diagKey = `${message.inboxAddress}:${message.timestamp}`;
-                if (Date.now() - message.timestamp < 600_000 && !receiptDiagLogged.has(diagKey)) {
-                  receiptDiagLogged.add(diagKey);
-                  logger.warn('[RECEIPT-DIAG] fresh DM decrypt FAILED', JSON.stringify({
-                    inbox: message.inboxAddress?.slice(0, 10), ts: message.timestamp,
-                    err: decryptError instanceof Error ? decryptError.message.slice(0, 120) : 'unknown',
-                  }));
-                }
                 // If this is a "no state" error, it's likely stale data - skip gracefully
                 if (decryptError instanceof Error && decryptError.message.includes('No encryption state')) {
                   return;
@@ -3083,33 +3033,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // Bound the redelivery loop: an undecryptable envelope replays
             // forever otherwise (JS path had no attempt counting).
             recordInboxAttempt(message.inboxAddress, message.timestamp);
-            // [RECEIPT-DIAG] temp, revert before PR — fresh envelopes only, once per envelope
-            const diagKey = `${message.inboxAddress}:${message.timestamp}`;
-            if (Date.now() - message.timestamp < 600_000 && !receiptDiagLogged.has(diagKey)) {
-              receiptDiagLogged.add(diagKey);
-              const diagState = encryptionStateStorage.getEncryptionState(conversationId, message.inboxAddress);
-              logger.warn('[RECEIPT-DIAG] fresh DM decrypt EMPTY/FAILED', JSON.stringify({
-                inbox: message.inboxAddress?.slice(0, 10), ts: message.timestamp,
-                reason: decryptedText ? decryptedText.slice(0, 120) : 'empty',
-                conv: conversationId?.slice(0, 10),
-                state: diagState
-                  ? { inboxId: diagState.inboxId?.slice(0, 10), tag: diagState.tag?.slice(0, 10), ts: diagState.timestamp, sentAccept: diagState.sentAccept }
-                  : 'NONE',
-                allStatesForConv: encryptionStateStorage.getEncryptionStates(conversationId).map(s => s.inboxId?.slice(0, 10)),
-              }));
-            }
             return;
           }
 
           decryptedMessage = JSON.parse(decryptedText) as Message;
-          // [RECEIPT-DIAG] temp, revert before PR — fresh envelopes only
-          if (Date.now() - message.timestamp < 600_000) {
-            logger.warn('[RECEIPT-DIAG] fresh DM decrypted OK', JSON.stringify({
-              inbox: message.inboxAddress?.slice(0, 10), ts: message.timestamp,
-              type: (decryptedMessage as unknown as { type?: string }).type ?? decryptedMessage.content?.type,
-              conv: conversationId?.slice(0, 10),
-            }));
-          }
 
           // Intercept call signaling messages — forward to CallContext, don't display in chat.
           // call-event is the exception: it renders in chat history as a system message.
@@ -5055,7 +4982,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // skipping one would gap the contiguous cursor advance later in this loop.
       // Only DM-batch messages ever accrue attempts (see the result/timeout
       // handling below), so nothing else can ever be poisoned here.
-      let poisonSkippedThisBatch = 0; // [CATCHUP-DIAG]
+      let poisonSkippedThisBatch = 0;
       // Poisoned envelopes that are ALSO old get deleted from the server so
       // they stop re-downloading on every connect (the reflood that makes the
       // drain minutes-slow). Double condition: poisoned (5 failed attempts, or
@@ -5066,7 +4993,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         const isHubLog = !!(m as { __logSeq?: number }).__logSeq;
         if (isHubLog) return true;
         if (isInboxEnvelopePoisoned(m.inboxAddress, m.timestamp)) {
-          poisonSkippedThisBatch += 1; // [CATCHUP-DIAG]
+          poisonSkippedThisBatch += 1;
           const deleteKey = `${m.inboxAddress}:${m.timestamp}`;
           if (
             Date.now() - m.timestamp > 7 * 24 * 60 * 60 * 1000 &&
@@ -5086,10 +5013,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         return true;
       });
       if (poisonSkippedThisBatch > 0) {
-        catchupDiagRef.current.poisonSkipped += poisonSkippedThisBatch; // [CATCHUP-DIAG]
-        logger.warn( // [CATCHUP-DIAG]
-          `[poison-guard] skipped ${poisonSkippedThisBatch} dead DM envelope(s) this batch ` +
-            `(cumulative ${catchupDiagRef.current.poisonSkipped})`,
+        logger.warn(
+          `[poison-guard] skipped ${poisonSkippedThisBatch} undecryptable DM envelope(s) this batch`,
         );
       }
       if (poisonDeleteByInbox.size > 0) {
@@ -5111,8 +5036,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         });
       }
 
-      catchupDiagRef.current.drained += batch.length; // [CATCHUP-DIAG]
-      setDrainStage(`preclassify(batch=${batch.length})`); // [CATCHUP-DIAG]
 
       try {
         // Classify messages and gather crypto state
@@ -5147,7 +5070,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // Process batch natively if there are batchable messages
         if (batchInput.space_groups.length > 0 || batchInput.dm_groups.length > 0) {
           const cryptoProvider = new NativeCryptoProvider();
-          setDrainStage(`native-batch(sp=${batchInput.space_groups.length},dm=${batchInput.dm_groups.length})`); // [CATCHUP-DIAG]
           // Map each DM envelope's timestamp to its inbox so the bounded-retry
           // tracker can be updated from the native result (or a timeout) below.
           const dmInboxByTs = new Map<number, string>();
@@ -5178,22 +5100,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // of the hoard, so it converges over as many connects as the hoard
               // spans batches, then no longer stalls.
               dmInboxByTs.forEach((inbox, ts) => recordInboxAttempt(inbox, ts));
-              const summary = batchInput.dm_groups.map((gp) => ({
-                conv: gp.conversation_id?.slice(0, 12),
-                type: gp.message_type,
-                states: gp.dr_states.length,
-                msgs: gp.messages.map((mm) => ({
-                  ts: mm.timestamp,
-                  init: mm.is_init_envelope,
-                  dr: mm.is_double_ratchet_envelope,
-                  len: mm.encrypted_content?.length,
-                })),
-              }));
               logger.warn(
                 '[poison-guard] native batch timed out — DM batching disabled for this session',
-                JSON.stringify(summary),
               );
-              (catchupDiagRef.current as Record<string, unknown>).poison = summary; // [CATCHUP-DIAG]
             }
             throw raceErr; // outer catch routes the batch to individual processing
           } finally {
@@ -5218,11 +5127,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
           // Apply results
           if (batchOutput.space_results.length > 0) {
-            setDrainStage('apply-space'); // [CATCHUP-DIAG]
             await applySpaceGroupResults(batchOutput.space_results, batch);
           }
           if (batchOutput.dm_results.length > 0) {
-            setDrainStage('apply-dm'); // [CATCHUP-DIAG]
             await applyDMGroupResults(batchOutput.dm_results, batch);
             // Update the bounded-retry tracker from authoritative native statuses:
             // clear on success (resets a recovered transient failure); count on a
@@ -5248,14 +5155,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         for (let i = 0; i < nonBatchMessages.length; i++) {
           // Yield to UI thread every 5 messages to prevent jank
           if (i % 5 === 0) {
-            setDrainStage(`nb-im(${i}/${nonBatchMessages.length})`); // [CATCHUP-DIAG]
             await new Promise<void>(resolve => {
               InteractionManager.runAfterInteractions(() => resolve());
             });
           }
 
           try {
-            setDrainStage(`nb-msg(${i}/${nonBatchMessages.length})`); // [CATCHUP-DIAG]
             await handleIncomingMessage(nonBatchMessages[i]);
           } catch { /* ignore */ }
 
@@ -5272,19 +5177,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
       } catch (batchError) {
         // Fallback: if batch processing fails entirely, process all individually
-        setDrainStage('fallback-preunseal'); // [CATCHUP-DIAG]
         await batchPreUnsealSpaceMessages(batch);
-        let fbIdx = 0; // [CATCHUP-DIAG]
         for (const message of batch) {
-          setDrainStage(`fallback-im(${fbIdx}/${batch.length})`); // [CATCHUP-DIAG]
           await new Promise<void>(resolve => {
             InteractionManager.runAfterInteractions(() => resolve());
           });
           try {
-            setDrainStage(`fallback-msg(${fbIdx}/${batch.length})`); // [CATCHUP-DIAG]
             await handleIncomingMessage(message);
           } catch { /* ignore */ }
-          fbIdx += 1; // [CATCHUP-DIAG]
         }
       }
 
@@ -5318,12 +5218,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // allocations are reclaimed before the next slice builds — keeps
       // peak RSS flat across a large catch-up instead of stacking.
       if (messageQueueRef.current.length > 0) {
-        setDrainStage('drain-yield'); // [CATCHUP-DIAG]
         await new Promise(resolve => setTimeout(resolve, 0));
       }
     }
 
-    setDrainStage('idle'); // [CATCHUP-DIAG]
     isProcessingQueueRef.current = false;
   }, [handleIncomingMessage, batchPreUnsealSpaceMessages, preclassifyAndGatherState, applySpaceGroupResults, applyDMGroupResults]);
 
@@ -5367,9 +5265,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     if (messageQueueRef.current.length >= MAX_MESSAGE_QUEUE_SIZE) {
       const excess = messageQueueRef.current.length - MAX_MESSAGE_QUEUE_SIZE + 1;
       messageQueueRef.current.splice(0, excess);
-      catchupDiagRef.current.liveDropped += excess; // [CATCHUP-DIAG]
     }
-    catchupDiagRef.current.liveIn += 1; // [CATCHUP-DIAG]
     messageQueueRef.current.push(message);
     // Start processing if not already in progress
     processMessageQueue();
@@ -5778,12 +5674,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     const INFLIGHT_TIMEOUT_MS = 30000;
     const DEFER_RETRY_MS = 250;
 
-    // [CATCHUP-DIAG]
-    const syncDiag = () => {
-      catchupDiagRef.current.inflight = inflight.size;
-      catchupDiagRef.current.defers = deferTimers.size;
-    };
-
     const requestLogSince = async (hubAddress: string, since: number) => {
       if (cancelled) return;
       // Expire in-flight requests whose result never came back so they
@@ -5809,7 +5699,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }, DEFER_RETRY_MS),
           );
         }
-        syncDiag(); // [CATCHUP-DIAG]
         return;
       }
       const space = getSpaceByHubAddress(hubAddress);
@@ -5827,7 +5716,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       } catch {
         inflight.delete(hubAddress);
       }
-      syncDiag(); // [CATCHUP-DIAG]
     };
 
     const ingestEntries = (
@@ -5850,13 +5738,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // cursor; the caller refetches from lastVisited. Dropping oldest
           // here punched the seq gap that wedged the cursor.
           truncated = true;
-          catchupDiagRef.current.truncated += 1; // [CATCHUP-DIAG]
           break;
         }
         lastVisited = entry.seq;
         const sealedEnvelope = entry.payload?.data;
         if (!sealedEnvelope) continue;
-        catchupDiagRef.current.ingested += 1; // [CATCHUP-DIAG]
         // Tag with __logSeq / __logHub so processMessageQueue can advance the
         // hub cursor only after persistence — see post-batch hook there.
         const synthetic = {
@@ -5882,7 +5768,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       if (!hubAddress) return;
       if (frame.type === 'log-since-result') {
         inflight.delete(hubAddress);
-        syncDiag(); // [CATCHUP-DIAG]
         const { lastVisited, truncated } = ingestEntries(hubAddress, frame.entries);
         if (truncated) {
           // Queue filled mid-page: refetch the tail we didn't enqueue.
@@ -5972,31 +5857,6 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       unsubscribe();
     };
   }, [connectionState, registerLogFrameHandler, enqueueOutbound, processMessageQueue]);
-
-  // [CATCHUP-DIAG] Write catch-up state to files/catchup-diag.json every 5s so
-  // drain progress is readable over adb (read-catchup-diag.ps1) — revert before PR.
-  useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const { File, Paths } = await import('expo-file-system');
-        const cursors: Record<string, number> = {};
-        for (const spaceId of getSpaceIds()) {
-          const hub = getSpaceKey(spaceId, 'hub');
-          if (hub?.address) {
-            cursors[hub.address.slice(0, 8)] = getHubLastSeq(hub.address);
-          }
-        }
-        const payload = JSON.stringify({
-          updated: Date.now(),
-          queue: messageQueueRef.current.length,
-          ...catchupDiagRef.current,
-          cursors,
-        });
-        new File(Paths.document, 'catchup-diag.json').write(payload);
-      } catch { /* diag only */ }
-    }, 5000);
-    return () => clearInterval(id);
-  }, []);
 
   // On-connect catch-up is handled exclusively by the per-hub log effect
   // above — listen-hub + log-since fetches everything since the stored
