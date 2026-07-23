@@ -21,6 +21,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { MessageActionSheet } from './MessageActionSheet';
 import { MessageRenderer } from './MessageRenderer';
 import { ReceiptTicks } from './ReceiptTicks';
+import { UnsignedIndicator } from './UnsignedIndicator';
 import { EditHistoryModal } from './EditHistoryModal';
 import { ReactionDetailsModal } from './ReactionDetailsModal';
 import { SpaceCallBubble } from './SpaceCallBubble';
@@ -758,15 +759,46 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     [showToast, styles, theme]
   );
 
+  // Inline variant of the unsigned warning — trails the last word of the message
+  // text (before the receipt) instead of sitting in the header. Same gate as
+  // renderUnsignedWarning; tappable to surface the same explanation toast.
+  const showUnsignedToast = useCallback(
+    () =>
+      showToast({
+        type: 'info',
+        title: 'Unsigned message',
+        message: 'Message does not have a valid signature, this may not be from the sender.',
+      }),
+    [showToast]
+  );
+  const renderUnsignedInline = useCallback(
+    (item: DisplayMessage): React.ReactNode => {
+      if (item.renderType === 'system' || item.renderType === 'error') return null;
+      if (item.originalMessage?.signature) return null;
+      if (item.sendStatus === 'sending' || item.sendStatus === 'failed') return null;
+      return (
+        // Yellow tint for the inline warning. (Header/media unsigned still uses
+        // theme.colors.warning; see renderUnsignedWarning.)
+        <UnsignedIndicator color="#EAB308" onPress={showUnsignedToast} size={13} />
+      );
+    },
+    [showUnsignedToast]
+  );
+
   // On compact continuation rows the whole header is hidden, dropping the
   // per-message indicators. Reproduce the two that matter — (edited) + unsigned —
   // on one small row below the content. Pinned/bookmark are deliberately omitted
   // (they have dedicated surfaces). The sending spinner is included since it's
   // also dropped on compact rows today. Returns null when there's nothing to show.
   const renderCompactIndicators = useCallback(
-    (item: DisplayMessage, opts?: { isSending?: boolean }) => {
+    (item: DisplayMessage, opts?: { isSending?: boolean; showUnsigned?: boolean }) => {
       const isEdited = item.isEdited;
+      // Text posts render the unsigned warning inline in the message text, so
+      // they opt out here (showUnsigned:false). Media rows have no inline text,
+      // so they keep it in this compact row (default true).
+      const allowUnsigned = opts?.showUnsigned !== false;
       const showUnsigned =
+        allowUnsigned &&
         item.renderType !== 'system' &&
         item.renderType !== 'error' &&
         !item.originalMessage?.signature &&
@@ -777,7 +809,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       return (
         <View style={styles.compactIndicatorRow}>
           {isEdited && <Text style={styles.editedIndicator}>(edited)</Text>}
-          {renderUnsignedWarning(item)}
+          {showUnsigned && renderUnsignedWarning(item)}
           {isSending && (
             <ActivityIndicator
               size="small"
@@ -1165,7 +1197,17 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       // for the link-card branch (ends in a BrowserLink) or a bodyless message,
       // it falls back to a compact row beneath the content.
       const receiptNode = renderReceipt(item);
-      const receiptInlined = !(item.hasLink && item.link) && !!messageTextWithoutLink;
+      // Trailing inline group: unsigned warning first, then the receipt. Both
+      // trail the last word of the message text (and wrap with it). Composed
+      // here so ordering is guaranteed regardless of the underlying renderer.
+      const unsignedNode = renderUnsignedInline(item);
+      const trailingInline = unsignedNode || receiptNode ? (
+        <>
+          {unsignedNode}
+          {receiptNode}
+        </>
+      ) : null;
+      const trailingInlined = !(item.hasLink && item.link) && !!messageTextWithoutLink;
 
       return (
         <Pressable
@@ -1185,7 +1227,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                 {item.isEdited && (
                   <Text style={styles.editedIndicator}>(edited)</Text>
                 )}
-                {renderUnsignedWarning(item)}
+                {/* Unsigned warning moved inline (trails the message text). */}
                 {isSending && (
                   <ActivityIndicator
                     size="small"
@@ -1242,14 +1284,15 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   onMentionPress={onUserPress ? handleMentionPress : undefined}
                   onChannelPress={onChannelLinkPress}
                   onLinkPress={onLinkPress}
-                  receipt={receiptNode}
+                  receipt={trailingInline}
                 />
               ) : null}
-              {!receiptInlined && receiptNode ? (
-                <View style={styles.receiptRow}>{receiptNode}</View>
+              {!trailingInlined && trailingInline ? (
+                <View style={styles.receiptRow}>{trailingInline}</View>
               ) : null}
-              {/* Per-message indicators on grouped continuation rows (header hidden) */}
-              {isCompact && renderCompactIndicators(item, { isSending })}
+              {/* Per-message indicators on grouped continuation rows (header hidden).
+                  Unsigned is inline in the text, so opt out of it here. */}
+              {isCompact && renderCompactIndicators(item, { isSending, showUnsigned: false })}
               {/* Render invite link card if detected */}
               {inviteLink && (
                 <InviteLinkCard
@@ -1288,7 +1331,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedWarning, renderCompactIndicators, renderReceipt, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds]
+    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedInline, renderCompactIndicators, renderReceipt, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds]
   );
 
   const renderCast = useCallback(
