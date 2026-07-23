@@ -2877,7 +2877,26 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   const existingStates = encryptionStateStorage.getEncryptionStates(conversationId);
                   const hasExistingSession = existingStates.length > 0;
 
-                  if (hasExistingSession) {
+                  // === Session CONFIRMATION (SDK/desktop parity) ===
+                  // If this inbox holds an UNCONFIRMED sender session (we
+                  // initiated; sendingInbox pub key still ''), the peer's
+                  // first init-wrapped reply confirms it: fills the peer's
+                  // real return inbox + sets sentAccept, ending the
+                  // init-wrapping churn on both sides. Falls through to the
+                  // pre-existing paths whenever this isn't a confirm case.
+                  const confirmResult = await encryptionService.confirmSenderSession(
+                    conversationId,
+                    message.inboxAddress,
+                    unsealed
+                  );
+                  if (confirmResult) {
+                    logger.warn('[session-confirm] sender session CONFIRMED', JSON.stringify({
+                      conv: conversationId?.slice(0, 10),
+                      inbox: message.inboxAddress?.slice(0, 10),
+                    }));
+                    decryptedText = confirmResult.message;
+                    userProfileFromEnvelope = confirmResult.userProfile;
+                  } else if (hasExistingSession) {
                     // === Use existing session to decrypt ===
                     // The message is wrapped in InitEnvelope but we already have a session
                     // Try to decrypt with existing states (trial decryption)
@@ -2908,18 +2927,29 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
                     // IMPORTANT: Update sendingInbox from the InitEnvelope
                     // This tells us where to send future replies (the sender's return inbox)
-                    if (unsealed.return_inbox_address && unsealed.return_inbox_encryption_key) {
+                    // SDK-parity: only patch the sendingInbox when the envelope
+                    // carries the FULL field set (a partial envelope must not
+                    // half-confirm the session), store the private key too, and
+                    // mark sentAccept — semantically identical to
+                    // confirmSenderSession's save.
+                    if (
+                      unsealed.return_inbox_address &&
+                      unsealed.return_inbox_encryption_key &&
+                      unsealed.return_inbox_public_key &&
+                      unsealed.return_inbox_private_key
+                    ) {
                       const currentState = encryptionStateStorage.getEncryptionState(conversationId, successInboxId);
                       if (currentState) {
                         const updatedSendingInbox = {
                           inbox_address: unsealed.return_inbox_address,
                           inbox_encryption_key: unsealed.return_inbox_encryption_key,
-                          inbox_public_key: unsealed.return_inbox_public_key || '',
-                          inbox_private_key: '',
+                          inbox_public_key: unsealed.return_inbox_public_key,
+                          inbox_private_key: unsealed.return_inbox_private_key,
                         };
                         encryptionStateStorage.saveEncryptionState({
                           ...currentState,
                           sendingInbox: updatedSendingInbox,
+                          sentAccept: true,
                         }, false);
                         ratchetStateCacheRef.current.clear();
                       }

@@ -506,6 +506,94 @@ class EncryptionService {
   }
 
   /**
+   * Confirm an unconfirmed Double Ratchet SENDER session from the peer's
+   * first reply — mobile port of the SDK's ConfirmDoubleRatchetSenderSession
+   * (quilibrium-js-sdk-channels channel.ts) as used by desktop
+   * (MessageService.ts Confirm branch).
+   *
+   * The initiator's state starts with sendingInbox.inbox_public_key === ''
+   * ("unconfirmed"); while unconfirmed, every send is wrapped in an
+   * InitializationEnvelope. The peer's first reply (itself init-wrapped)
+   * carries the peer's full return_inbox_* — processing it here fills the
+   * sendingInbox, sets sentAccept, and ends the init-wrapping on both sides.
+   *
+   * Composed entirely from existing primitives (DR decrypt + state
+   * bookkeeping); no new cryptography. Returns null whenever this is not a
+   * confirmable case, so callers fall back to the pre-existing behavior.
+   */
+  async confirmSenderSession(
+    conversationId: string,
+    receivedOnInboxAddress: string,
+    unsealed: UnsealedEnvelope
+  ): Promise<{ message: string; userProfile?: { displayName?: string; userIcon?: string } } | null> {
+    return ratchetMutex.runExclusive(conversationId, async () => {
+      const state = encryptionStateStorage.getEncryptionState(conversationId, receivedOnInboxAddress);
+      // Only an UNCONFIRMED sender session is a confirm case (SDK throws
+      // 'inbox key already set' otherwise; we return null and let the
+      // normal DR/init paths handle it).
+      if (!state) return null;
+      if (state.sendingInbox?.inbox_public_key) return null;
+
+      // SDK validation: ALL initialization fields must be present — a
+      // partial envelope must not half-confirm the session.
+      if (
+        !unsealed.return_inbox_address ||
+        !unsealed.return_inbox_encryption_key ||
+        !unsealed.return_inbox_private_key ||
+        !unsealed.return_inbox_public_key ||
+        !unsealed.tag ||
+        !unsealed.message ||
+        !unsealed.user_address
+      ) {
+        return null;
+      }
+
+      // Decrypt the inner DR envelope with the sender session's ratchet.
+      let envelopeStr = unsealed.message;
+      if (envelopeStr.includes('\\')) {
+        envelopeStr = envelopeStr.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      }
+      const decryptResult = await this.cryptoProvider.doubleRatchetDecrypt({
+        ratchet_state: state.state,
+        envelope: envelopeStr,
+      });
+      const resultWithError = decryptResult as typeof decryptResult & { decryptionError?: string };
+      if (resultWithError.decryptionError || decryptResult.message.length === 0) {
+        // Signal rule: a bad frame never destroys the session — leave the
+        // state untouched and let the caller fall back.
+        return null;
+      }
+      const decryptedMessage = textDecoder.decode(new Uint8Array(decryptResult.message));
+
+      // Persist the CONFIRMED state immediately, inside the lock (desktop
+      // parity: accept plaintext + store state changes is one atomic step).
+      const confirmedState: EncryptionState = {
+        state: decryptResult.ratchet_state,
+        timestamp: Date.now(),
+        conversationId,
+        inboxId: state.inboxId,
+        sentAccept: true,
+        sendingInbox: {
+          inbox_address: unsealed.return_inbox_address,
+          inbox_encryption_key: unsealed.return_inbox_encryption_key,
+          inbox_public_key: unsealed.return_inbox_public_key,
+          inbox_private_key: unsealed.return_inbox_private_key,
+        },
+        tag: unsealed.tag,
+      };
+      encryptionStateStorage.saveEncryptionState(confirmedState, true);
+      // Route future received replies on the peer's return inbox to this
+      // conversation.
+      encryptionStateStorage.saveInboxMapping(unsealed.return_inbox_address, conversationId);
+
+      const userProfile = (unsealed.display_name || unsealed.user_icon)
+        ? { displayName: unsealed.display_name, userIcon: unsealed.user_icon }
+        : undefined;
+      return { message: decryptedMessage, userProfile };
+    });
+  }
+
+  /**
    * Check if a session exists for a conversation
    */
   hasSession(conversationId: string): boolean {
