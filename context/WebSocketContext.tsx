@@ -2726,7 +2726,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // a ratchet the sender no longer holds. Delete it server-side
               // so it cannot be redelivered (defuse the mine), keep the
               // current session.
-              logger.warn('[stale-init] refused zombie init envelope (device inbox)', JSON.stringify({
+              logger.debug('[stale-init] refused zombie init envelope (device inbox)', JSON.stringify({
                 inbox: message.inboxAddress?.slice(0, 10),
                 ts: message.timestamp,
                 ageSec: Math.round((Date.now() - message.timestamp) / 1000),
@@ -2960,7 +2960,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     if (sessionResult === 'stale') {
                       // Redelivered/zombie init envelope refused by the
                       // staleness guard — see the device-inbox twin above.
-                      logger.warn('[stale-init] refused zombie init envelope (conversation inbox)', JSON.stringify({
+                      logger.debug('[stale-init] refused zombie init envelope (conversation inbox)', JSON.stringify({
                         inbox: message.inboxAddress?.slice(0, 10),
                         ts: message.timestamp,
                         ageSec: Math.round((Date.now() - message.timestamp) / 1000),
@@ -5013,7 +5013,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         return true;
       });
       if (poisonSkippedThisBatch > 0) {
-        logger.warn(
+        logger.debug(
           `[poison-guard] skipped ${poisonSkippedThisBatch} undecryptable DM envelope(s) this batch`,
         );
       }
