@@ -72,6 +72,37 @@ export function resetDMSession(conversationId: string): void {
 
 import type { MessagesPage, InfiniteMessagesData } from './queryTypes';
 
+// ============================================================================
+// [SEND-TIMING] Temporary instrumentation for the ~10s DM send latency bug
+// (.agents/bugs/2026-07-24-dm-send-latency-10s-production.md). Strip before
+// merging. logger.warn is used because logger.debug is filtered from the dev
+// terminal.
+// ============================================================================
+
+/**
+ * Event-loop lag probe: while active, measures how late a 250ms interval
+ * fires. Sustained large lag = the JS thread is saturated by long tasks,
+ * which would inflate EVERY await in the send path (including "sign").
+ * Auto-stops after durationMs.
+ */
+function startJsLagProbe(durationMs = 20000): void {
+  let last = Date.now();
+  let maxLag = 0;
+  const id = setInterval(() => {
+    const now = Date.now();
+    const lag = now - last - 250;
+    last = now;
+    if (lag > maxLag) maxLag = lag;
+    if (lag > 200) {
+      logger.warn(`[SEND-TIMING] JS-loop lag spike: ${lag}ms`);
+    }
+  }, 250);
+  setTimeout(() => {
+    clearInterval(id);
+    logger.warn(`[SEND-TIMING] JS-loop probe done, maxLag=${maxLag}ms over ${durationMs}ms`);
+  }, durationMs);
+}
+
 /**
  * Generate a messageId using SHA-256 hash, matching desktop implementation.
  * The hash is computed from: nonce + 'post' + senderAddress + messageContent
@@ -98,8 +129,11 @@ function generateMessageIdHash(
  */
 async function signMessageIdHash(messageIdBytes: Uint8Array): Promise<{ signature: string; publicKey: string } | null> {
   try {
+    const t0 = Date.now();
     const privateKeyHex = await getPrivateKey();
+    const t1 = Date.now();
     const publicKeyHex = await getPublicKey();
+    const t2 = Date.now();
 
     if (!privateKeyHex || !publicKeyHex) {
       return null;
@@ -114,7 +148,12 @@ async function signMessageIdHash(messageIdBytes: Uint8Array): Promise<{ signatur
 
     // Sign with Ed448
     const signingProvider = new NativeSigningProvider();
+    const t3 = Date.now();
     const signatureBase64 = await signingProvider.signEd448(privateKeyBase64, messageBase64);
+    const t4 = Date.now();
+    logger.warn(
+      `[SEND-TIMING] sign breakdown: getPrivateKey=${t1 - t0}ms getPublicKey=${t2 - t1}ms nativeSignEd448=${t4 - t3}ms total=${t4 - t0}ms`,
+    );
 
     // Convert signature from base64 to hex
     const signatureBytes = atob(signatureBase64);
@@ -177,6 +216,9 @@ export function useSendDirectMessage() {
       skipSigning,
     }: SendDirectMessageParams): Promise<Message> => {
       const senderId = user?.address ?? 'unknown';
+      const tSend0 = Date.now();
+      startJsLagProbe();
+      logger.warn(`[SEND-TIMING] mutationFn start`);
 
       // Use pre-generated values from onMutate, or generate new ones
       const nonce = _nonce ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -233,6 +275,7 @@ export function useSendDirectMessage() {
           message.publicKey = signatureData.publicKey;
         }
       }
+      logger.warn(`[SEND-TIMING] after sign: +${Date.now() - tSend0}ms`);
 
       // E2E encryption is required for direct messages
       const hasDeviceKeys = encryptionService.hasDeviceKeys();
@@ -253,7 +296,9 @@ export function useSendDirectMessage() {
       // stale isConnected) must not drop the send. Mirrors the DM delete/edit paths.
 
       // Get our device keyset for the InitializationEnvelope
+      const tKeyset0 = Date.now();
       const deviceKeyset = await getDeviceKeyset();
+      logger.warn(`[SEND-TIMING] getDeviceKeyset=${Date.now() - tKeyset0}ms (+${Date.now() - tSend0}ms)`);
       if (!deviceKeyset) {
         throw new Error('Device keyset not found. Please re-register.');
       }
@@ -286,18 +331,22 @@ export function useSendDirectMessage() {
 
       // If no devices and no existing sessions, try to fetch registrations
       if (allTargetDevices.length === 0) {
+        const tReg0 = Date.now();
         const { toAllDeviceInfos } = await import('./useRecipientRegistration');
 
         try {
           // Fetch recipient registration
           const recipientReg = await apiClient.fetchUserRegistration(recipientAddress);
+          logger.warn(`[SEND-TIMING] fetchUserRegistration(recipient)=${Date.now() - tReg0}ms`);
           if (recipientReg) {
             const recipientDevices = toAllDeviceInfos(recipientReg);
             allTargetDevices = [...recipientDevices];
           }
 
           // Fetch our own registration (for other devices)
+          const tReg1 = Date.now();
           const senderReg = await apiClient.fetchUserRegistration(senderId);
+          logger.warn(`[SEND-TIMING] fetchUserRegistration(sender)=${Date.now() - tReg1}ms`);
           if (senderReg) {
             const senderDevices = toAllDeviceInfos(senderReg);
             const otherSenderDevices = senderDevices.filter(
@@ -321,6 +370,9 @@ export function useSendDirectMessage() {
       );
 
       // Send to all target device inboxes (multi-device support)
+      logger.warn(
+        `[SEND-TIMING] devices gathered: ${allTargetDevices.length} target(s) (+${Date.now() - tSend0}ms), entering sendEncryptedMessageToAllDevices`,
+      );
       await sendEncryptedMessageToAllDevices(
         conversationId,
         recipientAddress,
@@ -338,8 +390,12 @@ export function useSendDirectMessage() {
         // Flip the bubble to 'sent' only when the message actually transmits
         // (fires inside the socket-OPEN drain). Until then it stays 'sending',
         // so an offline/queued message is never shown as sent.
-        () => markDmMessageSent(recipientAddress, message.messageId)
+        () => {
+          logger.warn(`[SEND-TIMING] onFlushed (actual transmit): +${Date.now() - tSend0}ms from mutationFn start`);
+          markDmMessageSent(recipientAddress, message.messageId);
+        }
       );
+      logger.warn(`[SEND-TIMING] mutationFn done (queued): +${Date.now() - tSend0}ms`);
 
       // Return the signed message but keep it in its optimistic 'sending' state:
       // onSuccess attaches the signature, and the onFlushed callback above flips
@@ -886,7 +942,14 @@ export async function sendEncryptedMessageToAllDevices(
   const cryptoProvider = new NativeCryptoProvider();
 
   // Get all existing encryption states for this conversation
+  // [SEND-TIMING] This is the junk-state hot spot candidate: one synchronous
+  // MMKV read + JSON.parse PER state row, on the JS thread. rows= is the
+  // direct measurement of the churn-debris hypothesis (8052 rows seen).
+  const tStates0 = Date.now();
   const existingStates = encryptionStateStorage.getEncryptionStates(conversationId);
+  logger.warn(
+    `[SEND-TIMING] getEncryptionStates: rows=${existingStates.length} took=${Date.now() - tStates0}ms`,
+  );
   const existingInboxTags = new Set(existingStates.map((s) => s.tag).filter(Boolean));
 
   // Determine which devices need new sessions vs existing sessions
@@ -911,9 +974,14 @@ export async function sendEncryptedMessageToAllDevices(
     }
   }
 
+  logger.warn(
+    `[SEND-TIMING] session split: newSession=${devicesNeedingNewSession.length} existingSession=${devicesWithExistingSession.length}`,
+  );
+
   // For new sessions, generate conversation inbox keypairs BEFORE enqueuing
   // so we can properly subscribe to them
   // Generate all keypairs in parallel for better performance
+  const tPrep0 = Date.now();
   const newSessionPrepData = await Promise.all(
     devicesNeedingNewSession.map(async (device) => {
       // Generate X448 for encryption, Ed448 for signing - in parallel
@@ -947,19 +1015,29 @@ export async function sendEncryptedMessageToAllDevices(
     })
   );
 
+  logger.warn(`[SEND-TIMING] new-session keypair prep=${Date.now() - tPrep0}ms`);
+
   // Subscribe to all conversation inboxes in parallel
   const inboxAddresses = newSessionPrepData.map((p) => p.conversationInboxAddress);
   if (inboxAddresses.length > 0) {
+    const tSub0 = Date.now();
     await subscribe(inboxAddresses);
+    logger.warn(`[SEND-TIMING] subscribe(${inboxAddresses.length})=${Date.now() - tSub0}ms`);
   }
 
   // Enqueue all outbound messages
+  const tEnqueue = Date.now();
   enqueueOutbound(async () => {
+    // Queue wait = time this prepare callback spent waiting for its slot in
+    // the WS client's processQueues drain (serialized behind inbound work).
+    logger.warn(`[SEND-TIMING] prep callback start, queueWait=${Date.now() - tEnqueue}ms`);
+    const tPrepCb0 = Date.now();
     const outbounds: string[] = [];
 
     // === Handle new sessions ===
     for (const prep of newSessionPrepData) {
       const { device, conversationInboxAddress, conversationInboxKeypair, conversationSigningKeypair } = prep;
+      const tDev0 = Date.now();
 
       // Encrypt with Double Ratchet using the new device method
       // This forces a new session to be established for this specific device
@@ -975,6 +1053,9 @@ export async function sendEncryptedMessageToAllDevices(
         JSON.stringify(message),
         conversationInboxAddress,
         device.inboxAddress  // Use device's inbox as the tag
+      );
+      logger.warn(
+        `[SEND-TIMING] new-session encrypt for ${device.inboxAddress.slice(0, 12)}: ${Date.now() - tDev0}ms`,
       );
 
       // Get X3DH ephemeral key
@@ -1030,6 +1111,7 @@ export async function sendEncryptedMessageToAllDevices(
     // === Handle existing sessions ===
     for (const { device, state } of devicesWithExistingSession) {
       if (!state) continue;
+      const tDev0 = Date.now();
 
       // Validate state has required fields
       if (!state.inboxId || !state.state) {
@@ -1142,6 +1224,9 @@ export async function sendEncryptedMessageToAllDevices(
           inbox_signature: '',
         };
 
+        logger.warn(
+          `[SEND-TIMING] unconfirmed-session re-init encrypt for ${device.inboxAddress.slice(0, 12)}: ${Date.now() - tDev0}ms`,
+        );
         outbounds.push(JSON.stringify(sealedMessage));
       } else if (sendingInbox?.inbox_address && sendingInbox?.inbox_encryption_key) {
         // Confirmed session - encrypt with existing session and send directly
@@ -1149,6 +1234,9 @@ export async function sendEncryptedMessageToAllDevices(
           conversationId,
           state.inboxId,
           JSON.stringify(message)
+        );
+        logger.warn(
+          `[SEND-TIMING] existing-session DR encrypt for ${device.inboxAddress.slice(0, 12)}: ${Date.now() - tDev0}ms`,
         );
 
         const sealingEphemeralKey = await cryptoProvider.generateX448();
@@ -1178,6 +1266,9 @@ export async function sendEncryptedMessageToAllDevices(
 
     // Reached only inside the outbound-queue drain, which runs only when the
     // socket is OPEN — the honest "actually transmitting" moment.
+    logger.warn(
+      `[SEND-TIMING] prep callback done: ${outbounds.length} envelope(s) in ${Date.now() - tPrepCb0}ms`,
+    );
     onFlushed?.();
     return outbounds;
   });

@@ -24,6 +24,7 @@ import {
 } from './initEnvelopeGuard';
 import { deriveAddress } from '../onboarding/keyService';
 
+import { logger } from '@quilibrium/quorum-shared';
 import type {
   DoubleRatchetStateAndMessage,
   DoubleRatchetStateAndEnvelope,
@@ -207,7 +208,11 @@ class EncryptionService {
     senderDeviceInboxAddress: string,
     deviceTag: string
   ): Promise<EncryptedEnvelope> {
+    // [SEND-TIMING] temporary instrumentation — strip before merge
+    // (.agents/bugs/2026-07-24-dm-send-latency-10s-production.md)
+    const tMutex0 = Date.now();
     return ratchetMutex.runExclusive(conversationId, async () => {
+    const tLock0 = Date.now();
     if (!this.deviceKeys) {
       throw new Error('Device keys not initialized');
     }
@@ -220,6 +225,7 @@ class EncryptionService {
       recipientInfo,
       senderDeviceInboxAddress
     );
+    const tX3dh = Date.now();
 
     const encryptionState = sessionResult.state;
     const ephemeralPublicKey = sessionResult.ephemeralPublicKey;
@@ -234,6 +240,9 @@ class EncryptionService {
     };
 
     const result = await this.cryptoProvider.doubleRatchetEncrypt(stateAndMessage);
+    logger.warn(
+      `[SEND-TIMING] encryptMessageForNewDevice: mutexWait=${tLock0 - tMutex0}ms establishSession=${tX3dh - tLock0}ms drEncrypt=${Date.now() - tX3dh}ms`,
+    );
 
     // Save state with the device tag so we can track sessions per-device
     // Note: We save under the senderDeviceInboxAddress (our inbox for this device)
