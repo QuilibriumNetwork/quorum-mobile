@@ -688,7 +688,12 @@ async function sendEncryptedMessage(
           ? bytesToHex(conversationSigningKeypair.private_key)
           : '',
         identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-        tag: conversationInboxAddress,
+        // SDK-standard tag: the SENDER'S DEVICE INBOX (the session identity
+        // the receiver files this session under). Previously mobile sent the
+        // return conversation inbox here, so peers filed our sessions under
+        // an address absent from every device-registration list — desktop's
+        // ghost-session prune then deleted them on every send.
+        tag: deviceKeyset.inboxAddress,
         message: encrypted.envelope,
         type: 'direct',
       };
@@ -792,7 +797,8 @@ async function sendEncryptedMessage(
             ? bytesToHex(ourConversationInbox.signingPrivateKey)
             : '',
           identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-          tag: ourConversationInbox?.inboxAddress || deviceKeyset.inboxAddress,
+          // SDK-standard tag: sender's device inbox (see first-send builder).
+          tag: deviceKeyset.inboxAddress,
           message: encrypted.envelope,
           type: 'direct',
         };
@@ -887,7 +893,21 @@ export async function sendEncryptedMessageToAllDevices(
 
   // Get all existing encryption states for this conversation
   const existingStates = encryptionStateStorage.getEncryptionStates(conversationId);
-  const existingInboxTags = new Set(existingStates.map((s) => s.tag).filter(Boolean));
+
+  // Ghost-session prune (SDK/desktop parity): drop TAGGED rows whose tag no
+  // longer corresponds to any registered device inbox (stale devices, plus
+  // legacy rows tagged with conversation-inbox addresses from before the
+  // SDK-standard tag fix). Tagless rows are left alone. Skipped when the
+  // device list is empty so a failed registration fetch can't wipe healthy
+  // sessions.
+  if (allTargetDevices.length > 0) {
+    const validInboxes = new Set(allTargetDevices.map((d) => d.inboxAddress));
+    for (const s of existingStates) {
+      if (s.tag && !validInboxes.has(s.tag)) {
+        encryptionStateStorage.deleteEncryptionState(conversationId, s.inboxId);
+      }
+    }
+  }
 
   // Determine which devices need new sessions vs existing sessions
   const devicesNeedingNewSession: typeof allTargetDevices = [];
@@ -902,11 +922,24 @@ export async function sendEncryptedMessageToAllDevices(
       continue;
     }
 
-    // Check if we have an existing session for this device's inbox (by tag)
-    const existingState = existingStates.find((s) => s.tag === device.inboxAddress);
+    // Check if we have an existing session for this device's inbox (by tag).
+    // Several rows can share a tag (e.g. a session created by RECEIVING the
+    // peer's message — born send-ready with their full return-inbox keys —
+    // alongside an older self-initiated one still waiting for confirmation).
+    // Prefer the send-ready row: it skips the init-envelope wrapping
+    // entirely.
+    const tagMatches = existingStates.filter((s) => s.tag === device.inboxAddress);
+    const existingState =
+      tagMatches.find((s) => s.sendingInbox?.inbox_public_key) ?? tagMatches[0];
     if (existingState) {
+      // TEMP-VERIFY: strip before merge
+      logger.warn(
+        `[DM-VERIFY] session for ${device.inboxAddress.slice(0, 12)}: ${existingState.sendingInbox?.inbox_public_key ? 'SEND-READY (confirmed)' : 'unconfirmed (init-wrap)'}`,
+      );
       devicesWithExistingSession.push({ device, state: existingState });
     } else {
+      // TEMP-VERIFY: strip before merge
+      logger.warn(`[DM-VERIFY] no session for ${device.inboxAddress.slice(0, 12)} — new X3DH`);
       devicesNeedingNewSession.push(device);
     }
   }
@@ -995,7 +1028,10 @@ export async function sendEncryptedMessageToAllDevices(
         return_inbox_public_key: bytesToHex(conversationSigningKeypair.public_key),
         return_inbox_private_key: bytesToHex(conversationSigningKeypair.private_key),
         identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-        tag: conversationInboxAddress,
+        // SDK-standard tag: sender's device inbox — the identity the
+        // receiver files this session under (previously the conversation
+        // inbox, which peers' device lists never contain).
+        tag: deviceKeyset.inboxAddress,
         message: encrypted.envelope,
         type: 'direct',
       };
@@ -1114,7 +1150,8 @@ export async function sendEncryptedMessageToAllDevices(
           return_inbox_public_key: bytesToHex(convSigningKeypair.public_key),
           return_inbox_private_key: bytesToHex(convSigningKeypair.private_key),
           identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-          tag: convInboxAddress,
+          // SDK-standard tag: sender's device inbox (see first-send builder).
+          tag: deviceKeyset.inboxAddress,
           message: encrypted.envelope,
           type: 'direct',
         };
@@ -1260,7 +1297,10 @@ async function encryptWithExistingSession(
     message: messageBytes,
   });
 
-  // Save updated state - preserve sendingInbox and tag
+  // Save updated state - preserve sendingInbox, tag, AND the X3DH ephemeral
+  // keys (an unconfirmed session re-wraps each message reusing them;
+  // dropping them here forced a fresh ephemeral next send and a receiver
+  // ephemeral-cache miss).
   // The inboxAddress is OUR receiving inbox (not where we send TO)
   encryptionStateStorage.saveEncryptionState({
     state: result.ratchet_state,
@@ -1270,6 +1310,8 @@ async function encryptWithExistingSession(
     sentAccept: encryptionState.sentAccept,
     sendingInbox: encryptionState.sendingInbox, // Preserve where to send
     tag: encryptionState.tag,
+    x3dhEphemeralPublicKey: encryptionState.x3dhEphemeralPublicKey,
+    x3dhEphemeralPrivateKey: encryptionState.x3dhEphemeralPrivateKey,
   }, true);
 
   return { envelope: result.envelope, ephemeralPublicKey };

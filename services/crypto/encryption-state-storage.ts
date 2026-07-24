@@ -28,6 +28,9 @@ export type {
   ConversationInboxKeypair,
 } from '@quilibrium/quorum-shared';
 
+// Per-inbox-address keypair copies (see saveConversationInboxKeypair).
+const INBOX_KEYPAIR_BY_ADDR_PREFIX = 'conversationInboxByAddr:';
+
 // Debounced best-effort push re-registration. A brand-new conversation
 // inbox must be registered with quorum-api so the peer's DMs can wake this
 // device — push registration otherwise only runs at startup/token-rotation
@@ -369,6 +372,13 @@ class EncryptionStateStorage {
   /**
    * Save a per-conversation inbox keypair
    * This keypair is used to receive replies for a specific conversation
+   *
+   * Also stored keyed BY INBOX ADDRESS: the per-conversation slot is
+   * last-writer-wins, so with multi-device sends (one return inbox per
+   * device session) only the last device's keypair survived there. The
+   * per-address copy lets the send path re-advertise a SESSION's own
+   * return inbox (desktop parity), which is what makes the peer's
+   * confirming reply land back on the row the send path reads.
    */
   saveConversationInboxKeypair(keypair: ConversationInboxKeypair): void {
     const key = `${KEYS.CONVERSATION_INBOX_KEY}${keypair.conversationId}`;
@@ -376,9 +386,30 @@ class EncryptionStateStorage {
     // binding gets registered so the peer's messages wake this device.
     const isNew = this.storage.getString(key) == null;
     this.storage.set(key, JSON.stringify(keypair));
+    this.storage.set(
+      `${INBOX_KEYPAIR_BY_ADDR_PREFIX}${keypair.inboxAddress}`,
+      JSON.stringify(keypair)
+    );
     if (isNew) {
       scheduleConversationInboxPushRegistration();
     }
+  }
+
+  /**
+   * Get the keypair for a SPECIFIC conversation inbox address. Reads the
+   * per-address key first; falls back to scanning the legacy per-conversation
+   * slots (which only retain each conversation's most recent inbox).
+   */
+  getConversationInboxKeypairForInbox(inboxAddress: string): ConversationInboxKeypair | null {
+    const data = this.storage.getString(`${INBOX_KEYPAIR_BY_ADDR_PREFIX}${inboxAddress}`);
+    if (data) {
+      try {
+        return JSON.parse(data) as ConversationInboxKeypair;
+      } catch {
+        // fall through to legacy scan
+      }
+    }
+    return this.getConversationInboxKeypairByAddress(inboxAddress);
   }
 
   /**

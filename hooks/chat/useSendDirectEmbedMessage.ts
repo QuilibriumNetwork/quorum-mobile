@@ -484,7 +484,9 @@ async function sendEncryptedEmbedMessage(
           ? bytesToHex(conversationSigningKeypair.private_key)
           : '',
         identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-        tag: conversationInboxAddress,
+        // SDK-standard tag: the SENDER'S DEVICE INBOX — the session identity
+        // the receiver files this session under (matches useSendDirectMessage).
+        tag: deviceKeyset.inboxAddress,
         message: encrypted.envelope,
         type: 'direct',
       };
@@ -576,7 +578,8 @@ async function sendEncryptedEmbedMessage(
             ? bytesToHex(ourConversationInbox.signingPrivateKey)
             : '',
           identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-          tag: ourConversationInbox?.inboxAddress || deviceKeyset.inboxAddress,
+          // SDK-standard tag: sender's device inbox (see first-send builder).
+          tag: deviceKeyset.inboxAddress,
           message: encrypted.envelope,
           type: 'direct',
         };
