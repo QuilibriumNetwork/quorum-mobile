@@ -177,7 +177,6 @@ export function useSendDirectMessage() {
       skipSigning,
     }: SendDirectMessageParams): Promise<Message> => {
       const senderId = user?.address ?? 'unknown';
-      const _tStart = Date.now(); // [SEND-TIMING] temp instrumentation
 
       // Use pre-generated values from onMutate, or generate new ones
       const nonce = _nonce ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -234,7 +233,6 @@ export function useSendDirectMessage() {
           message.publicKey = signatureData.publicKey;
         }
       }
-      logger.warn(`[SEND-TIMING] sign=${Date.now() - _tStart}ms`); // temp
 
       // E2E encryption is required for direct messages
       const hasDeviceKeys = encryptionService.hasDeviceKeys();
@@ -295,7 +293,6 @@ export function useSendDirectMessage() {
           const recipientReg = await apiClient.fetchUserRegistration(recipientAddress);
           if (recipientReg) {
             const recipientDevices = toAllDeviceInfos(recipientReg);
-            logger.warn(`[SEND-TIMING] recipientDevices=${recipientDevices.length} self=${recipientAddress === senderId}`); // temp
             allTargetDevices = [...recipientDevices];
           }
 
@@ -303,7 +300,6 @@ export function useSendDirectMessage() {
           const senderReg = await apiClient.fetchUserRegistration(senderId);
           if (senderReg) {
             const senderDevices = toAllDeviceInfos(senderReg);
-            logger.warn(`[SEND-TIMING] senderDevices=${senderDevices.length}`); // temp
             const otherSenderDevices = senderDevices.filter(
               (d) => d.inboxAddress !== deviceKeyset.inboxAddress
             );
@@ -324,9 +320,6 @@ export function useSendDirectMessage() {
         allTargetDevices.map((d) => d.inboxAddress.slice(0, 12)),
       );
 
-      const _tPrep = Date.now(); // [SEND-TIMING] temp
-      logger.warn(`[SEND-TIMING] devices=${allTargetDevices.length} prep=${_tPrep - _tStart}ms`); // temp
-
       // Send to all target device inboxes (multi-device support)
       await sendEncryptedMessageToAllDevices(
         conversationId,
@@ -345,10 +338,7 @@ export function useSendDirectMessage() {
         // Flip the bubble to 'sent' only when the message actually transmits
         // (fires inside the socket-OPEN drain). Until then it stays 'sending',
         // so an offline/queued message is never shown as sent.
-        () => {
-          logger.warn(`[SEND-TIMING] flush total=${Date.now() - _tStart}ms fromPrep=${Date.now() - _tPrep}ms`); // temp
-          markDmMessageSent(recipientAddress, message.messageId);
-        }
+        () => markDmMessageSent(recipientAddress, message.messageId)
       );
 
       // Return the signed message but keep it in its optimistic 'sending' state:
