@@ -294,6 +294,28 @@ const RetryButton = React.memo(function RetryButton({
   );
 });
 
+// Sending spinner that only appears after a short delay, so a fast send
+// (which completes in well under a second) never flashes a spinner. Mirrors
+// desktop's 1s-delayed "Sending..." indicator. It unmounts the moment the
+// message leaves 'sending' state, so a quick send shows no spinner at all;
+// only a genuinely slow or offline send reveals it.
+const SENDING_INDICATOR_DELAY_MS = 1000;
+const DelayedSendingIndicator = React.memo(function DelayedSendingIndicator({
+  color,
+  style,
+}: {
+  color: string;
+  style?: React.ComponentProps<typeof ActivityIndicator>['style'];
+}) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), SENDING_INDICATOR_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!visible) return null;
+  return <ActivityIndicator size="small" color={color} style={style} />;
+});
+
 export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(function MessagesList({
   messages,
   theme,
@@ -811,8 +833,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
           {isEdited && <Text style={styles.editedIndicator}>(edited)</Text>}
           {showUnsigned && renderUnsignedWarning(item)}
           {isSending && (
-            <ActivityIndicator
-              size="small"
+            <DelayedSendingIndicator
               color={theme.colors.textMuted}
               style={styles.sendingIndicator}
             />
@@ -1229,8 +1250,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                 )}
                 {/* Unsigned warning moved inline (trails the message text). */}
                 {isSending && (
-                  <ActivityIndicator
-                    size="small"
+                  <DelayedSendingIndicator
                     color={theme.colors.textMuted}
                     style={styles.sendingIndicator}
                   />
