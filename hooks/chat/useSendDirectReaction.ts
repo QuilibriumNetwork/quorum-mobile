@@ -59,7 +59,7 @@ export function useSendDirectReaction() {
   const storage = useStorageAdapter();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { enqueueOutbound, isConnected } = useWebSocket();
+  const { enqueueOutbound } = useWebSocket();
   const apiClient = getQuorumClient();
 
   return useMutation({
@@ -108,9 +108,9 @@ export function useSendDirectReaction() {
         throw new Error('Device encryption keys not initialized.');
       }
 
-      if (!isConnected) {
-        throw new Error('WebSocket not connected.');
-      }
+      // Do NOT gate on isConnected: enqueueOutbound buffers the envelope and the
+      // WS client flushes it on (re)connect, so a transient disconnect (or a
+      // stale isConnected) must not drop the send. Mirrors the DM delete/edit paths.
 
       // Fetch recipient info if needed
       let finalRecipientInfo = recipientInfo;
@@ -232,7 +232,7 @@ export function useRemoveDirectReaction() {
   const storage = useStorageAdapter();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { enqueueOutbound, isConnected } = useWebSocket();
+  const { enqueueOutbound } = useWebSocket();
   const apiClient = getQuorumClient();
 
   return useMutation({
@@ -279,9 +279,9 @@ export function useRemoveDirectReaction() {
         throw new Error('Device encryption keys not initialized.');
       }
 
-      if (!isConnected) {
-        throw new Error('WebSocket not connected.');
-      }
+      // Do NOT gate on isConnected: enqueueOutbound buffers the envelope and the
+      // WS client flushes it on (re)connect, so a transient disconnect (or a
+      // stale isConnected) must not drop the send. Mirrors the DM delete/edit paths.
 
       let finalRecipientInfo = recipientInfo;
       if (!finalRecipientInfo && !hasSession) {

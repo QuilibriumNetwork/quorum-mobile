@@ -138,6 +138,28 @@ export function useSendDirectMessage() {
   const { enqueueOutbound, isConnected, subscribe } = useWebSocket();
   const apiClient = getQuorumClient();
 
+  // Flip an optimistic DM bubble from 'sending' to 'sent' in the cache. Called
+  // when the message actually transmits (via the onFlushed hook below). Guarded
+  // on 'sending' so it no-ops if a server copy already replaced the message or
+  // it was already marked sent (race-safe).
+  const markDmMessageSent = (recipient: string, messageId: string) => {
+    const key = queryKeys.messages.infinite(recipient, recipient);
+    queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        pages: old.pages.map((page) => ({
+          ...page,
+          messages: page.messages.map((m) =>
+            m.messageId === messageId && m.sendStatus === 'sending'
+              ? { ...m, sendStatus: 'sent' as const }
+              : m
+          ),
+        })),
+      };
+    });
+  };
+
   return useMutation({
     mutationFn: async ({
       conversationId,
@@ -226,10 +248,9 @@ export function useSendDirectMessage() {
         throw new Error('Device encryption keys not initialized. Please restart the app.');
       }
 
-      if (!isConnected) {
-        logger.debug(`[DM-send ${me}] FAIL: not connected`);
-        throw new Error('WebSocket not connected. Please check your connection.');
-      }
+      // Do NOT gate on isConnected: enqueueOutbound buffers the envelope and the
+      // WS client flushes it on (re)connect, so a transient disconnect (or a
+      // stale isConnected) must not drop the send. Mirrors the DM delete/edit paths.
 
       // Get our device keyset for the InitializationEnvelope
       const deviceKeyset = await getDeviceKeyset();
@@ -313,19 +334,26 @@ export function useSendDirectMessage() {
           inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
         },
         senderId,
-        user?.displayName
+        user?.displayName,
+        // Flip the bubble to 'sent' only when the message actually transmits
+        // (fires inside the socket-OPEN drain). Until then it stays 'sending',
+        // so an offline/queued message is never shown as sent.
+        () => markDmMessageSent(recipientAddress, message.messageId)
       );
 
-      return { ...message, sendStatus: 'sent' };
+      // Return the signed message but keep it in its optimistic 'sending' state:
+      // onSuccess attaches the signature, and the onFlushed callback above flips
+      // it to 'sent' on real transmission.
+      return message;
     },
 
-    onMutate: async ({
-      conversationId,
-      recipientAddress,
-      text,
-      repliesToMessageId,
-      replyToAuthorAddress,
-    }) => {
+    onMutate: async (variables) => {
+      const {
+        recipientAddress,
+        text,
+        repliesToMessageId,
+        replyToAuthorAddress,
+      } = variables;
       // Use the same query key format as useMessages hook (spaceId, channelId = recipientAddress)
       const key = queryKeys.messages.infinite(recipientAddress, recipientAddress);
       const senderId = user?.address ?? 'unknown';
@@ -346,6 +374,15 @@ export function useSendDirectMessage() {
 
       // Generate messageId using SHA-256 hash (matching desktop implementation)
       const { messageId } = generateMessageIdHash(nonce, senderId, text);
+
+      // Reuse these EXACT values in mutationFn so the optimistic bubble and the
+      // message we actually send share ONE id/nonce/date. Without this they
+      // diverge (mutationFn generates its own), which is confusing and can make
+      // edits/deletes/replies reference a different id than the recipient has.
+      // mutationFn reads these via its `_messageId`/`_nonce`/`_createdDate` params.
+      variables._nonce = nonce;
+      variables._messageId = messageId;
+      variables._createdDate = createdDate;
 
       const optimisticMessage: Message = {
         messageId,
@@ -465,47 +502,48 @@ export function useSendDirectMessage() {
     onSuccess: async (message, { conversationId, recipientAddress }, context) => {
       const key = queryKeys.messages.infinite(recipientAddress, recipientAddress);
 
-      // The returned message has a different ID than the optimistic one
-      // Use the optimistic message ID but update the status. Carry the real
-      // signature/publicKey across (optimistic msg has neither) so signed
-      // messages don't render the unsigned-warning icon.
-      const sentMessage: Message = context?.optimisticMessage
-        ? {
-            ...context.optimisticMessage,
-            sendStatus: 'sent' as const,
-            signature: message.signature,
-            publicKey: message.publicKey,
-          }
-        : message;
-
-      // Update cache with sent status
-      queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page, index) => {
-            if (index === 0) {
-              return {
-                ...page,
-                messages: page.messages.map((m) =>
-                  m.messageId === context?.optimisticMessage.messageId
-                    ? sentMessage
-                    : m
-                ),
-              };
-            }
-            return page;
-          }),
-        };
-      });
+      // Attach the real signature/publicKey to the optimistic bubble (it had
+      // neither) so signed messages don't show the unsigned-warning icon. Do
+      // NOT mark it 'sent' here — at this point the message is only QUEUED; the
+      // onFlushed callback flips it to 'sent' when it actually transmits. Spread
+      // the CURRENT cached message so we never clobber a 'sent' the flush may
+      // already have applied (race-safe). With aligned ids, the sent message
+      // and the optimistic bubble share one messageId.
+      const optimisticId = context?.optimisticMessage.messageId;
+      if (optimisticId) {
+        queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              messages: page.messages.map((m) =>
+                m.messageId === optimisticId
+                  ? { ...m, signature: message.signature, publicKey: message.publicKey }
+                  : m
+              ),
+            })),
+          };
+        });
+      }
 
       // Defer storage writes so UI updates instantly
       queueMicrotask(async () => {
         try {
-          // Persist to local storage with 'sent' status
+          // Persist WITHOUT the ephemeral sendStatus so a reload renders the
+          // message normally instead of restoring a stale 'sending' spinner.
+          const persisted: Message = context?.optimisticMessage
+            ? {
+                ...context.optimisticMessage,
+                signature: message.signature,
+                publicKey: message.publicKey,
+              }
+            : { ...message };
+          delete (persisted as Record<string, unknown>).sendStatus;
+
           await storage.saveMessage(
-            sentMessage,
-            sentMessage.createdDate,
+            persisted,
+            persisted.createdDate,
             recipientAddress,
             'direct',
             '',
@@ -840,7 +878,8 @@ export async function sendEncryptedMessageToAllDevices(
     inboxEncryptionPublicKey: number[];
   },
   userAddress: string,
-  displayName?: string
+  displayName?: string,
+  onFlushed?: () => void
 ): Promise<void> {
   // Import the NativeCryptoProvider for encryption
   const { NativeCryptoProvider } = await import('@/services/crypto/native-provider');
@@ -1137,6 +1176,9 @@ export async function sendEncryptedMessageToAllDevices(
       }
     }
 
+    // Reached only inside the outbound-queue drain, which runs only when the
+    // socket is OPEN — the honest "actually transmitting" moment.
+    onFlushed?.();
     return outbounds;
   });
 }

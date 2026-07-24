@@ -47,7 +47,7 @@ export interface UseSpaceReactionParams {
 export function useAddSpaceReaction() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { enqueueOutbound, isConnected } = useWebSocket();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: UseSpaceReactionParams) => {
@@ -55,9 +55,9 @@ export function useAddSpaceReaction() {
         throw new Error('User must be logged in to add reactions');
       }
 
-      if (!isConnected) {
-        throw new Error('Not connected to server');
-      }
+      // Do NOT gate on isConnected: enqueueOutbound buffers the envelope and the
+      // WS client flushes it on (re)connect, so a transient disconnect (or a
+      // stale isConnected) must not drop the send. Mirrors the DM delete/edit paths.
 
       const result = await sendReaction({
         spaceId: params.spaceId,
@@ -159,7 +159,7 @@ export function useAddSpaceReaction() {
 export function useRemoveSpaceReaction() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { enqueueOutbound, isConnected } = useWebSocket();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: UseSpaceReactionParams) => {
@@ -167,9 +167,9 @@ export function useRemoveSpaceReaction() {
         throw new Error('User must be logged in to remove reactions');
       }
 
-      if (!isConnected) {
-        throw new Error('Not connected to server');
-      }
+      // Do NOT gate on isConnected: enqueueOutbound buffers the envelope and the
+      // WS client flushes it on (re)connect, so a transient disconnect (or a
+      // stale isConnected) must not drop the send. Mirrors the DM delete/edit paths.
 
       const result = await removeReaction({
         spaceId: params.spaceId,

@@ -41,7 +41,7 @@ export function canEditMessage(message: { userId: string; timestamp: number }, c
 export function useEditSpaceMessage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { enqueueOutbound, isConnected } = useWebSocket();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: UseEditSpaceMessageParams) => {
@@ -49,9 +49,9 @@ export function useEditSpaceMessage() {
         throw new Error('User must be logged in to edit messages');
       }
 
-      if (!isConnected) {
-        throw new Error('Not connected to server. Please wait for connection.');
-      }
+      // Do NOT gate on isConnected: enqueueOutbound buffers the envelope and the
+      // WS client flushes it on (re)connect, so a transient disconnect (or a
+      // stale isConnected) must not drop the send. Mirrors the DM delete/edit paths.
 
       // Enforce edit window
       const elapsed = Date.now() - params.originalCreatedDate;

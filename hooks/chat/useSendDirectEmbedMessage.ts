@@ -72,7 +72,7 @@ export function useSendDirectEmbedMessage() {
   const storage = useStorageAdapter();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { enqueueOutbound, isConnected, subscribe } = useWebSocket();
+  const { enqueueOutbound, subscribe } = useWebSocket();
   const apiClient = getQuorumClient();
 
   return useMutation({
@@ -144,9 +144,9 @@ export function useSendDirectEmbedMessage() {
         throw new Error('Device encryption keys not initialized. Please restart the app.');
       }
 
-      if (!isConnected) {
-        throw new Error('WebSocket not connected. Please check your connection.');
-      }
+      // Do NOT gate on isConnected: enqueueOutbound buffers the envelope and the
+      // WS client flushes it on (re)connect, so a transient disconnect (or a
+      // stale isConnected) must not drop the send. Mirrors the DM delete/edit paths.
 
       // If no session and no recipientInfo provided, try to fetch the registration
       let finalRecipientInfo = recipientInfo;
