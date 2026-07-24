@@ -382,35 +382,20 @@ class EncryptionStateStorage {
    */
   saveConversationInboxKeypair(keypair: ConversationInboxKeypair): void {
     const key = `${KEYS.CONVERSATION_INBOX_KEY}${keypair.conversationId}`;
-    // First time we've seen this conversation's inbox → make sure its push
-    // binding gets registered so the peer's messages wake this device.
-    const isNew = this.storage.getString(key) == null;
+    const addrKey = `${INBOX_KEYPAIR_BY_ADDR_PREFIX}${keypair.inboxAddress}`;
+    // First time we've seen this INBOX ADDRESS → make sure its push binding
+    // gets registered so the peer's messages wake this device. Keyed on the
+    // per-address slot: the per-conversation slot is last-writer-wins, so a
+    // second session inbox in the same conversation would look "not new"
+    // there and silently skip push registration.
+    const isNew = this.storage.getString(addrKey) == null;
     this.storage.set(key, JSON.stringify(keypair));
-    this.storage.set(
-      `${INBOX_KEYPAIR_BY_ADDR_PREFIX}${keypair.inboxAddress}`,
-      JSON.stringify(keypair)
-    );
+    this.storage.set(addrKey, JSON.stringify(keypair));
     if (isNew) {
       scheduleConversationInboxPushRegistration();
     }
   }
 
-  /**
-   * Get the keypair for a SPECIFIC conversation inbox address. Reads the
-   * per-address key first; falls back to scanning the legacy per-conversation
-   * slots (which only retain each conversation's most recent inbox).
-   */
-  getConversationInboxKeypairForInbox(inboxAddress: string): ConversationInboxKeypair | null {
-    const data = this.storage.getString(`${INBOX_KEYPAIR_BY_ADDR_PREFIX}${inboxAddress}`);
-    if (data) {
-      try {
-        return JSON.parse(data) as ConversationInboxKeypair;
-      } catch {
-        // fall through to legacy scan
-      }
-    }
-    return this.getConversationInboxKeypairByAddress(inboxAddress);
-  }
 
   /**
    * Get the inbox keypair for a conversation
@@ -427,10 +412,23 @@ class EncryptionStateStorage {
   }
 
   /**
-   * Delete conversation inbox keypair
+   * Delete conversation inbox keypair (both the per-conversation slot and
+   * the per-address copy, so a deleted conversation's inbox doesn't keep
+   * getting resubscribed and push-registered).
    */
   deleteConversationInboxKeypair(conversationId: string): void {
     const key = `${KEYS.CONVERSATION_INBOX_KEY}${conversationId}`;
+    const data = this.storage.getString(key);
+    if (data) {
+      try {
+        const kp = JSON.parse(data) as ConversationInboxKeypair;
+        if (kp.inboxAddress) {
+          this.storage.remove(`${INBOX_KEYPAIR_BY_ADDR_PREFIX}${kp.inboxAddress}`);
+        }
+      } catch {
+        // Malformed slot — still remove it below
+      }
+    }
     this.storage.remove(key);
   }
 

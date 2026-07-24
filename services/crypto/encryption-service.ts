@@ -584,7 +584,7 @@ class EncryptionService {
           inbox_public_key: unsealed.return_inbox_public_key,
           inbox_private_key: unsealed.return_inbox_private_key,
         },
-        tag: state.tag ?? unsealed.tag,
+        tag: state.tag || unsealed.tag,
       };
       encryptionStateStorage.saveEncryptionState(confirmedState, true);
       // Route future received replies on the peer's return inbox to this

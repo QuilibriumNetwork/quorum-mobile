@@ -86,6 +86,8 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+import { base64ToHex, hexToBase64 } from '@/utils/encoding';
+
 /**
  * Sign a sealed envelope for a CONFIRMED session with the conversation-inbox
  * signing key the peer shared at confirmation.
@@ -112,21 +114,21 @@ export async function signConfirmedEnvelope(
   }
   try {
     const signingProvider = new NativeSigningProvider();
-    const privateKeyBase64 = bytesToBase64(
-      new Uint8Array(hexToBytes(sendingInbox.inbox_private_key))
-    );
+    const privateKeyBase64 = hexToBase64(sendingInbox.inbox_private_key);
     const messageBase64 = bytesToBase64(new TextEncoder().encode(sealedEnvelope));
     const signatureBase64 = await signingProvider.signEd448(privateKeyBase64, messageBase64);
-    const signatureHex = Array.from(atob(signatureBase64))
-      .map((c) => c.charCodeAt(0).toString(16).padStart(2, '0'))
-      .join('');
     return {
       inbox_public_key: sendingInbox.inbox_public_key,
-      inbox_signature: signatureHex,
+      inbox_signature: base64ToHex(signatureBase64),
     };
-  } catch {
-    // Unsigned fallback — the send may be rejected, but never block the
-    // attempt on a signing failure.
+  } catch (err) {
+    // Unsigned fallback — never block the send attempt on a signing failure,
+    // but log it: an unsigned confirmed-path message may be rejected
+    // downstream with no other trace.
+    logger.warn(
+      '[DM-send] confirmed-envelope signing failed, sending unsigned:',
+      err instanceof Error ? err.message : err,
+    );
     return { inbox_public_key: '', inbox_signature: '' };
   }
 }
@@ -954,20 +956,12 @@ export async function sendEncryptedMessageToAllDevices(
   // Get all existing encryption states for this conversation
   const existingStates = encryptionStateStorage.getEncryptionStates(conversationId);
 
-  // Ghost-session prune (SDK/desktop parity): drop TAGGED rows whose tag no
-  // longer corresponds to any registered device inbox (stale devices, plus
-  // legacy rows tagged with conversation-inbox addresses from before the
-  // SDK-standard tag fix). Tagless rows are left alone. Skipped when the
-  // device list is empty so a failed registration fetch can't wipe healthy
-  // sessions.
-  if (allTargetDevices.length > 0) {
-    const validInboxes = new Set(allTargetDevices.map((d) => d.inboxAddress));
-    for (const s of existingStates) {
-      if (s.tag && !validInboxes.has(s.tag)) {
-        encryptionStateStorage.deleteEncryptionState(conversationId, s.inboxId);
-      }
-    }
-  }
+  // NOTE: desktop also prunes session rows whose tag matches no registered
+  // device inbox here. Mobile deliberately does NOT yet: callers reach this
+  // function with device lists of varying completeness (some pass only the
+  // recipient's devices), and pruning against a partial list would delete
+  // healthy own-device sync sessions. A prune needs its own
+  // registration-sourced valid set — tracked as follow-up work.
 
   // Determine which devices need new sessions vs existing sessions
   const devicesNeedingNewSession: typeof allTargetDevices = [];
