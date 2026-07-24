@@ -234,7 +234,7 @@ export function useSendDirectMessage() {
           message.publicKey = signatureData.publicKey;
         }
       }
-      logger.debug(`[SEND-TIMING] sign=${Date.now() - _tStart}ms`); // temp
+      logger.warn(`[SEND-TIMING] sign=${Date.now() - _tStart}ms`); // temp
 
       // E2E encryption is required for direct messages
       const hasDeviceKeys = encryptionService.hasDeviceKeys();
@@ -323,7 +323,7 @@ export function useSendDirectMessage() {
       );
 
       const _tPrep = Date.now(); // [SEND-TIMING] temp
-      logger.debug(`[SEND-TIMING] devices=${allTargetDevices.length} prep=${_tPrep - _tStart}ms`); // temp
+      logger.warn(`[SEND-TIMING] devices=${allTargetDevices.length} prep=${_tPrep - _tStart}ms`); // temp
 
       // Send to all target device inboxes (multi-device support)
       await sendEncryptedMessageToAllDevices(
@@ -344,7 +344,7 @@ export function useSendDirectMessage() {
         // (fires inside the socket-OPEN drain). Until then it stays 'sending',
         // so an offline/queued message is never shown as sent.
         () => {
-          logger.debug(`[SEND-TIMING] flush total=${Date.now() - _tStart}ms fromPrep=${Date.now() - _tPrep}ms`); // temp
+          logger.warn(`[SEND-TIMING] flush total=${Date.now() - _tStart}ms fromPrep=${Date.now() - _tPrep}ms`); // temp
           markDmMessageSent(recipientAddress, message.messageId);
         }
       );
