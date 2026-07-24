@@ -4637,6 +4637,17 @@ interface FeedPostCardProps {
    *  (useApexStatusForFids) and passed down as a boolean so memoized rows
    *  don't churn. */
   authorIsApex?: boolean;
+  /** Hide the inline parent-cast context (the "replying to …" mini preview).
+   *  Set when the parent is already rendered as the primary cast above this
+   *  one (feed reply threading), so it isn't shown twice. */
+  suppressParentContext?: boolean;
+  /** Drop the bottom divider. Used on the parent (primary) card of a feed
+   *  reply pair so it reads as one unit with the indented reply below it. */
+  hideBottomBorder?: boolean;
+  /** Navigate taps to this cast's OWN thread rather than its parent's. Set on
+   *  the parent card of a reply pair (which may itself be a reply) so tapping
+   *  it opens the thread focused on it, not its grandparent. */
+  openOwnThread?: boolean;
 }
 
 // Square media-grid cell — used by the "Media" filter to render the
@@ -4766,6 +4777,97 @@ function feedPostToCastPlaceholder(post: FeedPost): unknown {
   };
 }
 
+/** A feed reply we can render as a parent → reply pair: it has a parent hash
+ *  and a resolvable parent-author FID to fetch the parent with. URL-parent
+ *  replies (off-Farcaster) and parentless casts don't qualify. */
+function isThreadableReply(post: FeedPost): boolean {
+  return (
+    !!post.parentHash &&
+    Number.isFinite(post.parentAuthorFid) &&
+    (post.parentAuthorFid as number) > 0
+  );
+}
+
+/**
+ * Map a NormalizedCast (from the shared cast lookup) to the flat FeedPost
+ * shape a FeedPostCard renders. Used to promote a reply's parent cast into
+ * the feed as a full primary card (see FeedReplyCard) instead of embedding
+ * it as a quoted mini-preview. Frame embeds are dropped (rarely present on
+ * a parent and not worth reconstructing); everything else — text, images,
+ * videos, link previews, quote casts — carries over.
+ */
+function normalizedCastToFeedPost(cast: NormalizedCast): FeedPost {
+  const mediaUrls = cast.embeds
+    .filter((e) => e.image?.url)
+    .map((e) => e.image!.url!);
+
+  const videos: VideoEmbed[] = cast.embeds
+    .filter((e) => e.video?.url || e.video?.sourceUrl)
+    .map((e) => ({
+      url: e.video!.url,
+      sourceUrl: e.video!.sourceUrl,
+      thumbnailUrl: e.video!.thumbnailUrl,
+      width: e.video!.width,
+      height: e.video!.height,
+    }));
+
+  // Quote-cast embeds arrive as {fid, hash} stubs; QuoteCast lazy-resolves
+  // the real cast at render time (same as the main feed mapping does).
+  const quoteCasts: QuoteCastEmbed[] = cast.embeds
+    .filter((e) => e.castId && Number.isFinite(e.castId.fid) && e.castId.fid > 0 && !!e.castId.hash)
+    .map((e) => ({
+      cast: {
+        hash: e.castId!.hash,
+        author: { fid: e.castId!.fid, username: '', displayName: '' },
+        text: '',
+        timestamp: 0,
+      } as EmbeddedCast,
+      username: '',
+      hashPrefix: e.castId!.hash.slice(0, 10),
+    }));
+
+  const urlPreviews: UrlEmbed[] = cast.embeds
+    .filter((e) => (e.url || e.openGraph?.sourceUrl) && !e.image && !e.video && !e.castId)
+    .map((e) => ({
+      url: e.url || e.openGraph?.sourceUrl,
+      title: e.openGraph?.title,
+      description: e.openGraph?.description,
+      domain: e.openGraph?.domain,
+      image: e.openGraph?.image,
+    }));
+
+  return {
+    id: `parent-${cast.hash}`,
+    hash: cast.hash,
+    username: cast.author.username ?? '',
+    authorFid: cast.author.fid ?? 0,
+    authorName: cast.author.displayName || `fid:${cast.author.fid}`,
+    authorHandle: cast.author.username ? `@${cast.author.username}` : '',
+    authorAvatar: cast.author.pfpUrl,
+    channel: cast.channel?.name,
+    parentHash: cast.parentHash,
+    parentUrl: cast.parentUrl,
+    parentAuthorFid: cast.parentAuthor?.fid,
+    time: formatTimestamp(cast.timestamp),
+    content: cast.text,
+    stats: {
+      likes: formatCount(cast.reactions.likesCount),
+      replies: formatCount(cast.reactions.repliesCount),
+      shares: formatCount(cast.reactions.recastsCount),
+    },
+    tags: [],
+    mediaUrls,
+    videos,
+    urlPreviews,
+    quoteCasts,
+    frameEmbeds: [],
+    filter: 'all',
+    viewerHasLiked: cast.reactions.viewerLiked,
+    viewerHasRecast: cast.reactions.viewerRecasted,
+    viewerIsFollowing: cast.author.viewerFollows,
+  };
+}
+
 const MediaGridCell = React.memo(function MediaGridCell({
   post,
   theme,
@@ -4833,10 +4935,13 @@ const FeedPostCard = React.memo(function FeedPostCard({
   onDelete,
   onTipPress,
   authorIsApex = false,
+  suppressParentContext = false,
+  hideBottomBorder = false,
+  openOwnThread = false,
 }: FeedPostCardProps) {
   const queryClient = useQueryClient();
   const navigateToThread = useCallback(() => {
-    if (post.parentHash) {
+    if (post.parentHash && !openOwnThread) {
       const parentNormalized =
         post.parentAuthorFid
           ? queryClient.getQueryData<NormalizedCast | null>(
@@ -4859,7 +4964,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
     if (post.username && post.hash) {
       onNavigateToThread(post.username, post.hash, false, feedPostToCastPlaceholder(post));
     }
-  }, [post, onNavigateToThread, queryClient]);
+  }, [post, onNavigateToThread, queryClient, openOwnThread]);
 
   const navigateToReply = useCallback(() => {
     // Reply-compose target — always the cast itself (you're replying to
@@ -4895,6 +5000,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
         styles.postCard,
         castColor ? { backgroundColor: castColor } : null,
         castImage ? { backgroundColor: 'transparent', overflow: 'hidden' } : null,
+        hideBottomBorder ? { borderBottomWidth: 0 } : null,
       ]}
     >
       {castImage && (
@@ -4957,15 +5063,17 @@ const FeedPostCard = React.memo(function FeedPostCard({
         />
       </Pressable>
 
-      <ParentContextLine
-        cast={{
-          parentUrl: post.parentUrl,
-          parentHash: post.parentHash,
-          parentAuthor: post.parentAuthorFid ? { fid: post.parentAuthorFid } : undefined,
-        }}
-        theme={theme}
-        onNavigateToThread={onNavigateToThread}
-      />
+      {!suppressParentContext && (
+        <ParentContextLine
+          cast={{
+            parentUrl: post.parentUrl,
+            parentHash: post.parentHash,
+            parentAuthor: post.parentAuthorFid ? { fid: post.parentAuthorFid } : undefined,
+          }}
+          theme={theme}
+          onNavigateToThread={onNavigateToThread}
+        />
+      )}
 
       {post.content.trim().length > 0 && (
         <Pressable onPress={navigateToThread}>
@@ -5191,6 +5299,196 @@ const FeedPostCard = React.memo(function FeedPostCard({
     </View>
   );
 });
+
+/** A feed row that may carry a collapsed self-reply chain (root-first). When
+ *  `__chain` is set the row renders the whole chain as one unit; the row's own
+ *  identity/fields are the chain root's (see collapseSelfChains). */
+type FeedPostWithChain = FeedPost & { __chain?: FeedPost[] };
+
+interface FeedReplyCardProps extends FeedPostCardProps {
+  /** Live interaction-state maps, so each promoted/chained cast resolves its
+   *  own like/recast/follow/apex state (the row's own state still comes in via
+   *  the inherited FeedPostCardProps). */
+  likeStates: Map<string, { liked: boolean; count: number }>;
+  recastStates: Map<string, { recasted: boolean; count: number }>;
+  followStates: Map<number, boolean>;
+  apexFids: Set<number>;
+  /** A precomputed self-reply chain (root-first) to render stacked as one unit.
+   *  Absent for a lone reply, which instead fetches its immediate parent. */
+  chain?: FeedPost[];
+}
+
+/**
+ * Renders a reply (or a self-reply chain) in the main feed the way the thread
+ * view does: the cast being replied to is the primary (full) card, and each
+ * reply is stacked beneath it on a shared accent rail — rather than embedding
+ * the parent as a quoted mini-preview inside the reply.
+ *
+ *  - `chain` set  → render those casts (root → tip) as one stacked unit; the
+ *    root stays the header (its own "replying to …" line notes any cast it
+ *    replied to — we don't hoist another author's cast above the user's thread).
+ *  - lone reply   → fetch the immediate parent and show parent → reply.
+ *
+ * Falls back to a plain single card (with its inline "replying to …" context)
+ * while a parent is still loading or can't be fetched (e.g. off-Farcaster
+ * URL-parent replies), so nothing regresses in those cases.
+ */
+const FeedReplyCard = React.memo(function FeedReplyCard({
+  likeStates,
+  recastStates,
+  followStates,
+  apexFids,
+  likeState,
+  recastState,
+  followState,
+  authorIsApex,
+  chain,
+  ...shared
+}: FeedReplyCardProps) {
+  const { post, theme } = shared;
+
+  // The on-screen unit is the chain (root-first) or just this lone cast.
+  const hasChain = !!(chain && chain.length > 0);
+  const baseChain = hasChain ? chain! : [post];
+  const root = baseChain[0];
+
+  // A lone reply promotes the cast it replied to into the primary card (fetch
+  // it, one level). A chain keeps its own root as the header — we don't hoist a
+  // different author's cast above the user's thread; the root's own
+  // ParentContextLine still notes what it replied to.
+  const rootParentFid = root.parentAuthorFid;
+  const canFetchParent =
+    !hasChain &&
+    !!root.parentHash &&
+    Number.isFinite(rootParentFid) &&
+    (rootParentFid as number) > 0;
+  const { data: parentCast } = useFarcasterCast(
+    canFetchParent ? root.parentHash : undefined,
+    canFetchParent ? rootParentFid : undefined,
+    { enabled: canFetchParent, gcTime: 10 * 60 * 1000 },
+  );
+
+  // A lone cast whose parent (if any) hasn't resolved — render it unchanged so
+  // its own ParentContextLine still shows while the parent loads.
+  if (!parentCast && baseChain.length === 1) {
+    return (
+      <FeedPostCard
+        {...shared}
+        likeState={likeState}
+        recastState={recastState}
+        followState={followState}
+        authorIsApex={authorIsApex}
+      />
+    );
+  }
+
+  const casts = parentCast
+    ? [normalizedCastToFeedPost(parentCast), ...baseChain]
+    : baseChain;
+
+  return (
+    <View>
+      {casts.map((cast, i) => {
+        const isPrimary = i === 0;
+        const isLast = i === casts.length - 1;
+        const card = (
+          <FeedPostCard
+            {...shared}
+            post={cast}
+            likeState={likeStates.get(cast.hash)}
+            recastState={recastStates.get(cast.hash)}
+            followState={followStates.get(cast.authorFid)}
+            authorIsApex={apexFids.has(cast.authorFid)}
+            // One continuous unit: only the last cast keeps the feed divider.
+            hideBottomBorder={!isLast}
+            // Tap the primary → its own thread; a nested cast → the cast above.
+            openOwnThread={isPrimary}
+            // Nested casts' parent is the card right above them, so drop the
+            // redundant inline "replying to …" preview.
+            suppressParentContext={!isPrimary}
+          />
+        );
+        // Primary is full-width; every cast below sits on the shared accent
+        // rail that marks the thread as nested (same as the thread view).
+        return isPrimary ? (
+          <View key={cast.hash}>{card}</View>
+        ) : (
+          <View
+            key={cast.hash}
+            style={{
+              borderLeftWidth: Skin.border(2),
+              borderLeftColor: theme.colors.accent,
+            }}
+          >
+            {card}
+          </View>
+        );
+      })}
+    </View>
+  );
+});
+
+/**
+ * Collapse self-reply chains — a user rapidly replying to their own casts
+ * (A → B → C) — into a single feed row so the thread shows once, root-first,
+ * instead of as three overlapping parent/reply pairs.
+ *
+ * Chain members are gathered by walking `parentHash` links (they are NOT
+ * guaranteed adjacent in the ranked feed) and only when consecutive casts
+ * share an author. Each chain is emitted at its newest cast's (tip's) position
+ * and keyed by the root, so the row's identity stays stable as the chain grows.
+ * Cross-author replies are left untouched (FeedReplyCard fetches their parent).
+ */
+function collapseSelfChains(posts: FeedPost[]): FeedPostWithChain[] {
+  const byHash = new Map<string, FeedPost>();
+  for (const p of posts) byHash.set(p.hash.toLowerCase(), p);
+
+  // The in-feed parent of a cast, but only when it's the same author.
+  const selfParent = (p: FeedPost): FeedPost | undefined => {
+    if (!p.parentHash) return undefined;
+    const parent = byHash.get(p.parentHash.toLowerCase());
+    return parent && parent.authorFid > 0 && parent.authorFid === p.authorFid
+      ? parent
+      : undefined;
+  };
+
+  // Casts that are the self-parent of another cast — i.e. not a chain tip.
+  const hasSelfChild = new Set<string>();
+  for (const p of posts) {
+    const parent = selfParent(p);
+    if (parent) hasSelfChild.add(parent.hash.toLowerCase());
+  }
+
+  const chainByTip = new Map<string, FeedPost[]>();
+  const absorbed = new Set<string>(); // non-tip members, hidden as their own rows
+  for (const p of posts) {
+    // Walk up only from a tip: a self-reply with no self-reply of its own.
+    if (!selfParent(p) || hasSelfChild.has(p.hash.toLowerCase())) continue;
+    const chain: FeedPost[] = [p];
+    let cur: FeedPost | undefined = p;
+    let parent: FeedPost | undefined;
+    // Cap guards against a pathological/cyclic parentHash graph.
+    while ((parent = selfParent(cur)) && chain.length < 64) {
+      chain.push(parent);
+      absorbed.add(parent.hash.toLowerCase());
+      cur = parent;
+    }
+    chain.reverse(); // root → tip
+    chainByTip.set(p.hash.toLowerCase(), chain);
+  }
+
+  if (chainByTip.size === 0) return posts;
+
+  const result: FeedPostWithChain[] = [];
+  for (const p of posts) {
+    const key = p.hash.toLowerCase();
+    if (absorbed.has(key)) continue; // shown inside its chain's row
+    const chain = chainByTip.get(key);
+    // Emit at the tip's position, but adopt the root's identity/fields.
+    result.push(chain ? { ...chain[0], __chain: chain } : p);
+  }
+  return result;
+}
 
 // Navigation stack types
 type NavScreen =
@@ -5866,6 +6164,15 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     return posts.filter((post) => post.filter === activeFilter);
   }, [activeFilter, posts]);
 
+  // Collapse a user's self-reply chains (A → B → C) into one row so the feed
+  // shows the thread once instead of as overlapping parent/reply pairs. Only
+  // applies to the linear list (media renders as a grid, governance is its own
+  // data set), so those keep the flat `filteredPosts`.
+  const collapsedFeedData = useMemo(
+    () => collapseSelfChains(filteredPosts),
+    [filteredPosts],
+  );
+
   // Bulk-resolve parent author handles for the visible feed page so
   // ParentContextLine renders @handle immediately instead of fid:N → @handle.
   useFarcasterUsersPrefetch(
@@ -6521,7 +6828,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   ? governanceProposals
                   : activeFilter === 'media'
                     ? filteredPosts.filter((p) => p.mediaUrls.length > 0 || p.videos.some((v) => v.thumbnailUrl))
-                    : filteredPosts
+                    : collapsedFeedData
               }
               numColumns={activeFilter === 'media' ? 3 : 1}
               // Hint FlashList with the row size so recycling computes
@@ -6535,11 +6842,15 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   ? 'media-grid'
                   : item.isProposal
                     ? 'proposal'
-                    : item.videos.length > 0
-                      ? 'video'
-                      : item.mediaUrls.length > 0
-                        ? 'image'
-                        : 'text'
+                    : (item as FeedPostWithChain).__chain
+                      ? 'chain'
+                      : isThreadableReply(item)
+                        ? 'reply'
+                        : item.videos.length > 0
+                          ? 'video'
+                          : item.mediaUrls.length > 0
+                            ? 'image'
+                            : 'text'
               }
               showsVerticalScrollIndicator={false}
               // Let taps reach buttons (e.g. the proposal "Post vote") while a
@@ -6780,7 +7091,10 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   />
                 ) : (
                   <>
-                    <FeedPostCard
+                    {/* FeedReplyCard promotes a reply's parent into the
+                        primary card (with the reply indented beneath); for a
+                        non-reply it renders a plain FeedPostCard. */}
+                    <FeedReplyCard
                       post={post}
                       theme={theme}
                       styles={styles}
@@ -6802,6 +7116,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                       onDelete={handleDeleteCast}
                       onTipPress={handleOpenTip}
                       authorIsApex={feedApexFids.has(post.authorFid)}
+                      likeStates={likeStates}
+                      recastStates={recastStates}
+                      followStates={followStates}
+                      apexFids={feedApexFids}
+                      chain={(post as FeedPostWithChain).__chain}
                     />
                     {post.isProposal && (
                       <ProposalVoteBlock
