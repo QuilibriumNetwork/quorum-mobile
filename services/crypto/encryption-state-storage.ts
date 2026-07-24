@@ -10,7 +10,6 @@
 import { type MMKV } from 'react-native-mmkv';
 import { createMirroredMMKV } from '@/services/storage/mirroredMMKV';
 import {
-  logger,
   type EncryptionState,
   type InboxMapping,
   type LatestState,
@@ -182,10 +181,6 @@ class EncryptionStateStorage {
    * Get all encryption states for a conversation
    */
   getEncryptionStates(conversationId: string): EncryptionState[] {
-    // [SEND-TIMING] temporary slow-call logging — strip before merge. One
-    // synchronous MMKV read + JSON.parse per row, on the JS thread; a
-    // churned conversation was seen with 8052 rows.
-    const t0 = Date.now();
     const inboxIds = this.getConversationInboxIds(conversationId);
     const states: EncryptionState[] = [];
 
@@ -196,12 +191,6 @@ class EncryptionStateStorage {
       }
     }
 
-    const took = Date.now() - t0;
-    if (took > 50 || inboxIds.length > 100) {
-      logger.warn(
-        `[SEND-TIMING] getEncryptionStates(${conversationId.slice(0, 12)}…): rows=${states.length} keys=${inboxIds.length} took=${took}ms`,
-      );
-    }
     return states;
   }
 
@@ -538,12 +527,9 @@ class EncryptionStateStorage {
    * Returns array of (conversationId, state) pairs
    */
   getStatesByInboxId(inboxId: string): Array<{ conversationId: string; state: EncryptionState }> {
-    // [SEND-TIMING] temporary slow-call logging — strip before merge
-    const t0 = Date.now();
     // Build index lazily on first call (or after invalidation)
     if (!this.inboxIndex) {
       this.inboxIndex = this.buildInboxIndex();
-      logger.warn(`[SEND-TIMING] buildInboxIndex took=${Date.now() - t0}ms`);
     }
 
     const conversationIds = this.inboxIndex.get(inboxId);
@@ -557,12 +543,6 @@ class EncryptionStateStorage {
       }
     }
 
-    const took = Date.now() - t0;
-    if (took > 50) {
-      logger.warn(
-        `[SEND-TIMING] getStatesByInboxId(${inboxId.slice(0, 12)}…): results=${results.length} took=${took}ms`,
-      );
-    }
     return results;
   }
 
