@@ -226,10 +226,9 @@ export function useSendDirectMessage() {
         throw new Error('Device encryption keys not initialized. Please restart the app.');
       }
 
-      if (!isConnected) {
-        logger.debug(`[DM-send ${me}] FAIL: not connected`);
-        throw new Error('WebSocket not connected. Please check your connection.');
-      }
+      // Do NOT gate on isConnected: enqueueOutbound buffers the envelope and the
+      // WS client flushes it on (re)connect, so a transient disconnect (or a
+      // stale isConnected) must not drop the send. Mirrors the DM delete/edit paths.
 
       // Get our device keyset for the InitializationEnvelope
       const deviceKeyset = await getDeviceKeyset();
