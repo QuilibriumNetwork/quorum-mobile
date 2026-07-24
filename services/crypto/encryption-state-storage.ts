@@ -439,6 +439,19 @@ class EncryptionStateStorage {
    * Used when we need to decrypt a message that arrived at a conversation-specific inbox
    */
   getConversationInboxKeypairByAddress(inboxAddress: string): ConversationInboxKeypair | null {
+    // Per-address store first — the legacy per-conversation slot only holds
+    // the most recently created inbox of each conversation, so scanning it
+    // alone missed every other session inbox. The receive path uses this
+    // lookup both to recognize "this is one of OUR inboxes" (a miss caused
+    // messages to be silently dropped as echoes) and to unseal envelopes.
+    const direct = this.storage.getString(`${INBOX_KEYPAIR_BY_ADDR_PREFIX}${inboxAddress}`);
+    if (direct) {
+      try {
+        return JSON.parse(direct) as ConversationInboxKeypair;
+      } catch {
+        // fall through to legacy scan
+      }
+    }
     // Get all keys and find the one with matching inbox address
     const allKeys = this.storage.getAllKeys();
     for (const key of allKeys) {
@@ -468,13 +481,28 @@ class EncryptionStateStorage {
    */
   getAllConversationInboxKeypairs(): ConversationInboxKeypair[] {
     const out: ConversationInboxKeypair[] = [];
+    const seen = new Set<string>();
     const allKeys = this.storage.getAllKeys();
     for (const key of allKeys) {
-      if (!key.startsWith(KEYS.CONVERSATION_INBOX_KEY)) continue;
+      // Sweep BOTH stores: the legacy per-conversation slot keeps only the
+      // most recently created inbox of each conversation (last-writer-wins),
+      // while every session inbox has a per-address entry. Missing the
+      // per-address entries here meant that after an app restart,
+      // subscriptions and push bindings only covered the last inbox per
+      // conversation — peers replying to any other session inbox went
+      // unheard until they fell back to the device inbox (the "messages
+      // arrive minutes later" symptom).
+      const isLegacy = key.startsWith(KEYS.CONVERSATION_INBOX_KEY);
+      const isByAddr = key.startsWith(INBOX_KEYPAIR_BY_ADDR_PREFIX);
+      if (!isLegacy && !isByAddr) continue;
       const data = this.storage.getString(key);
       if (!data) continue;
       try {
-        out.push(JSON.parse(data) as ConversationInboxKeypair);
+        const kp = JSON.parse(data) as ConversationInboxKeypair;
+        if (kp.inboxAddress && !seen.has(kp.inboxAddress)) {
+          seen.add(kp.inboxAddress);
+          out.push(kp);
+        }
       } catch {
         // Skip malformed entries
       }
@@ -487,22 +515,10 @@ class EncryptionStateStorage {
    * Used for resubscribing to all inboxes we created when initiating conversations
    */
   getAllConversationInboxAddresses(): string[] {
-    const addresses: string[] = [];
-    const allKeys = this.storage.getAllKeys();
-    for (const key of allKeys) {
-      if (key.startsWith(KEYS.CONVERSATION_INBOX_KEY)) {
-        const data = this.storage.getString(key);
-        if (data) {
-          try {
-            const keypair = JSON.parse(data) as ConversationInboxKeypair;
-            addresses.push(keypair.inboxAddress);
-          } catch {
-            // Skip malformed entries
-          }
-        }
-      }
-    }
-    return addresses;
+    // Derived from the full keypair sweep so subscriptions cover EVERY
+    // session inbox, not just the last-created one per conversation (see
+    // getAllConversationInboxKeypairs).
+    return this.getAllConversationInboxKeypairs().map((kp) => kp.inboxAddress);
   }
 
   // Utility

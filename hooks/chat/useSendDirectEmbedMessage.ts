@@ -17,6 +17,7 @@ import { queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope, type Em
 import type { Message } from '@quilibrium/quorum-shared';
 import type { MessagePreview } from '@/utils/messagePreview';
 import { NativeSigningProvider } from '@/services/crypto/native-signing-provider';
+import { signConfirmedEnvelope } from './useSendDirectMessage';
 import { sha256 } from '@noble/hashes/sha2.js';
 
 /** SHA-256 messageId hash, matching desktop: nonce + 'post' + sender + JSON.stringify(content). */
@@ -618,13 +619,14 @@ async function sendEncryptedEmbedMessage(
           plaintext: envelopeBytes,
         });
 
+        const inboxAuth = await signConfirmedEnvelope(sendingInbox, sealedEnvelope);
         const existingSessionMsg = {
           type: 'direct',
           inbox_address: sendingInbox.inbox_address,
           envelope: sealedEnvelope,
           ephemeral_public_key: bytesToHex(sealingEphemeralKey.public_key),
-          inbox_public_key: '',
-          inbox_signature: '',
+          inbox_public_key: inboxAuth.inbox_public_key,
+          inbox_signature: inboxAuth.inbox_signature,
         };
 
         outbounds.push(JSON.stringify(existingSessionMsg));

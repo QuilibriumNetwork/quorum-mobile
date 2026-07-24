@@ -2916,6 +2916,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     }
 
                     if (!decryptedText || decryptedText.startsWith('Decryption failed') || !successInboxId) {
+                      // Bound the redelivery loop (PR #170 parity): a frame no
+                      // stored state can decrypt replays forever otherwise —
+                      // this branch previously returned without counting the
+                      // attempt, and dead frames re-drained several times a
+                      // minute indefinitely.
+                      recordInboxAttempt(message.inboxAddress, message.timestamp);
                       return;
                     }
 

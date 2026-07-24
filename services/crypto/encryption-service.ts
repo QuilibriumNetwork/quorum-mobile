@@ -1047,10 +1047,6 @@ class EncryptionService {
     // Save encryption state - this is the PRIMARY state for this conversation
     // The sendingInbox field tells us where to send, so we don't need a separate "latest" state
     encryptionStateStorage.saveEncryptionState(encryptionState, true);
-    // TEMP-VERIFY: strip before merge
-    console.warn(
-      `[DM-VERIFY] recipient session stored tag=${(unsealed.tag || '').slice(0, 12)} sendReady=${!!sendingInbox.inbox_public_key}`,
-    );
 
     // Remember this envelope's server timestamp so an exact redelivery is
     // recognized as stale even inside the skew tolerance window (state rows

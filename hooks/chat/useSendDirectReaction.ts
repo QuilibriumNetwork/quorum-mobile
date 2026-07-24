@@ -13,6 +13,7 @@ import { ratchetMutex } from '@/services/crypto/ratchet-mutex';
 import { encryptionStateStorage } from '@/services/crypto/encryption-state-storage';
 import { getDeviceKeyset } from '@/services/onboarding/secureStorage';
 import { queryKeys, bytesToHex, hexToBytes } from '@quilibrium/quorum-shared';
+import { signConfirmedEnvelope } from './useSendDirectMessage';
 import type { Message, ReactionMessage, RemoveReactionMessage, Reaction } from '@quilibrium/quorum-shared';
 
 export interface SendDirectReactionParams {
@@ -435,13 +436,14 @@ export async function sendEncryptedControlMessage(
         plaintext: envelopeBytes,
       });
 
+      const inboxAuth = await signConfirmedEnvelope(sendingInbox, sealedEnvelope);
       const sealedMessage = {
         type: 'direct',
         inbox_address: sendingInbox.inbox_address,
         envelope: sealedEnvelope,
         ephemeral_public_key: bytesToHex(sealingEphemeralKey.public_key),
-        inbox_public_key: '',
-        inbox_signature: '',
+        inbox_public_key: inboxAuth.inbox_public_key,
+        inbox_signature: inboxAuth.inbox_signature,
       };
 
       outbounds.push(JSON.stringify(sealedMessage));

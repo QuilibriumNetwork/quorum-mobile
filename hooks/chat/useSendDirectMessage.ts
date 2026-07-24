@@ -72,6 +72,65 @@ export function resetDMSession(conversationId: string): void {
 
 import type { MessagesPage, InfiniteMessagesData } from './queryTypes';
 
+// Chunked bytes→base64 (String.fromCharCode(...bytes) overflows the argument
+// limit on large envelopes, e.g. media embeds).
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(
+      null,
+      bytes.subarray(i, i + CHUNK) as unknown as number[]
+    );
+  }
+  return btoa(binary);
+}
+
+/**
+ * Sign a sealed envelope for a CONFIRMED session with the conversation-inbox
+ * signing key the peer shared at confirmation.
+ *
+ * SDK parity (DoubleRatchetInboxEncrypt): when sending_inbox.inbox_public_key
+ * is set, the ciphertext is signed with sending_inbox.inbox_private_key and
+ * both fields ride on the sealed message — writes to a registered
+ * conversation inbox are verified against that key. Mobile historically sent
+ * these fields empty, which went unnoticed because sessions never reached
+ * the confirmed state; once they did, unsigned confirmed-path messages were
+ * dropped downstream (no delivery, no receipt).
+ *
+ * Returns empty fields when the session has no signing material (init sends
+ * to device inboxes are unsigned by design).
+ */
+export async function signConfirmedEnvelope(
+  sendingInbox:
+    | { inbox_public_key?: string; inbox_private_key?: string }
+    | undefined,
+  sealedEnvelope: string
+): Promise<{ inbox_public_key: string; inbox_signature: string }> {
+  if (!sendingInbox?.inbox_public_key || !sendingInbox.inbox_private_key) {
+    return { inbox_public_key: '', inbox_signature: '' };
+  }
+  try {
+    const signingProvider = new NativeSigningProvider();
+    const privateKeyBase64 = bytesToBase64(
+      new Uint8Array(hexToBytes(sendingInbox.inbox_private_key))
+    );
+    const messageBase64 = bytesToBase64(new TextEncoder().encode(sealedEnvelope));
+    const signatureBase64 = await signingProvider.signEd448(privateKeyBase64, messageBase64);
+    const signatureHex = Array.from(atob(signatureBase64))
+      .map((c) => c.charCodeAt(0).toString(16).padStart(2, '0'))
+      .join('');
+    return {
+      inbox_public_key: sendingInbox.inbox_public_key,
+      inbox_signature: signatureHex,
+    };
+  } catch {
+    // Unsigned fallback — the send may be rejected, but never block the
+    // attempt on a signing failure.
+    return { inbox_public_key: '', inbox_signature: '' };
+  }
+}
+
 /**
  * Generate a messageId using SHA-256 hash, matching desktop implementation.
  * The hash is computed from: nonce + 'post' + senderAddress + messageContent
@@ -839,13 +898,14 @@ async function sendEncryptedMessage(
           plaintext: envelopeBytes,
         });
 
+        const inboxAuth = await signConfirmedEnvelope(sendingInbox, sealedEnvelope);
         const existingSessionMsg = {
           type: 'direct',
           inbox_address: sendingInbox.inbox_address,
           envelope: sealedEnvelope,
           ephemeral_public_key: bytesToHex(sealingEphemeralKey.public_key),
-          inbox_public_key: '',
-          inbox_signature: '',
+          inbox_public_key: inboxAuth.inbox_public_key,
+          inbox_signature: inboxAuth.inbox_signature,
         };
         outbounds.push(JSON.stringify(existingSessionMsg));
       } else {
@@ -932,14 +992,8 @@ export async function sendEncryptedMessageToAllDevices(
     const existingState =
       tagMatches.find((s) => s.sendingInbox?.inbox_public_key) ?? tagMatches[0];
     if (existingState) {
-      // TEMP-VERIFY: strip before merge
-      logger.warn(
-        `[DM-VERIFY] session for ${device.inboxAddress.slice(0, 12)}: ${existingState.sendingInbox?.inbox_public_key ? 'SEND-READY (confirmed)' : 'unconfirmed (init-wrap)'}`,
-      );
       devicesWithExistingSession.push({ device, state: existingState });
     } else {
-      // TEMP-VERIFY: strip before merge
-      logger.warn(`[DM-VERIFY] no session for ${device.inboxAddress.slice(0, 12)} — new X3DH`);
       devicesNeedingNewSession.push(device);
     }
   }
@@ -1200,13 +1254,14 @@ export async function sendEncryptedMessageToAllDevices(
           plaintext: envelopeBytes,
         });
 
+        const inboxAuth = await signConfirmedEnvelope(sendingInbox, sealedEnvelope);
         const existingSessionMsg = {
           type: 'direct',
           inbox_address: sendingInbox.inbox_address,
           envelope: sealedEnvelope,
           ephemeral_public_key: bytesToHex(sealingEphemeralKey.public_key),
-          inbox_public_key: '',
-          inbox_signature: '',
+          inbox_public_key: inboxAuth.inbox_public_key,
+          inbox_signature: inboxAuth.inbox_signature,
         };
 
         outbounds.push(JSON.stringify(existingSessionMsg));
