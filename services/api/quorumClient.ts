@@ -360,12 +360,46 @@ export class QuorumMobileClient implements QuorumApiClient {
 
   // User Registration (E2E Encryption)
 
+  // Short-TTL registration cache. Every DM operation (send, receipt, reaction,
+  // edit, delete, embed) was re-fetching both users' registrations over the
+  // network — measured at 0.5-3.7s per send. Registrations change only when a
+  // device is added/removed, so a 5-minute TTL is safe; the trust model is
+  // unchanged (a cached response is exactly as trustworthy as a fresh one from
+  // the same server). Callers that MERGE into the registration before
+  // re-uploading (device registration) must pass { fresh: true } — a stale
+  // read there could drop another device's entry.
+  private registrationCache = new Map<string, { reg: UserRegistration; ts: number }>();
+  private static readonly REGISTRATION_TTL_MS = 5 * 60 * 1000;
+
   /**
    * Fetch a user's registration info for E2E encryption
    * Contains identity key, signed pre-key, and inbox address needed for X3DH
+   *
+   * @param opts.fresh - Bypass the TTL cache. REQUIRED for read-modify-write
+   *                     flows (own-device registration).
    */
-  async fetchUserRegistration(address: string): Promise<UserRegistration> {
-    return this.fetch<UserRegistration>(`/users/${address}`);
+  async fetchUserRegistration(
+    address: string,
+    opts?: { fresh?: boolean }
+  ): Promise<UserRegistration> {
+    if (!opts?.fresh) {
+      const cached = this.registrationCache.get(address);
+      if (cached && Date.now() - cached.ts < QuorumMobileClient.REGISTRATION_TTL_MS) {
+        return cached.reg;
+      }
+    }
+    const reg = await this.fetch<UserRegistration>(`/users/${address}`);
+    this.registrationCache.set(address, { reg, ts: Date.now() });
+    return reg;
+  }
+
+  /** Drop cached registrations (all, or one address). */
+  invalidateRegistrationCache(address?: string): void {
+    if (address) {
+      this.registrationCache.delete(address);
+    } else {
+      this.registrationCache.clear();
+    }
   }
 
   /**
@@ -379,6 +413,8 @@ export class QuorumMobileClient implements QuorumApiClient {
       method: 'POST',
       body: registration,
     });
+    // Our own registration just changed — never serve the stale copy.
+    this.invalidateRegistrationCache(registration.user_address);
   }
 
   /**
