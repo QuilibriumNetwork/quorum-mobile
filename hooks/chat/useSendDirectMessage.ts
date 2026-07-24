@@ -318,13 +318,14 @@ export function useSendDirectMessage() {
       return { ...message, sendStatus: 'sent' };
     },
 
-    onMutate: async ({
-      conversationId,
-      recipientAddress,
-      text,
-      repliesToMessageId,
-      replyToAuthorAddress,
-    }) => {
+    onMutate: async (variables) => {
+      const {
+        conversationId,
+        recipientAddress,
+        text,
+        repliesToMessageId,
+        replyToAuthorAddress,
+      } = variables;
       // Use the same query key format as useMessages hook (spaceId, channelId = recipientAddress)
       const key = queryKeys.messages.infinite(recipientAddress, recipientAddress);
       const senderId = user?.address ?? 'unknown';
@@ -345,6 +346,15 @@ export function useSendDirectMessage() {
 
       // Generate messageId using SHA-256 hash (matching desktop implementation)
       const { messageId } = generateMessageIdHash(nonce, senderId, text);
+
+      // Reuse these EXACT values in mutationFn so the optimistic bubble and the
+      // message we actually send share ONE id/nonce/date. Without this they
+      // diverge (mutationFn generates its own), which is confusing and can make
+      // edits/deletes/replies reference a different id than the recipient has.
+      // mutationFn reads these via its `_messageId`/`_nonce`/`_createdDate` params.
+      variables._nonce = nonce;
+      variables._messageId = messageId;
+      variables._createdDate = createdDate;
 
       const optimisticMessage: Message = {
         messageId,
