@@ -295,6 +295,7 @@ export function useSendDirectMessage() {
           const recipientReg = await apiClient.fetchUserRegistration(recipientAddress);
           if (recipientReg) {
             const recipientDevices = toAllDeviceInfos(recipientReg);
+            logger.warn(`[SEND-TIMING] recipientDevices=${recipientDevices.length} self=${recipientAddress === senderId}`); // temp
             allTargetDevices = [...recipientDevices];
           }
 
@@ -302,6 +303,7 @@ export function useSendDirectMessage() {
           const senderReg = await apiClient.fetchUserRegistration(senderId);
           if (senderReg) {
             const senderDevices = toAllDeviceInfos(senderReg);
+            logger.warn(`[SEND-TIMING] senderDevices=${senderDevices.length}`); // temp
             const otherSenderDevices = senderDevices.filter(
               (d) => d.inboxAddress !== deviceKeyset.inboxAddress
             );
