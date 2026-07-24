@@ -209,7 +209,6 @@ class EncryptionService {
     deviceTag: string
   ): Promise<EncryptedEnvelope> {
     // [SEND-TIMING] temporary instrumentation — strip before merge
-    // (.agents/bugs/2026-07-24-dm-send-latency-10s-production.md)
     const tMutex0 = Date.now();
     return ratchetMutex.runExclusive(conversationId, async () => {
     const tLock0 = Date.now();

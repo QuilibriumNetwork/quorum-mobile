@@ -182,8 +182,7 @@ class EncryptionStateStorage {
    * Get all encryption states for a conversation
    */
   getEncryptionStates(conversationId: string): EncryptionState[] {
-    // [SEND-TIMING] temporary slow-call logging — strip before merge
-    // (.agents/bugs/2026-07-24-dm-send-latency-10s-production.md). One
+    // [SEND-TIMING] temporary slow-call logging — strip before merge. One
     // synchronous MMKV read + JSON.parse per row, on the JS thread; a
     // churned conversation was seen with 8052 rows.
     const t0 = Date.now();

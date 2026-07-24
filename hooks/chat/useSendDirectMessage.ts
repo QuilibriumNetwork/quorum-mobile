@@ -73,10 +73,9 @@ export function resetDMSession(conversationId: string): void {
 import type { MessagesPage, InfiniteMessagesData } from './queryTypes';
 
 // ============================================================================
-// [SEND-TIMING] Temporary instrumentation for the ~10s DM send latency bug
-// (.agents/bugs/2026-07-24-dm-send-latency-10s-production.md). Strip before
-// merging. logger.warn is used because logger.debug is filtered from the dev
-// terminal.
+// [SEND-TIMING] Temporary instrumentation for the ~10s DM send latency bug.
+// Strip before merging. logger.warn is used because logger.debug is filtered
+// from the dev terminal.
 // ============================================================================
 
 /**

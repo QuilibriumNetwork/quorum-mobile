@@ -590,8 +590,10 @@ export default function ProfileModal({
       }
 
       // Fetch user registration from server
+      // fresh: device-management UI must reflect live server state (e.g. a
+      // just-removed device), not the send-path TTL cache.
       const client = getQuorumClient();
-      const registration = await client.fetchUserRegistration(user.address);
+      const registration = await client.fetchUserRegistration(user.address, { fresh: true });
       if (registration?.device_registrations) {
         // Sort so current device is first
         const sorted = [...registration.device_registrations].sort((a, b) => {
