@@ -17,6 +17,7 @@ import { queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope, type Em
 import type { Message } from '@quilibrium/quorum-shared';
 import type { MessagePreview } from '@/utils/messagePreview';
 import { NativeSigningProvider } from '@/services/crypto/native-signing-provider';
+import { signConfirmedEnvelope } from './useSendDirectMessage';
 import { sha256 } from '@noble/hashes/sha2.js';
 
 /** SHA-256 messageId hash, matching desktop: nonce + 'post' + sender + JSON.stringify(content). */
@@ -484,7 +485,9 @@ async function sendEncryptedEmbedMessage(
           ? bytesToHex(conversationSigningKeypair.private_key)
           : '',
         identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-        tag: conversationInboxAddress,
+        // SDK-standard tag: the SENDER'S DEVICE INBOX — the session identity
+        // the receiver files this session under (matches useSendDirectMessage).
+        tag: deviceKeyset.inboxAddress,
         message: encrypted.envelope,
         type: 'direct',
       };
@@ -576,7 +579,8 @@ async function sendEncryptedEmbedMessage(
             ? bytesToHex(ourConversationInbox.signingPrivateKey)
             : '',
           identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-          tag: ourConversationInbox?.inboxAddress || deviceKeyset.inboxAddress,
+          // SDK-standard tag: sender's device inbox (see first-send builder).
+          tag: deviceKeyset.inboxAddress,
           message: encrypted.envelope,
           type: 'direct',
         };
@@ -615,13 +619,14 @@ async function sendEncryptedEmbedMessage(
           plaintext: envelopeBytes,
         });
 
+        const inboxAuth = await signConfirmedEnvelope(sendingInbox, sealedEnvelope);
         const existingSessionMsg = {
           type: 'direct',
           inbox_address: sendingInbox.inbox_address,
           envelope: sealedEnvelope,
           ephemeral_public_key: bytesToHex(sealingEphemeralKey.public_key),
-          inbox_public_key: '',
-          inbox_signature: '',
+          inbox_public_key: inboxAuth.inbox_public_key,
+          inbox_signature: inboxAuth.inbox_signature,
         };
 
         outbounds.push(JSON.stringify(existingSessionMsg));

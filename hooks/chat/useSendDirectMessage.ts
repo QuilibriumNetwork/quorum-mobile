@@ -72,6 +72,67 @@ export function resetDMSession(conversationId: string): void {
 
 import type { MessagesPage, InfiniteMessagesData } from './queryTypes';
 
+// Chunked bytes→base64 (String.fromCharCode(...bytes) overflows the argument
+// limit on large envelopes, e.g. media embeds).
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(
+      null,
+      bytes.subarray(i, i + CHUNK) as unknown as number[]
+    );
+  }
+  return btoa(binary);
+}
+
+import { base64ToHex, hexToBase64 } from '@/utils/encoding';
+
+/**
+ * Sign a sealed envelope for a CONFIRMED session with the conversation-inbox
+ * signing key the peer shared at confirmation.
+ *
+ * SDK parity (DoubleRatchetInboxEncrypt): when sending_inbox.inbox_public_key
+ * is set, the ciphertext is signed with sending_inbox.inbox_private_key and
+ * both fields ride on the sealed message — writes to a registered
+ * conversation inbox are verified against that key. Mobile historically sent
+ * these fields empty, which went unnoticed because sessions never reached
+ * the confirmed state; once they did, unsigned confirmed-path messages were
+ * dropped downstream (no delivery, no receipt).
+ *
+ * Returns empty fields when the session has no signing material (init sends
+ * to device inboxes are unsigned by design).
+ */
+export async function signConfirmedEnvelope(
+  sendingInbox:
+    | { inbox_public_key?: string; inbox_private_key?: string }
+    | undefined,
+  sealedEnvelope: string
+): Promise<{ inbox_public_key: string; inbox_signature: string }> {
+  if (!sendingInbox?.inbox_public_key || !sendingInbox.inbox_private_key) {
+    return { inbox_public_key: '', inbox_signature: '' };
+  }
+  try {
+    const signingProvider = new NativeSigningProvider();
+    const privateKeyBase64 = hexToBase64(sendingInbox.inbox_private_key);
+    const messageBase64 = bytesToBase64(new TextEncoder().encode(sealedEnvelope));
+    const signatureBase64 = await signingProvider.signEd448(privateKeyBase64, messageBase64);
+    return {
+      inbox_public_key: sendingInbox.inbox_public_key,
+      inbox_signature: base64ToHex(signatureBase64),
+    };
+  } catch (err) {
+    // Unsigned fallback — never block the send attempt on a signing failure,
+    // but log it: an unsigned confirmed-path message may be rejected
+    // downstream with no other trace.
+    logger.warn(
+      '[DM-send] confirmed-envelope signing failed, sending unsigned:',
+      err instanceof Error ? err.message : err,
+    );
+    return { inbox_public_key: '', inbox_signature: '' };
+  }
+}
+
 /**
  * Generate a messageId using SHA-256 hash, matching desktop implementation.
  * The hash is computed from: nonce + 'post' + senderAddress + messageContent
@@ -688,7 +749,12 @@ async function sendEncryptedMessage(
           ? bytesToHex(conversationSigningKeypair.private_key)
           : '',
         identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-        tag: conversationInboxAddress,
+        // SDK-standard tag: the SENDER'S DEVICE INBOX (the session identity
+        // the receiver files this session under). Previously mobile sent the
+        // return conversation inbox here, so peers filed our sessions under
+        // an address absent from every device-registration list — desktop's
+        // ghost-session prune then deleted them on every send.
+        tag: deviceKeyset.inboxAddress,
         message: encrypted.envelope,
         type: 'direct',
       };
@@ -792,7 +858,8 @@ async function sendEncryptedMessage(
             ? bytesToHex(ourConversationInbox.signingPrivateKey)
             : '',
           identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-          tag: ourConversationInbox?.inboxAddress || deviceKeyset.inboxAddress,
+          // SDK-standard tag: sender's device inbox (see first-send builder).
+          tag: deviceKeyset.inboxAddress,
           message: encrypted.envelope,
           type: 'direct',
         };
@@ -833,13 +900,14 @@ async function sendEncryptedMessage(
           plaintext: envelopeBytes,
         });
 
+        const inboxAuth = await signConfirmedEnvelope(sendingInbox, sealedEnvelope);
         const existingSessionMsg = {
           type: 'direct',
           inbox_address: sendingInbox.inbox_address,
           envelope: sealedEnvelope,
           ephemeral_public_key: bytesToHex(sealingEphemeralKey.public_key),
-          inbox_public_key: '',
-          inbox_signature: '',
+          inbox_public_key: inboxAuth.inbox_public_key,
+          inbox_signature: inboxAuth.inbox_signature,
         };
         outbounds.push(JSON.stringify(existingSessionMsg));
       } else {
@@ -887,7 +955,13 @@ export async function sendEncryptedMessageToAllDevices(
 
   // Get all existing encryption states for this conversation
   const existingStates = encryptionStateStorage.getEncryptionStates(conversationId);
-  const existingInboxTags = new Set(existingStates.map((s) => s.tag).filter(Boolean));
+
+  // NOTE: desktop also prunes session rows whose tag matches no registered
+  // device inbox here. Mobile deliberately does NOT yet: callers reach this
+  // function with device lists of varying completeness (some pass only the
+  // recipient's devices), and pruning against a partial list would delete
+  // healthy own-device sync sessions. A prune needs its own
+  // registration-sourced valid set — tracked as follow-up work.
 
   // Determine which devices need new sessions vs existing sessions
   const devicesNeedingNewSession: typeof allTargetDevices = [];
@@ -902,8 +976,15 @@ export async function sendEncryptedMessageToAllDevices(
       continue;
     }
 
-    // Check if we have an existing session for this device's inbox (by tag)
-    const existingState = existingStates.find((s) => s.tag === device.inboxAddress);
+    // Check if we have an existing session for this device's inbox (by tag).
+    // Several rows can share a tag (e.g. a session created by RECEIVING the
+    // peer's message — born send-ready with their full return-inbox keys —
+    // alongside an older self-initiated one still waiting for confirmation).
+    // Prefer the send-ready row: it skips the init-envelope wrapping
+    // entirely.
+    const tagMatches = existingStates.filter((s) => s.tag === device.inboxAddress);
+    const existingState =
+      tagMatches.find((s) => s.sendingInbox?.inbox_public_key) ?? tagMatches[0];
     if (existingState) {
       devicesWithExistingSession.push({ device, state: existingState });
     } else {
@@ -995,7 +1076,10 @@ export async function sendEncryptedMessageToAllDevices(
         return_inbox_public_key: bytesToHex(conversationSigningKeypair.public_key),
         return_inbox_private_key: bytesToHex(conversationSigningKeypair.private_key),
         identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-        tag: conversationInboxAddress,
+        // SDK-standard tag: sender's device inbox — the identity the
+        // receiver files this session under (previously the conversation
+        // inbox, which peers' device lists never contain).
+        tag: deviceKeyset.inboxAddress,
         message: encrypted.envelope,
         type: 'direct',
       };
@@ -1114,7 +1198,8 @@ export async function sendEncryptedMessageToAllDevices(
           return_inbox_public_key: bytesToHex(convSigningKeypair.public_key),
           return_inbox_private_key: bytesToHex(convSigningKeypair.private_key),
           identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-          tag: convInboxAddress,
+          // SDK-standard tag: sender's device inbox (see first-send builder).
+          tag: deviceKeyset.inboxAddress,
           message: encrypted.envelope,
           type: 'direct',
         };
@@ -1163,13 +1248,14 @@ export async function sendEncryptedMessageToAllDevices(
           plaintext: envelopeBytes,
         });
 
+        const inboxAuth = await signConfirmedEnvelope(sendingInbox, sealedEnvelope);
         const existingSessionMsg = {
           type: 'direct',
           inbox_address: sendingInbox.inbox_address,
           envelope: sealedEnvelope,
           ephemeral_public_key: bytesToHex(sealingEphemeralKey.public_key),
-          inbox_public_key: '',
-          inbox_signature: '',
+          inbox_public_key: inboxAuth.inbox_public_key,
+          inbox_signature: inboxAuth.inbox_signature,
         };
 
         outbounds.push(JSON.stringify(existingSessionMsg));
@@ -1260,7 +1346,10 @@ async function encryptWithExistingSession(
     message: messageBytes,
   });
 
-  // Save updated state - preserve sendingInbox and tag
+  // Save updated state - preserve sendingInbox, tag, AND the X3DH ephemeral
+  // keys (an unconfirmed session re-wraps each message reusing them;
+  // dropping them here forced a fresh ephemeral next send and a receiver
+  // ephemeral-cache miss).
   // The inboxAddress is OUR receiving inbox (not where we send TO)
   encryptionStateStorage.saveEncryptionState({
     state: result.ratchet_state,
@@ -1270,6 +1359,8 @@ async function encryptWithExistingSession(
     sentAccept: encryptionState.sentAccept,
     sendingInbox: encryptionState.sendingInbox, // Preserve where to send
     tag: encryptionState.tag,
+    x3dhEphemeralPublicKey: encryptionState.x3dhEphemeralPublicKey,
+    x3dhEphemeralPrivateKey: encryptionState.x3dhEphemeralPrivateKey,
   }, true);
 
   return { envelope: result.envelope, ephemeralPublicKey };

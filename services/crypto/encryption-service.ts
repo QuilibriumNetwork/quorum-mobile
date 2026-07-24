@@ -567,6 +567,11 @@ class EncryptionService {
 
       // Persist the CONFIRMED state immediately, inside the lock (desktop
       // parity: accept plaintext + store state changes is one atomic step).
+      // Keep the row's OWN tag (the target device inbox): the send path
+      // selects sessions by tag, so overwriting it with the PEER's tag
+      // (unsealed.tag) un-linked the confirmed row from its device and the
+      // next send re-initialized from scratch — sessions could never stay
+      // confirmed. Desktop preserves the session's own tag here.
       const confirmedState: EncryptionState = {
         state: decryptResult.ratchet_state,
         timestamp: Date.now(),
@@ -579,7 +584,7 @@ class EncryptionService {
           inbox_public_key: unsealed.return_inbox_public_key,
           inbox_private_key: unsealed.return_inbox_private_key,
         },
-        tag: unsealed.tag,
+        tag: state.tag || unsealed.tag,
       };
       encryptionStateStorage.saveEncryptionState(confirmedState, true);
       // Route future received replies on the peer's return inbox to this
@@ -985,12 +990,17 @@ class EncryptionService {
     const decryptedMessage = textDecoder.decode(new Uint8Array(decryptResult.message));
 
     // Create sendingInbox structure for sealing future replies
-    // This is the sender's inbox info we'll use to seal messages to them
+    // This is the sender's inbox info we'll use to seal messages to them.
+    // SDK model: the init envelope carries the sender's FULL return-inbox key
+    // set (including the signing keys), so a recipient session is born
+    // send-ready — no separate confirmation round-trip is needed in this
+    // direction. Leaving the keys empty here (the previous behavior) made
+    // the send path treat this session as unconfirmed forever.
     const sendingInbox: SendingInbox = {
       inbox_address: unsealed.return_inbox_address,
       inbox_encryption_key: unsealed.return_inbox_encryption_key,
-      inbox_public_key: '', // Empty until session is confirmed (we don't know their signing key yet)
-      inbox_private_key: '', // Always empty - we never have their private key
+      inbox_public_key: unsealed.return_inbox_public_key || '',
+      inbox_private_key: unsealed.return_inbox_private_key || '',
     };
 
     // IMPORTANT: Generate conversation inbox keypairs for the receiver
@@ -1025,7 +1035,13 @@ class EncryptionService {
       inboxId: conversationInboxAddress,  // Key by OUR conversation inbox
       sentAccept: false,
       sendingInbox,  // Where we SEND replies (sender's return inbox)
-      tag: conversationInboxAddress,  // Session tag
+      // SDK model: the envelope tag is the SENDER'S DEVICE INBOX and is the
+      // session's identity — the send path selects sessions by
+      // tag === target device inbox, so storing it is what lets a reply
+      // reuse this (send-ready) session instead of spinning up a parallel
+      // sender session. The previous value (our own conversation inbox)
+      // made this row invisible to sends.
+      tag: unsealed.tag || conversationInboxAddress,
     };
 
     // Save encryption state - this is the PRIMARY state for this conversation

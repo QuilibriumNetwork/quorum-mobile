@@ -28,6 +28,9 @@ export type {
   ConversationInboxKeypair,
 } from '@quilibrium/quorum-shared';
 
+// Per-inbox-address keypair copies (see saveConversationInboxKeypair).
+const INBOX_KEYPAIR_BY_ADDR_PREFIX = 'conversationInboxByAddr:';
+
 // Debounced best-effort push re-registration. A brand-new conversation
 // inbox must be registered with quorum-api so the peer's DMs can wake this
 // device — push registration otherwise only runs at startup/token-rotation
@@ -369,17 +372,30 @@ class EncryptionStateStorage {
   /**
    * Save a per-conversation inbox keypair
    * This keypair is used to receive replies for a specific conversation
+   *
+   * Also stored keyed BY INBOX ADDRESS: the per-conversation slot is
+   * last-writer-wins, so with multi-device sends (one return inbox per
+   * device session) only the last device's keypair survived there. The
+   * per-address copy lets the send path re-advertise a SESSION's own
+   * return inbox (desktop parity), which is what makes the peer's
+   * confirming reply land back on the row the send path reads.
    */
   saveConversationInboxKeypair(keypair: ConversationInboxKeypair): void {
     const key = `${KEYS.CONVERSATION_INBOX_KEY}${keypair.conversationId}`;
-    // First time we've seen this conversation's inbox → make sure its push
-    // binding gets registered so the peer's messages wake this device.
-    const isNew = this.storage.getString(key) == null;
+    const addrKey = `${INBOX_KEYPAIR_BY_ADDR_PREFIX}${keypair.inboxAddress}`;
+    // First time we've seen this INBOX ADDRESS → make sure its push binding
+    // gets registered so the peer's messages wake this device. Keyed on the
+    // per-address slot: the per-conversation slot is last-writer-wins, so a
+    // second session inbox in the same conversation would look "not new"
+    // there and silently skip push registration.
+    const isNew = this.storage.getString(addrKey) == null;
     this.storage.set(key, JSON.stringify(keypair));
+    this.storage.set(addrKey, JSON.stringify(keypair));
     if (isNew) {
       scheduleConversationInboxPushRegistration();
     }
   }
+
 
   /**
    * Get the inbox keypair for a conversation
@@ -396,10 +412,23 @@ class EncryptionStateStorage {
   }
 
   /**
-   * Delete conversation inbox keypair
+   * Delete conversation inbox keypair (both the per-conversation slot and
+   * the per-address copy, so a deleted conversation's inbox doesn't keep
+   * getting resubscribed and push-registered).
    */
   deleteConversationInboxKeypair(conversationId: string): void {
     const key = `${KEYS.CONVERSATION_INBOX_KEY}${conversationId}`;
+    const data = this.storage.getString(key);
+    if (data) {
+      try {
+        const kp = JSON.parse(data) as ConversationInboxKeypair;
+        if (kp.inboxAddress) {
+          this.storage.remove(`${INBOX_KEYPAIR_BY_ADDR_PREFIX}${kp.inboxAddress}`);
+        }
+      } catch {
+        // Malformed slot — still remove it below
+      }
+    }
     this.storage.remove(key);
   }
 
@@ -408,6 +437,19 @@ class EncryptionStateStorage {
    * Used when we need to decrypt a message that arrived at a conversation-specific inbox
    */
   getConversationInboxKeypairByAddress(inboxAddress: string): ConversationInboxKeypair | null {
+    // Per-address store first — the legacy per-conversation slot only holds
+    // the most recently created inbox of each conversation, so scanning it
+    // alone missed every other session inbox. The receive path uses this
+    // lookup both to recognize "this is one of OUR inboxes" (a miss caused
+    // messages to be silently dropped as echoes) and to unseal envelopes.
+    const direct = this.storage.getString(`${INBOX_KEYPAIR_BY_ADDR_PREFIX}${inboxAddress}`);
+    if (direct) {
+      try {
+        return JSON.parse(direct) as ConversationInboxKeypair;
+      } catch {
+        // fall through to legacy scan
+      }
+    }
     // Get all keys and find the one with matching inbox address
     const allKeys = this.storage.getAllKeys();
     for (const key of allKeys) {
@@ -437,13 +479,28 @@ class EncryptionStateStorage {
    */
   getAllConversationInboxKeypairs(): ConversationInboxKeypair[] {
     const out: ConversationInboxKeypair[] = [];
+    const seen = new Set<string>();
     const allKeys = this.storage.getAllKeys();
     for (const key of allKeys) {
-      if (!key.startsWith(KEYS.CONVERSATION_INBOX_KEY)) continue;
+      // Sweep BOTH stores: the legacy per-conversation slot keeps only the
+      // most recently created inbox of each conversation (last-writer-wins),
+      // while every session inbox has a per-address entry. Missing the
+      // per-address entries here meant that after an app restart,
+      // subscriptions and push bindings only covered the last inbox per
+      // conversation — peers replying to any other session inbox went
+      // unheard until they fell back to the device inbox (the "messages
+      // arrive minutes later" symptom).
+      const isLegacy = key.startsWith(KEYS.CONVERSATION_INBOX_KEY);
+      const isByAddr = key.startsWith(INBOX_KEYPAIR_BY_ADDR_PREFIX);
+      if (!isLegacy && !isByAddr) continue;
       const data = this.storage.getString(key);
       if (!data) continue;
       try {
-        out.push(JSON.parse(data) as ConversationInboxKeypair);
+        const kp = JSON.parse(data) as ConversationInboxKeypair;
+        if (kp.inboxAddress && !seen.has(kp.inboxAddress)) {
+          seen.add(kp.inboxAddress);
+          out.push(kp);
+        }
       } catch {
         // Skip malformed entries
       }
@@ -456,22 +513,10 @@ class EncryptionStateStorage {
    * Used for resubscribing to all inboxes we created when initiating conversations
    */
   getAllConversationInboxAddresses(): string[] {
-    const addresses: string[] = [];
-    const allKeys = this.storage.getAllKeys();
-    for (const key of allKeys) {
-      if (key.startsWith(KEYS.CONVERSATION_INBOX_KEY)) {
-        const data = this.storage.getString(key);
-        if (data) {
-          try {
-            const keypair = JSON.parse(data) as ConversationInboxKeypair;
-            addresses.push(keypair.inboxAddress);
-          } catch {
-            // Skip malformed entries
-          }
-        }
-      }
-    }
-    return addresses;
+    // Derived from the full keypair sweep so subscriptions cover EVERY
+    // session inbox, not just the last-created one per conversation (see
+    // getAllConversationInboxKeypairs).
+    return this.getAllConversationInboxKeypairs().map((kp) => kp.inboxAddress);
   }
 
   // Utility
