@@ -956,6 +956,12 @@ function envelopeFingerprint(sealedMessageJson: string): string {
   }
 }
 
+// DIAGNOSTIC armed marker: fires once when this module loads. If a capture
+// does not contain this line, the running build is NOT the diag branch and
+// the capture is invalid — this exact mistake silenced a whole test round
+// before (bug doc §5b). Confirm it before sending anything.
+logger.warn('[DM-diag] armed', JSON.stringify({ t: Date.now(), rig: 'dm-frame-trace' }));
+
 /**
  * Build the sealed init-envelope send for ONE device session.
  *
