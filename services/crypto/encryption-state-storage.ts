@@ -7,6 +7,7 @@
  * Uses types from @quilibrium/quorum-shared for cross-platform compatibility.
  */
 
+import { AppState } from 'react-native';
 import { type MMKV } from 'react-native-mmkv';
 import { createMirroredMMKV } from '@/services/storage/mirroredMMKV';
 import {
@@ -106,6 +107,27 @@ class EncryptionStateStorage {
   constructor() {
     // Separate MMKV instance for encryption states (encrypted at rest)
     this.storage = new MMKVStorageProvider('quorum-encryption');
+    this.flushWhenBackgrounded();
+  }
+
+  /**
+   * Flush the write queue whenever the app leaves the foreground.
+   *
+   * Batching keeps MMKV off the hot path, but a queued ratchet advance is
+   * only in memory while its frame is already on the wire. Backgrounding
+   * freezes JS timers on Android, so without this the pending flush may
+   * never run before the process is reaped — the peer has consumed the
+   * frame and this device restarts a step behind, permanently desynced.
+   */
+  private flushWhenBackgrounded(): void {
+    try {
+      AppState.addEventListener('change', (next) => {
+        if (next !== 'active') this.flushWrites();
+      });
+    } catch {
+      // No AppState (tests, non-RN contexts): batching still works, it just
+      // relies on the timer. Never let this break storage construction.
+    }
   }
 
   /**
@@ -151,6 +173,31 @@ class EncryptionStateStorage {
    */
   flushPendingWrites(): void {
     this.flushWrites();
+  }
+
+  /**
+   * Write a key immediately, superseding any queued value for it.
+   *
+   * Dropping the queued entry is the point: without it the next flush would
+   * write the OLDER value back over this one, regressing the ratchet after
+   * its frame is already on the wire.
+   */
+  private writeNow(key: string, value: string): void {
+    this.pendingWrites.delete(key);
+    this.storage.set(key, value);
+  }
+
+  /**
+   * Delete a key, including any queued write for it.
+   *
+   * Without dropping the queued entry the row comes back from the dead:
+   * reads consult the queue first (so it is still visible immediately after
+   * deletion), and the next flush writes it back to disk — silently undoing
+   * a "reset encryption session".
+   */
+  private removeNow(key: string): void {
+    this.pendingWrites.delete(key);
+    this.storage.remove(key);
   }
 
   // Encryption States
@@ -209,7 +256,7 @@ class EncryptionStateStorage {
 
     if (immediate) {
       // Immediate write for critical operations (e.g., before sending)
-      this.storage.set(key, value);
+      this.writeNow(key, value);
     } else {
       // Batched write for performance during sync
       this.queueWrite(key, value);
@@ -230,7 +277,7 @@ class EncryptionStateStorage {
    */
   deleteEncryptionState(conversationId: string, inboxId: string): void {
     const key = `${KEYS.ENCRYPTION_STATE}${conversationId}:${inboxId}`;
-    this.storage.remove(key);
+    this.removeNow(key);
 
     // Remove from conversation inbox list
     this.removeInboxFromConversation(conversationId, inboxId);
@@ -244,7 +291,15 @@ class EncryptionStateStorage {
 
     for (const inboxId of inboxIds) {
       const key = `${KEYS.ENCRYPTION_STATE}${conversationId}:${inboxId}`;
-      this.storage.remove(key);
+      this.removeNow(key);
+    }
+
+    // A queued write can name an inbox the list no longer does (the list is
+    // rebuilt on every save, the queue outlives it), so sweep the queue for
+    // this conversation too — otherwise that row survives the reset.
+    const prefix = `${KEYS.ENCRYPTION_STATE}${conversationId}:`;
+    for (const key of [...this.pendingWrites.keys()]) {
+      if (key.startsWith(prefix)) this.removeNow(key);
     }
 
     // Clear the inbox list
