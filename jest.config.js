@@ -8,6 +8,9 @@ module.exports = {
   // Watchman to speed up file discovery, so turning it off is behavior-safe.
   watchman: false,
   moduleNameMapper: {
+    // Project-root path alias (tsconfig "@/*" -> "./*"). Metro resolves this
+    // from tsconfig; jest needs it spelled out.
+    '^@/(.*)$': '<rootDir>/$1',
     // Resolve quorum-shared to its NON-native build. The native barrel
     // (index.native.js) imports RN native modules (AsyncStorage, etc.) that
     // are null under jest; the pure crypto/auth/permission functions these

@@ -133,7 +133,11 @@ describe('confirmSenderSession', () => {
     expect(saved.sentAccept).toBe(true);
     expect(saved.state).toBe('advanced-state');
     expect(saved.inboxId).toBe(INBOX); // keyed under OUR receiving inbox
-    expect(saved.tag).toBe('QmPeerReturnInbox');
+    // The row keeps its OWN tag (the target device inbox), it does not adopt
+    // the peer's. The send path selects sessions by tag, so overwriting this
+    // un-links the confirmed row from its device and the next send re-runs
+    // X3DH — sessions could then never stay confirmed. Desktop does the same.
+    expect(saved.tag).toBe(INBOX);
     expect(saved.sendingInbox).toEqual({
       inbox_address: 'QmPeerReturnInbox',
       inbox_encryption_key: 'peer-enc-key',
