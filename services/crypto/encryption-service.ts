@@ -645,6 +645,27 @@ class EncryptionService {
   }
 
   /**
+   * Record that this session's accept is on the wire — the init-wrapped frame
+   * carrying OUR return inbox — so later sends use the plain shape. SDK parity
+   * with DoubleRatchetInboxEncrypt's `sent_accept` (see sessionSendShape).
+   *
+   * Call only AFTER the sealed frame exists: flipping earlier and then failing
+   * to build it would leave the session claiming an accept it never sent, and
+   * every later frame would be a plain one the peer rejects.
+   *
+   * Re-reads inside the ratchet lock and preserves the ratchet: a send may have
+   * advanced the state between encrypting and this call, and writing back a
+   * stale snapshot would regress a ratchet whose frame is already on the wire.
+   */
+  async markAcceptSent(conversationId: string, inboxId: string): Promise<void> {
+    return ratchetMutex.runExclusive(conversationId, async () => {
+      const fresh = encryptionStateStorage.getEncryptionState(conversationId, inboxId);
+      if (!fresh || fresh.sentAccept) return;
+      encryptionStateStorage.saveEncryptionState({ ...fresh, sentAccept: true }, false, true);
+    });
+  }
+
+  /**
    * Get the return inbox address for a conversation (for sending reset messages)
    */
   getReturnInboxForConversation(conversationId: string): string | null {
@@ -797,9 +818,6 @@ class EncryptionService {
         // Also save to regular state storage
         encryptionStateStorage.saveEncryptionState(updatedState, false);
 
-        // Get our conversation inbox for the return value
-        const cachedConversationInbox = encryptionStateStorage.getConversationInboxKeypair(conversationId);
-
         return {
           conversationId,
           message: decryptedMessage,
@@ -810,7 +828,10 @@ class EncryptionService {
             publicKey: unsealed.return_inbox_public_key,
             privateKey: unsealed.return_inbox_private_key,
           },
-          ourConversationInbox: cachedConversationInbox?.inboxAddress || ephemeralCachedState.inboxId,
+          // This session's OWN receiving inbox (the row key), not a
+          // conversation-wide one — that would be another device's inbox and
+          // the caller subscribes to whatever we return here.
+          ourConversationInbox: ephemeralCachedState.inboxId,
           userProfile: {
             displayName: unsealed.display_name,
             userIcon: unsealed.user_icon,
@@ -888,9 +909,6 @@ class EncryptionService {
         };
         encryptionStateStorage.saveEncryptionState(updatedState, false); // Don't update latestState for receive
 
-        // Get our conversation inbox for the return value
-        const conversationInbox = encryptionStateStorage.getConversationInboxKeypair(conversationId);
-
         const userProfile = (unsealed.display_name || unsealed.user_icon)
           ? { displayName: unsealed.display_name, userIcon: unsealed.user_icon }
           : undefined;
@@ -905,7 +923,8 @@ class EncryptionService {
             publicKey: unsealed.return_inbox_public_key,
             privateKey: unsealed.return_inbox_private_key,
           },
-          ourConversationInbox: conversationInbox?.inboxAddress || existingState.inboxId,
+          // This session's OWN receiving inbox (see the ephemeral-cache branch).
+          ourConversationInbox: existingState.inboxId,
           userProfile,
         };
       }

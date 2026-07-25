@@ -15,6 +15,13 @@ import { getQuorumClient } from '@/services/api/quorumClient';
 import { encryptionService } from '@/services/crypto/encryption-service';
 import { ratchetMutex } from '@/services/crypto/ratchet-mutex';
 import { selectSendState } from '@/services/crypto/selectSendState';
+import {
+  mintSessionReturnInbox,
+  resolveSessionReturnInbox,
+  sessionReturnInbox,
+  type InboxKeyGenerator,
+} from '@/services/crypto/sessionReturnInbox';
+import { sessionSendShape } from '@/services/crypto/sessionSendShape';
 import { encryptionStateStorage, type ConversationInboxKeypair } from '@/services/crypto/encryption-state-storage';
 import { getDeviceKeyset, getPrivateKey, getPublicKey } from '@/services/onboarding/secureStorage';
 import { deriveAddress } from '@/services/onboarding/keyService';
@@ -819,7 +826,9 @@ async function sendEncryptedMessage(
 
       if (needsInitEnvelope && sendingInbox?.inbox_encryption_key) {
         // Session not yet confirmed: rewrap in an InitializationEnvelope.
-        const ourConversationInbox = encryptionStateStorage.getConversationInboxKeypair(conversationId);
+        // The return inbox is THIS session's own (the row we are advancing);
+        // the peer's confirming reply is matched to the row by that address.
+        const ourConversationInbox = sessionReturnInbox(encryptionState);
 
         // Reuse the X3DH ephemeral key from session establishment so the
         // receiver derives the matching session key. A fresh ephemeral
@@ -921,6 +930,204 @@ async function sendEncryptedMessage(
 }
 
 /**
+ * Build the sealed init-envelope send for ONE device session.
+ *
+ * Serves both a brand-new session and the re-initialization of an unconfirmed
+ * one: they differ only in where `returnInbox` came from (freshly minted vs.
+ * the session's own row), so the envelope is built in one place to stop the two
+ * from drifting apart.
+ *
+ * Returns null when X3DH yielded no ephemeral keypair — nothing sendable.
+ */
+async function buildInitEnvelopeSend(args: {
+  conversationId: string;
+  recipientAddress: string;
+  message: Message;
+  device: {
+    identityKey: number[];
+    signedPreKey: number[];
+    inboxAddress: string;
+    inboxEncryptionKey: number[];
+  };
+  returnInbox: ConversationInboxKeypair;
+  deviceKeyset: { identityPublicKey: number[]; inboxAddress: string };
+  userAddress: string;
+  displayName?: string;
+  cryptoProvider: {
+    encryptInboxMessage(request: {
+      inbox_public_key: number[];
+      ephemeral_private_key: number[];
+      plaintext: number[];
+    }): Promise<string>;
+  };
+}): Promise<string | null> {
+  const {
+    conversationId,
+    recipientAddress,
+    message,
+    device,
+    returnInbox,
+    deviceKeyset,
+    userAddress,
+    displayName,
+    cryptoProvider,
+  } = args;
+
+  // Establishes a fresh X3DH session for this device, keyed by OUR return
+  // inbox and tagged with the target device inbox.
+  const encrypted = await encryptionService.encryptMessageForNewDevice(
+    conversationId,
+    {
+      address: recipientAddress,
+      identityKey: device.identityKey,
+      signedPreKey: device.signedPreKey,
+      inboxAddress: device.inboxAddress,
+      inboxEncryptionKey: device.inboxEncryptionKey,
+    },
+    JSON.stringify(message),
+    returnInbox.inboxAddress,
+    device.inboxAddress
+  );
+
+  const x3dhEphemeralKey = encrypted.ephemeralPublicKey;
+  const ephemeralPrivateKey = encrypted.ephemeralPrivateKey;
+  if (!x3dhEphemeralKey?.length || !ephemeralPrivateKey?.length) return null;
+
+  const initEnvelope: InitializationEnvelope = {
+    user_address: userAddress,
+    display_name: displayName || userAddress,
+    return_inbox_address: returnInbox.inboxAddress,
+    return_inbox_encryption_key: bytesToHex(returnInbox.encryptionPublicKey),
+    return_inbox_public_key: returnInbox.signingPublicKey
+      ? bytesToHex(returnInbox.signingPublicKey)
+      : '',
+    return_inbox_private_key: returnInbox.signingPrivateKey
+      ? bytesToHex(returnInbox.signingPrivateKey)
+      : '',
+    identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
+    // SDK-standard tag: sender's device inbox — the identity the receiver files
+    // this session under (peers' device lists never contain conversation inboxes).
+    tag: deviceKeyset.inboxAddress,
+    message: encrypted.envelope,
+    type: 'direct',
+  };
+
+  const envelopeBytes = Array.from(new TextEncoder().encode(JSON.stringify(initEnvelope)));
+
+  const sealedEnvelope = await cryptoProvider.encryptInboxMessage({
+    inbox_public_key: device.inboxEncryptionKey,
+    ephemeral_private_key: ephemeralPrivateKey,
+    plaintext: envelopeBytes,
+  });
+
+  return JSON.stringify({
+    type: 'direct',
+    inbox_address: device.inboxAddress,
+    ephemeral_public_key: Array.isArray(x3dhEphemeralKey)
+      ? bytesToHex(x3dhEphemeralKey)
+      : x3dhEphemeralKey,
+    envelope: sealedEnvelope,
+    inbox_public_key: '',
+    inbox_signature: '',
+  });
+}
+
+/**
+ * Build the ACCEPT for a session the peer started: the existing ratchet's
+ * envelope wrapped in an InitializationEnvelope carrying our return inbox.
+ *
+ * Their session is unconfirmed until this lands, and while unconfirmed their
+ * receive path takes ConfirmDoubleRatchetSenderSession, which rejects a plain
+ * frame outright. That function then decrypts with `encryption_state.
+ * ratchet_state` (channel.ts L1123) — the EXISTING ratchet — so the accept must
+ * NOT re-run X3DH. A fresh X3DH here would replace the very session their
+ * frames are encrypted against.
+ *
+ * Signed like any confirmed-path frame: it is written to their conversation
+ * inbox, which verifies the signature.
+ *
+ * Returns null when we no longer hold this session's own return inbox keys —
+ * there is nothing to announce, so the caller falls back to a plain send.
+ *
+ * Does NOT record the accept: `announced` reports whether this frame can
+ * actually announce anything, and the caller flips the flag only once the whole
+ * batch exists. Recording it here would mark an accept that a sibling device's
+ * exception then discarded (see the deferred markAcceptSent in the send loop).
+ */
+async function buildAcceptSend(args: {
+  conversationId: string;
+  message: Message;
+  state: { inboxId: string; sendingInbox?: { inbox_address?: string; inbox_encryption_key?: string; inbox_public_key?: string; inbox_private_key?: string } };
+  deviceKeyset: { identityPublicKey: number[]; inboxAddress: string };
+  userAddress: string;
+  displayName?: string;
+  cryptoProvider: {
+    generateX448(): Promise<{ public_key: number[]; private_key: number[] }>;
+    encryptInboxMessage(request: {
+      inbox_public_key: number[];
+      ephemeral_private_key: number[];
+      plaintext: number[];
+    }): Promise<string>;
+  };
+}): Promise<{ sealed: string; announced: boolean } | null> {
+  const { conversationId, message, state, deviceKeyset, userAddress, displayName, cryptoProvider } = args;
+  const sendingInbox = state.sendingInbox;
+  if (!sendingInbox?.inbox_address || !sendingInbox.inbox_encryption_key) return null;
+
+  const returnInbox = sessionReturnInbox(state);
+  if (!returnInbox) return null;
+
+  const encrypted = await encryptWithExistingSession(
+    conversationId,
+    state.inboxId,
+    JSON.stringify(message)
+  );
+
+  const initEnvelope: InitializationEnvelope = {
+    user_address: userAddress,
+    display_name: displayName || userAddress,
+    return_inbox_address: returnInbox.inboxAddress,
+    return_inbox_encryption_key: bytesToHex(returnInbox.encryptionPublicKey),
+    return_inbox_public_key: returnInbox.signingPublicKey ? bytesToHex(returnInbox.signingPublicKey) : '',
+    return_inbox_private_key: returnInbox.signingPrivateKey ? bytesToHex(returnInbox.signingPrivateKey) : '',
+    identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
+    tag: deviceKeyset.inboxAddress,
+    message: encrypted.envelope,
+    type: 'direct',
+  };
+
+  const envelopeBytes = Array.from(new TextEncoder().encode(JSON.stringify(initEnvelope)));
+  const sealingEphemeralKey = await cryptoProvider.generateX448();
+  const sealedEnvelope = await cryptoProvider.encryptInboxMessage({
+    inbox_public_key: hexToBytes(sendingInbox.inbox_encryption_key),
+    ephemeral_private_key: sealingEphemeralKey.private_key,
+    plaintext: envelopeBytes,
+  });
+
+  const inboxAuth = await signConfirmedEnvelope(sendingInbox, sealedEnvelope);
+  const sealed = JSON.stringify({
+    type: 'direct',
+    inbox_address: sendingInbox.inbox_address,
+    envelope: sealedEnvelope,
+    ephemeral_public_key: bytesToHex(sealingEphemeralKey.public_key),
+    inbox_public_key: inboxAuth.inbox_public_key,
+    inbox_signature: inboxAuth.inbox_signature,
+  });
+
+  // signConfirmedEnvelope degrades to unsigned rather than throwing, and their
+  // conversation inbox rejects an unsigned write — so such a frame announces
+  // nothing and must not count as our accept. Send it anyway (it costs
+  // nothing) and let the next send announce again.
+  if (!inboxAuth.inbox_signature) {
+    logger.warn(
+      '[DM-send] accept went out unsigned, not recording it:',
+      state.inboxId.slice(0, 12),
+    );
+  }
+  return { sealed, announced: !!inboxAuth.inbox_signature };
+}
+
+/**
  * Send an encrypted message to ALL target device inboxes
  *
  * This handles multi-device support by:
@@ -968,7 +1175,7 @@ export async function sendEncryptedMessageToAllDevices(
   const devicesNeedingNewSession: typeof allTargetDevices = [];
   const devicesWithExistingSession: Array<{
     device: typeof allTargetDevices[0];
-    state: ReturnType<typeof encryptionStateStorage.getEncryptionState>;
+    state: NonNullable<ReturnType<typeof encryptionStateStorage.getEncryptionState>>;
   }> = [];
 
   for (const device of allTargetDevices) {
@@ -990,44 +1197,38 @@ export async function sendEncryptedMessageToAllDevices(
     }
   }
 
-  // For new sessions, generate conversation inbox keypairs BEFORE enqueuing
-  // so we can properly subscribe to them
-  // Generate all keypairs in parallel for better performance
+  // Resolve every return inbox BEFORE enqueuing, so all of them can be
+  // subscribed before anything is sent — the peer's confirming reply is lost if
+  // nothing is listening on the inbox we advertise.
+  //
+  // Each session gets its OWN inbox: a new session mints one, a re-initializing
+  // session reuses the inbox its row is keyed by (see sessionReturnInbox). One
+  // shared conversation inbox made all of a peer's devices re-initialize into
+  // ONE row, destroying every session but the last.
+  const generator: InboxKeyGenerator = cryptoProvider;
+
   const newSessionPrepData = await Promise.all(
-    devicesNeedingNewSession.map(async (device) => {
-      // Generate X448 for encryption, Ed448 for signing - in parallel
-      const [conversationInboxKeypair, conversationSigningKeypair] = await Promise.all([
-        cryptoProvider.generateX448(),
-        cryptoProvider.generateEd448(),
-      ]);
-      // Derive address from Ed448 signing key
-      const conversationInboxAddress = deriveAddress(new Uint8Array(conversationSigningKeypair.public_key));
-
-      // Store the conversation inbox keypair
-      const storedKeypair: ConversationInboxKeypair = {
-        conversationId,
-        inboxAddress: conversationInboxAddress,
-        encryptionPublicKey: conversationInboxKeypair.public_key,
-        encryptionPrivateKey: conversationInboxKeypair.private_key,
-        signingPublicKey: conversationSigningKeypair.public_key,
-        signingPrivateKey: conversationSigningKeypair.private_key,
-      };
-      encryptionStateStorage.saveConversationInboxKeypair(storedKeypair);
-
-      // Save inbox mapping
-      encryptionStateStorage.saveInboxMapping(conversationInboxAddress, conversationId);
-
-      return {
-        device,
-        conversationInboxAddress,
-        conversationInboxKeypair,
-        conversationSigningKeypair,
-      };
-    })
+    devicesNeedingNewSession.map(async (device) => ({
+      device,
+      returnInbox: await mintSessionReturnInbox(conversationId, generator),
+    }))
   );
 
-  // Subscribe to all conversation inboxes in parallel
-  const inboxAddresses = newSessionPrepData.map((p) => p.conversationInboxAddress);
+  const reinitPrepData = await Promise.all(
+    devicesWithExistingSession
+      .filter(({ state }) => state.inboxId && state.state && sessionSendShape(state) === 'init')
+      .map(async ({ device, state }) => ({
+        device,
+        ...(await resolveSessionReturnInbox(conversationId, state, generator)),
+      }))
+  );
+  const reinitByDevice = new Map(reinitPrepData.map((p) => [p.device.inboxAddress, p.inbox]));
+
+  // Only freshly minted inboxes need a subscription; reused ones already have one.
+  const inboxAddresses = [
+    ...newSessionPrepData.map((p) => p.returnInbox.inboxAddress),
+    ...reinitPrepData.filter((p) => p.minted).map((p) => p.inbox.inboxAddress),
+  ];
   if (inboxAddresses.length > 0) {
     await subscribe(inboxAddresses);
   }
@@ -1035,78 +1236,31 @@ export async function sendEncryptedMessageToAllDevices(
   // Enqueue all outbound messages
   enqueueOutbound(async () => {
     const outbounds: string[] = [];
+    // Sessions whose accept is in this batch. Flipped only once every frame
+    // below exists — see the loop that drains this before returning.
+    const acceptedSessions: string[] = [];
 
     // === Handle new sessions ===
-    for (const prep of newSessionPrepData) {
-      const { device, conversationInboxAddress, conversationInboxKeypair, conversationSigningKeypair } = prep;
-
-      // Encrypt with Double Ratchet using the new device method
-      // This forces a new session to be established for this specific device
-      const encrypted = await encryptionService.encryptMessageForNewDevice(
+    for (const { device, returnInbox } of newSessionPrepData) {
+      const sealed = await buildInitEnvelopeSend({
         conversationId,
-        {
-          address: recipientAddress,
-          identityKey: device.identityKey,
-          signedPreKey: device.signedPreKey,
-          inboxAddress: device.inboxAddress,
-          inboxEncryptionKey: device.inboxEncryptionKey,
-        },
-        JSON.stringify(message),
-        conversationInboxAddress,
-        device.inboxAddress  // Use device's inbox as the tag
-      );
-
-      // Get X3DH ephemeral key
-      const x3dhEphemeralKey = encrypted.ephemeralPublicKey;
-      if (!x3dhEphemeralKey || x3dhEphemeralKey.length === 0) {
-        continue;
-      }
-
-      const x3dhEphemeralKeyBytes = Array.isArray(x3dhEphemeralKey) ? x3dhEphemeralKey : hexToBytes(x3dhEphemeralKey);
-      const x3dhEphemeralKeyHex = Array.isArray(x3dhEphemeralKey) ? bytesToHex(x3dhEphemeralKey) : x3dhEphemeralKey;
-
-      // Build InitializationEnvelope
-      const initEnvelope: InitializationEnvelope = {
-        user_address: userAddress,
-        display_name: displayName || userAddress,
-        return_inbox_address: conversationInboxAddress,
-        return_inbox_encryption_key: bytesToHex(conversationInboxKeypair.public_key),
-        return_inbox_public_key: bytesToHex(conversationSigningKeypair.public_key),
-        return_inbox_private_key: bytesToHex(conversationSigningKeypair.private_key),
-        identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-        // SDK-standard tag: sender's device inbox — the identity the
-        // receiver files this session under (previously the conversation
-        // inbox, which peers' device lists never contain).
-        tag: deviceKeyset.inboxAddress,
-        message: encrypted.envelope,
-        type: 'direct',
-      };
-
-      // Seal with recipient's inbox encryption key
-      const textEncoder = new TextEncoder();
-      const envelopeBytes = Array.from(textEncoder.encode(JSON.stringify(initEnvelope)));
-
-      const ephemeralPrivateKey = encrypted.ephemeralPrivateKey;
-      if (!ephemeralPrivateKey || ephemeralPrivateKey.length === 0) {
-        continue;
-      }
-
-      const sealedEnvelope = await cryptoProvider.encryptInboxMessage({
-        inbox_public_key: device.inboxEncryptionKey,
-        ephemeral_private_key: ephemeralPrivateKey,
-        plaintext: envelopeBytes,
+        recipientAddress,
+        message,
+        device,
+        returnInbox,
+        deviceKeyset,
+        userAddress,
+        displayName,
+        cryptoProvider,
       });
-
-      const sealedMessage = {
-        type: 'direct',
-        inbox_address: device.inboxAddress,
-        ephemeral_public_key: x3dhEphemeralKeyHex,
-        envelope: sealedEnvelope,
-        inbox_public_key: '',
-        inbox_signature: '',
-      };
-
-      outbounds.push(JSON.stringify(sealedMessage));
+      if (sealed) {
+        outbounds.push(sealed);
+      } else {
+        logger.warn(
+          '[DM-send] X3DH produced no ephemeral key, device skipped:',
+          device.inboxAddress.slice(0, 12),
+        );
+      }
     }
 
     // === Handle existing sessions ===
@@ -1118,11 +1272,37 @@ export async function sendEncryptedMessageToAllDevices(
         continue;
       }
 
-      // Check if session is confirmed or needs InitializationEnvelope
+      // Which shape this frame must take on the wire — see sessionSendShape.
       const sendingInbox = state.sendingInbox;
-      const needsInitEnvelope = !sendingInbox || sendingInbox.inbox_public_key === '';
+      const shape = sessionSendShape(state);
+      const reinitInbox = reinitByDevice.get(device.inboxAddress);
 
-      if (needsInitEnvelope && sendingInbox?.inbox_encryption_key) {
+      if (shape === 'accept') {
+        // The peer opened this session and is still unconfirmed: our first
+        // frame back must carry our return inbox or they reject all of them.
+        const accept = await buildAcceptSend({
+          conversationId,
+          message,
+          state,
+          deviceKeyset,
+          userAddress,
+          displayName,
+          cryptoProvider,
+        });
+        if (accept) {
+          outbounds.push(accept.sealed);
+          if (accept.announced) acceptedSessions.push(state.inboxId);
+          continue;
+        }
+        // No return inbox to announce — fall through to the plain send below,
+        // which is what we did before and is no worse.
+        logger.warn(
+          '[DM-send] cannot announce a return inbox for this session, sending plain:',
+          device.inboxAddress.slice(0, 12),
+        );
+      }
+
+      if (shape === 'init' && reinitInbox) {
         // CRITICAL: Unconfirmed session means the receiver never got our previous messages
         // or never acknowledged them. We need to send as a NEW session so the receiver
         // can do X3DH and derive the same initial ratchet state.
@@ -1130,102 +1310,28 @@ export async function sendEncryptedMessageToAllDevices(
         // If we use the existing (advanced) ratchet state, the receiver will do X3DH
         // to get the initial state, and won't be able to decrypt our message.
         //
-        // Treat this like devicesNeedingNewSession - establish a fresh X3DH session.
-
-        // Get or create conversation inbox for this device
-        let convInboxAddress: string;
-        let convInboxKeypair: { public_key: number[]; private_key: number[] };
-        let convSigningKeypair: { public_key: number[]; private_key: number[] };
-
-        const existingConvInbox = encryptionStateStorage.getConversationInboxKeypair(conversationId);
-        if (existingConvInbox) {
-          convInboxAddress = existingConvInbox.inboxAddress;
-          convInboxKeypair = {
-            public_key: existingConvInbox.encryptionPublicKey,
-            private_key: existingConvInbox.encryptionPrivateKey,
-          };
-          convSigningKeypair = {
-            public_key: existingConvInbox.signingPublicKey,
-            private_key: existingConvInbox.signingPrivateKey,
-          };
-        } else {
-          // Generate new conversation inbox
-          convInboxKeypair = await cryptoProvider.generateX448();
-          convSigningKeypair = await cryptoProvider.generateEd448();
-          convInboxAddress = deriveAddress(new Uint8Array(convSigningKeypair.public_key));
-
-          const storedKeypair: ConversationInboxKeypair = {
-            conversationId,
-            inboxAddress: convInboxAddress,
-            encryptionPublicKey: convInboxKeypair.public_key,
-            encryptionPrivateKey: convInboxKeypair.private_key,
-            signingPublicKey: convSigningKeypair.public_key,
-            signingPrivateKey: convSigningKeypair.private_key,
-          };
-          encryptionStateStorage.saveConversationInboxKeypair(storedKeypair);
-          encryptionStateStorage.saveInboxMapping(convInboxAddress, conversationId);
-        }
-
-        // Force a new X3DH session for this device
-        const encrypted = await encryptionService.encryptMessageForNewDevice(
+        // Treat this like devicesNeedingNewSession - establish a fresh X3DH session,
+        // into THIS session's own return inbox (resolved during prep) so the
+        // re-init cannot overwrite another device's row.
+        const sealed = await buildInitEnvelopeSend({
           conversationId,
-          {
-            address: recipientAddress,
-            identityKey: device.identityKey,
-            signedPreKey: device.signedPreKey,
-            inboxAddress: device.inboxAddress,
-            inboxEncryptionKey: device.inboxEncryptionKey,
-          },
-          JSON.stringify(message),
-          convInboxAddress,
-          device.inboxAddress  // Tag with device inbox
-        );
-
-        const x3dhEphemeralKey = encrypted.ephemeralPublicKey;
-        if (!x3dhEphemeralKey || x3dhEphemeralKey.length === 0) {
-          continue;
-        }
-
-        const x3dhEphemeralKeyHex = Array.isArray(x3dhEphemeralKey) ? bytesToHex(x3dhEphemeralKey) : x3dhEphemeralKey;
-
-        const initEnvelope: InitializationEnvelope = {
-          user_address: userAddress,
-          display_name: displayName || userAddress,
-          return_inbox_address: convInboxAddress,
-          return_inbox_encryption_key: bytesToHex(convInboxKeypair.public_key),
-          return_inbox_public_key: bytesToHex(convSigningKeypair.public_key),
-          return_inbox_private_key: bytesToHex(convSigningKeypair.private_key),
-          identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-          // SDK-standard tag: sender's device inbox (see first-send builder).
-          tag: deviceKeyset.inboxAddress,
-          message: encrypted.envelope,
-          type: 'direct',
-        };
-
-        const textEncoder = new TextEncoder();
-        const envelopeBytes = Array.from(textEncoder.encode(JSON.stringify(initEnvelope)));
-
-        const ephemeralPrivateKey = encrypted.ephemeralPrivateKey;
-        if (!ephemeralPrivateKey || ephemeralPrivateKey.length === 0) {
-          continue;
-        }
-
-        const sealedEnvelope = await cryptoProvider.encryptInboxMessage({
-          inbox_public_key: device.inboxEncryptionKey,
-          ephemeral_private_key: ephemeralPrivateKey,
-          plaintext: envelopeBytes,
+          recipientAddress,
+          message,
+          device,
+          returnInbox: reinitInbox,
+          deviceKeyset,
+          userAddress,
+          displayName,
+          cryptoProvider,
         });
-
-        const sealedMessage = {
-          type: 'direct',
-          inbox_address: device.inboxAddress,
-          ephemeral_public_key: x3dhEphemeralKeyHex,
-          envelope: sealedEnvelope,
-          inbox_public_key: '',
-          inbox_signature: '',
-        };
-
-        outbounds.push(JSON.stringify(sealedMessage));
+        if (sealed) {
+          outbounds.push(sealed);
+        } else {
+          logger.warn(
+            '[DM-send] X3DH produced no ephemeral key on re-init, device skipped:',
+            device.inboxAddress.slice(0, 12),
+          );
+        }
       } else if (sendingInbox?.inbox_address && sendingInbox?.inbox_encryption_key) {
         // Confirmed session - encrypt with existing session and send directly
         const encrypted = await encryptWithExistingSession(
@@ -1257,7 +1363,27 @@ export async function sendEncryptedMessageToAllDevices(
         };
 
         outbounds.push(JSON.stringify(existingSessionMsg));
+      } else {
+        // Neither sendable nor re-initializable: the row has no inbox to seal
+        // to. Nothing we can do here, but it must not be silent.
+        logger.warn(
+          '[DM-send] session has no usable sendingInbox, device skipped:',
+          device.inboxAddress.slice(0, 12),
+        );
       }
+    }
+
+    // Record the accepts LAST, once every frame in this batch exists.
+    //
+    // A device throwing anywhere in the loops above rejects this whole
+    // callback, and the transport discards the entire batch without requeueing
+    // it (rn-websocket's processQueues logs and moves on). Flipping the flag
+    // inside the loop would therefore mark an accept for a frame that was
+    // never queued — and the session, believing it announced, would send only
+    // plain frames the peer rejects. Permanently, until a manual reset. The
+    // ghost devices in a normal fan-out make a mid-loop throw plausible.
+    for (const inboxId of acceptedSessions) {
+      await encryptionService.markAcceptSent(conversationId, inboxId);
     }
 
     // Reached only inside the outbound-queue drain, which runs only when the

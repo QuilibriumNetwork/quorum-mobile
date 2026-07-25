@@ -11,9 +11,11 @@ import { getQuorumClient } from '@/services/api/quorumClient';
 import { encryptionService } from '@/services/crypto/encryption-service';
 import { ratchetMutex } from '@/services/crypto/ratchet-mutex';
 import { encryptionStateStorage, type ConversationInboxKeypair } from '@/services/crypto/encryption-state-storage';
+import { sessionReturnInbox } from '@/services/crypto/sessionReturnInbox';
+import { sessionSendShape } from '@/services/crypto/sessionSendShape';
 import { getDeviceKeyset, getPrivateKey, getPublicKey } from '@/services/onboarding/secureStorage';
 import { deriveAddress } from '@/services/onboarding/keyService';
-import { queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope, type EmbedMessage } from '@quilibrium/quorum-shared';
+import { logger, queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope, type EmbedMessage } from '@quilibrium/quorum-shared';
 import type { Message } from '@quilibrium/quorum-shared';
 import type { MessagePreview } from '@/utils/messagePreview';
 import { NativeSigningProvider } from '@/services/crypto/native-signing-provider';
@@ -540,11 +542,29 @@ async function sendEncryptedEmbedMessage(
       );
 
       const sendingInbox = encryptionState.sendingInbox;
-      const needsInitEnvelope = !sendingInbox || sendingInbox.inbox_public_key === '';
+      // 'accept' is the session the PEER opened: they stay unconfirmed and drop
+      // every plain frame until we announce our return inbox once. Same wire
+      // shape as 'init' — the existing ratchet, wrapped — so one branch serves
+      // both; only the bookkeeping at the end differs. See sessionSendShape.
+      const shape = sessionSendShape(encryptionState);
+      // An accept with no return-inbox keys of its own would advertise the
+      // DEVICE inbox and empty signing keys, which the peer's confirm step
+      // rejects outright — while we recorded the accept as sent. Fall back to
+      // the plain send instead (what this path did before) and stay honest.
+      const canAnnounce = sessionReturnInbox(encryptionState) !== null;
+      if (shape === 'accept' && !canAnnounce) {
+        logger.warn(
+          '[DM-embed] no return inbox to announce for this session, sending plain:',
+          encryptionState.inboxId?.slice(0, 12),
+        );
+      }
+      const needsInitEnvelope = shape === 'init' || (shape === 'accept' && canAnnounce);
 
       if (needsInitEnvelope && sendingInbox?.inbox_encryption_key) {
-        // Unconfirmed session
-        const ourConversationInbox = encryptionStateStorage.getConversationInboxKeypair(conversationId);
+        // Unconfirmed session. The return inbox is THIS session's own (the row
+        // we are advancing) — a conversation-wide one belongs to whichever
+        // device wrote it last, and the peer would confirm the wrong row.
+        const ourConversationInbox = sessionReturnInbox(encryptionState);
 
         let ephemeralPrivateKeyBytes: number[];
         let ephemeralPublicKeyHex: string;
@@ -595,16 +615,27 @@ async function sendEncryptedEmbedMessage(
           plaintext: envelopeBytes,
         });
 
+        // An accept is written to their CONVERSATION inbox, which verifies the
+        // signature; an init goes to their device inbox and has no signing key
+        // yet. signConfirmedEnvelope returns empty fields in that case, so one
+        // call covers both.
+        const inboxAuth = await signConfirmedEnvelope(sendingInbox, sealedEnvelope);
         const sealedMessage = {
           type: 'direct',
           inbox_address: sendingInbox.inbox_address,
           ephemeral_public_key: ephemeralPublicKeyHex,
           envelope: sealedEnvelope,
-          inbox_public_key: '',
-          inbox_signature: '',
+          inbox_public_key: inboxAuth.inbox_public_key,
+          inbox_signature: inboxAuth.inbox_signature,
         };
 
         outbounds.push(JSON.stringify(sealedMessage));
+        // Only a SIGNED accept can land — their conversation inbox rejects an
+        // unsigned write, so recording one would strand the session on plain
+        // frames they refuse.
+        if (shape === 'accept' && inboxAuth.inbox_signature) {
+          await encryptionService.markAcceptSent(conversationId, encryptionState.inboxId);
+        }
       } else if (sendingInbox?.inbox_address) {
         // Confirmed session
         const sealingEphemeralKey = await cryptoProvider.generateX448();

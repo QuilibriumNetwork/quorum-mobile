@@ -5237,9 +5237,25 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
    */
   const throttledMessageHandler = useCallback((message: EncryptedWebSocketMessage) => {
     const me = fullUserAddrRef.current?.slice(0, 8) ?? '???';
-    // Diagnostic: confirm WS messages are reaching the client at all.
+    // The server's only channel for telling us a write was refused. It was
+    // logged at debug and dropped, which made a rejected inbox write
+    // indistinguishable from a delivered one: frames left the socket, never
+    // reached the peer, and nothing anywhere said why. Warn, and keep the
+    // whole payload — the reason is the point.
     if ('error' in message && message.error) {
-      logger.debug(`[WS-in ${me}] error msg`, message.error);
+      logger.warn(`[WS-in ${me}] SERVER REJECTED`, JSON.stringify(message));
+      return;
+    }
+
+    // Anything inbound that is neither an error, nor a known frame type, nor a
+    // sealed message is by definition unhandled. Silence here hid the case
+    // above for months; if the server answers writes in some other shape, this
+    // is what surfaces it.
+    if (
+      !(message as { encryptedContent?: unknown }).encryptedContent &&
+      !(message as { type?: unknown }).type
+    ) {
+      logger.warn(`[WS-in ${me}] UNHANDLED inbound payload`, JSON.stringify(message).slice(0, 400));
       return;
     }
 
@@ -5436,7 +5452,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         try {
           envelopes = await prepareMessage();
         } catch (err) {
-          logger.debug(`[WS-send ${me}] prepareMessage threw`, err);
+          // The transport discards this whole batch without requeueing it, so
+          // one device's failure silently costs every device in the fan-out.
+          // Debug level made that invisible under a warnings-only capture.
+          logger.warn(`[WS-send ${me}] prepareMessage threw, WHOLE batch dropped`, err);
           throw err;
         }
         for (const env of envelopes) {
