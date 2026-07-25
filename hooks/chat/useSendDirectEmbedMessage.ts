@@ -15,7 +15,7 @@ import { sessionReturnInbox } from '@/services/crypto/sessionReturnInbox';
 import { sessionSendShape } from '@/services/crypto/sessionSendShape';
 import { getDeviceKeyset, getPrivateKey, getPublicKey } from '@/services/onboarding/secureStorage';
 import { deriveAddress } from '@/services/onboarding/keyService';
-import { queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope, type EmbedMessage } from '@quilibrium/quorum-shared';
+import { logger, queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope, type EmbedMessage } from '@quilibrium/quorum-shared';
 import type { Message } from '@quilibrium/quorum-shared';
 import type { MessagePreview } from '@/utils/messagePreview';
 import { NativeSigningProvider } from '@/services/crypto/native-signing-provider';
@@ -547,7 +547,18 @@ async function sendEncryptedEmbedMessage(
       // shape as 'init' — the existing ratchet, wrapped — so one branch serves
       // both; only the bookkeeping at the end differs. See sessionSendShape.
       const shape = sessionSendShape(encryptionState);
-      const needsInitEnvelope = shape === 'init' || shape === 'accept';
+      // An accept with no return-inbox keys of its own would advertise the
+      // DEVICE inbox and empty signing keys, which the peer's confirm step
+      // rejects outright — while we recorded the accept as sent. Fall back to
+      // the plain send instead (what this path did before) and stay honest.
+      const canAnnounce = sessionReturnInbox(encryptionState) !== null;
+      if (shape === 'accept' && !canAnnounce) {
+        logger.warn(
+          '[DM-embed] no return inbox to announce for this session, sending plain:',
+          encryptionState.inboxId?.slice(0, 12),
+        );
+      }
+      const needsInitEnvelope = shape === 'init' || (shape === 'accept' && canAnnounce);
 
       if (needsInitEnvelope && sendingInbox?.inbox_encryption_key) {
         // Unconfirmed session. The return inbox is THIS session's own (the row
@@ -619,7 +630,10 @@ async function sendEncryptedEmbedMessage(
         };
 
         outbounds.push(JSON.stringify(sealedMessage));
-        if (shape === 'accept') {
+        // Only a SIGNED accept can land — their conversation inbox rejects an
+        // unsigned write, so recording one would strand the session on plain
+        // frames they refuse.
+        if (shape === 'accept' && inboxAuth.inbox_signature) {
           await encryptionService.markAcceptSent(conversationId, encryptionState.inboxId);
         }
       } else if (sendingInbox?.inbox_address) {

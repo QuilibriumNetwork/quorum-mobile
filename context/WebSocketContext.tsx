@@ -5452,7 +5452,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         try {
           envelopes = await prepareMessage();
         } catch (err) {
-          logger.debug(`[WS-send ${me}] prepareMessage threw`, err);
+          // The transport discards this whole batch without requeueing it, so
+          // one device's failure silently costs every device in the fan-out.
+          // Debug level made that invisible under a warnings-only capture.
+          logger.warn(`[WS-send ${me}] prepareMessage threw, WHOLE batch dropped`, err);
           throw err;
         }
         for (const env of envelopes) {

@@ -1048,6 +1048,11 @@ async function buildInitEnvelopeSend(args: {
  *
  * Returns null when we no longer hold this session's own return inbox keys —
  * there is nothing to announce, so the caller falls back to a plain send.
+ *
+ * Does NOT record the accept: `announced` reports whether this frame can
+ * actually announce anything, and the caller flips the flag only once the whole
+ * batch exists. Recording it here would mark an accept that a sibling device's
+ * exception then discarded (see the deferred markAcceptSent in the send loop).
  */
 async function buildAcceptSend(args: {
   conversationId: string;
@@ -1064,7 +1069,7 @@ async function buildAcceptSend(args: {
       plaintext: number[];
     }): Promise<string>;
   };
-}): Promise<string | null> {
+}): Promise<{ sealed: string; announced: boolean } | null> {
   const { conversationId, message, state, deviceKeyset, userAddress, displayName, cryptoProvider } = args;
   const sendingInbox = state.sendingInbox;
   if (!sendingInbox?.inbox_address || !sendingInbox.inbox_encryption_key) return null;
@@ -1109,9 +1114,17 @@ async function buildAcceptSend(args: {
     inbox_signature: inboxAuth.inbox_signature,
   });
 
-  // Only now that the frame exists — see markAcceptSent.
-  await encryptionService.markAcceptSent(conversationId, state.inboxId);
-  return sealed;
+  // signConfirmedEnvelope degrades to unsigned rather than throwing, and their
+  // conversation inbox rejects an unsigned write — so such a frame announces
+  // nothing and must not count as our accept. Send it anyway (it costs
+  // nothing) and let the next send announce again.
+  if (!inboxAuth.inbox_signature) {
+    logger.warn(
+      '[DM-send] accept went out unsigned, not recording it:',
+      state.inboxId.slice(0, 12),
+    );
+  }
+  return { sealed, announced: !!inboxAuth.inbox_signature };
 }
 
 /**
@@ -1223,6 +1236,9 @@ export async function sendEncryptedMessageToAllDevices(
   // Enqueue all outbound messages
   enqueueOutbound(async () => {
     const outbounds: string[] = [];
+    // Sessions whose accept is in this batch. Flipped only once every frame
+    // below exists — see the loop that drains this before returning.
+    const acceptedSessions: string[] = [];
 
     // === Handle new sessions ===
     for (const { device, returnInbox } of newSessionPrepData) {
@@ -1237,7 +1253,14 @@ export async function sendEncryptedMessageToAllDevices(
         displayName,
         cryptoProvider,
       });
-      if (sealed) outbounds.push(sealed);
+      if (sealed) {
+        outbounds.push(sealed);
+      } else {
+        logger.warn(
+          '[DM-send] X3DH produced no ephemeral key, device skipped:',
+          device.inboxAddress.slice(0, 12),
+        );
+      }
     }
 
     // === Handle existing sessions ===
@@ -1257,7 +1280,7 @@ export async function sendEncryptedMessageToAllDevices(
       if (shape === 'accept') {
         // The peer opened this session and is still unconfirmed: our first
         // frame back must carry our return inbox or they reject all of them.
-        const sealed = await buildAcceptSend({
+        const accept = await buildAcceptSend({
           conversationId,
           message,
           state,
@@ -1266,8 +1289,9 @@ export async function sendEncryptedMessageToAllDevices(
           displayName,
           cryptoProvider,
         });
-        if (sealed) {
-          outbounds.push(sealed);
+        if (accept) {
+          outbounds.push(accept.sealed);
+          if (accept.announced) acceptedSessions.push(state.inboxId);
           continue;
         }
         // No return inbox to announce — fall through to the plain send below,
@@ -1300,7 +1324,14 @@ export async function sendEncryptedMessageToAllDevices(
           displayName,
           cryptoProvider,
         });
-        if (sealed) outbounds.push(sealed);
+        if (sealed) {
+          outbounds.push(sealed);
+        } else {
+          logger.warn(
+            '[DM-send] X3DH produced no ephemeral key on re-init, device skipped:',
+            device.inboxAddress.slice(0, 12),
+          );
+        }
       } else if (sendingInbox?.inbox_address && sendingInbox?.inbox_encryption_key) {
         // Confirmed session - encrypt with existing session and send directly
         const encrypted = await encryptWithExistingSession(
@@ -1340,6 +1371,19 @@ export async function sendEncryptedMessageToAllDevices(
           device.inboxAddress.slice(0, 12),
         );
       }
+    }
+
+    // Record the accepts LAST, once every frame in this batch exists.
+    //
+    // A device throwing anywhere in the loops above rejects this whole
+    // callback, and the transport discards the entire batch without requeueing
+    // it (rn-websocket's processQueues logs and moves on). Flipping the flag
+    // inside the loop would therefore mark an accept for a frame that was
+    // never queued — and the session, believing it announced, would send only
+    // plain frames the peer rejects. Permanently, until a manual reset. The
+    // ghost devices in a normal fan-out make a mid-loop throw plausible.
+    for (const inboxId of acceptedSessions) {
+      await encryptionService.markAcceptSent(conversationId, inboxId);
     }
 
     // Reached only inside the outbound-queue drain, which runs only when the

@@ -151,6 +151,36 @@ describe('a recipient session announces once, then goes plain', () => {
   });
 });
 
+describe('an accept that never reached the wire is not recorded', () => {
+  // Three ways the accept can fail to land. Each one, if recorded anyway,
+  // strands the session on plain frames the peer rejects — permanently, until
+  // a manual reset. That is the exact deadlock this whole change exists to fix,
+  // so re-arming it through the back door is the worst available outcome.
+
+  it('stays in accept shape when the flag was never flipped', async () => {
+    // Stands in for: a sibling device threw mid-batch and the transport
+    // discarded every frame, so no accept was recorded.
+    encryptionStateStorage.saveEncryptionState(recipientSession(), false, true);
+
+    const row = encryptionStateStorage.getEncryptionState(CONV, INBOX)!;
+    expect(sessionSendShape(row)).toBe('accept');
+    expect(row.sentAccept).toBe(false);
+  });
+
+  it('re-announces on the next send after an unrecorded accept', async () => {
+    encryptionStateStorage.saveEncryptionState(recipientSession(), false, true);
+
+    // First attempt produced a frame but it was not recorded (unsigned, or the
+    // batch was dropped). Second attempt must announce again.
+    expect(sessionSendShape(encryptionStateStorage.getEncryptionState(CONV, INBOX))).toBe('accept');
+    expect(sessionSendShape(encryptionStateStorage.getEncryptionState(CONV, INBOX))).toBe('accept');
+
+    // Only an explicit record moves it on.
+    await encryptionService.markAcceptSent(CONV, INBOX);
+    expect(sessionSendShape(encryptionStateStorage.getEncryptionState(CONV, INBOX))).toBe('plain');
+  });
+});
+
 describe('the two ways sentAccept gets set converge', () => {
   it('a session confirmed on RECEIVE sends plain, same as one accepted on SEND', async () => {
     // Mobile sets the flag in two unrelated places and they must mean one
