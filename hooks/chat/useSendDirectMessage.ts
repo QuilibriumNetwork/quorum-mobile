@@ -930,6 +930,15 @@ async function sendEncryptedMessage(
 }
 
 /**
+ * Short, stable fingerprint of a serialized ratchet state, for correlating a
+ * send with the peer's decrypt outcome without logging key material.
+ */
+function stateFingerprint(state: string | undefined): string {
+  if (!state) return 'none';
+  return bytesToHex(Array.from(sha256(new TextEncoder().encode(state)))).slice(0, 8);
+}
+
+/**
  * Build the sealed init-envelope send for ONE device session.
  *
  * Serves both a brand-new session and the re-initialization of an unconfirmed
@@ -1191,6 +1200,25 @@ export async function sendEncryptedMessageToAllDevices(
     const tagMatches = existingStates.filter((s) => s.tag === device.inboxAddress);
     const existingState = selectSendState(tagMatches);
     if (existingState) {
+      // Which session we chose, and what we chose it from. A frame that seals
+      // and signs correctly but fails the peer's INNER ratchet decrypt means we
+      // encrypted with a session they hold no counterpart for, and alternating
+      // between two rows of the same device is the way that happens. The state
+      // fingerprint distinguishes "ratchet advanced as expected" from
+      // "ratchet went backwards" across consecutive sends.
+      logger.warn(
+        '[DM-send row]',
+        JSON.stringify({
+          device: device.inboxAddress.slice(0, 10),
+          rows: tagMatches.length,
+          chose: existingState.inboxId?.slice(0, 10),
+          shape: sessionSendShape(existingState),
+          to: existingState.sendingInbox?.inbox_address?.slice(0, 10),
+          ts: existingState.timestamp,
+          fp: stateFingerprint(existingState.state),
+          all: tagMatches.map((s) => `${s.inboxId?.slice(0, 10)}@${s.timestamp}`),
+        }),
+      );
       devicesWithExistingSession.push({ device, state: existingState });
     } else {
       devicesNeedingNewSession.push(device);
