@@ -645,6 +645,27 @@ class EncryptionService {
   }
 
   /**
+   * Record that this session's accept is on the wire — the init-wrapped frame
+   * carrying OUR return inbox — so later sends use the plain shape. SDK parity
+   * with DoubleRatchetInboxEncrypt's `sent_accept` (see sessionSendShape).
+   *
+   * Call only AFTER the sealed frame exists: flipping earlier and then failing
+   * to build it would leave the session claiming an accept it never sent, and
+   * every later frame would be a plain one the peer rejects.
+   *
+   * Re-reads inside the ratchet lock and preserves the ratchet: a send may have
+   * advanced the state between encrypting and this call, and writing back a
+   * stale snapshot would regress a ratchet whose frame is already on the wire.
+   */
+  async markAcceptSent(conversationId: string, inboxId: string): Promise<void> {
+    return ratchetMutex.runExclusive(conversationId, async () => {
+      const fresh = encryptionStateStorage.getEncryptionState(conversationId, inboxId);
+      if (!fresh || fresh.sentAccept) return;
+      encryptionStateStorage.saveEncryptionState({ ...fresh, sentAccept: true }, false, true);
+    });
+  }
+
+  /**
    * Get the return inbox address for a conversation (for sending reset messages)
    */
   getReturnInboxForConversation(conversationId: string): string | null {

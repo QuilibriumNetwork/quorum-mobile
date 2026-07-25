@@ -12,6 +12,7 @@ import { encryptionService } from '@/services/crypto/encryption-service';
 import { ratchetMutex } from '@/services/crypto/ratchet-mutex';
 import { encryptionStateStorage, type ConversationInboxKeypair } from '@/services/crypto/encryption-state-storage';
 import { sessionReturnInbox } from '@/services/crypto/sessionReturnInbox';
+import { sessionSendShape } from '@/services/crypto/sessionSendShape';
 import { getDeviceKeyset, getPrivateKey, getPublicKey } from '@/services/onboarding/secureStorage';
 import { deriveAddress } from '@/services/onboarding/keyService';
 import { queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope, type EmbedMessage } from '@quilibrium/quorum-shared';
@@ -541,7 +542,12 @@ async function sendEncryptedEmbedMessage(
       );
 
       const sendingInbox = encryptionState.sendingInbox;
-      const needsInitEnvelope = !sendingInbox || sendingInbox.inbox_public_key === '';
+      // 'accept' is the session the PEER opened: they stay unconfirmed and drop
+      // every plain frame until we announce our return inbox once. Same wire
+      // shape as 'init' — the existing ratchet, wrapped — so one branch serves
+      // both; only the bookkeeping at the end differs. See sessionSendShape.
+      const shape = sessionSendShape(encryptionState);
+      const needsInitEnvelope = shape === 'init' || shape === 'accept';
 
       if (needsInitEnvelope && sendingInbox?.inbox_encryption_key) {
         // Unconfirmed session. The return inbox is THIS session's own (the row
@@ -598,16 +604,24 @@ async function sendEncryptedEmbedMessage(
           plaintext: envelopeBytes,
         });
 
+        // An accept is written to their CONVERSATION inbox, which verifies the
+        // signature; an init goes to their device inbox and has no signing key
+        // yet. signConfirmedEnvelope returns empty fields in that case, so one
+        // call covers both.
+        const inboxAuth = await signConfirmedEnvelope(sendingInbox, sealedEnvelope);
         const sealedMessage = {
           type: 'direct',
           inbox_address: sendingInbox.inbox_address,
           ephemeral_public_key: ephemeralPublicKeyHex,
           envelope: sealedEnvelope,
-          inbox_public_key: '',
-          inbox_signature: '',
+          inbox_public_key: inboxAuth.inbox_public_key,
+          inbox_signature: inboxAuth.inbox_signature,
         };
 
         outbounds.push(JSON.stringify(sealedMessage));
+        if (shape === 'accept') {
+          await encryptionService.markAcceptSent(conversationId, encryptionState.inboxId);
+        }
       } else if (sendingInbox?.inbox_address) {
         // Confirmed session
         const sealingEphemeralKey = await cryptoProvider.generateX448();
