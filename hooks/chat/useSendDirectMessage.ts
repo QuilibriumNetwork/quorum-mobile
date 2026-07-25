@@ -14,6 +14,7 @@ import { useAuth, useWebSocket } from '@/context';
 import { getQuorumClient } from '@/services/api/quorumClient';
 import { encryptionService } from '@/services/crypto/encryption-service';
 import { ratchetMutex } from '@/services/crypto/ratchet-mutex';
+import { selectSendState } from '@/services/crypto/selectSendState';
 import { encryptionStateStorage, type ConversationInboxKeypair } from '@/services/crypto/encryption-state-storage';
 import { getDeviceKeyset, getPrivateKey, getPublicKey } from '@/services/onboarding/secureStorage';
 import { deriveAddress } from '@/services/onboarding/keyService';
@@ -977,14 +978,11 @@ export async function sendEncryptedMessageToAllDevices(
     }
 
     // Check if we have an existing session for this device's inbox (by tag).
-    // Several rows can share a tag (e.g. a session created by RECEIVING the
-    // peer's message — born send-ready with their full return-inbox keys —
-    // alongside an older self-initiated one still waiting for confirmation).
-    // Prefer the send-ready row: it skips the init-envelope wrapping
-    // entirely.
+    // Several rows can share a tag, and the NEWEST send-ready one must win —
+    // see selectSendState for why (a peer's reset is otherwise ignored and we
+    // keep sending into an inbox they have abandoned).
     const tagMatches = existingStates.filter((s) => s.tag === device.inboxAddress);
-    const existingState =
-      tagMatches.find((s) => s.sendingInbox?.inbox_public_key) ?? tagMatches[0];
+    const existingState = selectSendState(tagMatches);
     if (existingState) {
       devicesWithExistingSession.push({ device, state: existingState });
     } else {
