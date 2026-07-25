@@ -939,6 +939,24 @@ function stateFingerprint(state: string | undefined): string {
 }
 
 /**
+ * Identity of a frame ON THE WIRE: a hash of the sealed envelope, which is the
+ * one field both sides see byte-for-byte. Server timestamps are NOT unique and
+ * counting by them has produced wrong conclusions before, so this is the only
+ * sound way to answer "did THIS frame arrive?".
+ *
+ * The peer computes the same value over
+ * `JSON.parse(message.encryptedContent).envelope`.
+ */
+function envelopeFingerprint(sealedMessageJson: string): string {
+  try {
+    const envelope = (JSON.parse(sealedMessageJson) as { envelope?: string }).envelope ?? '';
+    return bytesToHex(Array.from(sha256(new TextEncoder().encode(envelope)))).slice(0, 8);
+  } catch {
+    return 'unparsed';
+  }
+}
+
+/**
  * Build the sealed init-envelope send for ONE device session.
  *
  * Serves both a brand-new session and the re-initialization of an unconfirmed
@@ -1413,6 +1431,21 @@ export async function sendEncryptedMessageToAllDevices(
     for (const inboxId of acceptedSessions) {
       await encryptionService.markAcceptSent(conversationId, inboxId);
     }
+
+    // What actually hit the wire, and to whom. This line runs only inside the
+    // drain, i.e. only with the socket OPEN, so its presence is proof of
+    // transmission — the [DM-send row] line above only proves preparation.
+    // Receipt ticks cannot be used for this: they are known to show for
+    // undelivered messages.
+    logger.warn(
+      '[DM-send wire]',
+      JSON.stringify(
+        outbounds.map((o) => {
+          const target = (JSON.parse(o) as { inbox_address?: string }).inbox_address ?? '?';
+          return `${target.slice(0, 10)}:${envelopeFingerprint(o)}`;
+        }),
+      ),
+    );
 
     // Reached only inside the outbound-queue drain, which runs only when the
     // socket is OPEN — the honest "actually transmitting" moment.
