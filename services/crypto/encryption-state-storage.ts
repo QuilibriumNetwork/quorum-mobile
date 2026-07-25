@@ -425,15 +425,14 @@ class EncryptionStateStorage {
   // Conversation Inbox Keypairs
 
   /**
-   * Save a per-conversation inbox keypair
-   * This keypair is used to receive replies for a specific conversation
+   * Save an inbox keypair used to receive replies for one SESSION.
    *
-   * Also stored keyed BY INBOX ADDRESS: the per-conversation slot is
-   * last-writer-wins, so with multi-device sends (one return inbox per
-   * device session) only the last device's keypair survived there. The
-   * per-address copy lets the send path re-advertise a SESSION's own
-   * return inbox (desktop parity), which is what makes the peer's
-   * confirming reply land back on the row the send path reads.
+   * The authoritative copy is keyed BY INBOX ADDRESS — a conversation has one
+   * inbox per session (one per peer device), and the per-conversation slot is
+   * last-writer-wins, so it only ever holds the newest. That slot is still
+   * written for backwards compatibility (records predating the per-address
+   * store are only found there by the sweeps below); nothing may READ it to
+   * decide where a session receives.
    */
   saveConversationInboxKeypair(keypair: ConversationInboxKeypair): void {
     const key = `${KEYS.CONVERSATION_INBOX_KEY}${keypair.conversationId}`;
@@ -451,20 +450,11 @@ class EncryptionStateStorage {
     }
   }
 
-
-  /**
-   * Get the inbox keypair for a conversation
-   */
-  getConversationInboxKeypair(conversationId: string): ConversationInboxKeypair | null {
-    const key = `${KEYS.CONVERSATION_INBOX_KEY}${conversationId}`;
-    const data = this.storage.getString(key);
-    if (!data) return null;
-    try {
-      return JSON.parse(data) as ConversationInboxKeypair;
-    } catch {
-      return null;
-    }
-  }
+  // NOTE: there is deliberately no getter by conversationId. Reading the
+  // last-writer-wins slot handed one device's inbox to another device's
+  // session, and rows are keyed by that inbox, so the two sessions collapsed
+  // into one row and all but the last were destroyed. Look up by ADDRESS,
+  // from the session row that needs it (services/crypto/sessionReturnInbox.ts).
 
   /**
    * Delete conversation inbox keypair (both the per-conversation slot and

@@ -11,6 +11,7 @@ import { getQuorumClient } from '@/services/api/quorumClient';
 import { encryptionService } from '@/services/crypto/encryption-service';
 import { ratchetMutex } from '@/services/crypto/ratchet-mutex';
 import { encryptionStateStorage, type ConversationInboxKeypair } from '@/services/crypto/encryption-state-storage';
+import { sessionReturnInbox } from '@/services/crypto/sessionReturnInbox';
 import { getDeviceKeyset, getPrivateKey, getPublicKey } from '@/services/onboarding/secureStorage';
 import { deriveAddress } from '@/services/onboarding/keyService';
 import { queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope, type EmbedMessage } from '@quilibrium/quorum-shared';
@@ -543,8 +544,10 @@ async function sendEncryptedEmbedMessage(
       const needsInitEnvelope = !sendingInbox || sendingInbox.inbox_public_key === '';
 
       if (needsInitEnvelope && sendingInbox?.inbox_encryption_key) {
-        // Unconfirmed session
-        const ourConversationInbox = encryptionStateStorage.getConversationInboxKeypair(conversationId);
+        // Unconfirmed session. The return inbox is THIS session's own (the row
+        // we are advancing) — a conversation-wide one belongs to whichever
+        // device wrote it last, and the peer would confirm the wrong row.
+        const ourConversationInbox = sessionReturnInbox(encryptionState);
 
         let ephemeralPrivateKeyBytes: number[];
         let ephemeralPublicKeyHex: string;

@@ -797,9 +797,6 @@ class EncryptionService {
         // Also save to regular state storage
         encryptionStateStorage.saveEncryptionState(updatedState, false);
 
-        // Get our conversation inbox for the return value
-        const cachedConversationInbox = encryptionStateStorage.getConversationInboxKeypair(conversationId);
-
         return {
           conversationId,
           message: decryptedMessage,
@@ -810,7 +807,10 @@ class EncryptionService {
             publicKey: unsealed.return_inbox_public_key,
             privateKey: unsealed.return_inbox_private_key,
           },
-          ourConversationInbox: cachedConversationInbox?.inboxAddress || ephemeralCachedState.inboxId,
+          // This session's OWN receiving inbox (the row key), not a
+          // conversation-wide one — that would be another device's inbox and
+          // the caller subscribes to whatever we return here.
+          ourConversationInbox: ephemeralCachedState.inboxId,
           userProfile: {
             displayName: unsealed.display_name,
             userIcon: unsealed.user_icon,
@@ -888,9 +888,6 @@ class EncryptionService {
         };
         encryptionStateStorage.saveEncryptionState(updatedState, false); // Don't update latestState for receive
 
-        // Get our conversation inbox for the return value
-        const conversationInbox = encryptionStateStorage.getConversationInboxKeypair(conversationId);
-
         const userProfile = (unsealed.display_name || unsealed.user_icon)
           ? { displayName: unsealed.display_name, userIcon: unsealed.user_icon }
           : undefined;
@@ -905,7 +902,8 @@ class EncryptionService {
             publicKey: unsealed.return_inbox_public_key,
             privateKey: unsealed.return_inbox_private_key,
           },
-          ourConversationInbox: conversationInbox?.inboxAddress || existingState.inboxId,
+          // This session's OWN receiving inbox (see the ephemeral-cache branch).
+          ourConversationInbox: existingState.inboxId,
           userProfile,
         };
       }
