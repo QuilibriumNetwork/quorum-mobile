@@ -2742,6 +2742,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             fp: bytesToHex(Array.from(sha256(new TextEncoder().encode(envStr)))).slice(0, 8),
             ts: message.timestamp,
             init: !!isInitMessage,
+            // Which decrypt path saw it. The batch twin emits path:'batch';
+            // together the two cover every arriving DM frame exactly once.
+            path: 'individual',
           }));
         } catch {
           // diag only
@@ -4596,6 +4599,35 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         if (msgResult.timestamp != null) {
           const original = batch.find((m) => m.timestamp === msgResult.timestamp);
           if (original) processedKeys.add(batchKey(original));
+
+          // DIAGNOSTIC (diag branch only): twin of the [DM-recv wire] log on
+          // the individual path, computing the fingerprint over the same
+          // envelope bytes so both paths join against the sender's
+          // [DM-send wire]. Without it the batch path is invisible to the
+          // frame join: the individual path only ever sees init-wrapped,
+          // control and failed frames, so every plain double-ratchet message
+          // that decrypts here reads as "never arrived" and the rig
+          // over-reports loss in one direction only. Emitted just for frames
+          // the batch actually consumed — anything routed to
+          // fallbackMessages is logged by handleIncomingMessage instead, so
+          // no frame is counted twice. Must never interfere with processing.
+          try {
+            if (original) {
+              const sealed = JSON.parse(original.encryptedContent) as { envelope?: unknown };
+              const envStr = typeof sealed.envelope === 'string'
+                ? sealed.envelope
+                : JSON.stringify(sealed.envelope ?? '');
+              logger.warn('[DM-recv wire]', JSON.stringify({
+                inbox: original.inboxAddress?.slice(0, 10),
+                fp: bytesToHex(Array.from(sha256(new TextEncoder().encode(envStr)))).slice(0, 8),
+                ts: original.timestamp,
+                init: msgResult.status === 'init_decrypted',
+                path: 'batch',
+              }));
+            }
+          } catch {
+            // diag only
+          }
         }
 
         let conversationId = msgResult.conversation_id || groupResult.conversation_id;
