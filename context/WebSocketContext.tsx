@@ -2728,6 +2728,25 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // mapping from a previous conversation would misclassify.
         const isInitMessage = isOnDeviceInbox && isInitEnvelope;
 
+        // DIAGNOSTIC (diag branch only): receive-side twin of desktop's
+        // [DM-recv wire]. Every arriving DM frame is logged with the same
+        // envelope fingerprint its sender logs, so desktop→mobile frames
+        // join 1:1 across the two logs (the reverse of the mobile→desktop
+        // join). Must never interfere with processing.
+        try {
+          const envStr = typeof sealedMessage.envelope === 'string'
+            ? sealedMessage.envelope
+            : JSON.stringify(sealedMessage.envelope ?? '');
+          logger.warn('[DM-recv wire]', JSON.stringify({
+            inbox: message.inboxAddress?.slice(0, 10),
+            fp: bytesToHex(Array.from(sha256(new TextEncoder().encode(envStr)))).slice(0, 8),
+            ts: message.timestamp,
+            init: !!isInitMessage,
+          }));
+        } catch {
+          // diag only
+        }
+
         const sealedAny = sealedMessage as unknown as Record<string, unknown>;
 
         // Per-conversation inboxes (subscribed when we initiate) must NOT
