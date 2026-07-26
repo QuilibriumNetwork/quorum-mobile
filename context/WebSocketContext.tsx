@@ -2740,6 +2740,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // Decryption failed - message was likely for a different device.
               // Count toward the bounded-retry skip-list so an undecryptable
               // init envelope can't replay through this path unbounded.
+              logger.debug(
+                `[DM-recv] device-inbox init not decryptable here (likely another device's frame) inbox=${message.inboxAddress?.slice(0, 12)} ts=${message.timestamp}`
+              );
               recordInboxAttempt(message.inboxAddress, message.timestamp);
               return;
             }
@@ -2788,7 +2791,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               }
             }
           } catch (initError) {
-            // Manual reset via resetDMSession() is available if needed
+            // Manual reset via resetDMSession() is available if needed.
+            // NEVER silent: a throw after initializeRecipientSession has
+            // advanced the ratchet strands a frame that can no longer
+            // decrypt on redelivery — a permanently lost message.
+            logger.error(
+              '[DM-recv] device-inbox init path FAILED',
+              JSON.stringify({
+                inbox: message.inboxAddress?.slice(0, 12),
+                ts: message.timestamp,
+              }),
+              String(initError)
+            );
             return;
           }
         } else {
@@ -2912,6 +2926,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                           break;
                         }
                       } catch (decryptErr) {
+                        // Per-state trial failure is expected mid-loop; the
+                        // all-states-failed case below is the loud signal.
+                        logger.debug(
+                          `[DM-recv] trial decrypt failed for state ${encState.inboxId?.slice(0, 10)}: ${String(decryptErr).slice(0, 120)}`
+                        );
                       }
                     }
 
@@ -2921,6 +2940,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                       // this branch previously returned without counting the
                       // attempt, and dead frames re-drained several times a
                       // minute indefinitely.
+                      // Logged loudly: an init-wrapped frame on OUR
+                      // conversation inbox that no state decrypts is a
+                      // message-loss signal (peer ahead of our ratchet, or a
+                      // consumed-then-stranded frame), not routine noise.
+                      logger.warn(
+                        '[DM-recv] init-wrapped frame undecryptable by ALL states — dropping after bounded retries',
+                        JSON.stringify({
+                          inbox: message.inboxAddress?.slice(0, 12),
+                          ts: message.timestamp,
+                          states: existingStates.length,
+                        })
+                      );
                       recordInboxAttempt(message.inboxAddress, message.timestamp);
                       return;
                     }
@@ -2981,7 +3012,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                       return;
                     }
                     if (!sessionResult) {
-                      // Decryption failed - message was likely for a different device
+                      // Decryption failed - message was likely for a different device.
+                      // Warn (not debug): this is OUR conversation inbox, so a
+                      // failed init here can be a lost first message.
+                      logger.warn(
+                        '[DM-recv] init on conversation inbox failed to build a session — dropping after bounded retries',
+                        JSON.stringify({
+                          inbox: message.inboxAddress?.slice(0, 12),
+                          ts: message.timestamp,
+                        })
+                      );
                       recordInboxAttempt(message.inboxAddress, message.timestamp);
                       return;
                     }
@@ -3001,6 +3041,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   }
                 }
               } catch (unsealError) {
+                // NEVER silent: if confirmSenderSession already advanced the
+                // ratchet, the frame cannot decrypt on redelivery — a throw
+                // here is a permanently lost message.
+                logger.error(
+                  '[DM-recv] conversation-inbox init/confirm path FAILED',
+                  JSON.stringify({
+                    inbox: message.inboxAddress?.slice(0, 12),
+                    ts: message.timestamp,
+                  }),
+                  String(unsealError)
+                );
                 return;
               }
             } else {
@@ -3406,8 +3457,19 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }
           }
         }
-      } catch {
-        // Message processing failed — isolate so other messages continue processing
+      } catch (processingError) {
+        // Message processing failed — isolate so other messages continue
+        // processing. NEVER silent: by this point the ratchet has usually
+        // consumed the frame's position, so a throw here can be a
+        // permanently lost message.
+        logger.error(
+          '[DM-recv] message processing FAILED after decrypt stage',
+          JSON.stringify({
+            inbox: message.inboxAddress?.slice(0, 12),
+            ts: message.timestamp,
+          }),
+          String(processingError)
+        );
       }
     },
     [queryClient, storage, applyDmProfileUpdate]
