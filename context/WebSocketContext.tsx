@@ -588,6 +588,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       }
       return true;
     }
+    // Flat typing signals (same wire shape as the acks: top-level `type`, no
+    // content, no messageId). Desktop sends them over the DM session; mobile
+    // has no typing UI yet, so consume them — un-intercepted they fell
+    // through to saveMessage, crashed on the NOT NULL messageId constraint,
+    // were never acked, and redelivered forever (124 crash-loops in one
+    // 5-minute capture).
+    if (raw.type === 'typing-start' || raw.type === 'typing-stop') {
+      return true;
+    }
 
     // Piggybacked acks on a normal message — process (only if from the partner,
     // not our own echo), then strip before persist regardless.
@@ -2731,9 +2740,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 ts: message.timestamp,
                 ageSec: Math.round((Date.now() - message.timestamp) / 1000),
               }));
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
               return;
             }
             if (!sessionResult) {
@@ -3100,9 +3107,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           if (decryptedMessage.content?.type?.startsWith('call-') && decryptedMessage.content?.type !== 'call-event') {
             callSignalingHandlerRef.current?.(decryptedMessage);
             // Best-effort: delete from server so stale signals don't replay on next launch
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
             return;
           }
 
@@ -3146,9 +3151,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // parse branches above (new-session + subsequent-message) since both
         // converge here. Best-effort: delete from server so it doesn't replay.
         if (await applyDmProfileUpdate(decryptedMessage, senderAddress)) {
-          getDeviceKeyset().then(dk => {
-            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-          });
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
           return;
         }
 
@@ -3182,9 +3185,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             );
           }
           // Best-effort: clear the control message from the inbox.
-          getDeviceKeyset().then(dk => {
-            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-          });
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
           return;
         }
 
@@ -3275,9 +3276,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             );
           }
           // Best-effort: clear the control message from the inbox.
-          getDeviceKeyset().then(dk => {
-            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-          });
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
           return;
         }
 
@@ -3285,9 +3284,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // branch): reset the session only, before the save.
         if (decryptedMessage.content?.type === 'delete-conversation') {
           encryptionStateStorage.deleteAllEncryptionStates(conversationId);
-          getDeviceKeyset().then(dk => {
-            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-          });
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
           return;
         }
 
@@ -3300,9 +3297,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           const isSelfSender = !!selfContent.senderId && selfContent.senderId === user?.address;
 
           // Always clear the processed control message from the inbox (self or not).
-          getDeviceKeyset().then(dk => {
-            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-          });
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
 
           if (isSelfSender) {
             encryptionStateStorage.deleteAllEncryptionStates(conversationId);
@@ -3336,9 +3331,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           !DM_GUARD_PASSTHROUGH_TYPES.has(dmContentType)
         ) {
           logger.debug(`[DM] default-deny dropped unsupported type=${dmContentType}`);
-          getDeviceKeyset().then(dk => {
-            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-          });
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
+          return;
+        }
+
+        // Backstop for ANY flat payload that slips every intercept above:
+        // the messages table requires message_id NOT NULL, so saving would
+        // throw, skip the ack, and redeliver-crash forever. Consume instead.
+        if (!decryptedMessage.messageId) {
+          logger.warn(
+            '[DM-recv] payload has no messageId — consuming without saving',
+            JSON.stringify({
+              inbox: message.inboxAddress?.slice(0, 12),
+              ts: message.timestamp,
+              type: (decryptedMessage as any).type ?? decryptedMessage.content?.type ?? '?',
+            })
+          );
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
           return;
         }
 
@@ -4532,9 +4541,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // Best-effort: delete from server so stale signals don't replay on next launch
           const originalMsg = batch.find(m => m.timestamp === msgResult.timestamp);
           if (originalMsg) {
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(originalMsg.inboxAddress, originalMsg.timestamp);
           }
           continue;
         }
@@ -4544,9 +4551,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         if (handleDmReceipt(decryptedMessage, conversationId.split('/')[0])) {
           const originalMsg = batch.find(m => m.timestamp === msgResult.timestamp);
           if (originalMsg) {
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(originalMsg.inboxAddress, originalMsg.timestamp);
           }
           continue;
         }
@@ -4572,9 +4577,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         if (await applyDmProfileUpdate(decryptedMessage, batchProfileSender)) {
           const originalMsg = batch.find(m => m.timestamp === msgResult.timestamp);
           if (originalMsg) {
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(originalMsg.inboxAddress, originalMsg.timestamp);
           }
           continue;
         }
@@ -4598,9 +4601,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               };
               deleteConversationInboxMessages(originalDeleteMsg.inboxAddress, [originalDeleteMsg.timestamp], signingKey).catch(() => {});
             } else {
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(originalDeleteMsg.inboxAddress, [originalDeleteMsg.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(originalDeleteMsg.inboxAddress, originalDeleteMsg.timestamp);
             }
           }
           continue;
@@ -4620,9 +4621,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // Always clear the processed control message from the inbox (self or not).
           const originalSelfMsg = batch.find(m => m.timestamp === msgResult.timestamp);
           if (originalSelfMsg) {
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(originalSelfMsg.inboxAddress, [originalSelfMsg.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(originalSelfMsg.inboxAddress, originalSelfMsg.timestamp);
           }
 
           if (isSelfSender) {
@@ -4727,9 +4726,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               };
               deleteConversationInboxMessages(originalReactionMsg.inboxAddress, [originalReactionMsg.timestamp], signingKey).catch(() => {});
             } else {
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(originalReactionMsg.inboxAddress, [originalReactionMsg.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(originalReactionMsg.inboxAddress, originalReactionMsg.timestamp);
             }
           }
           continue;
@@ -4784,9 +4781,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               };
               deleteConversationInboxMessages(originalRemoveMsg.inboxAddress, [originalRemoveMsg.timestamp], signingKey).catch(() => {});
             } else {
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(originalRemoveMsg.inboxAddress, [originalRemoveMsg.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(originalRemoveMsg.inboxAddress, originalRemoveMsg.timestamp);
             }
           }
           continue;
@@ -4892,9 +4887,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               };
               deleteConversationInboxMessages(originalEditMsg.inboxAddress, [originalEditMsg.timestamp], signingKey).catch(() => {});
             } else {
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(originalEditMsg.inboxAddress, [originalEditMsg.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(originalEditMsg.inboxAddress, originalEditMsg.timestamp);
             }
           }
           continue;
@@ -4930,11 +4923,26 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               };
               deleteConversationInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], signingKey).catch(() => {});
             } else {
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(originalMsg.inboxAddress, originalMsg.timestamp);
             }
           }
+          continue;
+        }
+
+        // Backstop for ANY flat payload that slips every intercept above
+        // (mirrors the JS fallback path): the messages table requires
+        // message_id NOT NULL — saving would throw, skip the ack, and
+        // redeliver-crash forever. Consume instead.
+        if (!decryptedMessage.messageId) {
+          logger.warn(
+            '[DM-recv] payload has no messageId — consuming without saving (batch)',
+            JSON.stringify({
+              ts: msgResult.timestamp,
+              type: (decryptedMessage as any).type ?? decryptedMessage.content?.type ?? '?',
+            })
+          );
+          const originalFlat = batch.find(m => m.timestamp === msgResult.timestamp);
+          if (originalFlat) deleteProcessedEnvelope(originalFlat.inboxAddress, originalFlat.timestamp);
           continue;
         }
 
@@ -4996,9 +5004,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             };
             deleteConversationInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], signingKey).catch(() => {});
           } else {
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(originalMsg.inboxAddress, originalMsg.timestamp);
           }
         }
       }
