@@ -4,7 +4,14 @@ import { base64ToHex, numberArrayToBase64 } from '@/utils/encoding';
 import { InteractionManager } from 'react-native';
 import { sha512 } from '@noble/hashes/sha2.js';
 import { gcm } from '@noble/ciphers/aes.js';
-import { randomBytes } from '@noble/ciphers/webcrypto.js';
+// randomBytes lives in utils.js, NOT webcrypto.js, as of @noble/ciphers v2.
+// webcrypto.js still resolves, so the wrong path is not an import error — the
+// binding just lands as `undefined` and blows up at the call site in
+// encryptConfig, which saveConfig catches and logs. Every config write then
+// fails to publish while still saving locally, so the app looks fine and
+// nothing syncs outbound. Backed by crypto.getRandomValues, polyfilled at
+// startup in index.js by react-native-get-random-values.
+import { randomBytes } from '@noble/ciphers/utils.js';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { getQuorumClient } from '../api/quorumClient';
 import { mmkvStorage } from '../offline/storage';
