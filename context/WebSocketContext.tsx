@@ -53,7 +53,11 @@ import type {
   WebSocketClient,
   WebSocketConnectionState,
 } from '@quilibrium/quorum-shared';
-import { getLocalUserConfig } from '../services/config/configService';
+import {
+  getLocalUserConfig,
+  getLocalConversationSetting,
+  getConversationSettingForCurrentUser,
+} from '../services/config/configService';
 import { updateMessageDeliveredAt, updateMessagesReadAt } from '../services/storage/messagesDb';
 import { sendEncryptedMessageToAllDevices } from '../hooks/chat/useSendDirectMessage';
 import { toAllDeviceInfos, type DeviceInfo } from '../hooks/chat/useRecipientRegistration';
@@ -548,20 +552,28 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const receiptServiceRef = useRef<ReceiptService | null>(null);
   const sendDmReceiptAckRef = useRef<((partnerAddress: string, ack: ReceiptControlMessage) => void) | null>(null);
 
-  // Effective receipt switch: per-conversation override (stored on the local
-  // Conversation, like desktop) wins over the global setting, else the global
-  // (default OFF). Read live so a settings toggle takes effect immediately.
-  // `partner` is the DM partner address (conversationId is `partner/partner`).
-  // NOTE: the per-conversation override is NOT synced across devices yet — that's
-  // the unified conversation-settings sync task (2026-07-20).
+  // Effective receipt switch: per-conversation override wins over the global
+  // setting, else the global (default OFF). Read live so a settings toggle takes
+  // effect immediately. `partner` is the DM partner address (conversationId is
+  // `partner/partner`).
+  //
+  // The override comes from the synced UserConfig map, falling back to the
+  // legacy device-local Conversation field for a device whose one-time migration
+  // sweep hasn't run yet. This gate must stay in step with the settings sheet —
+  // gating receipts on a stale local value would keep emitting acks for a
+  // conversation the user switched off from another device.
   const isReceiptEnabled = useCallback((kind: 'delivery' | 'read', partner?: string): boolean => {
     const self = fullUserAddrRef.current;
     if (!self) return false;
     const cfg = getLocalUserConfig(self);
-    const conv = partner ? getConversationSync(`${partner}/${partner}`) : undefined;
+    const conversationId = partner ? `${partner}/${partner}` : undefined;
+    const conv = conversationId ? getConversationSync(conversationId) : undefined;
+    const override = conversationId
+      ? getLocalConversationSetting(self, conversationId, kind === 'delivery' ? 'deliveryReceipts' : 'readReceipts')
+      : undefined;
     return kind === 'delivery'
-      ? (conv?.deliveryReceipts ?? cfg?.deliveryReceipts ?? false)
-      : (conv?.readReceipts ?? cfg?.readReceipts ?? false);
+      ? (override ?? conv?.deliveryReceipts ?? cfg?.deliveryReceipts ?? false)
+      : (override ?? conv?.readReceipts ?? cfg?.readReceipts ?? false);
   }, []);
 
   // Intercept DM receipts on the decrypt path (both receive branches), BEFORE
@@ -3218,7 +3230,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
             if (withinWindow && withinLength) {
               const conversation = await storage.getConversation(conversationId);
-              const saveEditHistory = conversation?.saveEditHistory ?? false;
+              // Synced per-conversation override first, then the legacy local
+              // field (pre-migration devices). Must match the send-side gate in
+              // useEditDirectMessage or an incoming edit would retain history
+              // this device's own edits drop, and vice versa.
+              const saveEditHistory =
+                getConversationSettingForCurrentUser(conversationId, 'saveEditHistory') ??
+                conversation?.saveEditHistory ??
+                false;
               const applied = applyEdit(
                 {
                   text: targetMsg.content.text,
@@ -4818,7 +4837,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
             if (withinWindow && withinLength) {
               const conversation = await storage.getConversation(conversationId);
-              const saveEditHistory = conversation?.saveEditHistory ?? false;
+              // Synced per-conversation override first, then the legacy local
+              // field (pre-migration devices). Must match the send-side gate in
+              // useEditDirectMessage or an incoming edit would retain history
+              // this device's own edits drop, and vice versa.
+              const saveEditHistory =
+                getConversationSettingForCurrentUser(conversationId, 'saveEditHistory') ??
+                conversation?.saveEditHistory ??
+                false;
               const applied = applyEdit(
                 {
                   text: targetMsg.content.text,

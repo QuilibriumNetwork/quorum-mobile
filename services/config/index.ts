@@ -21,6 +21,12 @@ export {
   getLocalMutedConversations,
   setMutedConversations,
   isConversationMutedForCurrentUser,
+  // Per-conversation DM setting overrides (config-backed, syncs across devices)
+  getLocalConversationSettings,
+  getLocalConversationSetting,
+  getConversationSettingForCurrentUser,
+  setLocalConversationSetting,
+  setLocalConversationSettings,
   // Channel/Space notification mute (config-backed, syncs across devices)
   getLocalMutedChannels,
   setMutedChannels,

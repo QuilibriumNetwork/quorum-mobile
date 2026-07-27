@@ -22,10 +22,15 @@ import {
   type Bookmark,
   type NavItem,
   type EncryptionState,
+  type ConversationSettingsMap,
+  type ConversationSettingKey,
   BOOKMARKS_CONFIG,
   int64ToBytes,
   hexToBytes,
   bytesToHex,
+  getConversationSetting,
+  setConversationSetting,
+  mergeConversationSettings,
   logger,
 } from '@quilibrium/quorum-shared';
 import { getAllSpaces, getSpaceKey, getSpaceKeys, saveSpaceKey, clearSpaceStorage } from './spaceStorage';
@@ -42,6 +47,36 @@ const bookmarkStorage: MMKV = createMMKV({ id: 'quorum-bookmarks' });
 const CONFIG_KEY_PREFIX = 'user_config:';
 const BOOKMARKS_KEY_PREFIX = 'bookmarks:';
 const DELETED_BOOKMARKS_KEY = 'deleted_bookmark_ids:';
+
+/**
+ * Verbose config-sync tracing: dumps the synced per-conversation payload and,
+ * after each publish, reads the blob straight back from the server to prove it
+ * landed. Dev-only — the read-back costs an extra round trip per write.
+ *
+ * Cross-device config problems are near-impossible to diagnose from the outside
+ * because every hop fails quietly: a local-only save, a skipped publish, and a
+ * successful publish that the other device simply hasn't pulled yet all look
+ * identical from the UI.
+ */
+const CONFIG_TRACE = __DEV__;
+
+/**
+ * Shorten a conversationId for logs. A DM conversationId is the peer's address,
+ * so a full map dump is the user's contact list — and debug logs get pasted into
+ * issues and chats. The prefix is enough to correlate lines across a session
+ * without handing over who the user talks to. The setting values stay in full;
+ * they are what we are actually debugging, and they identify nobody.
+ */
+function shortConvId(conversationId: string): string {
+  return `${conversationId.slice(0, 10)}…`;
+}
+
+/** JSON for a settings map with peer addresses redacted; values kept intact. */
+function redactedSettings(map: ConversationSettingsMap | undefined): string {
+  return JSON.stringify(
+    Object.fromEntries(Object.entries(map ?? {}).map(([id, v]) => [shortConvId(id), v]))
+  );
+}
 
 // NavItems Validation
 
@@ -333,11 +368,19 @@ export async function getConfig(address: string): Promise<UserConfig> {
 
   // Check timestamp - if local is newer, use local
   if (remoteConfig.timestamp < (localConfig?.timestamp ?? 0)) {
+    if (CONFIG_TRACE) {
+      logger.log(
+        `[ConfigSync] pull: KEPT LOCAL (remote ts=${remoteConfig.timestamp} older than local ts=${localConfig?.timestamp}) — remote not decrypted, nothing merged`
+      );
+    }
     return localConfig!;
   }
 
   // If timestamps match, use local (no update needed)
   if (remoteConfig.timestamp === localConfig?.timestamp) {
+    if (CONFIG_TRACE) {
+      logger.log(`[ConfigSync] pull: UP TO DATE (ts=${remoteConfig.timestamp})`);
+    }
     return localConfig;
   }
 
@@ -398,6 +441,21 @@ export async function getConfig(address: string): Promise<UserConfig> {
       });
     }
 
+    // Per-conversation DM overrides merge per ENTRY (last-write-wins on each
+    // entry's `updatedAt`), not as a whole blob — otherwise an unrelated config
+    // save on another device would clobber an edit made here to a DIFFERENT
+    // conversation. The shared helper is the single source of truth for those
+    // semantics so desktop and mobile agree byte-for-byte.
+    //
+    // Re-read the local side HERE rather than reusing the `localConfig`
+    // snapshot above: the signature verification between them yields the event
+    // loop, so a settings toggle can land in that window, and the wholesale
+    // saveLocalUserConfig below would otherwise write it straight back out.
+    const mergedConversationSettings = mergeConversationSettings(
+      getLocalUserConfig(address)?.conversationSettings,
+      (decryptedConfig as UserConfig).conversationSettings
+    );
+
     // Save to local storage
     // IMPORTANT: Preserve name and profile_image fields from remote config
     const configWithTimestamp: UserConfig = {
@@ -421,8 +479,23 @@ export async function getConfig(address: string): Promise<UserConfig> {
       notificationSettings: (decryptedConfig as any).notificationSettings,
       // Synced personal block list (per-space viewer-side hide).
       blockedUsers: (decryptedConfig as any).blockedUsers,
+      // Per-entry merged (see above) rather than taken from the remote blob, so
+      // a stale remote copy can't drop an override made on this device.
+      conversationSettings: mergedConversationSettings,
     } as UserConfig;
     saveLocalUserConfig(configWithTimestamp);
+
+    if (CONFIG_TRACE) {
+      const remoteEntries = Object.keys(
+        (decryptedConfig as UserConfig).conversationSettings ?? {}
+      ).length;
+      logger.log(
+        `[ConfigSync] pull: TOOK REMOTE ts=${remoteConfig.timestamp} (local was ${localConfig?.timestamp ?? 'none'}); conversationSettings remote=${remoteEntries} merged=${Object.keys(mergedConversationSettings).length}`
+      );
+      logger.log(
+        `[ConfigSync] pull merged conversationSettings=${redactedSettings(mergedConversationSettings)}`
+      );
+    }
 
     return configWithTimestamp;
   } catch (error) {
@@ -523,6 +596,15 @@ export async function saveConfig(config: UserConfig): Promise<void> {
   config.bookmarks = getLocalBookmarks(address);
   config.deletedBookmarkIds = getDeletedBookmarkIds(address);
 
+  // A skipped publish is the quietest way for cross-device sync to "not work":
+  // the value saves locally, the UI looks right, and nothing ever leaves the
+  // device. Say so out loud, matching the POST-failure warning below.
+  if (!config.allowSync) {
+    logger.warn('[ConfigSync] NOT publishing — allowSync is off; the change is local-only');
+  } else if (!privateKey || !publicKey) {
+    logger.warn('[ConfigSync] NOT publishing — no keypair available; the change is local-only');
+  }
+
   // Sync to server if allowed
   if (config.allowSync && privateKey && publicKey) {
     try {
@@ -567,6 +649,35 @@ export async function saveConfig(config: UserConfig): Promise<void> {
       // Clear deleted bookmark tombstones after successful sync
       clearDeletedBookmarkIds(address);
       config.deletedBookmarkIds = [];
+
+      // Success is as diagnostic as failure: without it, "no logs" is
+      // indistinguishable between published-fine and never-attempted.
+      const convEntries = Object.keys(config.conversationSettings ?? {}).length;
+      logger.log(
+        `[ConfigSync] published ts=${ts} bytes=${encryptedConfig.length} conversationSettings=${convEntries}`
+      );
+
+      if (CONFIG_TRACE) {
+        logger.log(
+          `[ConfigSync] payload conversationSettings=${redactedSettings(config.conversationSettings)}`
+        );
+        // Read straight back from the server. This is the only check that
+        // proves the write actually landed rather than just being accepted:
+        // a matching timestamp means another device pulling now would see it.
+        try {
+          const echo = await client.getUserSettings(address);
+          const storedTs = echo?.timestamp;
+          logger.log(
+            storedTs === ts
+              ? `[ConfigSync] server read-back CONFIRMS ts=${ts}`
+              : `[ConfigSync] server read-back MISMATCH — wrote ts=${ts}, server has ts=${storedTs}`
+          );
+        } catch (echoError) {
+          logger.warn(
+            `[ConfigSync] server read-back failed: ${echoError instanceof Error ? echoError.message : String(echoError)}`
+          );
+        }
+      }
     } catch (error) {
       // Sync failure must be LOUD: a silent 400 here (e.g. the evals-bloat
       // size limit, desktop bug #108) makes new spaces / signing keys /
@@ -657,6 +768,118 @@ export function isConversationMutedForCurrentUser(conversationId: string): boole
   const address = getCurrentUserAddressFromStorage();
   if (!address) return false;
   return getLocalMutedConversations(address).includes(conversationId);
+}
+
+// --- Per-conversation DM setting overrides (synced via UserConfig) ---
+//
+// `conversationSettings[conversationId]` holds only the fields that DIFFER from
+// the user's global setting / the app default: saveEditHistory, isRepudiable,
+// deliveryReceipts, readReceipts. An absent field means "inherit", so a later
+// change to the global default still follows. Same carrier as mute (the bookmark
+// pattern: written into UserConfig, read straight back from the local MMKV
+// config, never routed through the in-memory `user` object).
+//
+// Read/write/merge all go through the shared helpers so desktop and mobile agree
+// byte-for-byte on the map semantics, including the per-entry last-write-wins
+// merge and the empty-but-timestamped reset tombstone.
+
+export function getLocalConversationSettings(address: string): ConversationSettingsMap {
+  return getLocalUserConfig(address)?.conversationSettings ?? {};
+}
+
+/**
+ * Read one per-conversation override. `undefined` means the conversation has no
+ * override for that field — the caller falls back to the legacy local
+ * Conversation record, then the global setting, then the default.
+ */
+export function getLocalConversationSetting(
+  address: string,
+  conversationId: string,
+  key: ConversationSettingKey
+): boolean | undefined {
+  return getConversationSetting(getLocalConversationSettings(address), conversationId, key);
+}
+
+/**
+ * Resolve one override for the CURRENT user without the caller needing the
+ * address. Used by the inbound decrypt path (receipt gating, received edits),
+ * which runs outside React and only has a conversationId.
+ */
+export function getConversationSettingForCurrentUser(
+  conversationId: string,
+  key: ConversationSettingKey
+): boolean | undefined {
+  const address = getCurrentUserAddressFromStorage();
+  if (!address) return undefined;
+  return getLocalConversationSetting(address, conversationId, key);
+}
+
+/**
+ * Persist a patch of overrides for one conversation, bumping that entry's
+ * `updatedAt` so the change wins the cross-device merge. A key set to
+ * `undefined` clears that override (reset-to-global).
+ *
+ * Returns the new map so a caller holding an in-memory copy can update without
+ * re-reading storage.
+ */
+export async function setLocalConversationSetting(
+  address: string,
+  conversationId: string,
+  patch: Partial<Record<ConversationSettingKey, boolean | undefined>>
+): Promise<ConversationSettingsMap> {
+  const current = getLocalUserConfig(address) ?? getDefaultUserConfig(address);
+  const conversationSettings = setConversationSetting(
+    current.conversationSettings,
+    conversationId,
+    patch
+  );
+  if (CONFIG_TRACE) {
+    logger.log(
+      `[ConversationSettings] write ${shortConvId(conversationId)} patch=${JSON.stringify(patch)} → entry=${JSON.stringify(conversationSettings[conversationId])}`
+    );
+  }
+  const updated: UserConfig = { ...current, conversationSettings };
+  saveLocalUserConfig(updated);
+  try {
+    if (updated.allowSync) {
+      await saveConfig(updated);
+    }
+  } catch (error) {
+    // Best-effort sync — the setting change is already saved locally. Still log:
+    // a silent failure here means the setting never leaves this device, which is
+    // exactly the "nothing syncs" black hole saveConfig warns about.
+    logger.warn(
+      `[ConversationSettings] setting saved locally but NOT published: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  return conversationSettings;
+}
+
+/**
+ * Merge a whole map into the stored config (used by the one-time legacy
+ * migration sweep). Merges rather than replaces because the caller builds its
+ * map across a sequence of awaits: a genuine edit can land in that window, and
+ * per-entry LWW keeps it (migration entries carry `updatedAt = 1` and lose to
+ * anything real). Returns the merged map.
+ */
+export async function setLocalConversationSettings(
+  address: string,
+  conversationSettings: ConversationSettingsMap
+): Promise<ConversationSettingsMap> {
+  const current = getLocalUserConfig(address) ?? getDefaultUserConfig(address);
+  const merged = mergeConversationSettings(current.conversationSettings, conversationSettings);
+  const updated: UserConfig = { ...current, conversationSettings: merged };
+  saveLocalUserConfig(updated);
+  try {
+    if (updated.allowSync) {
+      await saveConfig(updated);
+    }
+  } catch (error) {
+    logger.warn(
+      `[ConversationSettings] migrated settings saved locally but NOT published: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  return merged;
 }
 
 // --- Channel / Space notification mute (synced via UserConfig) ---
