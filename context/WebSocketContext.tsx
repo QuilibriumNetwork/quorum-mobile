@@ -410,7 +410,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const userAddrRef = useRef<string>('???');
   userAddrRef.current = shortAddr(user?.address);
 
-  // Store full user address for comparison in callbacks (not shortened)
+  // Store full user address for comparison in callbacks (not shortened).
+  //
+  // ALWAYS use this ref for self-comparisons inside the receive callbacks —
+  // never `user?.address` directly. This provider mounts before AuthContext has
+  // restored the user, so `user` is null on the first render, and the big
+  // receive callbacks (handleIncomingMessage, applyDMGroupResults) depend only
+  // on stable singletons. They are therefore created ONCE with `user === null`
+  // and never recreated, which silently turns every `user?.address` inside them
+  // into `undefined` for the app's whole lifetime. That is not theoretical: it
+  // disabled every self-echo guard in the live DM path, so our own messages
+  // echoed from another device were treated as a stranger's and created a
+  // phantom conversation with ourselves, wearing our own name and avatar.
   const fullUserAddrRef = useRef<string | undefined>(undefined);
   fullUserAddrRef.current = user?.address;
 
@@ -2787,7 +2798,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // message carries no channelId, we cannot determine the real partner.
             // Drop it to prevent a phantom selfAddress/selfAddress conversation row.
             const initSenderAddress = conversationId.split('/')[0];
-            if (initSenderAddress === user?.address) {
+            if (initSenderAddress === fullUserAddrRef.current) {
               if (decryptedMessage.channelId) {
                 // Has channelId — redirect to the real partner conversation.
                 const actualRecipient = decryptedMessage.channelId;
@@ -3136,10 +3147,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // This matches desktop behavior in MessageService.ts lines 2082-2086
           const senderAddress = conversationId.split('/')[0];
           authenticatedDmSender = senderAddress; // before the rewrite below
-          if (senderAddress === user?.address && decryptedMessage.channelId) {
+          if (senderAddress === fullUserAddrRef.current && decryptedMessage.channelId) {
             const actualRecipient = decryptedMessage.channelId;
             conversationId = `${actualRecipient}/${actualRecipient}`;
-          } else if (senderAddress === user?.address) {
+          } else if (senderAddress === fullUserAddrRef.current) {
             // Channel-less self-echo — can't attribute to a partner, nothing to
             // display. Drop it so it can't create a self-address conversation row.
             return;
@@ -3154,7 +3165,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // overwrite the partner's row. Mirrors desktop's
         // `envelope.user_address != self_address` check. authenticatedDmSender
         // is the true (pre-rewrite) sender.
-        if (authenticatedDmSender && authenticatedDmSender === user?.address) {
+        if (authenticatedDmSender && authenticatedDmSender === fullUserAddrRef.current) {
           userProfileFromEnvelope = undefined;
         }
 
@@ -3313,7 +3324,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // also receives the fan-out but must NEVER delete our copy.
         if ((decryptedMessage.content?.type as string) === 'delete-conversation-self') {
           const selfContent = decryptedMessage.content as { senderId?: string; conversationAddress?: string };
-          const isSelfSender = !!selfContent.senderId && selfContent.senderId === user?.address;
+          const isSelfSender = !!selfContent.senderId && selfContent.senderId === fullUserAddrRef.current;
 
           // Always clear the processed control message from the inbox (self or not).
           deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
@@ -4635,7 +4646,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // is self. Runs before the conversation-save so it can't resurrect a row.
         if ((decryptedMessage.content?.type as string) === 'delete-conversation-self') {
           const selfContent = decryptedMessage.content as { senderId?: string; conversationAddress?: string };
-          const isSelfSender = !!selfContent.senderId && selfContent.senderId === user?.address;
+          const isSelfSender = !!selfContent.senderId && selfContent.senderId === fullUserAddrRef.current;
 
           // Always clear the processed control message from the inbox (self or not).
           const originalSelfMsg = batch.find(m => m.timestamp === msgResult.timestamp);
