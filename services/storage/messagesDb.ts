@@ -33,7 +33,11 @@ import type {
   GetMessagesResult,
   Message,
 } from '@quilibrium/quorum-shared';
-import { logger } from '@quilibrium/quorum-shared';
+import {
+  logger,
+  resolveDeliveryAckPatch,
+  resolveReadAckPatch,
+} from '@quilibrium/quorum-shared';
 
 const DB_NAME = 'quorum-messages.db';
 const MIGRATION_FLAG_KEY = 'messages-sqlite-migration:v1';
@@ -608,9 +612,18 @@ export async function deleteMessage(messageId: string): Promise<void> {
 /**
  * DM delivery receipt: stamp deliveredAt on a single sent message. Patches
  * the JSON payload (deliveredAt is not a dedicated column). No-op if the row
- * is gone or already delivered.
+ * is gone or the ack changes nothing.
+ *
+ * Also completes a read upgrade when a read ack already covered this message.
+ * The read debounce (5s) is shorter than the delivery one (10s), so read acks
+ * usually land first, when there is no delivery to gate the ✓✓ on yet.
+ * `readWatermarks` is keyed by conversation (spaceId); omit it to skip that.
  */
-export async function updateMessageDeliveredAt(messageId: string, deliveredAt: number): Promise<void> {
+export async function updateMessageDeliveredAt(
+  messageId: string,
+  deliveredAt: number,
+  readWatermarks?: ReadonlyMap<string, number>
+): Promise<void> {
   const db = await ensureDb();
   if (!db) return;
   const row = db.getFirstSync<{ payload: string }>(
@@ -620,19 +633,27 @@ export async function updateMessageDeliveredAt(messageId: string, deliveredAt: n
   if (!row) return;
   let msg: Message;
   try { msg = JSON.parse(row.payload) as Message; } catch { return; }
-  if (msg.deliveredAt) return;
-  msg.deliveredAt = deliveredAt;
-  db.runSync(`UPDATE messages SET payload = ? WHERE message_id = ?;`, [JSON.stringify(msg), messageId]);
+  const readWatermark = readWatermarks?.get(msg.spaceId) ?? 0;
+  const patch = resolveDeliveryAckPatch(msg, { readWatermark, now: deliveredAt });
+  if (!patch) return;
+  db.runSync(
+    `UPDATE messages SET payload = ? WHERE message_id = ?;`,
+    [JSON.stringify({ ...msg, ...patch }), messageId]
+  );
 }
 
 /**
- * DM read receipt: stamp readAt (and deliveredAt if missing) on all OWN
- * messages in a conversation up to a high-water timestamp. DM spaceId and
- * channelId are both the partner address.
+ * DM read receipt: stamp readAt on OWN messages in a conversation up to a
+ * high-water timestamp. DM spaceId and channelId are both the partner address.
+ *
+ * Only messages carrying a genuine deliveredAt are marked — a read ack must
+ * never invent a delivery, or messages lost in transport light up with ✓✓ they
+ * never earned. The HWM message itself is exempt: reading it proves it arrived.
  */
 export async function updateMessagesReadAt(
   conversationAddress: string,
   selfAddress: string,
+  upToMessageId: string,
   upToTimestamp: number,
   readAt: number
 ): Promise<void> {
@@ -643,13 +664,17 @@ export async function updateMessagesReadAt(
      WHERE space_id = ? AND channel_id = ? AND created_date <= ?;`,
     [conversationAddress, conversationAddress, upToTimestamp]
   );
+  const ctx = { upToMessageId, upToTimestamp, now: readAt };
   for (const row of rows) {
     let msg: Message;
     try { msg = JSON.parse(row.payload) as Message; } catch { continue; }
-    if (msg.content?.senderId !== selfAddress || msg.readAt) continue;
-    msg.readAt = readAt;
-    if (!msg.deliveredAt) msg.deliveredAt = readAt;
-    db.runSync(`UPDATE messages SET payload = ? WHERE message_id = ?;`, [JSON.stringify(msg), row.message_id]);
+    if (msg.content?.senderId !== selfAddress) continue;
+    const patch = resolveReadAckPatch(msg, ctx);
+    if (!patch) continue;
+    db.runSync(
+      `UPDATE messages SET payload = ? WHERE message_id = ?;`,
+      [JSON.stringify({ ...msg, ...patch }), row.message_id]
+    );
   }
 }
 

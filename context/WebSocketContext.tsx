@@ -9,13 +9,17 @@
  */
 
 import {
+  advanceReadWatermark,
   bytesToHex,
   createRNWebSocketClient,
   int64ToBytes,
+  isReadAckTimestampValid,
   logger,
   MAX_MESSAGE_LENGTH,
   queryKeys,
   ReceiptService,
+  resolveDeliveryAckPatch,
+  resolveReadAckPatch,
 } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { PERSISTABLE_TYPES, DM_GUARD_PASSTHROUGH_TYPES } from '@/components/Chat/types';
@@ -563,6 +567,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const receiptServiceRef = useRef<ReceiptService | null>(null);
   const sendDmReceiptAckRef = useRef<((partnerAddress: string, ack: ReceiptControlMessage) => void) | null>(null);
 
+  // How far the partner has read, per DM conversation. In-memory only: it exists
+  // to bridge the ~5s gap between a read ack and the delivery acks it outran, so
+  // a restart mid-window costs at most a few ✓✓ that the next read ack restores.
+  const readWatermarksRef = useRef<Map<string, number>>(new Map());
+
   // Effective receipt switch: per-conversation override wins over the global
   // setting, else the global (default OFF). Read live so a settings toggle takes
   // effect immediately. `partner` is the DM partner address (conversationId is
@@ -573,18 +582,27 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // sweep hasn't run yet. This gate must stay in step with the settings sheet —
   // gating receipts on a stale local value would keep emitting acks for a
   // conversation the user switched off from another device.
+  //
+  // Read is NESTED under delivery, matching desktop and the settings sheet (which
+  // hides the read toggle when delivery is off). Enforcing it here and not just in
+  // the UI matters now that delivery is load-bearing for read: ✓✓ is only granted
+  // to a message with a real deliveredAt, so a stale
+  // `readReceipts: true, deliveryReceipts: false` override would otherwise leave a
+  // conversation with permanently blank receipts and no explanation.
   const isReceiptEnabled = useCallback((kind: 'delivery' | 'read', partner?: string): boolean => {
     const self = fullUserAddrRef.current;
     if (!self) return false;
     const cfg = getLocalUserConfig(self);
     const conversationId = partner ? `${partner}/${partner}` : undefined;
     const conv = conversationId ? getConversationSync(conversationId) : undefined;
-    const override = conversationId
-      ? getLocalConversationSetting(self, conversationId, kind === 'delivery' ? 'deliveryReceipts' : 'readReceipts')
-      : undefined;
-    return kind === 'delivery'
-      ? (override ?? conv?.deliveryReceipts ?? cfg?.deliveryReceipts ?? false)
-      : (override ?? conv?.readReceipts ?? cfg?.readReceipts ?? false);
+    const resolve = (setting: 'deliveryReceipts' | 'readReceipts'): boolean => {
+      const override = conversationId
+        ? getLocalConversationSetting(self, conversationId, setting)
+        : undefined;
+      return override ?? conv?.[setting] ?? cfg?.[setting] ?? false;
+    };
+    const delivery = resolve('deliveryReceipts');
+    return kind === 'delivery' ? delivery : delivery && resolve('readReceipts');
   }, []);
 
   // Intercept DM receipts on the decrypt path (both receive branches), BEFORE
@@ -5684,23 +5702,36 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         sendDmReceiptAckRef.current?.(address, { senderId: self, type: 'delivery-ack', messageIds });
       },
       onAckProcessed: (messageIds) => {
+        // Delivery acks carry real message IDs, so they are the source of truth
+        // for "it arrived". If a read ack already covered the message, this also
+        // completes the ✓✓ upgrade it could not grant on its own.
         const now = Date.now();
         const ids = new Set(messageIds);
-        // We don't know which conversation — patch deliveredAt across all DM caches.
-        queryClient.setQueriesData<InfiniteMessagesData>({ queryKey: ['messages', 'infinite'] }, (old) => {
-          if (!old?.pages) return old;
+        // The ack does not say which conversation it belongs to, but the query
+        // key does — so read the caches out and patch each one by key, rather
+        // than blind-updating them all.
+        const cached = queryClient.getQueriesData<InfiniteMessagesData>({ queryKey: ['messages', 'infinite'] });
+        for (const [queryKey, old] of cached) {
+          if (!old?.pages) continue;
+          // ['messages', 'infinite', spaceId, channelId] — for DMs both are the partner.
+          const readWatermark = readWatermarksRef.current.get(String(queryKey[2] ?? '')) ?? 0;
           let changed = false;
           const pages = old.pages.map((page) => {
             let pageChanged = false;
             const messages = page.messages.map((m) => {
-              if (ids.has(m.messageId) && !m.deliveredAt) { changed = true; pageChanged = true; return { ...m, deliveredAt: now }; }
-              return m;
+              if (!ids.has(m.messageId)) return m;
+              const patch = resolveDeliveryAckPatch(m, { readWatermark, now });
+              if (!patch) return m;
+              changed = true; pageChanged = true;
+              return { ...m, ...patch };
             });
             return pageChanged ? { ...page, messages } : page;
           });
-          return changed ? { ...old, pages } : old;
-        });
-        for (const id of messageIds) updateMessageDeliveredAt(id, now).catch(() => {});
+          if (changed) queryClient.setQueryData<InfiniteMessagesData>(queryKey, { ...old, pages });
+        }
+        for (const id of messageIds) {
+          updateMessageDeliveredAt(id, now, readWatermarksRef.current).catch(() => {});
+        }
       },
       onReadFlush: (address, hwm) => {
         sendDmReceiptAckRef.current?.(address, {
@@ -5709,6 +5740,19 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       },
       onReadAckProcessed: (upToMessageId, upToTimestamp, conversationAddress) => {
         const now = Date.now();
+
+        // A peer sending an unbounded timestamp would otherwise mark our entire
+        // outbound history read.
+        if (!isReadAckTimestampValid(upToTimestamp, now)) return;
+
+        // Remember how far they have read, so delivery acks still in flight can
+        // finish the upgrade when they land (see onAckProcessed).
+        readWatermarksRef.current.set(
+          conversationAddress,
+          advanceReadWatermark(readWatermarksRef.current.get(conversationAddress) ?? 0, upToTimestamp),
+        );
+
+        const ctx = { upToMessageId, upToTimestamp, now };
         const key = queryKeys.messages.infinite(conversationAddress, conversationAddress);
         queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {
           if (!old?.pages) return old;
@@ -5716,17 +5760,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           const pages = old.pages.map((page) => {
             let pageChanged = false;
             const messages = page.messages.map((m) => {
-              if (m.content?.senderId === self && m.createdDate <= upToTimestamp && !m.readAt) {
-                changed = true; pageChanged = true;
-                return { ...m, readAt: now, deliveredAt: m.deliveredAt || now };
-              }
-              return m;
+              if (m.content?.senderId !== self) return m;
+              const patch = resolveReadAckPatch(m, ctx);
+              if (!patch) return m;
+              changed = true; pageChanged = true;
+              return { ...m, ...patch };
             });
             return pageChanged ? { ...page, messages } : page;
           });
           return changed ? { ...old, pages } : old;
         });
-        updateMessagesReadAt(conversationAddress, self, upToTimestamp, now).catch(() => {});
+        updateMessagesReadAt(conversationAddress, self, upToMessageId, upToTimestamp, now).catch(() => {});
       },
     });
 
