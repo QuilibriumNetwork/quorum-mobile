@@ -38,9 +38,15 @@ module.exports = {
   setupFiles: ['<rootDir>/dev/harness/shim.ts'],
   // Scenarios talk to a live relay; the default 5s kills them mid-handshake.
   testTimeout: 4 * 60 * 60 * 1000,
+  // ORDER MATTERS: jest tries these in declaration order and takes the first
+  // match, so every specific pattern must come BEFORE the broad '^@/(.*)$'
+  // alias. Appending a specific rule at the bottom silently does nothing.
   moduleNameMapper: {
-    // Mobile's tsconfig path alias, spelled out for jest.
-    '^@/(.*)$': '<rootDir>/$1',
+    // Narrow the @/context barrel to the DM contexts. The barrel re-exports
+    // every context, so importing it for one hook pulls OnboardingContext
+    // (→ expo-router) and the calling contexts (→ WebRTC natives) — none of
+    // which a DM touches. See context-barrel-shim.ts.
+    '^@/context$': '<rootDir>/dev/harness/context-barrel-shim.ts',
 
     // ---- THE crypto seam ----
     // Swap mobile's uniffi-backed provider for the WASM one. This is the single
@@ -52,11 +58,20 @@ module.exports = {
     // within services/crypto, '../crypto/native-provider' from siblings, and
     // '@/services/crypto/native-provider' from elsewhere. It deliberately does
     // NOT match native-signing-provider, which is a different module.
+    //
+    // These MUST stay above the '^@/(.*)$' alias. When they sat below it, an
+    // '@/services/crypto/native-provider' import matched the alias first and
+    // loaded the REAL uniffi provider — which then failed on expo-modules-core.
+    // A loud failure was luck; the same shadowing on a module that happens to
+    // import cleanly would have silently run unshimmed code.
     '^(.*/)?native-provider$': '<rootDir>/dev/harness/wasm-provider-shim.ts',
     // Separate module in the app, so a separate shim here. Collapsing the two
     // would make both import paths resolve to one file and quietly change what
     // each call site receives.
     '^(.*/)?native-signing-provider$': '<rootDir>/dev/harness/wasm-signing-shim.ts',
+    // The services/crypto barrel re-exports both providers, so importing it
+    // reaches the real modules without going through either pattern above.
+    '^(.*/)?services/crypto$': '<rootDir>/dev/harness/crypto-barrel-shim.ts',
 
     // ---- native modules that cannot exist in Node ----
     // Each is a real device API with no Node equivalent. Swapping them here
@@ -72,6 +87,24 @@ module.exports = {
     // messagesDb imports the /legacy entrypoint; same module either way.
     '^expo-file-system/legacy$': '<rootDir>/dev/harness/filesystem-shim.ts',
     '^expo-file-system$': '<rootDir>/dev/harness/filesystem-shim.ts',
+    // ---- UI cut ----
+    // The harness renders WebSocketProvider (mobile's DM receive path lives
+    // inside it) but never renders UI. StorageContext — needed only for its
+    // context object — imports MigrationModal at module scope, and that one
+    // import pulls the entire theme chain: ThemeProvider → fontLoader →
+    // expo-font, which ships untransformable ESM.
+    //
+    // Stubbing this ONE leaf severs the whole UI subtree, which is both smaller
+    // and more honest than allowlisting expo-font and whatever it drags behind
+    // it. Safe because MigrationModal is referenced only inside StorageProvider's
+    // JSX, and the harness supplies the adapter via StorageContext.Provider
+    // directly rather than mounting that provider.
+    '^(.*/)?components/MigrationModal$': '<rootDir>/jest/empty-module.js',
+
+    // Mobile's tsconfig path alias. LAST of the '@/'-matching rules by design:
+    // it is a catch-all, so anything specific above it must be declared first.
+    '^@/(.*)$': '<rootDir>/$1',
+
     '^@quilibrium/quilibrium-js-sdk-channels$': SDK,
     // SDK is reached via desktop's node_modules, which on this machine is a
     // yarn-link SYMLINK to the SDK source checkout — and that checkout has no
@@ -100,7 +133,13 @@ module.exports = {
       '<rootDir>/jest/empty-module.js',
   },
   transform: {
-    '^.+\\.[jt]sx?$': ['babel-jest', { configFile: path.resolve(__dirname, 'babel.config.js') }],
+    // The app's babel config plus one harness-only transform (lazy `import()`
+    // → require, which jest's CJS runtime cannot do). babel.config.js itself is
+    // untouched — see dev/harness/babel.harness.js.
+    '^.+\\.[jt]sx?$': [
+      'babel-jest',
+      { configFile: path.resolve(__dirname, 'dev/harness/babel.harness.js') },
+    ],
   },
   // These packages ship ESM that jest's CJS runner cannot execute directly, so
   // babel must transform them. The list grows as scenarios reach deeper into

@@ -18,7 +18,8 @@
     "prebuild:snapshot": "scripts/snapshot-ios-customizations.sh",
     "prebuild:restore": "scripts/restore-ios-customizations.sh",
     "postinstall": "patch-package && watchman watch-del-all 2>/dev/null; rm -rf $TMPDIR/metro-* .expo node_modules/.cache 2>/dev/null || true",
-    "clean": "watchman watch-del-all 2>/dev/null; rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-* .expo node_modules/.cache 2>/dev/null; echo 'Caches cleared'"
+    "clean": "watchman watch-del-all 2>/dev/null; rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-* .expo node_modules/.cache 2>/dev/null; echo 'Caches cleared'",
+    "harness:dm": "node dev/harness/run-two-bots.mjs"
   },
   "dependencies": {
     "@bitcoin-js/tiny-secp256k1-asmjs": "2.2.4",

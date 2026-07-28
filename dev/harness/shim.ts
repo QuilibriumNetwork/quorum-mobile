@@ -47,3 +47,21 @@ if (!w.Buffer) w.Buffer = NodeBuffer;
 // Node 22 provides globalThis.crypto (webcrypto). Mirror it onto window for the
 // SDK's window.crypto.subtle paths.
 if (g.crypto && !w.crypto) w.crypto = g.crypto;
+
+// __DEV__ alone is not enough to see mobile's own diagnostics: quorum-shared's
+// logger defaults to minLevel 'log', which drops every logger.debug call. Those
+// are precisely the lines that say which inboxes were subscribed and how a frame
+// was routed — the difference between "the message was lost" and "it went
+// somewhere nobody was listening".
+//
+// Off by default because a busy run emits a great deal of it. HARNESS_LOG_DEBUG=1
+// turns it on.
+if (process.env.HARNESS_LOG_DEBUG === '1') {
+  // Required lazily: this file is a setupFile and runs before the module
+  // mappings matter, but the import must still resolve through them.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { logger } = require('@quilibrium/quorum-shared') as {
+    logger: { configure(c: { minLevel: string }): void };
+  };
+  logger.configure({ minLevel: 'debug' });
+}

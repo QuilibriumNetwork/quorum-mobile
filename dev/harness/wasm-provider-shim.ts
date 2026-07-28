@@ -35,6 +35,7 @@ const WASM_PATH =
   );
 
 let initialised = false;
+let wrapped: Record<string, unknown> | null = null;
 
 /**
  * Initialise the crate's WASM binding exactly once per process.
@@ -43,12 +44,69 @@ let initialised = false;
  * `wasm` var, so this initialises both. Calling initSync twice throws, hence the
  * guard — scenarios construct providers freely and must not have to coordinate.
  */
+/**
+ * The crate signals failure by RETURNING an error string, and quorum-shared's
+ * parseWasmResult only recognises some of them — it tests for `invalid`/`error`
+ * prefixes and the substrings `failed`/`Error`. A crate error outside that set
+ * (e.g. one beginning "Decryption ...") falls through to JSON.parse and reaches
+ * the app as a bare `SyntaxError: Unexpected token 'D'`, with no indication of
+ * which crypto call produced it.
+ *
+ * This wrapper does not change behaviour — a failure is still a failure — it
+ * makes it SAY WHERE IT CAME FROM, by prefixing unrecognised non-JSON returns
+ * with `error:` and the function name. Diagnosing a decrypt failure without this
+ * means bisecting a dozen candidate calls by hand.
+ */
+// A Proxy cannot do this: the wasm bindings are non-writable, non-configurable
+// data properties, and a `get` trap returning anything other than the actual
+// value violates a proxy invariant (it throws at the first access). So build a
+// plain object of wrapped functions instead.
+function nameCrateErrors(mod: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(mod)) {
+    const value = mod[key];
+    if (typeof value !== 'function' || !key.startsWith('js_')) {
+      out[key] = value;
+      continue;
+    }
+    out[key] = (...args: unknown[]) => {
+      const result = (value as (...a: unknown[]) => unknown).apply(mod, args);
+      if (typeof result !== 'string') return result;
+      // Valid JSON, or a quoted string: a normal success return.
+      try {
+        JSON.parse(result);
+        return result;
+      } catch {
+        /* not JSON — fall through */
+      }
+      if (result.startsWith('"')) return result;
+      if (process.env.HARNESS_CRYPTO_DEBUG === '1') {
+        // eslint-disable-next-line no-console
+        console.error(`[harness] ${key} returned a crate error: ${result.slice(0, 300)}`);
+      }
+      // Already recognisable to parseWasmResult? Leave it exactly as the crate
+      // wrote it, so error text the app may match on is not altered.
+      if (
+        result.startsWith('invalid') ||
+        result.startsWith('error') ||
+        result.includes('failed') ||
+        result.includes('Error')
+      ) {
+        return result;
+      }
+      return `error: ${key}: ${result}`;
+    };
+  }
+  return out;
+}
+
 export function initHarnessCrypto(): ChannelWasmModule {
   if (!initialised) {
     channel_raw.initSync(readFileSync(WASM_PATH));
     initialised = true;
+    wrapped = nameCrateErrors(channel_raw as unknown as Record<string, unknown>);
   }
-  return channel_raw as unknown as ChannelWasmModule;
+  return wrapped as unknown as ChannelWasmModule;
 }
 
 /** Methods that exist ONLY in the native module — no WASM or JS equivalent. */
@@ -97,6 +155,83 @@ export class NativeCryptoProvider extends WasmCryptoProvider {
       // pass an unusable "signature" on to a peer that cannot verify it.
       throw new Error(`[harness] signEd448 failed: ${result}`);
     }
+  }
+
+  /**
+   * The two backends disagree on how a decrypt FAILURE is reported, and mobile's
+   * app code is written against the native one.
+   *
+   *   native: returns { ratchet_state: <unchanged>, message: [], decryptionError }
+   *           and never throws — encryption-service checks exactly that shape and
+   *           falls through to the next decryption strategy.
+   *   wasm:   parseWasmResult() THROWS on strings it recognises as errors, and
+   *           JSON.parses anything else — so a crate error it does not recognise
+   *           (e.g. one starting "Decryption ...") surfaces as a bare SyntaxError
+   *           from deep inside the provider.
+   *
+   * Either way mobile's graceful fallback never runs, and a recoverable failure
+   * is turned into a hard one. Presenting the native convention here is what
+   * makes the harness faithful to the app's own error handling.
+   */
+  async doubleRatchetDecrypt(
+    stateAndEnvelope: { ratchet_state: string; envelope: string }
+  ): Promise<{ ratchet_state: string; message: number[]; decryptionError?: string }> {
+    const wasm = initHarnessCrypto() as unknown as {
+      js_double_ratchet_decrypt(input: string): string;
+    };
+    const result = wasm.js_double_ratchet_decrypt(
+      JSON.stringify({
+        ratchet_state: stateAndEnvelope.ratchet_state,
+        envelope: stateAndEnvelope.envelope,
+      })
+    );
+
+    const fail = (why: string) => {
+      if (process.env.HARNESS_CRYPTO_DEBUG === '1') {
+        // eslint-disable-next-line no-console
+        console.error('[harness] doubleRatchetDecrypt failed:', why.slice(0, 300));
+      }
+      return { ratchet_state: stateAndEnvelope.ratchet_state, message: [], decryptionError: why };
+    };
+
+    let parsed: { ratchet_state?: unknown; message?: unknown };
+    try {
+      parsed = JSON.parse(result) as typeof parsed;
+    } catch {
+      return fail(result);
+    }
+    if (typeof parsed.ratchet_state !== 'string') return fail('ratchet_state is not a string');
+
+    // The crate returns `message` as EITHER a base64 string or a byte array.
+    // parseWasmResult does not normalise this, so on the string form mobile's
+    // code ends up doing new Uint8Array("<base64>") — which yields nothing, with
+    // no error anywhere. Mobile's native parser base64-decodes; match it.
+    let messageBytes: number[];
+    if (typeof parsed.message === 'string') {
+      messageBytes = Array.from(Buffer.from(parsed.message, 'base64'));
+    } else if (Array.isArray(parsed.message)) {
+      messageBytes = parsed.message as number[];
+    } else {
+      return fail('message is neither string nor array');
+    }
+
+    // The crate also reports failure by putting the error INSIDE the message
+    // bytes of an otherwise successful-looking result. Mobile's native parser
+    // catches that; the WASM one does not, so the error text travelled onward as
+    // if it were plaintext and surfaced far away as
+    // `SyntaxError: Unexpected token 'D'` when the app JSON.parsed it.
+    if (messageBytes.length > 0) {
+      const asText = new TextDecoder().decode(new Uint8Array(messageBytes));
+      if (
+        asText.startsWith('Decryption failed:') ||
+        asText.startsWith('invalid') ||
+        asText.includes('aead::Error')
+      ) {
+        return fail(`Double ratchet decryption error: ${asText}`);
+      }
+    }
+
+    return { ratchet_state: parsed.ratchet_state, message: messageBytes };
   }
 
   /** Mirrors native-provider sealInboxEnvelope. */
