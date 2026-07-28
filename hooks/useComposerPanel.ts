@@ -283,11 +283,17 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
       // never stack over the same zone.
       const restingFootprint = restingChromeHeight + bottomInset;
       const panelHeight = Math.max(lastKeyboardHeight.value, restingFootprint);
-      // On a cold open the spacer ramps the panel in by coldOpenSV — track the
-      // SAME ramp here so the list lift stays in lockstep with the sliding panel
-      // (no gap between the last message and the rising panel during the slide).
-      const rampedPanel = restingFootprint + (panelHeight - restingFootprint) * coldOpenSV.value;
-      return Math.max(0, rampedPanel - liveKeyboardHeight);
+      // Publish the FULL footprint in one step — do NOT track the spacer's
+      // cold-open ramp (coldOpenSV) here. Ramping the published footprint
+      // per-frame breaks the lift on Android: the keyboard library computes
+      // each frame's scroll target as `scroll + delta` from a scroll position
+      // that lags several frames behind its own deferred scrollTo calls, so
+      // successive small deltas overwrite each other instead of accumulating
+      // (measured: ~26px of a ~173px lift). One step = one big delta computed
+      // off a fresh base = the full lift, at the cost of the list rising
+      // slightly ahead of the panel slide (the accepted "single deferred
+      // correction" behavior this feature shipped with).
+      return Math.max(0, panelHeight - liveKeyboardHeight);
     },
     (panelFootprint) => {
       composerPanelFootprintSV.value = panelFootprint;
