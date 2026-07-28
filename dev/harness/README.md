@@ -28,6 +28,23 @@ Diagnostics: `HARNESS_LOG_DEBUG=1` turns on mobile's own `logger.debug` lines
 (subscriptions, routing); `HARNESS_CRYPTO_DEBUG=1` reports crate-level crypto
 failures with the function that produced them.
 
+### 📊 Then append a row to the measurement log
+
+**`quorum-desktop/.agents/docs/transport-measurements.md`** — one row per run:
+date, what ran, the configuration, the result, and one line on what it changed.
+Append-only; never rewrite a past row. (It lives in the desktop repo because
+quorum-mobile's `.agents/` is gitignored, so nothing written here is shared or
+recoverable.)
+
+Record the **class** of the result, `arrival` or `decrypt`. A frame that arrives
+and fails AEAD is *not* lost, and conflating the two has been the most expensive
+mistake in this investigation.
+
+Include the account shape and device count. They are variables in their own right:
+every mobile bench result so far is on fresh single-device throwaways, which is
+the least stressed configuration there is and **not** the one the field loss was
+measured in.
+
 **One bot per process, and that is not negotiable.** Mobile reaches storage
 through module singletons, so two bots in one process would share identity and
 ratchet state. `jest.isolateModulesAsync` isolates static require-graphs (proven
