@@ -40,6 +40,13 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Headless DM harness (dev/harness) — LOCAL ONLY, NEVER COMMIT.
+# .state/ holds persisted device keysets and logs/ holds captured ratchet
+# state: both are REAL private key material from real accounts. The harness
+# also talks to production, so these are not synthetic fixtures.
+dev/harness/.state/
+dev/harness/logs/
+
 # typescript
 *.tsbuildinfo
 
