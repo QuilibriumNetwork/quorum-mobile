@@ -20,7 +20,18 @@ const g = globalThis as unknown as {
   window?: unknown;
   Buffer?: unknown;
   crypto?: unknown;
+  __DEV__?: boolean;
 };
+
+// React Native's dev global. Metro injects it; in Node nothing does, and modules
+// that branch on it (services/api/config.ts) throw ReferenceError at import.
+//
+// Defaults to TRUE, deliberately. quorum-shared's logger no-ops ENTIRELY when
+// __DEV__ is false, which would make the harness blind to exactly the signals it
+// exists to capture — the desktop harness already lost a round to an observer
+// that could not see decrypt failures. Set HARNESS_DEV=0 to run the
+// production-shaped paths instead, accepting the loss of logging.
+if (g.__DEV__ === undefined) g.__DEV__ = process.env.HARNESS_DEV !== '0';
 
 if (!g.window) g.window = g;
 const w = g.window as { location?: unknown; Buffer?: unknown; crypto?: unknown };

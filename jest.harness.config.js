@@ -41,6 +41,33 @@ module.exports = {
   moduleNameMapper: {
     // Mobile's tsconfig path alias, spelled out for jest.
     '^@/(.*)$': '<rootDir>/$1',
+
+    // ---- THE crypto seam ----
+    // Swap mobile's uniffi-backed provider for the WASM one. This is the single
+    // substitution that lets services/ run unmodified: every call site does a
+    // bare `new NativeCryptoProvider()`, so replacing the MODULE replaces the
+    // backend with no app change at all.
+    //
+    // The pattern must catch every spelling in use — './native-provider' from
+    // within services/crypto, '../crypto/native-provider' from siblings, and
+    // '@/services/crypto/native-provider' from elsewhere. It deliberately does
+    // NOT match native-signing-provider, which is a different module.
+    '^(.*/)?native-provider$': '<rootDir>/dev/harness/wasm-provider-shim.ts',
+
+    // ---- native modules that cannot exist in Node ----
+    // Each is a real device API with no Node equivalent. Swapping them here
+    // rather than in app code is what lets mobile's own services/ run unmodified
+    // — no #ifdefs, no injection seams, no test-only branches in shipping code.
+    // react-native's entrypoint is untranspiled Flow/ESM; jest's CJS runner
+    // cannot load it and transforming the package would drag a huge graph
+    // through babel for a handful of values.
+    '^react-native$': '<rootDir>/dev/harness/react-native-shim.ts',
+    '^react-native-mmkv$': '<rootDir>/dev/harness/mmkv-shim.ts',
+    '^expo-secure-store$': '<rootDir>/dev/harness/securestore-shim.ts',
+    '^expo-sqlite$': '<rootDir>/dev/harness/sqlite-shim.ts',
+    // messagesDb imports the /legacy entrypoint; same module either way.
+    '^expo-file-system/legacy$': '<rootDir>/dev/harness/filesystem-shim.ts',
+    '^expo-file-system$': '<rootDir>/dev/harness/filesystem-shim.ts',
     '^@quilibrium/quilibrium-js-sdk-channels$': SDK,
     // SDK is reached via desktop's node_modules, which on this machine is a
     // yarn-link SYMLINK to the SDK source checkout — and that checkout has no
