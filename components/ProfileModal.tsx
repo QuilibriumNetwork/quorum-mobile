@@ -165,40 +165,6 @@ export type ProfileSection = 'profile' | 'premium' | 'settings' | 'farcaster';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-function CallScreeningSection({ theme }: { theme: AppTheme }) {
-  const [enabled, setEnabled] = React.useState(() => {
-    const { getCallScreening } = require('@/context/CallContext');
-    return getCallScreening();
-  });
-
-  return (
-    <View style={{ marginBottom: Skin.space(24) }}>
-      <Text style={{ fontSize: Skin.font(16), fontFamily: theme.fonts.bold.fontFamily, fontWeight: theme.fonts.bold.fontWeight, color: theme.colors.textMain, marginBottom: Skin.space(12) }}>
-        Calls
-      </Text>
-      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(8), padding: Skin.space(16) }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flex: 1, marginRight: Skin.space(12) }}>
-            <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Screen Unknown Callers</Text>
-            <Text style={{ fontSize: Skin.font(12), color: theme.colors.textSubtle, marginTop: Skin.space(2) }}>
-              Only ring for people you have a conversation with
-            </Text>
-          </View>
-          <Switch
-            value={enabled}
-            onValueChange={(v) => {
-              const { setCallScreening } = require('@/context/CallContext');
-              setCallScreening(v);
-              setEnabled(v);
-            }}
-            trackColor={{ true: theme.colors.primary }}
-          />
-        </View>
-      </View>
-    </View>
-  );
-}
-
 function DevModeSection({ theme }: { theme: AppTheme }) {
   const [isLocal, setIsLocal] = React.useState(isDevModeLocal());
   const config = getApiConfig();
@@ -692,14 +658,15 @@ export default function ProfileModal({
   const handleResetAllSessions = React.useCallback(() => {
     void (async () => {
       const ok = await confirm({
-        title: 'Reset All DM Sessions',
+        title: 'Fix DM Encryption',
         message:
-          'This will reset all your encrypted DM sessions. Your next message to each contact will establish a fresh secure connection.\n\nUse this if you are experiencing persistent decryption errors.',
+          'This will reset the encryption sessions for all your DM conversations. Your next message to each contact will establish a fresh secure connection.\n\nUse this if messages are failing to send or decrypt.',
         confirmLabel: 'Reset All',
+        variant: 'primary',
       });
       if (!ok) return;
       encryptionStateStorage.clearAll();
-      Alert.alert('Success', 'All DM sessions have been reset. Your next message to each contact will establish a fresh secure connection.');
+      Alert.alert('Encryption Reset', 'Your next message to each contact will establish a fresh secure connection.');
     })();
   }, [confirm]);
 
@@ -2300,7 +2267,7 @@ export default function ProfileModal({
                     style={styles.actionButton}
                     onPress={() => setShowFarcasterImport(true)}
                   >
-                    <IconSymbol name="person.badge.plus" size={20} color={theme.colors.textMain} />
+                    <IconSymbol name="person.badge.plus" size={20} color={theme.colors.primary} />
                     <Text style={styles.actionButtonText}>Connect Farcaster Account</Text>
                     <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
                   </TouchableOpacity>
@@ -2407,9 +2374,6 @@ export default function ProfileModal({
               onResetAllSessions={handleResetAllSessions}
             />
 
-            {/* Calls */}
-            <CallScreeningSection theme={theme} />
-
             {/* App Updates (OTA) */}
             <OtaUpdateSection theme={theme} />
 
@@ -2418,9 +2382,9 @@ export default function ProfileModal({
 
             {/* Danger Zone */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Danger Zone</Text>
+              <Text style={[styles.sectionTitle, styles.dangerText]}>Danger Zone</Text>
               <TouchableOpacity style={[styles.actionButton, styles.dangerButton]} onPress={() => setShowResetConfirm(true)}>
-                <IconSymbol name="arrow.counterclockwise" size={20} color={theme.colors.danger} />
+                <IconSymbol name="trash" size={20} color={theme.colors.danger} />
                 <Text style={[styles.actionButtonText, styles.dangerText]}>Reset App Data</Text>
               </TouchableOpacity>
             </View>
@@ -2435,11 +2399,10 @@ export default function ProfileModal({
             {user?.farcaster ? (
               // Connected state
               <>
-                {/* Account card with Disconnect — first item. Icon top-aligned
-                    to match the Warpcast import row. */}
-                <View style={[styles.farcasterConnected, { alignItems: 'flex-start' }]}>
-                  <View style={[styles.farcasterInfo, { alignItems: 'flex-start' }]}>
-                    <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success} style={{ marginTop: Skin.space(2) }} />
+                {/* Account card with Disconnect — first item. */}
+                <View style={styles.farcasterConnected}>
+                  <View style={styles.farcasterInfo}>
+                    <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success} />
                     <View style={styles.farcasterDetails}>
                       <Text style={styles.farcasterUsername}>@{user.farcaster.username}</Text>
                       <Text style={styles.farcasterFid}>FID: {user.farcaster.fid}</Text>
@@ -2513,7 +2476,7 @@ export default function ProfileModal({
                 {/* Warpcast Wallet Import */}
                 {hasWarpcastWallet && !hasImportedWarpcastWallet && onOpenWarpcastImport && (
                   <TouchableOpacity
-                    style={[styles.actionButton, { alignItems: 'flex-start' }]}
+                    style={styles.actionButton}
                     onPress={() => {
                       if (isRouteMode) {
                         // In route mode, just open the import modal directly (no need to close ProfileModal)
@@ -2525,14 +2488,14 @@ export default function ProfileModal({
                       }
                     }}
                   >
-                    <IconSymbol name="wallet.pass.fill" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
+                    <IconSymbol name="wallet.pass.fill" size={20} color={theme.colors.primary} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.actionButtonText}>Import Warpcast Wallet</Text>
                       <Text style={[styles.settingDescription, { marginTop: Skin.space(4), marginLeft: Skin.space(12) }]}>
                         Import your Warpcast embedded wallet to use alongside your Quorum wallet
                       </Text>
                     </View>
-                    <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} style={{ marginTop: Skin.space(2) }} />
+                    <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
                   </TouchableOpacity>
                 )}
                 {hasImportedWarpcastWallet && importedWallet && (
@@ -2552,8 +2515,8 @@ export default function ProfileModal({
                 {/* Merge profiles — shown when currently unmerged (parent gates
                     the callback on splitMode). */}
                 {onMergeProfiles && (
-                  <TouchableOpacity style={[styles.actionButton, { alignItems: 'flex-start' }]} onPress={handleMergeProfiles}>
-                    <IconSymbol name="merge" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
+                  <TouchableOpacity style={styles.actionButton} onPress={handleMergeProfiles}>
+                    <IconSymbol name="merge" size={20} color={theme.colors.primary} />
                     <View style={styles.actionButtonContent}>
                       <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Merge profiles</Text>
                       <Text style={styles.actionButtonSubtext}>Combine your Quorum and Farcaster profiles into one</Text>
@@ -2563,8 +2526,8 @@ export default function ProfileModal({
                 {/* Keep separate (unmerge) — shown when currently merged. Purely a
                     display change; no data is altered. */}
                 {onUnmergeProfiles && (
-                  <TouchableOpacity style={[styles.actionButton, { alignItems: 'flex-start' }]} onPress={handleUnmergeProfiles}>
-                    <IconSymbol name="split" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
+                  <TouchableOpacity style={styles.actionButton} onPress={handleUnmergeProfiles}>
+                    <IconSymbol name="split" size={20} color={theme.colors.primary} />
                     <View style={styles.actionButtonContent}>
                       <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Separate profiles</Text>
                       <Text style={styles.actionButtonSubtext}>Show and edit your Quorum and Farcaster profiles separately</Text>
@@ -4228,6 +4191,12 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
    *  Account Info card). */
   privacyLevel?: string;
 }) {
+  // Call screening lives in CallContext (module-level, not config-synced);
+  // lazy require avoids an import cycle with the call stack.
+  const [screenUnknownCallers, setScreenUnknownCallers] = React.useState(() => {
+    const { getCallScreening } = require('@/context/CallContext');
+    return getCallScreening();
+  });
   return (
     <>
       {/* Privacy & Sync Settings */}
@@ -4260,6 +4229,24 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
             disabled={syncDisabled}
             trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
             thumbColor={allowSync ? '#ffffff' : '#f4f3f4'}
+          />
+        </View>
+        <View style={styles.settingRow}>
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingLabel}>Screen Unknown Callers</Text>
+            <Text style={styles.settingDescription}>
+              Only ring for people you have a conversation with
+            </Text>
+          </View>
+          <Switch
+            value={screenUnknownCallers}
+            onValueChange={(v) => {
+              const { setCallScreening } = require('@/context/CallContext');
+              setCallScreening(v);
+              setScreenUnknownCallers(v);
+            }}
+            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+            thumbColor={screenUnknownCallers ? '#ffffff' : '#f4f3f4'}
           />
         </View>
         <View style={styles.settingRow}>
@@ -4356,7 +4343,7 @@ const AccountRecoverySection = React.memo(function AccountRecoverySection({
       <Text style={styles.sectionTitle}>Account</Text>
       {!showRecoveryPhrase ? (
         <TouchableOpacity style={styles.actionButton} onPress={onExport}>
-          <IconSymbol name="key.fill" size={20} color={theme.colors.textMain} />
+          <IconSymbol name="key.fill" size={20} color={theme.colors.primary} />
           <Text style={styles.actionButtonText}>Export Recovery Key</Text>
           <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
         </TouchableOpacity>
@@ -4512,10 +4499,10 @@ const DeviceKeysSection = React.memo(function DeviceKeysSection({
         style={[styles.actionButton, { marginTop: Skin.space(16) }]}
         onPress={onResetAllSessions}
       >
-        <IconSymbol name="arrow.triangle.2.circlepath" size={20} color={theme.colors.warning} />
+        <IconSymbol name="arrow.triangle.2.circlepath" size={20} color={theme.colors.primary} />
         <View style={styles.actionButtonContent}>
-          <Text style={styles.actionButtonText}>Reset All DM Sessions</Text>
-          <Text style={styles.actionButtonSubtext}>Fix persistent encryption errors</Text>
+          <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Fix DM Encryption</Text>
+          <Text style={styles.actionButtonSubtext}>Reset if messages fail to send or decrypt</Text>
         </View>
       </TouchableOpacity>
     </View>

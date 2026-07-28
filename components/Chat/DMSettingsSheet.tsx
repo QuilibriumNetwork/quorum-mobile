@@ -132,14 +132,15 @@ export function DMSettingsSheet({
       title: 'Fix Encryption',
       message: `This will reset the encryption session with ${displayName}. The next message will establish a fresh secure connection.\n\nUse this if messages are failing to send or decrypt.`,
       confirmLabel: 'Reset Session',
+      variant: 'primary',
     });
     setIsConfirming(false);
     if (!ok) return;
     resetDMSession(conversationId);
     onClose();
     Alert.alert(
-      'Session Reset',
-      'The encryption session has been reset. Your next message will establish a fresh secure connection.'
+      'Encryption Reset',
+      'Your next message will establish a fresh secure connection.'
     );
   };
 
@@ -249,7 +250,7 @@ export function DMSettingsSheet({
           <ActionRow
             icon="arrow.triangle.2.circlepath"
             label="Fix Encryption"
-            sublabel="Reset if messages fail to send/decrypt"
+            sublabel="Reset if messages fail to send or decrypt"
             onPress={handleFixEncryption}
           />
           <ActionRow

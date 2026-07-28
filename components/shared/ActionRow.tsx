@@ -65,18 +65,13 @@ export function ActionRow(props: ActionRowProps) {
 
   const interactive = !!props.onPress && !props.disabled;
 
-  // Single-line rows center the leading glyph (aligned with the one line);
-  // multi-line rows (with a sublabel) TOP-align it so it pairs with the TITLE,
-  // not the gap between title and sublabel — the standard iOS/Material pattern.
-  // Single-line behavior is unchanged from before.
-  const multiline = !!props.sublabel;
-  const leadingNudge = multiline ? styles.leadingTopNudge : undefined;
-
+  // Leading icon and trailing control are vertically CENTERED against the full
+  // row height, on single- and multi-line rows alike (product decision — no
+  // top-aligned glyphs anywhere).
   return (
     <TouchableOpacity
       style={[
         styles.row,
-        multiline && styles.rowMultiline,
         props.isLast && styles.rowLast,
         props.style,
       ]}
@@ -88,13 +83,11 @@ export function ActionRow(props: ActionRowProps) {
       accessibilityState={{ disabled: !!props.disabled }}
     >
       {props.leading ? (
-        // Top-nudge a custom leading node too (channel icon, avatar) so it lines
-        // up with the title on multi-line rows.
-        multiline ? <View style={leadingNudge}>{props.leading}</View> : props.leading
+        props.leading
       ) : props.icon ? (
         // icon name is validated by IconSymbol's mapping at runtime; the strict
         // union type is too narrow for a generic wrapper.
-        <IconSymbol name={props.icon as IconSymbolName} size={20} color={color} style={leadingNudge} />
+        <IconSymbol name={props.icon as IconSymbolName} size={20} color={color} />
       ) : (
         <View style={styles.iconSpacer} />
       )}
@@ -113,16 +106,9 @@ export function ActionRow(props: ActionRowProps) {
       </View>
 
       {props.trailing === 'chevron' ? (
-        <IconSymbol
-          name="chevron.right"
-          size={16}
-          color={theme.colors.textMuted}
-          style={multiline ? styles.trailingCenter : undefined}
-        />
+        <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
       ) : props.trailing ? (
-        // Keep the trailing control (Switch, chevron…) vertically centered even
-        // when the row top-aligns its leading icon + text for a sublabel.
-        multiline ? <View style={styles.trailingCenter}>{props.trailing}</View> : props.trailing
+        props.trailing
       ) : null}
     </TouchableOpacity>
   );
@@ -173,25 +159,11 @@ const createRowStyles = (theme: AppTheme) =>
       borderBottomWidth: Skin.border(1),
       borderBottomColor: theme.colors.surface4,
     },
-    rowMultiline: {
-      // Top-align leading icon + text column for two-line rows (icon pairs with
-      // the title). The trailing control is re-centered via `trailingCenter`.
-      alignItems: 'flex-start',
-    },
     rowLast: {
       borderBottomWidth: 0,
     },
     iconSpacer: {
       width: 20,
-    },
-    // Optical nudge so a 20px glyph sits on the title's text line (not the very
-    // cap top) when the row is top-aligned.
-    leadingTopNudge: {
-      marginTop: Skin.space(2),
-    },
-    // Re-center a trailing control against the full row height on multi-line rows.
-    trailingCenter: {
-      alignSelf: 'center',
     },
     labelColumn: {
       flex: 1,
