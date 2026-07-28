@@ -52,6 +52,21 @@ module.exports = {
     // reasoning the app's jest.config.js already documents.
     '^@quilibrium/quorum-shared$':
       '<rootDir>/node_modules/@quilibrium/quorum-shared/dist/index.js',
+    // The two mappings below are lifted from the app's jest.config.js, which hit
+    // the same problems loading the shared bundle. Kept verbatim rather than
+    // re-derived — if the app's version changes, change this to match.
+    //
+    // multiformats only exposes an ESM `import` condition for this subpath, so
+    // jest's CJS resolver cannot find it; point at the concrete file.
+    '^multiformats/bases/base58$':
+      '<rootDir>/node_modules/multiformats/dist/src/bases/base58.js',
+    // The shared bundle mixes crypto with web-UI, markdown and date utilities
+    // that other exports use lazily and the crypto paths never touch — several
+    // not even installed here. Stub them so loading the bundle does not require
+    // untransformable ESM / web-only packages. The real crypto deps (@noble/*,
+    // multiformats, @tanstack/react-query) resolve normally.
+    '^(unified|remark-gfm|remark-parse|remark-stringify|strip-markdown|clsx|react-dom|react-dropzone|react-tooltip|@tabler/icons-react)(/.*)?$':
+      '<rootDir>/jest/empty-module.js',
   },
   transform: {
     '^.+\\.[jt]sx?$': ['babel-jest', { configFile: path.resolve(__dirname, 'babel.config.js') }],
