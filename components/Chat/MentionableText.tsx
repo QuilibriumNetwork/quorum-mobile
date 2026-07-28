@@ -100,6 +100,14 @@ function emojiOnlyScale(count: number): number {
   return 1;
 }
 
+// Line box for enlarged emoji. Emoji glyphs draw beyond the nominal em box on
+// both platforms, so the line box needs ~20% headroom: pinning lineHeight to
+// the font size clips the glyph tops/bottoms, while leaving it unset gives
+// Android's emoji font an oversized line box (the old empty-gap-below bug).
+function emojiLineHeight(size: number): number {
+  return Math.round(size * 1.2);
+}
+
 // Count emoji clusters in an emoji-only string (whitespace ignored).
 function countEmojiClusters(text: string): number {
   const matches = text.replace(/\s+/g, '').match(EMOJI_CLUSTER_REGEX);
@@ -455,15 +463,14 @@ function MentionableTextBase({
     if (isEmojiOnly) {
       const base = style?.fontSize || 16;
       const size = base * emojiOnlyScale(countEmojiClusters(text));
-      // Pin lineHeight to the font size: a large emoji Text with no lineHeight
-      // gets an oversized line box on Android (extra emoji-font ascent/descent),
-      // which showed as a big empty gap below emoji-only messages.
+      // Line height via emojiLineHeight — see its comment for why neither
+      // unset nor font-size-pinned works.
       // Emoji-only: lay out in a bottom-aligned row so the (small) trailing
       // indicators sit at the bottom of the (large) emoji rather than floating
       // up the tall line box. `receipt` is a <Text>-wrapped node, valid here.
       return renderWithToggle(
         <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-          <Text style={[style, { fontSize: size, lineHeight: size }]}>{text}</Text>
+          <Text style={[style, { fontSize: size, lineHeight: emojiLineHeight(size) }]}>{text}</Text>
           {receipt}
         </View>
       );
@@ -504,10 +511,10 @@ function MentionableTextBase({
   const effectiveEmojiSize = isEmojiOnlyMessage
     ? (largeEmojiSize / 2) * emojiScale
     : emojiSize;
-  // lineHeight pinned to the font so the enlarged emoji row doesn't reserve the
-  // oversized emoji-font line box on Android (the empty-gap-below bug).
+  // Line height via emojiLineHeight — see its comment for why neither unset
+  // nor font-size-pinned works.
   const effectiveStyle = isEmojiOnlyMessage
-    ? { ...style, fontSize: scaledFont, lineHeight: scaledFont }
+    ? { ...style, fontSize: scaledFont, lineHeight: emojiLineHeight(scaledFont) }
     : style;
 
   // Mention/channel styling — color-only (no highlighted background). The bg

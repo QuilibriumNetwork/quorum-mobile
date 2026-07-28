@@ -1908,7 +1908,7 @@ export default function ProfileModal({
                     }
                   }}
                 >
-                  <IconSymbol name="tag.fill" size={18} color={theme.colors.primary} />
+                  <IconSymbol name="tag" size={18} color={theme.colors.primary} />
                   <Text style={styles.marketplaceButtonText}>List on Marketplace</Text>
                 </TouchableOpacity>
               </View>
@@ -1920,21 +1920,21 @@ export default function ProfileModal({
                 style={styles.marketplaceButton}
                 onPress={() => onOpenMarketplace ? onOpenMarketplace() : setMarketplaceModalVisible(true)}
               >
-                <IconSymbol name="storefront.fill" size={18} color={theme.colors.primary} />
+                <IconSymbol name="storefront" size={18} color={theme.colors.primary} />
                 <Text style={styles.marketplaceButtonText}>Browse Marketplace</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.marketplaceButton}
                 onPress={() => onOpenAuctions ? onOpenAuctions() : setAuctionsModalVisible(true)}
               >
-                <IconSymbol name="hammer.fill" size={18} color={theme.colors.primary} />
+                <IconSymbol name="hammer" size={18} color={theme.colors.primary} />
                 <Text style={styles.marketplaceButtonText}>Auctions</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.marketplaceButton}
                 onPress={() => onOpenOffers ? onOpenOffers() : setOffersModalVisible(true)}
               >
-                <IconSymbol name="envelope.fill" size={18} color={theme.colors.primary} />
+                <IconSymbol name="envelope" size={18} color={theme.colors.primary} />
                 <Text style={styles.marketplaceButtonText}>Offers</Text>
               </TouchableOpacity>
             </View>
@@ -2174,13 +2174,13 @@ export default function ProfileModal({
             <View style={styles.benefitsSection}>
               <Text style={styles.sectionTitle}>Benefits</Text>
               <View style={styles.benefitItem}>
-                <IconSymbol name="person.badge.shield.checkmark.fill" size={20} color={theme.colors.primary} />
+                <IconSymbol name="person.badge.shield.checkmark" size={20} color={theme.colors.primary} />
                 <Text style={styles.benefitText}>
                   Unique identity across the Quilibrium network
                 </Text>
               </View>
               <View style={styles.benefitItem}>
-                <IconSymbol name="hand.thumbsup.fill" size={20} color={theme.colors.primary} />
+                <IconSymbol name="hand.thumbsup" size={20} color={theme.colors.primary} />
                 <Text style={styles.benefitText}>
                   Earn governance points to participate in QNS decisions
                 </Text>

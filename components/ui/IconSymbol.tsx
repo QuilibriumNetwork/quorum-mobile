@@ -180,9 +180,11 @@ const SF_TO_TABLER = {
   'person.crop.circle': tabler('IconUserCircle'),
   'person.crop.circle.fill': tabler('IconUserCircle', 'IconUserCircleFilled'),
   'person.crop.circle.badge.exclamationmark': tabler('IconUserExclamation'),
+  'person.badge.shield.checkmark': tabler('IconShieldCheck', 'IconShieldCheckFilled'),
   'person.badge.shield.checkmark.fill': tabler('IconShieldCheck', 'IconShieldCheckFilled'),
   'hand.raised.fill': tabler('IconHandStop'),
   'hand.raised.slash.fill': tabler('IconHandOff'),
+  'hand.thumbsup': tabler('IconThumbUp', 'IconThumbUpFilled'),
   'hand.thumbsup.fill': tabler('IconThumbUp', 'IconThumbUpFilled'),
   'hand.thumbsdown.fill': tabler('IconThumbDown', 'IconThumbDownFilled'),
 
@@ -233,6 +235,7 @@ const SF_TO_TABLER = {
 
   // Building / share
   'building.columns': tabler('IconBuildingBank'),
+  'storefront': tabler('IconBuildingStore', 'IconBuildingStoreFilled'),
   'storefront.fill': tabler('IconBuildingStore', 'IconBuildingStoreFilled'),
   'square.and.arrow.up': tabler('IconShare'),
   'square.and.arrow.down': tabler('IconDownload'),
@@ -317,6 +320,7 @@ const SF_TO_TABLER = {
   'clock.arrow.circlepath': tabler('IconHistory'),
 
   // Tags
+  'tag': tabler('IconTag', 'IconTagFilled'),
   'tag.fill': tabler('IconTag', 'IconTagFilled'),
   'tag.slash': tabler('IconTagOff'),
 
