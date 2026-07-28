@@ -106,7 +106,7 @@ export function CastOverflowButton({
       ? [
           {
             label: 'Translate',
-            icon: 'globe',
+            icon: 'language',
             onPress: () => requestTranslateText(castText!),
           },
         ]

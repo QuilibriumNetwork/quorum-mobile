@@ -24,6 +24,7 @@ import IconAlertCircle from '@tabler/icons-react-native/IconAlertCircle';
 import IconAlertCircleFilled from '@tabler/icons-react-native/IconAlertCircleFilled';
 import IconAlertTriangle from '@tabler/icons-react-native/IconAlertTriangle';
 import IconAlertTriangleFilled from '@tabler/icons-react-native/IconAlertTriangleFilled';
+import IconAnkh from '@tabler/icons-react-native/IconAnkh';
 import IconArrowBackUp from '@tabler/icons-react-native/IconArrowBackUp';
 import IconArrowDownLeft from '@tabler/icons-react-native/IconArrowDownLeft';
 import IconArrowDownRight from '@tabler/icons-react-native/IconArrowDownRight';
@@ -44,6 +45,8 @@ import IconBellFilled from '@tabler/icons-react-native/IconBellFilled';
 import IconBellOff from '@tabler/icons-react-native/IconBellOff';
 import IconBolt from '@tabler/icons-react-native/IconBolt';
 import IconBoltFilled from '@tabler/icons-react-native/IconBoltFilled';
+import IconBomb from '@tabler/icons-react-native/IconBomb';
+import IconBombFilled from '@tabler/icons-react-native/IconBombFilled';
 import IconBook from '@tabler/icons-react-native/IconBook';
 import IconBookFilled from '@tabler/icons-react-native/IconBookFilled';
 import IconBookmark from '@tabler/icons-react-native/IconBookmark';
@@ -67,6 +70,7 @@ import IconCertificate from '@tabler/icons-react-native/IconCertificate';
 import IconChartBar from '@tabler/icons-react-native/IconChartBar';
 import IconChartLine from '@tabler/icons-react-native/IconChartLine';
 import IconCheck from '@tabler/icons-react-native/IconCheck';
+import IconChecks from '@tabler/icons-react-native/IconChecks';
 import IconChevronDown from '@tabler/icons-react-native/IconChevronDown';
 import IconChevronLeft from '@tabler/icons-react-native/IconChevronLeft';
 import IconChevronRight from '@tabler/icons-react-native/IconChevronRight';
@@ -96,9 +100,12 @@ import IconCompass from '@tabler/icons-react-native/IconCompass';
 import IconCompassFilled from '@tabler/icons-react-native/IconCompassFilled';
 import IconConfetti from '@tabler/icons-react-native/IconConfetti';
 import IconConfettiFilled from '@tabler/icons-react-native/IconConfettiFilled';
+import IconConfucius from '@tabler/icons-react-native/IconConfucius';
 import IconCopy from '@tabler/icons-react-native/IconCopy';
 import IconCreditCard from '@tabler/icons-react-native/IconCreditCard';
 import IconCreditCardFilled from '@tabler/icons-react-native/IconCreditCardFilled';
+import IconCross from '@tabler/icons-react-native/IconCross';
+import IconCrossFilled from '@tabler/icons-react-native/IconCrossFilled';
 import IconCrown from '@tabler/icons-react-native/IconCrown';
 import IconCrownFilled from '@tabler/icons-react-native/IconCrownFilled';
 import IconCurrencyBitcoin from '@tabler/icons-react-native/IconCurrencyBitcoin';
@@ -131,21 +138,28 @@ import IconFlame from '@tabler/icons-react-native/IconFlame';
 import IconFlameFilled from '@tabler/icons-react-native/IconFlameFilled';
 import IconFlask from '@tabler/icons-react-native/IconFlask';
 import IconFlaskFilled from '@tabler/icons-react-native/IconFlaskFilled';
+import IconFlower from '@tabler/icons-react-native/IconFlower';
 import IconFolder from '@tabler/icons-react-native/IconFolder';
 import IconFolderFilled from '@tabler/icons-react-native/IconFolderFilled';
+import IconGenderFemale from '@tabler/icons-react-native/IconGenderFemale';
+import IconGenderMale from '@tabler/icons-react-native/IconGenderMale';
+import IconGhost from '@tabler/icons-react-native/IconGhost';
+import IconGhost3 from '@tabler/icons-react-native/IconGhost3';
+import IconGhost3Filled from '@tabler/icons-react-native/IconGhost3Filled';
 import IconGift from '@tabler/icons-react-native/IconGift';
 import IconGiftFilled from '@tabler/icons-react-native/IconGiftFilled';
 import IconGripVertical from '@tabler/icons-react-native/IconGripVertical';
 import IconHammer from '@tabler/icons-react-native/IconHammer';
+import IconHandLoveYou from '@tabler/icons-react-native/IconHandLoveYou';
 import IconHandOff from '@tabler/icons-react-native/IconHandOff';
 import IconHandStop from '@tabler/icons-react-native/IconHandStop';
-import IconHandTwoFingers from '@tabler/icons-react-native/IconHandTwoFingers';
 import IconHash from '@tabler/icons-react-native/IconHash';
 import IconHeadphones from '@tabler/icons-react-native/IconHeadphones';
 import IconHeadset from '@tabler/icons-react-native/IconHeadset';
 import IconHeadsetFilled from '@tabler/icons-react-native/IconHeadsetFilled';
 import IconHeart from '@tabler/icons-react-native/IconHeart';
 import IconHeartFilled from '@tabler/icons-react-native/IconHeartFilled';
+import IconHeartHandshake from '@tabler/icons-react-native/IconHeartHandshake';
 import IconHelpCircle from '@tabler/icons-react-native/IconHelpCircle';
 import IconHelpCircleFilled from '@tabler/icons-react-native/IconHelpCircleFilled';
 import IconHistory from '@tabler/icons-react-native/IconHistory';
@@ -153,9 +167,12 @@ import IconHome from '@tabler/icons-react-native/IconHome';
 import IconHomeFilled from '@tabler/icons-react-native/IconHomeFilled';
 import IconInfoCircle from '@tabler/icons-react-native/IconInfoCircle';
 import IconInfoCircleFilled from '@tabler/icons-react-native/IconInfoCircleFilled';
+import IconJewishStar from '@tabler/icons-react-native/IconJewishStar';
+import IconJewishStarFilled from '@tabler/icons-react-native/IconJewishStarFilled';
 import IconKey from '@tabler/icons-react-native/IconKey';
 import IconKeyFilled from '@tabler/icons-react-native/IconKeyFilled';
 import IconKeyboard from '@tabler/icons-react-native/IconKeyboard';
+import IconLanguage from '@tabler/icons-react-native/IconLanguage';
 import IconLayoutGrid from '@tabler/icons-react-native/IconLayoutGrid';
 import IconLeaf from '@tabler/icons-react-native/IconLeaf';
 import IconLifebuoy from '@tabler/icons-react-native/IconLifebuoy';
@@ -170,6 +187,7 @@ import IconMailOpened from '@tabler/icons-react-native/IconMailOpened';
 import IconMapPin from '@tabler/icons-react-native/IconMapPin';
 import IconMapPinFilled from '@tabler/icons-react-native/IconMapPinFilled';
 import IconMaximize from '@tabler/icons-react-native/IconMaximize';
+import IconMenorah from '@tabler/icons-react-native/IconMenorah';
 import IconMenu2 from '@tabler/icons-react-native/IconMenu2';
 import IconMessage from '@tabler/icons-react-native/IconMessage';
 import IconMessageFilled from '@tabler/icons-react-native/IconMessageFilled';
@@ -180,12 +198,12 @@ import IconMicrophoneFilled from '@tabler/icons-react-native/IconMicrophoneFille
 import IconMicrophoneOff from '@tabler/icons-react-native/IconMicrophoneOff';
 import IconMinimize from '@tabler/icons-react-native/IconMinimize';
 import IconMinus from '@tabler/icons-react-native/IconMinus';
-import IconMoodHappy from '@tabler/icons-react-native/IconMoodHappy';
 import IconMoodHappyFilled from '@tabler/icons-react-native/IconMoodHappyFilled';
 import IconMoodSmile from '@tabler/icons-react-native/IconMoodSmile';
 import IconMoodSmileFilled from '@tabler/icons-react-native/IconMoodSmileFilled';
 import IconMoon from '@tabler/icons-react-native/IconMoon';
 import IconMoonFilled from '@tabler/icons-react-native/IconMoonFilled';
+import IconOm from '@tabler/icons-react-native/IconOm';
 import IconPalette from '@tabler/icons-react-native/IconPalette';
 import IconPaletteFilled from '@tabler/icons-react-native/IconPaletteFilled';
 import IconPaperclip from '@tabler/icons-react-native/IconPaperclip';
@@ -234,12 +252,12 @@ import IconShieldX from '@tabler/icons-react-native/IconShieldX';
 import IconSparkles from '@tabler/icons-react-native/IconSparkles';
 import IconSparklesFilled from '@tabler/icons-react-native/IconSparklesFilled';
 import IconSpeakerphone from '@tabler/icons-react-native/IconSpeakerphone';
+import IconSpiral from '@tabler/icons-react-native/IconSpiral';
 import IconSquare from '@tabler/icons-react-native/IconSquare';
 import IconSquareFilled from '@tabler/icons-react-native/IconSquareFilled';
 import IconStack from '@tabler/icons-react-native/IconStack';
 import IconStack2 from '@tabler/icons-react-native/IconStack2';
 import IconStack2Filled from '@tabler/icons-react-native/IconStack2Filled';
-import IconStackFilled from '@tabler/icons-react-native/IconStackFilled';
 import IconStar from '@tabler/icons-react-native/IconStar';
 import IconStarFilled from '@tabler/icons-react-native/IconStarFilled';
 import IconSun from '@tabler/icons-react-native/IconSun';
@@ -248,6 +266,7 @@ import IconSword from '@tabler/icons-react-native/IconSword';
 import IconTag from '@tabler/icons-react-native/IconTag';
 import IconTagFilled from '@tabler/icons-react-native/IconTagFilled';
 import IconTagOff from '@tabler/icons-react-native/IconTagOff';
+import IconTank from '@tabler/icons-react-native/IconTank';
 import IconTarget from '@tabler/icons-react-native/IconTarget';
 import IconThumbDown from '@tabler/icons-react-native/IconThumbDown';
 import IconThumbDownFilled from '@tabler/icons-react-native/IconThumbDownFilled';
@@ -278,27 +297,6 @@ import IconWifiOff from '@tabler/icons-react-native/IconWifiOff';
 import IconWorld from '@tabler/icons-react-native/IconWorld';
 import IconWorldMap from '@tabler/icons-react-native/IconWorldMap';
 import IconX from '@tabler/icons-react-native/IconX';
-// Channel-icon-picker additions (2026-06-26).
-import IconSticker from '@tabler/icons-react-native/IconSticker';
-import IconTank from '@tabler/icons-react-native/IconTank';
-import IconGenderFemale from '@tabler/icons-react-native/IconGenderFemale';
-import IconGenderMale from '@tabler/icons-react-native/IconGenderMale';
-import IconBomb from '@tabler/icons-react-native/IconBomb';
-import IconBombFilled from '@tabler/icons-react-native/IconBombFilled';
-import IconOm from '@tabler/icons-react-native/IconOm';
-import IconCross from '@tabler/icons-react-native/IconCross';
-import IconCrossFilled from '@tabler/icons-react-native/IconCrossFilled';
-import IconMenorah from '@tabler/icons-react-native/IconMenorah';
-import IconAnkh from '@tabler/icons-react-native/IconAnkh';
-import IconJewishStar from '@tabler/icons-react-native/IconJewishStar';
-import IconJewishStarFilled from '@tabler/icons-react-native/IconJewishStarFilled';
-import IconConfucius from '@tabler/icons-react-native/IconConfucius';
-import IconGhost3 from '@tabler/icons-react-native/IconGhost3';
-import IconGhost3Filled from '@tabler/icons-react-native/IconGhost3Filled';
-import IconSpiral from '@tabler/icons-react-native/IconSpiral';
-import IconHeartHandshake from '@tabler/icons-react-native/IconHeartHandshake';
-import IconFlower from '@tabler/icons-react-native/IconFlower';
-import IconHandLoveYou from '@tabler/icons-react-native/IconHandLoveYou';
 
 export const TablerIcons = {
   IconAi,
@@ -306,6 +304,7 @@ export const TablerIcons = {
   IconAlertCircleFilled,
   IconAlertTriangle,
   IconAlertTriangleFilled,
+  IconAnkh,
   IconArrowBackUp,
   IconArrowDownLeft,
   IconArrowDownRight,
@@ -326,6 +325,8 @@ export const TablerIcons = {
   IconBellOff,
   IconBolt,
   IconBoltFilled,
+  IconBomb,
+  IconBombFilled,
   IconBook,
   IconBookFilled,
   IconBookmark,
@@ -349,6 +350,7 @@ export const TablerIcons = {
   IconChartBar,
   IconChartLine,
   IconCheck,
+  IconChecks,
   IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
@@ -378,9 +380,12 @@ export const TablerIcons = {
   IconCompassFilled,
   IconConfetti,
   IconConfettiFilled,
+  IconConfucius,
   IconCopy,
   IconCreditCard,
   IconCreditCardFilled,
+  IconCross,
+  IconCrossFilled,
   IconCrown,
   IconCrownFilled,
   IconCurrencyBitcoin,
@@ -413,21 +418,28 @@ export const TablerIcons = {
   IconFlameFilled,
   IconFlask,
   IconFlaskFilled,
+  IconFlower,
   IconFolder,
   IconFolderFilled,
+  IconGenderFemale,
+  IconGenderMale,
+  IconGhost,
+  IconGhost3,
+  IconGhost3Filled,
   IconGift,
   IconGiftFilled,
   IconGripVertical,
   IconHammer,
+  IconHandLoveYou,
   IconHandOff,
   IconHandStop,
-  IconHandTwoFingers,
   IconHash,
   IconHeadphones,
   IconHeadset,
   IconHeadsetFilled,
   IconHeart,
   IconHeartFilled,
+  IconHeartHandshake,
   IconHelpCircle,
   IconHelpCircleFilled,
   IconHistory,
@@ -435,9 +447,12 @@ export const TablerIcons = {
   IconHomeFilled,
   IconInfoCircle,
   IconInfoCircleFilled,
+  IconJewishStar,
+  IconJewishStarFilled,
   IconKey,
   IconKeyFilled,
   IconKeyboard,
+  IconLanguage,
   IconLayoutGrid,
   IconLeaf,
   IconLifebuoy,
@@ -452,6 +467,7 @@ export const TablerIcons = {
   IconMapPin,
   IconMapPinFilled,
   IconMaximize,
+  IconMenorah,
   IconMenu2,
   IconMessage,
   IconMessageFilled,
@@ -462,12 +478,12 @@ export const TablerIcons = {
   IconMicrophoneOff,
   IconMinimize,
   IconMinus,
-  IconMoodHappy,
   IconMoodHappyFilled,
   IconMoodSmile,
   IconMoodSmileFilled,
   IconMoon,
   IconMoonFilled,
+  IconOm,
   IconPalette,
   IconPaletteFilled,
   IconPaperclip,
@@ -516,12 +532,12 @@ export const TablerIcons = {
   IconSparkles,
   IconSparklesFilled,
   IconSpeakerphone,
+  IconSpiral,
   IconSquare,
   IconSquareFilled,
   IconStack,
   IconStack2,
   IconStack2Filled,
-  IconStackFilled,
   IconStar,
   IconStarFilled,
   IconSun,
@@ -530,6 +546,7 @@ export const TablerIcons = {
   IconTag,
   IconTagFilled,
   IconTagOff,
+  IconTank,
   IconTarget,
   IconThumbDown,
   IconThumbDownFilled,
@@ -560,25 +577,4 @@ export const TablerIcons = {
   IconWorld,
   IconWorldMap,
   IconX,
-  // Channel-icon-picker additions (2026-06-26).
-  IconSticker,
-  IconTank,
-  IconGenderFemale,
-  IconGenderMale,
-  IconBomb,
-  IconBombFilled,
-  IconOm,
-  IconCross,
-  IconCrossFilled,
-  IconMenorah,
-  IconAnkh,
-  IconJewishStar,
-  IconJewishStarFilled,
-  IconConfucius,
-  IconGhost3,
-  IconGhost3Filled,
-  IconSpiral,
-  IconHeartHandshake,
-  IconFlower,
-  IconHandLoveYou,
 };

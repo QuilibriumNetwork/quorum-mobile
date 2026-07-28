@@ -170,13 +170,16 @@ function DevModeSection({ theme }: { theme: AppTheme }) {
   const [isLocal, setIsLocal] = React.useState(isDevModeLocal());
   const config = getApiConfig();
 
+  // Warning-tinted dashed box — same "dev builds only" visual language as the
+  // Apex modal's debug panel.
   return (
     <View style={{ marginBottom: Skin.space(24) }}>
-      <Text style={{ fontSize: Skin.font(16), fontFamily: theme.fonts.bold.fontFamily, fontWeight: theme.fonts.bold.fontWeight, color: theme.colors.textMain, marginBottom: Skin.space(12) }}>
-        Developer
+      <Text style={{ fontSize: Skin.font(16), fontFamily: theme.fonts.bold.fontFamily, fontWeight: theme.fonts.bold.fontWeight, color: theme.colors.warning, marginBottom: Skin.space(12) }}>
+        Developer (dev builds only)
       </Text>
-      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(8), padding: Skin.space(16) }}>
+      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(8), padding: Skin.space(16), borderWidth: 1, borderStyle: 'dashed', borderColor: theme.colors.warning }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <IconSymbol name="chevron.left.forwardslash.chevron.right" size={20} color={theme.colors.warning} style={{ marginRight: Skin.space(12) }} />
           <View style={{ flex: 1, marginRight: Skin.space(12) }}>
             <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Use Local API</Text>
             <Text style={{ fontSize: Skin.font(12), color: theme.colors.textSubtle, marginTop: Skin.space(2) }}>
@@ -2236,6 +2239,7 @@ export default function ProfileModal({
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Appearance</Text>
               <TouchableOpacity style={styles.settingRow} onPress={() => setSkinsOpen(true)}>
+                <IconSymbol name="paintpalette" size={20} color={theme.colors.primary} style={styles.settingIcon} />
                 <View style={styles.settingLeft}>
                   <Text style={styles.settingLabel}>Skins</Text>
                   <Text style={styles.settingDescription}>
@@ -2247,6 +2251,7 @@ export default function ProfileModal({
                 <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity style={styles.settingRow} onPress={() => setTranslateOpen(true)}>
+                <IconSymbol name="language" size={20} color={theme.colors.primary} style={styles.settingIcon} />
                 <View style={styles.settingLeft}>
                   <Text style={styles.settingLabel}>Translate to</Text>
                   <Text style={styles.settingDescription}>
@@ -2431,6 +2436,7 @@ export default function ProfileModal({
                 {/* Feed display preferences — Farcaster-only (drive useFarcasterFeed).
                     Plain settingRow → uniform 8px marginBottom like every card. */}
                 <View style={styles.settingRow}>
+                  <IconSymbol name="bubble.left.and.bubble.right" size={20} color={theme.colors.primary} style={styles.settingIcon} />
                   <View style={styles.settingLeft}>
                     <Text style={styles.settingLabel}>Show replies in main feed</Text>
                     <Text style={styles.settingDescription}>
@@ -2445,6 +2451,7 @@ export default function ProfileModal({
                   />
                 </View>
                 <View style={styles.settingRow}>
+                  <IconSymbol name="bubble.left.and.bubble.right" size={20} color={theme.colors.primary} style={styles.settingIcon} />
                   <View style={styles.settingLeft}>
                     <Text style={styles.settingLabel}>Show replies from non-followed in main feed</Text>
                     <Text style={styles.settingDescription}>
@@ -2461,6 +2468,7 @@ export default function ProfileModal({
                 </View>
                 {/* Hypersnap signer opt-in */}
                 <View style={styles.farcasterConnected}>
+                  <IconSymbol name="bolt" size={20} color={theme.colors.primary} style={styles.settingIcon} />
                   <View style={{ flex: 1, marginRight: Skin.space(12) }}>
                     <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Hypersnap Signer</Text>
                     <Text style={{ fontSize: Skin.font(12), color: theme.colors.textSubtle, marginTop: Skin.space(2) }}>
@@ -3463,6 +3471,9 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       borderRadius: Skin.radius(8),
       marginBottom: Skin.space(8),
     },
+    settingIcon: {
+      marginRight: Skin.space(12),
+    },
     settingLeft: {
       flex: 1,
       marginRight: Skin.space(16),
@@ -4207,6 +4218,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Privacy & Sync</Text>
         <View style={styles.settingRow}>
+          <IconSymbol name="eye" size={20} color={theme.colors.primary} style={styles.settingIcon} />
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Public Profile</Text>
             <Text style={styles.settingDescription}>
@@ -4221,6 +4233,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
           />
         </View>
         <View style={styles.settingRow}>
+          <IconSymbol name="arrow.2.circlepath" size={20} color={theme.colors.primary} style={styles.settingIcon} />
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Enable Sync</Text>
             <Text style={styles.settingDescription}>
@@ -4236,6 +4249,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
           />
         </View>
         <View style={styles.settingRow}>
+          <IconSymbol name="phone" size={20} color={theme.colors.primary} style={styles.settingIcon} />
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Screen Unknown Callers</Text>
             <Text style={styles.settingDescription}>
@@ -4254,6 +4268,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
           />
         </View>
         <View style={styles.settingRow}>
+          <IconSymbol name="checkmark" size={20} color={theme.colors.primary} style={styles.settingIcon} />
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Delivery receipts</Text>
             <Text style={styles.settingDescription}>
@@ -4272,6 +4287,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
             desktop, which hides this row while delivery is off). */}
         {deliveryReceipts && (
           <View style={styles.settingRow}>
+            <IconSymbol name="checkmark.double" size={20} color={theme.colors.primary} style={styles.settingIcon} />
             <View style={styles.settingLeft}>
               <Text style={styles.settingLabel}>Read receipts</Text>
               <Text style={styles.settingDescription}>
@@ -4293,6 +4309,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
             ships. (issue #58) */}
         {/* Privacy Level — read-only (moved from the old Account Info card). */}
         <View style={styles.settingRow}>
+          <IconSymbol name="shield" size={20} color={theme.colors.primary} style={styles.settingIcon} />
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Privacy Level</Text>
           </View>
@@ -4306,6 +4323,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Notifications</Text>
         <View style={styles.settingRow}>
+          <IconSymbol name="bell" size={20} color={theme.colors.primary} style={styles.settingIcon} />
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Push Notifications</Text>
             <Text style={styles.settingDescription}>Receive notifications on your device</Text>

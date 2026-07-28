@@ -219,7 +219,7 @@ export function DMSettingsSheet({
           )}
           {onSetReadReceipts && effectiveDelivery && (
             <ActionRow
-              icon="checkmark.circle"
+              icon="checkmark.double"
               label="Read receipts"
               sublabel={receiptSublabel(readOverridden, onResetRead)}
               trailing={

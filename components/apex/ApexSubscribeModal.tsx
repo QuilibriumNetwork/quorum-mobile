@@ -520,7 +520,10 @@ export default function ApexSubscribeModal({ visible, onClose, mode }: ApexSubsc
         {/* DEV-ONLY debug panel — never rendered in release builds. */}
         {__DEV__ && (
           <View style={styles.debugBox}>
-            <Text style={styles.debugTitle}>Debug (dev builds only)</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
+              <IconSymbol name="chevron.left.forwardslash.chevron.right" size={16} color={theme.colors.warning} />
+              <Text style={styles.debugTitle}>Debug (dev builds only)</Text>
+            </View>
             <Text style={styles.debugHint}>
               Walk the Apex flow without paying. Empty slot picks are padded
               with debug spaces; state is local-only.

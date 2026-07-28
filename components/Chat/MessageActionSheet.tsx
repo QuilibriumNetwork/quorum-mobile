@@ -277,7 +277,7 @@ export function MessageActionSheet({
                 />
               )}
               {canTranslate && (
-                <ActionRow icon="globe" label="Translate" onPress={handleTranslate} />
+                <ActionRow icon="language" label="Translate" onPress={handleTranslate} />
               )}
               {onBookmark && (
                 <ActionRow
