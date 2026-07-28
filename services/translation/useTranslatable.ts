@@ -23,6 +23,7 @@ import {
   translationPrefsStore,
   K_TARGET_LANGUAGE,
   resolveTarget,
+  isTranslationOff,
 } from './translationPrefs';
 import {
   detectLanguage,
@@ -87,6 +88,9 @@ export interface Translatable {
 
 export function useTranslatable(rawText: string, enabled: boolean): Translatable {
   const [storedTarget] = useMMKVString(K_TARGET_LANGUAGE, translationPrefsStore);
+  // "Do not translate" pref kills the whole feature: no auto-offer, no forced
+  // menu translation. Applied on top of the caller's `enabled`.
+  const off = isTranslationOff(storedTarget);
   const target = primary(resolveTarget(storedTarget));
 
   const [state, setState] = useState<TranslateState>('original');
@@ -122,7 +126,7 @@ export function useTranslatable(rawText: string, enabled: boolean): Translatable
   // anyway"). Self-contained: detects a source if needed.
   const runTranslate = useCallback(async () => {
     const text = (rawText ?? '').trim();
-    if (!text) return;
+    if (!text || off) return;
     if (stateRef.current === 'downloading' || stateRef.current === 'translating') return;
 
     const h = hashText(text);
@@ -166,7 +170,7 @@ export function useTranslatable(rawText: string, enabled: boolean): Translatable
     } catch {
       if (mountedRef.current) setState('error');
     }
-  }, [rawText, target, detectOnce]);
+  }, [rawText, target, off, detectOnce]);
 
   // Keep a stable ref so the force subscription always calls the latest closure.
   const runTranslateRef = useRef(runTranslate);
@@ -180,7 +184,7 @@ export function useTranslatable(rawText: string, enabled: boolean): Translatable
     detectedRef.current = null;
 
     const text = (rawText ?? '').trim();
-    if (!enabled || !longEnough(text)) return;
+    if (!enabled || off || !longEnough(text)) return;
 
     let cancelled = false;
     (async () => {
@@ -203,17 +207,17 @@ export function useTranslatable(rawText: string, enabled: boolean): Translatable
     return () => {
       cancelled = true;
     };
-  }, [rawText, target, enabled, detectOnce]);
+  }, [rawText, target, enabled, off, detectOnce]);
 
   // Subscribe to context-menu "Translate" requests for this exact text.
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || off) return;
     const text = (rawText ?? '').trim();
     if (!text) return;
     return subscribeForce(hashText(text), () => {
       runTranslateRef.current();
     });
-  }, [rawText, enabled]);
+  }, [rawText, enabled, off]);
 
   const toggle = useCallback(() => {
     if (stateRef.current === 'translated') {

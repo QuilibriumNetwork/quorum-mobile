@@ -50,6 +50,7 @@ import { useMMKVBoolean, useMMKVString } from 'react-native-mmkv';
 import {
   translationPrefsStore,
   K_TARGET_LANGUAGE,
+  isTranslationOff,
   resolveTarget,
 } from '@/services/translation/translationPrefs';
 import { languageName } from '@/components/translation/languages';
@@ -392,6 +393,7 @@ export default function ProfileModal({
   const [skinsOpen, setSkinsOpen] = React.useState(false);
   const [translateOpen, setTranslateOpen] = React.useState(false);
   const [storedTarget] = useMMKVString(K_TARGET_LANGUAGE, translationPrefsStore);
+  const translationOff = isTranslationOff(storedTarget);
   const targetLanguageName = languageName(resolveTarget(storedTarget));
   const [showNamePickerModal, setShowNamePickerModal] = React.useState(false);
 
@@ -2248,7 +2250,9 @@ export default function ProfileModal({
                 <View style={styles.settingLeft}>
                   <Text style={styles.settingLabel}>Translate to</Text>
                   <Text style={styles.settingDescription}>
-                    {`On-device translation target: ${targetLanguageName}`}
+                    {translationOff
+                      ? 'Translation is turned off'
+                      : `On-device translation target: ${targetLanguageName}`}
                   </Text>
                 </View>
                 <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
