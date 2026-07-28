@@ -20,6 +20,15 @@ installGlobalErrorReporter();
 import { installReactQueryRnBridges } from '@/services/observability/reactQueryRnBridges';
 installReactQueryRnBridges();
 
+// quorum-shared's transport rejects its connect promise on socket error, and
+// its reconnect timer calls doConnect() uncaught — so flaky connectivity
+// floods dev builds with an "Uncaught (in promise) Error: WebSocket error"
+// LogBox toast on every retry, covering the tab bar. Dev-only UI suppression;
+// metro/terminal logs are unaffected. Remove once quorum-shared catches the
+// reconnect rejection (transport/rn-websocket.ts).
+import { LogBox } from 'react-native';
+LogBox.ignoreLogs([/WebSocket error/]);
+
 import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { Slot, router, useSegments, useRootNavigationState } from 'expo-router';

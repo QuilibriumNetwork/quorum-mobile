@@ -5,6 +5,7 @@ import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, withSequence } from 'react-native-reanimated';
 import { ChatKeyboardScrollView } from './ChatKeyboardScrollView';
+import { composerBottomBusySV } from '@/services/ui/composerPanelVisible';
 import BrowserLink from '@/components/BrowserLink';
 import { haptics } from '@/utils/haptics';
 import { useToast } from '@/context/ToastContext';
@@ -460,6 +461,23 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     const isOwnMessage = !!currentUserId && newLastMsg?.userId === currentUserId;
     if (isOwnMessage || distanceFromBottomRef.current <= 80) {
       flatListRef.current?.scrollToEnd({ animated: true });
+      // The animated scroll targets the content size measured BEFORE the new
+      // cell lays out. Cells much taller than the running row height — emoji-
+      // only messages render at up to 6x the body font — leave the list off
+      // the true end once the anchor applies the measured delta (visible as an
+      // over-scroll while the keyboard's bottom inset gives it room). A second
+      // pass after measurement snaps to the real end; it's a no-op when the
+      // first pass already landed right. Skipped if the user scrolled away.
+      const correct = setTimeout(() => {
+        // Never snap while the emoji panel owns the bottom (open or mid
+        // keyboard hand-off): the panel runs its own list choreography
+        // (freeze / cold-open lift) and a snap here fights it.
+        if (composerBottomBusySV.value === 1) return;
+        if (distanceFromBottomRef.current <= 400) {
+          flatListRef.current?.scrollToEnd({ animated: false });
+        }
+      }, 350);
+      return () => clearTimeout(correct);
     }
   }, [orderedMessages, currentUserId]);
 

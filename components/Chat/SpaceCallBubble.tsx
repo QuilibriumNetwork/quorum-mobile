@@ -49,7 +49,7 @@ export function SpaceCallBubble({
   theme,
 }: SpaceCallBubbleProps) {
   const isVideo = message.spaceCallMediaType === 'video';
-  const iconName = isVideo ? 'video.fill' : 'speaker.wave.2.fill';
+  const iconName = isVideo ? 'video' : 'speaker.wave.2';
   const label = isVideo ? 'Video' : 'Voice';
   const callId = message.spaceCallId;
 
@@ -182,10 +182,7 @@ export function SpaceCallBubble({
               {joining ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <>
-                  <IconSymbol name="phone.fill" size={14} color="#fff" />
-                  <Text style={styles.joinButtonText}>Join</Text>
-                </>
+                <Text style={styles.joinButtonText}>Join</Text>
               )}
             </TouchableOpacity>
           )}

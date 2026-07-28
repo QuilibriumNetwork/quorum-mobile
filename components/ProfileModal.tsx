@@ -50,6 +50,7 @@ import { useMMKVBoolean, useMMKVString } from 'react-native-mmkv';
 import {
   translationPrefsStore,
   K_TARGET_LANGUAGE,
+  isTranslationOff,
   resolveTarget,
 } from '@/services/translation/translationPrefs';
 import { languageName } from '@/components/translation/languages';
@@ -165,51 +166,20 @@ export type ProfileSection = 'profile' | 'premium' | 'settings' | 'farcaster';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-function CallScreeningSection({ theme }: { theme: AppTheme }) {
-  const [enabled, setEnabled] = React.useState(() => {
-    const { getCallScreening } = require('@/context/CallContext');
-    return getCallScreening();
-  });
-
-  return (
-    <View style={{ marginBottom: Skin.space(24) }}>
-      <Text style={{ fontSize: Skin.font(16), fontFamily: theme.fonts.bold.fontFamily, fontWeight: theme.fonts.bold.fontWeight, color: theme.colors.textMain, marginBottom: Skin.space(12) }}>
-        Calls
-      </Text>
-      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(8), padding: Skin.space(16) }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flex: 1, marginRight: Skin.space(12) }}>
-            <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Screen Unknown Callers</Text>
-            <Text style={{ fontSize: Skin.font(12), color: theme.colors.textSubtle, marginTop: Skin.space(2) }}>
-              Only ring for people you have a conversation with
-            </Text>
-          </View>
-          <Switch
-            value={enabled}
-            onValueChange={(v) => {
-              const { setCallScreening } = require('@/context/CallContext');
-              setCallScreening(v);
-              setEnabled(v);
-            }}
-            trackColor={{ true: theme.colors.primary }}
-          />
-        </View>
-      </View>
-    </View>
-  );
-}
-
 function DevModeSection({ theme }: { theme: AppTheme }) {
   const [isLocal, setIsLocal] = React.useState(isDevModeLocal());
   const config = getApiConfig();
 
+  // Warning-tinted dashed box — same "dev builds only" visual language as the
+  // Apex modal's debug panel.
   return (
     <View style={{ marginBottom: Skin.space(24) }}>
-      <Text style={{ fontSize: Skin.font(16), fontFamily: theme.fonts.bold.fontFamily, fontWeight: theme.fonts.bold.fontWeight, color: theme.colors.textMain, marginBottom: Skin.space(12) }}>
-        Developer
+      <Text style={{ fontSize: Skin.font(16), fontFamily: theme.fonts.bold.fontFamily, fontWeight: theme.fonts.bold.fontWeight, color: theme.colors.warning, marginBottom: Skin.space(12) }}>
+        Developer (dev builds only)
       </Text>
-      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(8), padding: Skin.space(16) }}>
+      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(8), padding: Skin.space(16), borderWidth: 1, borderStyle: 'dashed', borderColor: theme.colors.warning }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <IconSymbol name="chevron.left.forwardslash.chevron.right" size={20} color={theme.colors.warning} style={{ marginRight: Skin.space(12) }} />
           <View style={{ flex: 1, marginRight: Skin.space(12) }}>
             <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Use Local API</Text>
             <Text style={{ fontSize: Skin.font(12), color: theme.colors.textSubtle, marginTop: Skin.space(2) }}>
@@ -426,6 +396,7 @@ export default function ProfileModal({
   const [skinsOpen, setSkinsOpen] = React.useState(false);
   const [translateOpen, setTranslateOpen] = React.useState(false);
   const [storedTarget] = useMMKVString(K_TARGET_LANGUAGE, translationPrefsStore);
+  const translationOff = isTranslationOff(storedTarget);
   const targetLanguageName = languageName(resolveTarget(storedTarget));
   const [showNamePickerModal, setShowNamePickerModal] = React.useState(false);
 
@@ -692,14 +663,15 @@ export default function ProfileModal({
   const handleResetAllSessions = React.useCallback(() => {
     void (async () => {
       const ok = await confirm({
-        title: 'Reset All DM Sessions',
+        title: 'Fix DM Encryption',
         message:
-          'This will reset all your encrypted DM sessions. Your next message to each contact will establish a fresh secure connection.\n\nUse this if you are experiencing persistent decryption errors.',
+          'This will reset the encryption sessions for all your DM conversations. Your next message to each contact will establish a fresh secure connection.\n\nUse this if messages are failing to send or decrypt.',
         confirmLabel: 'Reset All',
+        variant: 'primary',
       });
       if (!ok) return;
       encryptionStateStorage.clearAll();
-      Alert.alert('Success', 'All DM sessions have been reset. Your next message to each contact will establish a fresh secure connection.');
+      Alert.alert('Encryption Reset', 'Your next message to each contact will establish a fresh secure connection.');
     })();
   }, [confirm]);
 
@@ -1936,7 +1908,7 @@ export default function ProfileModal({
                     }
                   }}
                 >
-                  <IconSymbol name="tag.fill" size={18} color={theme.colors.primary} />
+                  <IconSymbol name="tag" size={18} color={theme.colors.primary} />
                   <Text style={styles.marketplaceButtonText}>List on Marketplace</Text>
                 </TouchableOpacity>
               </View>
@@ -1948,21 +1920,21 @@ export default function ProfileModal({
                 style={styles.marketplaceButton}
                 onPress={() => onOpenMarketplace ? onOpenMarketplace() : setMarketplaceModalVisible(true)}
               >
-                <IconSymbol name="storefront.fill" size={18} color={theme.colors.primary} />
+                <IconSymbol name="storefront" size={18} color={theme.colors.primary} />
                 <Text style={styles.marketplaceButtonText}>Browse Marketplace</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.marketplaceButton}
                 onPress={() => onOpenAuctions ? onOpenAuctions() : setAuctionsModalVisible(true)}
               >
-                <IconSymbol name="hammer.fill" size={18} color={theme.colors.primary} />
+                <IconSymbol name="hammer" size={18} color={theme.colors.primary} />
                 <Text style={styles.marketplaceButtonText}>Auctions</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.marketplaceButton}
                 onPress={() => onOpenOffers ? onOpenOffers() : setOffersModalVisible(true)}
               >
-                <IconSymbol name="envelope.fill" size={18} color={theme.colors.primary} />
+                <IconSymbol name="envelope" size={18} color={theme.colors.primary} />
                 <Text style={styles.marketplaceButtonText}>Offers</Text>
               </TouchableOpacity>
             </View>
@@ -2202,13 +2174,13 @@ export default function ProfileModal({
             <View style={styles.benefitsSection}>
               <Text style={styles.sectionTitle}>Benefits</Text>
               <View style={styles.benefitItem}>
-                <IconSymbol name="person.badge.shield.checkmark.fill" size={20} color={theme.colors.primary} />
+                <IconSymbol name="person.badge.shield.checkmark" size={20} color={theme.colors.primary} />
                 <Text style={styles.benefitText}>
                   Unique identity across the Quilibrium network
                 </Text>
               </View>
               <View style={styles.benefitItem}>
-                <IconSymbol name="hand.thumbsup.fill" size={20} color={theme.colors.primary} />
+                <IconSymbol name="hand.thumbsup" size={20} color={theme.colors.primary} />
                 <Text style={styles.benefitText}>
                   Earn governance points to participate in QNS decisions
                 </Text>
@@ -2267,6 +2239,7 @@ export default function ProfileModal({
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Appearance</Text>
               <TouchableOpacity style={styles.settingRow} onPress={() => setSkinsOpen(true)}>
+                <IconSymbol name="paintpalette" size={20} color={theme.colors.primary} style={styles.settingIcon} />
                 <View style={styles.settingLeft}>
                   <Text style={styles.settingLabel}>Skins</Text>
                   <Text style={styles.settingDescription}>
@@ -2278,10 +2251,13 @@ export default function ProfileModal({
                 <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity style={styles.settingRow} onPress={() => setTranslateOpen(true)}>
+                <IconSymbol name="language" size={20} color={theme.colors.primary} style={styles.settingIcon} />
                 <View style={styles.settingLeft}>
                   <Text style={styles.settingLabel}>Translate to</Text>
                   <Text style={styles.settingDescription}>
-                    {`On-device translation target: ${targetLanguageName}`}
+                    {translationOff
+                      ? 'Translation is turned off'
+                      : `On-device translation target: ${targetLanguageName}`}
                   </Text>
                 </View>
                 <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
@@ -2300,7 +2276,7 @@ export default function ProfileModal({
                     style={styles.actionButton}
                     onPress={() => setShowFarcasterImport(true)}
                   >
-                    <IconSymbol name="person.badge.plus" size={20} color={theme.colors.textMain} />
+                    <IconSymbol name="person.badge.plus" size={20} color={theme.colors.primary} />
                     <Text style={styles.actionButtonText}>Connect Farcaster Account</Text>
                     <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
                   </TouchableOpacity>
@@ -2407,9 +2383,6 @@ export default function ProfileModal({
               onResetAllSessions={handleResetAllSessions}
             />
 
-            {/* Calls */}
-            <CallScreeningSection theme={theme} />
-
             {/* App Updates (OTA) */}
             <OtaUpdateSection theme={theme} />
 
@@ -2418,9 +2391,9 @@ export default function ProfileModal({
 
             {/* Danger Zone */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Danger Zone</Text>
+              <Text style={[styles.sectionTitle, styles.dangerText]}>Danger Zone</Text>
               <TouchableOpacity style={[styles.actionButton, styles.dangerButton]} onPress={() => setShowResetConfirm(true)}>
-                <IconSymbol name="arrow.counterclockwise" size={20} color={theme.colors.danger} />
+                <IconSymbol name="trash" size={20} color={theme.colors.danger} />
                 <Text style={[styles.actionButtonText, styles.dangerText]}>Reset App Data</Text>
               </TouchableOpacity>
             </View>
@@ -2435,11 +2408,10 @@ export default function ProfileModal({
             {user?.farcaster ? (
               // Connected state
               <>
-                {/* Account card with Disconnect — first item. Icon top-aligned
-                    to match the Warpcast import row. */}
-                <View style={[styles.farcasterConnected, { alignItems: 'flex-start' }]}>
-                  <View style={[styles.farcasterInfo, { alignItems: 'flex-start' }]}>
-                    <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success} style={{ marginTop: Skin.space(2) }} />
+                {/* Account card with Disconnect — first item. */}
+                <View style={styles.farcasterConnected}>
+                  <View style={styles.farcasterInfo}>
+                    <IconSymbol name="checkmark.circle.fill" size={20} color={theme.colors.success} />
                     <View style={styles.farcasterDetails}>
                       <Text style={styles.farcasterUsername}>@{user.farcaster.username}</Text>
                       <Text style={styles.farcasterFid}>FID: {user.farcaster.fid}</Text>
@@ -2464,6 +2436,7 @@ export default function ProfileModal({
                 {/* Feed display preferences — Farcaster-only (drive useFarcasterFeed).
                     Plain settingRow → uniform 8px marginBottom like every card. */}
                 <View style={styles.settingRow}>
+                  <IconSymbol name="bubble.left.and.bubble.right" size={20} color={theme.colors.primary} style={styles.settingIcon} />
                   <View style={styles.settingLeft}>
                     <Text style={styles.settingLabel}>Show replies in main feed</Text>
                     <Text style={styles.settingDescription}>
@@ -2478,6 +2451,7 @@ export default function ProfileModal({
                   />
                 </View>
                 <View style={styles.settingRow}>
+                  <IconSymbol name="bubble.left.and.bubble.right" size={20} color={theme.colors.primary} style={styles.settingIcon} />
                   <View style={styles.settingLeft}>
                     <Text style={styles.settingLabel}>Show replies from non-followed in main feed</Text>
                     <Text style={styles.settingDescription}>
@@ -2494,6 +2468,7 @@ export default function ProfileModal({
                 </View>
                 {/* Hypersnap signer opt-in */}
                 <View style={styles.farcasterConnected}>
+                  <IconSymbol name="bolt" size={20} color={theme.colors.primary} style={styles.settingIcon} />
                   <View style={{ flex: 1, marginRight: Skin.space(12) }}>
                     <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Hypersnap Signer</Text>
                     <Text style={{ fontSize: Skin.font(12), color: theme.colors.textSubtle, marginTop: Skin.space(2) }}>
@@ -2513,7 +2488,7 @@ export default function ProfileModal({
                 {/* Warpcast Wallet Import */}
                 {hasWarpcastWallet && !hasImportedWarpcastWallet && onOpenWarpcastImport && (
                   <TouchableOpacity
-                    style={[styles.actionButton, { alignItems: 'flex-start' }]}
+                    style={styles.actionButton}
                     onPress={() => {
                       if (isRouteMode) {
                         // In route mode, just open the import modal directly (no need to close ProfileModal)
@@ -2525,14 +2500,14 @@ export default function ProfileModal({
                       }
                     }}
                   >
-                    <IconSymbol name="wallet.pass.fill" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
+                    <IconSymbol name="wallet.pass.fill" size={20} color={theme.colors.primary} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.actionButtonText}>Import Warpcast Wallet</Text>
                       <Text style={[styles.settingDescription, { marginTop: Skin.space(4), marginLeft: Skin.space(12) }]}>
                         Import your Warpcast embedded wallet to use alongside your Quorum wallet
                       </Text>
                     </View>
-                    <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} style={{ marginTop: Skin.space(2) }} />
+                    <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
                   </TouchableOpacity>
                 )}
                 {hasImportedWarpcastWallet && importedWallet && (
@@ -2552,8 +2527,8 @@ export default function ProfileModal({
                 {/* Merge profiles — shown when currently unmerged (parent gates
                     the callback on splitMode). */}
                 {onMergeProfiles && (
-                  <TouchableOpacity style={[styles.actionButton, { alignItems: 'flex-start' }]} onPress={handleMergeProfiles}>
-                    <IconSymbol name="merge" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
+                  <TouchableOpacity style={styles.actionButton} onPress={handleMergeProfiles}>
+                    <IconSymbol name="merge" size={20} color={theme.colors.primary} />
                     <View style={styles.actionButtonContent}>
                       <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Merge profiles</Text>
                       <Text style={styles.actionButtonSubtext}>Combine your Quorum and Farcaster profiles into one</Text>
@@ -2563,8 +2538,8 @@ export default function ProfileModal({
                 {/* Keep separate (unmerge) — shown when currently merged. Purely a
                     display change; no data is altered. */}
                 {onUnmergeProfiles && (
-                  <TouchableOpacity style={[styles.actionButton, { alignItems: 'flex-start' }]} onPress={handleUnmergeProfiles}>
-                    <IconSymbol name="split" size={20} color={theme.colors.primary} style={{ marginTop: Skin.space(2) }} />
+                  <TouchableOpacity style={styles.actionButton} onPress={handleUnmergeProfiles}>
+                    <IconSymbol name="split" size={20} color={theme.colors.primary} />
                     <View style={styles.actionButtonContent}>
                       <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Separate profiles</Text>
                       <Text style={styles.actionButtonSubtext}>Show and edit your Quorum and Farcaster profiles separately</Text>
@@ -3496,6 +3471,9 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       borderRadius: Skin.radius(8),
       marginBottom: Skin.space(8),
     },
+    settingIcon: {
+      marginRight: Skin.space(12),
+    },
     settingLeft: {
       flex: 1,
       marginRight: Skin.space(16),
@@ -4228,12 +4206,19 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
    *  Account Info card). */
   privacyLevel?: string;
 }) {
+  // Call screening lives in CallContext (module-level, not config-synced);
+  // lazy require avoids an import cycle with the call stack.
+  const [screenUnknownCallers, setScreenUnknownCallers] = React.useState(() => {
+    const { getCallScreening } = require('@/context/CallContext');
+    return getCallScreening();
+  });
   return (
     <>
       {/* Privacy & Sync Settings */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Privacy & Sync</Text>
         <View style={styles.settingRow}>
+          <IconSymbol name="eye" size={20} color={theme.colors.primary} style={styles.settingIcon} />
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Public Profile</Text>
             <Text style={styles.settingDescription}>
@@ -4248,6 +4233,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
           />
         </View>
         <View style={styles.settingRow}>
+          <IconSymbol name="arrow.2.circlepath" size={20} color={theme.colors.primary} style={styles.settingIcon} />
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Enable Sync</Text>
             <Text style={styles.settingDescription}>
@@ -4263,6 +4249,26 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
           />
         </View>
         <View style={styles.settingRow}>
+          <IconSymbol name="phone" size={20} color={theme.colors.primary} style={styles.settingIcon} />
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingLabel}>Screen Unknown Callers</Text>
+            <Text style={styles.settingDescription}>
+              Only ring for people you have a conversation with
+            </Text>
+          </View>
+          <Switch
+            value={screenUnknownCallers}
+            onValueChange={(v) => {
+              const { setCallScreening } = require('@/context/CallContext');
+              setCallScreening(v);
+              setScreenUnknownCallers(v);
+            }}
+            trackColor={{ false: theme.colors.surface4, true: theme.colors.accent }}
+            thumbColor={screenUnknownCallers ? '#ffffff' : '#f4f3f4'}
+          />
+        </View>
+        <View style={styles.settingRow}>
+          <IconSymbol name="checkmark" size={20} color={theme.colors.primary} style={styles.settingIcon} />
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Delivery receipts</Text>
             <Text style={styles.settingDescription}>
@@ -4281,6 +4287,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
             desktop, which hides this row while delivery is off). */}
         {deliveryReceipts && (
           <View style={styles.settingRow}>
+            <IconSymbol name="checkmark.double" size={20} color={theme.colors.primary} style={styles.settingIcon} />
             <View style={styles.settingLeft}>
               <Text style={styles.settingLabel}>Read receipts</Text>
               <Text style={styles.settingDescription}>
@@ -4302,6 +4309,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
             ships. (issue #58) */}
         {/* Privacy Level — read-only (moved from the old Account Info card). */}
         <View style={styles.settingRow}>
+          <IconSymbol name="shield" size={20} color={theme.colors.primary} style={styles.settingIcon} />
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Privacy Level</Text>
           </View>
@@ -4315,6 +4323,7 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Notifications</Text>
         <View style={styles.settingRow}>
+          <IconSymbol name="bell" size={20} color={theme.colors.primary} style={styles.settingIcon} />
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Push Notifications</Text>
             <Text style={styles.settingDescription}>Receive notifications on your device</Text>
@@ -4356,7 +4365,7 @@ const AccountRecoverySection = React.memo(function AccountRecoverySection({
       <Text style={styles.sectionTitle}>Account</Text>
       {!showRecoveryPhrase ? (
         <TouchableOpacity style={styles.actionButton} onPress={onExport}>
-          <IconSymbol name="key.fill" size={20} color={theme.colors.textMain} />
+          <IconSymbol name="key.fill" size={20} color={theme.colors.primary} />
           <Text style={styles.actionButtonText}>Export Recovery Key</Text>
           <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
         </TouchableOpacity>
@@ -4512,10 +4521,10 @@ const DeviceKeysSection = React.memo(function DeviceKeysSection({
         style={[styles.actionButton, { marginTop: Skin.space(16) }]}
         onPress={onResetAllSessions}
       >
-        <IconSymbol name="arrow.triangle.2.circlepath" size={20} color={theme.colors.warning} />
+        <IconSymbol name="arrow.triangle.2.circlepath" size={20} color={theme.colors.primary} />
         <View style={styles.actionButtonContent}>
-          <Text style={styles.actionButtonText}>Reset All DM Sessions</Text>
-          <Text style={styles.actionButtonSubtext}>Fix persistent encryption errors</Text>
+          <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Fix DM Encryption</Text>
+          <Text style={styles.actionButtonSubtext}>Reset if messages fail to send or decrypt</Text>
         </View>
       </TouchableOpacity>
     </View>

@@ -17,11 +17,17 @@ import { useBlockedFids } from '@/hooks/useBlockedFids';
 import { useMutedFids } from '@/hooks/useMutedFids';
 import { useUserVisibilityActions } from '@/hooks/useUserVisibilityActions';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { useMMKVString } from 'react-native-mmkv';
 import { requestTranslateText } from '@/services/translation/forceTranslate';
 import {
   ensureAvailabilityProbed,
   translationAvailableCached,
 } from '@/services/translation/availability';
+import {
+  translationPrefsStore,
+  K_TARGET_LANGUAGE,
+  isTranslationOff,
+} from '@/services/translation/translationPrefs';
 import type { AppTheme } from '@/theme';
 
 interface CastOverflowButtonProps {
@@ -68,7 +74,12 @@ export function CastOverflowButton({
   React.useEffect(() => {
     ensureAvailabilityProbed().then(setTranslateAvailable);
   }, []);
-  const canTranslate = translateAvailable && !!castText && castText.trim().length > 0;
+  const [storedTarget] = useMMKVString(K_TARGET_LANGUAGE, translationPrefsStore);
+  const canTranslate =
+    translateAvailable &&
+    !isTranslationOff(storedTarget) &&
+    !!castText &&
+    castText.trim().length > 0;
 
   const who = authorUsername ? `@${authorUsername}` : 'this user';
   const fail = (verb: string) =>
@@ -95,7 +106,7 @@ export function CastOverflowButton({
       ? [
           {
             label: 'Translate',
-            icon: 'globe',
+            icon: 'language',
             onPress: () => requestTranslateText(castText!),
           },
         ]
