@@ -19,9 +19,15 @@
 // on real accounts. A bench that inflates the very quantity it is measuring is
 // worse than no bench.
 //
-// ⚠️ Account private keys are NEVER written to .state/. Only the device keyset
-// is. A key supplied via env is re-read from env each run, so .state/ can be
-// deleted at any time without losing account access — and cannot leak one.
+// ⚠️ Account private keys: an ENV-SUPPLIED key is never written to .state/ — it is
+// re-read from env each run, so .state/ can be deleted at any time without losing
+// account access, and cannot leak a real account. A GENERATED throwaway key IS
+// persisted, because .state/ is its only home; losing it orphans the account.
+//
+// So `privateKeyHex` present in a state file means that bot is a throwaway, by
+// construction (see writeState below: `...(fromEnv ? {} : { privateKeyHex })`).
+// That is the reliable way to tell which bots sit on your real test accounts —
+// the ones WITHOUT it. .state/ is gitignored either way (.gitignore:47).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
