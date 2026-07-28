@@ -53,6 +53,10 @@ module.exports = {
     // '@/services/crypto/native-provider' from elsewhere. It deliberately does
     // NOT match native-signing-provider, which is a different module.
     '^(.*/)?native-provider$': '<rootDir>/dev/harness/wasm-provider-shim.ts',
+    // Separate module in the app, so a separate shim here. Collapsing the two
+    // would make both import paths resolve to one file and quietly change what
+    // each call site receives.
+    '^(.*/)?native-signing-provider$': '<rootDir>/dev/harness/wasm-signing-shim.ts',
 
     // ---- native modules that cannot exist in Node ----
     // Each is a real device API with no Node equivalent. Swapping them here
@@ -98,7 +102,23 @@ module.exports = {
   transform: {
     '^.+\\.[jt]sx?$': ['babel-jest', { configFile: path.resolve(__dirname, 'babel.config.js') }],
   },
+  // These packages ship ESM that jest's CJS runner cannot execute directly, so
+  // babel must transform them. The list grows as scenarios reach deeper into
+  // mobile's real code — keyService alone pulls @scure/bip39 and multihashes.
+  // Everything else in node_modules stays untransformed, which keeps runs fast.
   transformIgnorePatterns: [
-    'node_modules/(?!(@quilibrium/quorum-shared|multiformats|@noble|bs58|base-x|uint8arrays))',
+    'node_modules/(?!(' +
+      [
+        '@quilibrium/quorum-shared',
+        'multiformats',
+        'multihashes',
+        '@noble',
+        '@scure',
+        'bs58',
+        'base-x',
+        'uint8arrays',
+        'varint',
+      ].join('|') +
+      '))',
   ],
 };
