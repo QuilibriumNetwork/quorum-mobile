@@ -1,13 +1,53 @@
-# Headless DM harness (mobile) — slice 1
+# Headless DM harness (mobile)
 
 Run **mobile's own client code** in Node, with no device, no emulator and no
-Metro. Slice 1 proves the toolchain; later slices add identity, transport and
-two-bot DM scenarios.
+Metro.
 
 ```bash
 yarn harness:smoke     # offline, no keys, no network — safe anywhere
-yarn harness           # every scenario
+yarn harness           # every scenario (networked ones hit production)
+yarn harness:dm        # the two-bot DM measurement — see below
 ```
+
+`HARNESS_OFFLINE=1 yarn harness` skips everything networked.
+
+## The measurement
+
+`yarn harness:dm` starts **two processes**, one bot each, pairs them through a
+run directory, exchanges numbered DMs and reports loss per direction:
+
+```
+[dm] A→B: sent=40 arrived=40 loss=0.0%
+[dm] B→A: sent=40 arrived=40 loss=0.0%
+[dm] total: 80/80 delivered
+[dm] no loss.
+```
+
+Knobs: `HARNESS_ROUNDS`, `HARNESS_SEND_INTERVAL_MS`, `HARNESS_SETTLE_MS`.
+Diagnostics: `HARNESS_LOG_DEBUG=1` turns on mobile's own `logger.debug` lines
+(subscriptions, routing); `HARNESS_CRYPTO_DEBUG=1` reports crate-level crypto
+failures with the function that produced them.
+
+**One bot per process, and that is not negotiable.** Mobile reaches storage
+through module singletons, so two bots in one process would share identity and
+ratchet state. `jest.isolateModulesAsync` isolates static require-graphs (proven
+in `two-bot-feasibility.scenario.ts`) but *not* lazy `require()`s, which run
+after the isolate closes — a silent leak that would fuse the two devices being
+compared. See the header of `bot.ts`.
+
+### Reading a result honestly
+
+`leftOnMyInbox` in the per-role summary is the number of frames still queued on
+that bot's device inbox. It is the difference between two very different
+findings: frames still sitting there **arrived and were not consumed** (a
+receive/session problem), while an empty inbox with missing messages means they
+were never posted or went elsewhere. A delivery count alone cannot tell them
+apart — an early run showed 100% "loss" that was in fact 40 frames delivered
+perfectly and refused by the receiver's session.
+
+Also drain before measuring (the scenario does): the relay redelivers un-acked
+frames forever, so a run started on a backlog counts a previous run's
+undecryptable leftovers as fresh losses.
 
 ## Why this exists
 
@@ -96,16 +136,49 @@ the WASM binary, so this is the existing convention rather than a new one.
 
 | file | role |
 |---|---|
-| `shim.ts` | browser globals the SDK bundle touches at import (`window.Buffer`) |
-| `smoke.scenario.ts` | offline: WASM loads, real keys, sign+verify with tamper rejection |
-| `../../jest.harness.config.js` | node env, SDK alias, `*.scenario.ts` matcher |
+| `shim.ts` | browser globals the SDK bundle touches at import; optional debug logging |
+| `babel.harness.js` | app babel config + one transform: lazy `import()` → `require` |
+| `wasm-provider-shim.ts` | the crypto seam — WASM in place of uniffi, plus the native error conventions mobile's code expects |
+| `wasm-signing-shim.ts`, `crypto-barrel-shim.ts` | the other two spellings of that seam |
+| `context-barrel-shim.ts` | narrows `@/context` to the DM contexts |
+| `mmkv-shim.ts`, `securestore-shim.ts`, `sqlite-shim.ts`, `filesystem-shim.ts`, `react-native-shim.ts` | device APIs with no Node equivalent |
+| `identity.ts` | registers/reuses an account through mobile's own onboarding |
+| `bot.ts` | a full headless client: renders mobile's real `WebSocketProvider` |
+| `rendezvous.ts`, `run-two-bots.mjs` | pairs two bot processes and reports loss |
+| `*.scenario.ts` | the scenarios themselves |
+| `../../jest.harness.config.js` | node env, module seams, `*.scenario.ts` matcher |
 
 ## Status
 
-- **Slice 1 — toolchain proven.** WASM loads under mobile's jest; the crate
-  really executes (sign/verify, tampered message rejected). App suite unaffected:
-  13 suites / 108 tests, unchanged.
-- Slices 2-4 (crypto-provider shim, storage shims, DM core extraction, two-bot
-  scenarios) are specced in
-  `quorum-desktop/.agents/tasks/2026-07-27-cross-platform-dm-harness.md` — note
-  that plan lives in the **desktop** repo, because `.agents/` is gitignored here.
+Mobile's real client code runs headlessly end to end: onboarding, connect,
+subscribe, DM send and DM receive. Measured 2026-07-28 on production, two
+throwaway accounts, one device each:
+
+**40 rounds each direction — 80/80 delivered, 0.0% loss, zero decrypt failures,
+both inboxes empty at the end.**
+
+What that does and does not mean: mobile's own send/receive logic does not lose
+these messages when RN's native WebSocket is removed. It moves probability
+toward the native layer; it does not settle it, because a fresh two-device pair
+may simply be the population least likely to show an intermittent, account-aged
+fault. Treat it as one variable eliminated, not a verdict.
+
+Three findings that cost real time and are worth knowing before touching this:
+
+1. **The two crypto backends are not interchangeable at the error level.** They
+   implement the same `CryptoProvider` interface, but mobile's native provider
+   reports a decrypt failure as `{message: [], decryptionError}` and
+   base64-decodes a string `message`, while `WasmCryptoProvider` throws for some
+   errors and passes others through untouched. Mobile's app code is written
+   against the native conventions, so an unbridged WASM provider turned a
+   recoverable failure into `SyntaxError: Unexpected token 'D'` thrown far from
+   its cause. `wasm-provider-shim.ts` now mirrors the native conventions.
+2. **Simultaneous session open forks the pair.** Having both bots send from the
+   same instant failed all 50 messages of a 25-round run on X3DH while every
+   frame arrived perfectly — and the forked state persisted into later runs
+   through retained undecryptable frames. The baseline scenario has one
+   initiator; simultaneous open deserves its own scenario.
+3. **App suite unaffected**: 13 suites / 108 tests, unchanged. `jest.config.js`
+   is untouched, no dependency was added, `yarn.lock` was never modified.
+
+*Last updated: 2026-07-28*

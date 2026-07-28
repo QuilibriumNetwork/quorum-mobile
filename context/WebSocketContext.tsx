@@ -200,7 +200,12 @@ function deleteProcessedEnvelope(inboxAddress: string, timestamp: number): void 
   }
 }
 
-async function deleteInboxMessages(
+// Exported (no behaviour change) so the headless harness can clear a device
+// inbox before measuring delivery. The relay redelivers un-acked frames
+// indefinitely, so a run that starts on a backlog counts old undecryptable
+// frames as fresh losses. Reusing this rather than reimplementing the signing
+// keeps the harness from drifting away from the real delete path.
+export async function deleteInboxMessages(
   inboxAddress: string,
   timestamps: number[],
   deviceKeyset: DeviceKeyset
