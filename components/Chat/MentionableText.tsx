@@ -49,6 +49,14 @@ interface MentionableTextProps {
    * wraps with it. Sits before the translation toggle when both are present.
    */
   receipt?: React.ReactNode;
+  /**
+   * View-based form of `receipt`, required by the emoji-only branches below.
+   * Those lay the trailing group out as a flex child, and an inline <Image>
+   * inside a <Text> that is a flex child draws outside its measured box — which
+   * left the receipt and the unsigned warning sitting in different places.
+   * Falls back to `receipt` when a caller hasn't supplied it.
+   */
+  receiptBlock?: React.ReactNode;
 }
 
 // Regex patterns for @mentions, URLs, and :emoji:
@@ -133,6 +141,7 @@ function MentionableTextBase({
   theme,
   enableTranslate = false,
   receipt,
+  receiptBlock,
 }: MentionableTextProps) {
   // On-device translation. `text` below is the displayed copy (original or
   // translated), so all parsing/rendering downstream is unchanged.
@@ -473,7 +482,7 @@ function MentionableTextBase({
           {/* flexShrink so a wide emoji run gives way to the trailing indicators
               rather than squeezing them into a width that makes them wrap. */}
           <Text style={[style, { fontSize: size, lineHeight: emojiLineHeight(size), flexShrink: 1 }]}>{text}</Text>
-          {receipt}
+          {receiptBlock ?? receipt}
         </View>
       );
     }
@@ -640,7 +649,7 @@ function MentionableTextBase({
         {/* flexShrink so a wide emoji run gives way to the trailing indicators
             rather than squeezing them into a width that makes them wrap. */}
         <Text style={[effectiveStyle, { flexShrink: 1 }]}>{renderedParts}</Text>
-        {receipt}
+        {receiptBlock ?? receipt}
       </View>
     );
   }

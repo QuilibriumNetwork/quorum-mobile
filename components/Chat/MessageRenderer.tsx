@@ -46,6 +46,13 @@ interface MessageRendererProps {
    * wraps with it. Threaded into the terminal <Text> by the underlying renderer.
    */
   receipt?: React.ReactNode;
+  /**
+   * View-based form of `receipt`, used by layouts that place the group in a row
+   * of views instead of in a text run (the emoji-only branch). Inline images in
+   * a <Text> that is a flex child draw outside their measured box, so those
+   * call sites must not use `receipt`.
+   */
+  receiptBlock?: React.ReactNode;
 }
 
 function MessageRendererBase({
@@ -63,6 +70,7 @@ function MessageRendererBase({
   onLinkPress,
   enableTranslate = false,
   receipt,
+  receiptBlock,
 }: MessageRendererProps) {
   const isMarkdown = useMemo(() => hasMarkdown(text), [text]);
 
@@ -91,6 +99,7 @@ function MessageRendererBase({
         onChannelPress={onChannelPress}
         onLinkPress={onLinkPress}
         receipt={receipt}
+        receiptBlock={receiptBlock}
       />
     );
   }
@@ -113,6 +122,7 @@ function MessageRendererBase({
         onChannelPress={onChannelPress}
         onLinkPress={onLinkPress}
         receipt={receipt}
+        receiptBlock={receiptBlock}
       />
     );
   }

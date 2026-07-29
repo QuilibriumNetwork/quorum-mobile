@@ -1237,6 +1237,22 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
           {unsignedNode}
         </Text>
       ) : null;
+      // Block variant of the same group, for the layouts that place it in a View
+      // row rather than in a text run — MentionableText's emoji-only branch.
+      // There the inline form cannot be used: an <Image> inline in a <Text> that
+      // is itself a flex child draws outside the box the <Text> measured, which
+      // is what put the receipt and the warning in different places on
+      // emoji-only messages. Bare <Image>s in a real row lay out predictably.
+      const trailingBlock = receiptNode || unsignedNode ? (
+        <View style={[styles.trailingBlock, DEBUG_TRAILING_LAYOUT && { backgroundColor: DEBUG_GROUP_BG }]}>
+          {receiptRead(item) !== null && (
+            <ReceiptTicks read={!!receiptRead(item)} color={theme.colors.textMuted} inline={false} />
+          )}
+          {unsignedNode && (
+            <UnsignedIndicator color="#EAB308" onPress={showUnsignedToast} inline={false} />
+          )}
+        </View>
+      ) : null;
       const trailingInlined = !(item.hasLink && item.link) && !!messageTextWithoutLink;
 
       return (
@@ -1315,6 +1331,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   onChannelPress={onChannelLinkPress}
                   onLinkPress={onLinkPress}
                   receipt={trailingInline}
+                  receiptBlock={trailingBlock}
                 />
               ) : null}
               {!trailingInlined && trailingInline ? (
@@ -1361,7 +1378,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedInline, renderCompactIndicators, renderReceipt, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds]
+    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedInline, renderCompactIndicators, renderReceipt, receiptRead, showUnsignedToast, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds]
   );
 
   const renderCast = useCallback(
@@ -1774,6 +1791,17 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   // wrap onto a second line. Ignored when it renders as an inline text run.
   trailingGroup: {
     flexShrink: 0,
+  },
+  // Block form of the trailing group: a real row of bare <Image>s, used where
+  // the group sits in a View rather than in a text run. alignItems center lines
+  // the glyphs up on their shared centre — the assets are padded onto a common
+  // box precisely so that centring them is correct (see trailingGlyphs.ts).
+  trailingBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: Skin.space(3),
+    marginLeft: Skin.space(4),
   },
   // DM receipt fallback row — used when the tick can't inline into the message
   // text (link card / bodyless message). Left-aligned beneath the content.

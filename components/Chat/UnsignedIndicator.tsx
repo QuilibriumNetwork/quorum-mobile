@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import { Text, Image, StyleSheet } from 'react-native';
+import { Text, Image, Pressable, StyleSheet } from 'react-native';
 import { UNSIGNED_ICON_URI, UNSIGNED_ICON_ASPECT } from './unsignedIconAsset';
 import {
   TRAILING_GLYPH_SIZE,
@@ -34,9 +34,38 @@ interface UnsignedIndicatorProps {
    * derived from the asset aspect. Leave unset outside deliberate one-offs.
    */
   size?: number;
+  /**
+   * Inline (a text run inside the message <Text>) vs block (a bare tappable
+   * <Image> for a View-based row).
+   *
+   * Block exists because an inline <Image> inside a <Text> that is itself a flex
+   * child does not lay out reliably — the image draws outside the box the <Text>
+   * measured. Any caller placing this in a View row must use block.
+   */
+  inline?: boolean;
 }
 
-function UnsignedIndicatorBase({ color, onPress, size = TRAILING_GLYPH_SIZE }: UnsignedIndicatorProps) {
+function UnsignedIndicatorBase({
+  color,
+  onPress,
+  size = TRAILING_GLYPH_SIZE,
+  inline = true,
+}: UnsignedIndicatorProps) {
+  if (!inline) {
+    return (
+      <Pressable
+        onPress={onPress}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        accessibilityRole="button"
+        accessibilityLabel="Unsigned message"
+      >
+        <Image
+          source={{ uri: UNSIGNED_ICON_URI }}
+          style={{ width: size * UNSIGNED_ICON_ASPECT, height: size, tintColor: color }}
+        />
+      </Pressable>
+    );
+  }
   return (
     <Text
       onPress={onPress}
