@@ -1,10 +1,10 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { useTheme } from '@/theme';
 import { createTheme } from '@/theme/themes';
 import * as Skin from '@/theme/skins/geometry';
-import { Button } from '@/components/ui/Button';
 import { CenterModal } from './CenterModal';
+import { ConfirmActions } from './ConfirmActions';
 
 type ThemeType = ReturnType<typeof createTheme>;
 
@@ -60,26 +60,13 @@ export function ConfirmDialog({
     >
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.message}>{message}</Text>
-      <View style={styles.actions}>
-        <Button
-          variant="ghost"
-          size="lg"
-          color={theme.colors.textSubtle}
-          onPress={onCancel}
-          style={styles.button}
-        >
-          {cancelLabel}
-        </Button>
-        <Button
-          variant="ghost"
-          size="lg"
-          color={variant === 'danger' ? theme.colors.danger : theme.colors.primary}
-          onPress={onConfirm}
-          style={styles.button}
-        >
-          {confirmLabel}
-        </Button>
-      </View>
+      <ConfirmActions
+        confirmLabel={confirmLabel}
+        cancelLabel={cancelLabel}
+        variant={variant}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
     </CenterModal>
   );
 }
@@ -99,21 +86,6 @@ const createStyles = (theme: ThemeType) =>
       color: theme.colors.textSubtle,
       lineHeight: Skin.font(20),
       marginBottom: Skin.space(20),
-    },
-    actions: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      alignItems: 'center',
-      gap: Skin.space(4),
-      // The links keep a generous tap target via their own horizontal padding;
-      // pull the row out by that much so the last label optically aligns with
-      // the card's text edge rather than sitting inset from it.
-      marginRight: -Skin.space(12),
-    },
-    button: {
-      // Tighter than the `lg` default (28) — these read as links, not slabs.
-      // Vertical padding is untouched, so the tap target stays ~50pt tall.
-      paddingHorizontal: Skin.space(12),
     },
   });
 

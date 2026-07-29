@@ -6,6 +6,8 @@ export { ActionRow, ActionRowGroup } from './ActionRow';
 export type { ActionRowProps, ActionRowGroupProps } from './ActionRow';
 export { CenterModal } from './CenterModal';
 export type { CenterModalProps } from './CenterModal';
+export { ConfirmActions } from './ConfirmActions';
+export type { ConfirmActionsProps } from './ConfirmActions';
 export { ConfirmDialog } from './ConfirmDialog';
 export type { ConfirmDialogProps } from './ConfirmDialog';
 export { TypeToConfirmModal } from './TypeToConfirmModal';

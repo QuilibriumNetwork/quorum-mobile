@@ -3,8 +3,8 @@ import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } fro
 import { useTheme } from '@/theme';
 import { createTheme } from '@/theme/themes';
 import * as Skin from '@/theme/skins/geometry';
-import { Button } from '@/components/ui/Button';
 import { CenterModal } from './CenterModal';
+import { ConfirmActions } from './ConfirmActions';
 
 type ThemeType = ReturnType<typeof createTheme>;
 
@@ -106,27 +106,13 @@ export function TypeToConfirmModal({
           accessibilityLabel={`Type ${keyword} to confirm`}
         />
 
-        <View style={styles.actions}>
-          <Button
-            variant="ghost"
-            size="lg"
-            color={theme.colors.textSubtle}
-            onPress={handleCancel}
-            style={styles.button}
-          >
-            {cancelLabel}
-          </Button>
-          <Button
-            variant="ghost"
-            size="lg"
-            color={theme.colors.danger}
-            onPress={onConfirm}
-            disabled={!matches}
-            style={styles.button}
-          >
-            {confirmLabel}
-          </Button>
-        </View>
+        <ConfirmActions
+          confirmLabel={confirmLabel}
+          cancelLabel={cancelLabel}
+          onConfirm={onConfirm}
+          onCancel={handleCancel}
+          confirmDisabled={!matches}
+        />
       </KeyboardAvoidingView>
     </CenterModal>
   );
@@ -191,18 +177,6 @@ const createStyles = (theme: ThemeType) =>
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
       marginBottom: Skin.space(20),
-    },
-    actions: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      alignItems: 'center',
-      gap: Skin.space(4),
-      // Matches ConfirmDialog: pull the row out by the links' own horizontal
-      // padding so the last label optically aligns with the card's text edge.
-      marginRight: -Skin.space(12),
-    },
-    button: {
-      paddingHorizontal: Skin.space(12),
     },
   });
 
