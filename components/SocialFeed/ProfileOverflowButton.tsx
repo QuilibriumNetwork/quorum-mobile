@@ -107,7 +107,7 @@ export function ProfileOverflowButton({
         style={{
           width: 36,
           height: 36,
-          borderRadius: Skin.radius(18),
+          borderRadius: Skin.circleOrSquare(18),
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: theme.colors.surface3,

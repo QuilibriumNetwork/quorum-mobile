@@ -7,6 +7,7 @@
  * Uses types from @quilibrium/quorum-shared for cross-platform compatibility.
  */
 
+import { AppState } from 'react-native';
 import { type MMKV } from 'react-native-mmkv';
 import { createMirroredMMKV } from '@/services/storage/mirroredMMKV';
 import {
@@ -27,6 +28,9 @@ export type {
   LatestState,
   ConversationInboxKeypair,
 } from '@quilibrium/quorum-shared';
+
+// Per-inbox-address keypair copies (see saveConversationInboxKeypair).
+const INBOX_KEYPAIR_BY_ADDR_PREFIX = 'conversationInboxByAddr:';
 
 // Debounced best-effort push re-registration. A brand-new conversation
 // inbox must be registered with quorum-api so the peer's DMs can wake this
@@ -103,6 +107,27 @@ class EncryptionStateStorage {
   constructor() {
     // Separate MMKV instance for encryption states (encrypted at rest)
     this.storage = new MMKVStorageProvider('quorum-encryption');
+    this.flushWhenBackgrounded();
+  }
+
+  /**
+   * Flush the write queue whenever the app leaves the foreground.
+   *
+   * Batching keeps MMKV off the hot path, but a queued ratchet advance is
+   * only in memory while its frame is already on the wire. Backgrounding
+   * freezes JS timers on Android, so without this the pending flush may
+   * never run before the process is reaped — the peer has consumed the
+   * frame and this device restarts a step behind, permanently desynced.
+   */
+  private flushWhenBackgrounded(): void {
+    try {
+      AppState.addEventListener('change', (next) => {
+        if (next !== 'active') this.flushWrites();
+      });
+    } catch {
+      // No AppState (tests, non-RN contexts): batching still works, it just
+      // relies on the timer. Never let this break storage construction.
+    }
   }
 
   /**
@@ -148,6 +173,31 @@ class EncryptionStateStorage {
    */
   flushPendingWrites(): void {
     this.flushWrites();
+  }
+
+  /**
+   * Write a key immediately, superseding any queued value for it.
+   *
+   * Dropping the queued entry is the point: without it the next flush would
+   * write the OLDER value back over this one, regressing the ratchet after
+   * its frame is already on the wire.
+   */
+  private writeNow(key: string, value: string): void {
+    this.pendingWrites.delete(key);
+    this.storage.set(key, value);
+  }
+
+  /**
+   * Delete a key, including any queued write for it.
+   *
+   * Without dropping the queued entry the row comes back from the dead:
+   * reads consult the queue first (so it is still visible immediately after
+   * deletion), and the next flush writes it back to disk — silently undoing
+   * a "reset encryption session".
+   */
+  private removeNow(key: string): void {
+    this.pendingWrites.delete(key);
+    this.storage.remove(key);
   }
 
   // Encryption States
@@ -206,7 +256,7 @@ class EncryptionStateStorage {
 
     if (immediate) {
       // Immediate write for critical operations (e.g., before sending)
-      this.storage.set(key, value);
+      this.writeNow(key, value);
     } else {
       // Batched write for performance during sync
       this.queueWrite(key, value);
@@ -227,7 +277,7 @@ class EncryptionStateStorage {
    */
   deleteEncryptionState(conversationId: string, inboxId: string): void {
     const key = `${KEYS.ENCRYPTION_STATE}${conversationId}:${inboxId}`;
-    this.storage.remove(key);
+    this.removeNow(key);
 
     // Remove from conversation inbox list
     this.removeInboxFromConversation(conversationId, inboxId);
@@ -241,7 +291,15 @@ class EncryptionStateStorage {
 
     for (const inboxId of inboxIds) {
       const key = `${KEYS.ENCRYPTION_STATE}${conversationId}:${inboxId}`;
-      this.storage.remove(key);
+      this.removeNow(key);
+    }
+
+    // A queued write can name an inbox the list no longer does (the list is
+    // rebuilt on every save, the queue outlives it), so sweep the queue for
+    // this conversation too — otherwise that row survives the reset.
+    const prefix = `${KEYS.ENCRYPTION_STATE}${conversationId}:`;
+    for (const key of [...this.pendingWrites.keys()]) {
+      if (key.startsWith(prefix)) this.removeNow(key);
     }
 
     // Clear the inbox list
@@ -367,39 +425,55 @@ class EncryptionStateStorage {
   // Conversation Inbox Keypairs
 
   /**
-   * Save a per-conversation inbox keypair
-   * This keypair is used to receive replies for a specific conversation
+   * Save an inbox keypair used to receive replies for one SESSION.
+   *
+   * The authoritative copy is keyed BY INBOX ADDRESS — a conversation has one
+   * inbox per session (one per peer device), and the per-conversation slot is
+   * last-writer-wins, so it only ever holds the newest. That slot is still
+   * written for backwards compatibility (records predating the per-address
+   * store are only found there by the sweeps below); nothing may READ it to
+   * decide where a session receives.
    */
   saveConversationInboxKeypair(keypair: ConversationInboxKeypair): void {
     const key = `${KEYS.CONVERSATION_INBOX_KEY}${keypair.conversationId}`;
-    // First time we've seen this conversation's inbox → make sure its push
-    // binding gets registered so the peer's messages wake this device.
-    const isNew = this.storage.getString(key) == null;
+    const addrKey = `${INBOX_KEYPAIR_BY_ADDR_PREFIX}${keypair.inboxAddress}`;
+    // First time we've seen this INBOX ADDRESS → make sure its push binding
+    // gets registered so the peer's messages wake this device. Keyed on the
+    // per-address slot: the per-conversation slot is last-writer-wins, so a
+    // second session inbox in the same conversation would look "not new"
+    // there and silently skip push registration.
+    const isNew = this.storage.getString(addrKey) == null;
     this.storage.set(key, JSON.stringify(keypair));
+    this.storage.set(addrKey, JSON.stringify(keypair));
     if (isNew) {
       scheduleConversationInboxPushRegistration();
     }
   }
 
-  /**
-   * Get the inbox keypair for a conversation
-   */
-  getConversationInboxKeypair(conversationId: string): ConversationInboxKeypair | null {
-    const key = `${KEYS.CONVERSATION_INBOX_KEY}${conversationId}`;
-    const data = this.storage.getString(key);
-    if (!data) return null;
-    try {
-      return JSON.parse(data) as ConversationInboxKeypair;
-    } catch {
-      return null;
-    }
-  }
+  // NOTE: there is deliberately no getter by conversationId. Reading the
+  // last-writer-wins slot handed one device's inbox to another device's
+  // session, and rows are keyed by that inbox, so the two sessions collapsed
+  // into one row and all but the last were destroyed. Look up by ADDRESS,
+  // from the session row that needs it (services/crypto/sessionReturnInbox.ts).
 
   /**
-   * Delete conversation inbox keypair
+   * Delete conversation inbox keypair (both the per-conversation slot and
+   * the per-address copy, so a deleted conversation's inbox doesn't keep
+   * getting resubscribed and push-registered).
    */
   deleteConversationInboxKeypair(conversationId: string): void {
     const key = `${KEYS.CONVERSATION_INBOX_KEY}${conversationId}`;
+    const data = this.storage.getString(key);
+    if (data) {
+      try {
+        const kp = JSON.parse(data) as ConversationInboxKeypair;
+        if (kp.inboxAddress) {
+          this.storage.remove(`${INBOX_KEYPAIR_BY_ADDR_PREFIX}${kp.inboxAddress}`);
+        }
+      } catch {
+        // Malformed slot — still remove it below
+      }
+    }
     this.storage.remove(key);
   }
 
@@ -408,6 +482,19 @@ class EncryptionStateStorage {
    * Used when we need to decrypt a message that arrived at a conversation-specific inbox
    */
   getConversationInboxKeypairByAddress(inboxAddress: string): ConversationInboxKeypair | null {
+    // Per-address store first — the legacy per-conversation slot only holds
+    // the most recently created inbox of each conversation, so scanning it
+    // alone missed every other session inbox. The receive path uses this
+    // lookup both to recognize "this is one of OUR inboxes" (a miss caused
+    // messages to be silently dropped as echoes) and to unseal envelopes.
+    const direct = this.storage.getString(`${INBOX_KEYPAIR_BY_ADDR_PREFIX}${inboxAddress}`);
+    if (direct) {
+      try {
+        return JSON.parse(direct) as ConversationInboxKeypair;
+      } catch {
+        // fall through to legacy scan
+      }
+    }
     // Get all keys and find the one with matching inbox address
     const allKeys = this.storage.getAllKeys();
     for (const key of allKeys) {
@@ -437,13 +524,28 @@ class EncryptionStateStorage {
    */
   getAllConversationInboxKeypairs(): ConversationInboxKeypair[] {
     const out: ConversationInboxKeypair[] = [];
+    const seen = new Set<string>();
     const allKeys = this.storage.getAllKeys();
     for (const key of allKeys) {
-      if (!key.startsWith(KEYS.CONVERSATION_INBOX_KEY)) continue;
+      // Sweep BOTH stores: the legacy per-conversation slot keeps only the
+      // most recently created inbox of each conversation (last-writer-wins),
+      // while every session inbox has a per-address entry. Missing the
+      // per-address entries here meant that after an app restart,
+      // subscriptions and push bindings only covered the last inbox per
+      // conversation — peers replying to any other session inbox went
+      // unheard until they fell back to the device inbox (the "messages
+      // arrive minutes later" symptom).
+      const isLegacy = key.startsWith(KEYS.CONVERSATION_INBOX_KEY);
+      const isByAddr = key.startsWith(INBOX_KEYPAIR_BY_ADDR_PREFIX);
+      if (!isLegacy && !isByAddr) continue;
       const data = this.storage.getString(key);
       if (!data) continue;
       try {
-        out.push(JSON.parse(data) as ConversationInboxKeypair);
+        const kp = JSON.parse(data) as ConversationInboxKeypair;
+        if (kp.inboxAddress && !seen.has(kp.inboxAddress)) {
+          seen.add(kp.inboxAddress);
+          out.push(kp);
+        }
       } catch {
         // Skip malformed entries
       }
@@ -456,22 +558,10 @@ class EncryptionStateStorage {
    * Used for resubscribing to all inboxes we created when initiating conversations
    */
   getAllConversationInboxAddresses(): string[] {
-    const addresses: string[] = [];
-    const allKeys = this.storage.getAllKeys();
-    for (const key of allKeys) {
-      if (key.startsWith(KEYS.CONVERSATION_INBOX_KEY)) {
-        const data = this.storage.getString(key);
-        if (data) {
-          try {
-            const keypair = JSON.parse(data) as ConversationInboxKeypair;
-            addresses.push(keypair.inboxAddress);
-          } catch {
-            // Skip malformed entries
-          }
-        }
-      }
-    }
-    return addresses;
+    // Derived from the full keypair sweep so subscriptions cover EVERY
+    // session inbox, not just the last-created one per conversation (see
+    // getAllConversationInboxKeypairs).
+    return this.getAllConversationInboxKeypairs().map((kp) => kp.inboxAddress);
   }
 
   // Utility

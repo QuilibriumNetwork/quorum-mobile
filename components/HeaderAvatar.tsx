@@ -13,6 +13,7 @@ import { StyleSheet, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { router } from 'expo-router';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
+import * as Skin from '@/theme/skins/geometry';
 import { useAuth } from '@/context';
 import { useTheme } from '@/theme';
 
@@ -55,13 +56,13 @@ const styles = StyleSheet.create({
   wrap: {
     width: SIZE,
     height: SIZE,
-    borderRadius: SIZE / 2,
+    borderRadius: Skin.circleOrSquare(SIZE / 2),
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
   avatar: {
     width: SIZE,
     height: SIZE,
-    borderRadius: SIZE / 2,
+    borderRadius: Skin.circleOrSquare(SIZE / 2),
   },
 });

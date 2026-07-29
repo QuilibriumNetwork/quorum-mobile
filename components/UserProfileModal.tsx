@@ -446,7 +446,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     avatar: {
       width: 100,
       height: 100,
-      borderRadius: Skin.radius(50),
+      borderRadius: Skin.circleOrSquare(50),
     },
     displayName: {
       fontSize: Skin.font(24),
@@ -531,7 +531,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     roleBadgeDot: {
       width: 8,
       height: 8,
-      borderRadius: Skin.radius(4),
+      borderRadius: Skin.circle(4),
     },
     roleBadgeText: {
       fontSize: Skin.font(13),

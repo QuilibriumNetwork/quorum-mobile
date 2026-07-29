@@ -14,11 +14,17 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ActionRow, ActionRowGroup } from '@/components/shared';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { getRecentEmojis } from '@/services/emojiFrecency';
+import { useMMKVString } from 'react-native-mmkv';
 import { requestTranslateText } from '@/services/translation/forceTranslate';
 import {
   ensureAvailabilityProbed,
   translationAvailableCached,
 } from '@/services/translation/availability';
+import {
+  translationPrefsStore,
+  K_TARGET_LANGUAGE,
+  isTranslationOff,
+} from '@/services/translation/translationPrefs';
 import * as Skin from '@/theme/skins/geometry';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -88,14 +94,20 @@ export function MessageActionSheet({
   const [quickEmojis, setQuickEmojis] = useState<string[]>(DEFAULT_QUICK_REACTIONS);
 
   // "Translate" is shown only when on-device translation is available
-  // (optimistic until the one-time probe resolves).
+  // (optimistic until the one-time probe resolves) and not disabled by the
+  // "Do not translate" preference.
   const [translateAvailable, setTranslateAvailable] = useState(
     translationAvailableCached() ?? true
   );
   useEffect(() => {
     ensureAvailabilityProbed().then(setTranslateAvailable);
   }, []);
-  const canTranslate = translateAvailable && !!messageText && messageText.trim().length > 0;
+  const [storedTarget] = useMMKVString(K_TARGET_LANGUAGE, translationPrefsStore);
+  const canTranslate =
+    translateAvailable &&
+    !isTranslationOff(storedTarget) &&
+    !!messageText &&
+    messageText.trim().length > 0;
 
   // Load frecency emojis when modal opens
   useEffect(() => {
@@ -265,7 +277,7 @@ export function MessageActionSheet({
                 />
               )}
               {canTranslate && (
-                <ActionRow icon="globe" label="Translate" onPress={handleTranslate} />
+                <ActionRow icon="language" label="Translate" onPress={handleTranslate} />
               )}
               {onBookmark && (
                 <ActionRow
@@ -336,7 +348,7 @@ const createStyles = (theme: AppTheme) =>
     quickReactionButton: {
       width: 44,
       height: 44,
-      borderRadius: Skin.radius(22),
+      borderRadius: Skin.circleOrSquare(22),
       backgroundColor: theme.colors.surface3 ?? theme.colors.surface2,
       justifyContent: 'center',
       alignItems: 'center',

@@ -348,7 +348,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     iconContainer: {
       width: 96,
       height: 96,
-      borderRadius: Skin.radius(48),
+      borderRadius: Skin.circleOrSquare(48),
       backgroundColor: theme.colors.primary + '15',
       alignItems: 'center',
       justifyContent: 'center',

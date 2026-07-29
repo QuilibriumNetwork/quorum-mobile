@@ -69,6 +69,46 @@ export function radius(n: number): number {
   return Math.round(n * current.radiusScale);
 }
 
+/** Has the active skin squared every corner? `set: 0` and `scale: 0` both mean
+ *  "square"; any other set/scale is some degree of rounded. */
+function skinIsSquare(): boolean {
+  if (current.radiusSet !== undefined) return current.radiusSet === 0;
+  return current.radiusScale === 0;
+}
+
+/**
+ * Always a circle — skins get no vote at all.
+ *
+ * Reserved for PURE-SHAPE indicators: status dots, unread dots, radio dots,
+ * toggle knobs. Their shape is their entire meaning, so squaring them doesn't
+ * restyle them, it breaks them — a square 9px status dot reads as a rendering
+ * glitch, and a square radio dot reads as a checkbox.
+ *
+ * Anything that CONTAINS something (an image, a glyph, a label) is not this.
+ * Use `circleOrSquare` for round containers, or `radius` for rounded rectangles.
+ */
+export function circle(n: number): number {
+  return n;
+}
+
+/**
+ * A perfect circle, or a perfect square on a skin that squares its corners.
+ * Never anything in between.
+ *
+ * For round CONTAINERS: avatars, round icon buttons, FABs, call buttons. A
+ * squared avatar is a legitimate look (it's a photo tile, and that IS the
+ * brutalist aesthetic), so unlike `circle` these do follow the skin — but only
+ * to the two endpoints. `radius()` is wrong here: under a `radii: { set: 4 }`
+ * skin it would return 4, giving a slightly-rounded avatar, and a squircle is
+ * exactly the third state this is meant to prevent.
+ *
+ * Callers pass half the element's size, so the call site reads as
+ * `borderRadius: circleOrSquare(24)` next to `width: 48, height: 48`.
+ */
+export function circleOrSquare(n: number): number {
+  return skinIsSquare() ? 0 : n;
+}
+
 /** Scale a padding/margin/gap by the active skin. */
 export function space(n: number): number {
   return Math.round(n * current.spacingScale);

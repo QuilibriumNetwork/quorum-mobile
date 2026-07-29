@@ -448,14 +448,14 @@ const styles = createSkinnable(() => StyleSheet.create({
   dot: {
     width: 8,
     height: 8,
-    borderRadius: Skin.radius(4),
+    borderRadius: Skin.circle(4),
     backgroundColor: 'rgba(255,255,255,0.4)',
   },
   dotActive: {
     backgroundColor: '#fff',
     width: 10,
     height: 10,
-    borderRadius: Skin.radius(5),
+    borderRadius: Skin.circle(5),
   },
 }));
 

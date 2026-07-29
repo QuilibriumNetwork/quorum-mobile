@@ -223,7 +223,7 @@ function createStyles(theme: AppTheme) {
     avatar: {
       width: 36,
       height: 36,
-      borderRadius: Skin.radius(18),
+      borderRadius: Skin.circleOrSquare(18),
     },
     rowName: {
       flex: 1,

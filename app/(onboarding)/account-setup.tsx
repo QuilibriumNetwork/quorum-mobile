@@ -250,7 +250,7 @@ const createStyles = (theme: AppTheme) =>
     logo: {
       width: 80,
       height: 80,
-      borderRadius: Skin.radius(40),
+      borderRadius: Skin.circleOrSquare(40),
       marginBottom: Skin.space(20),
     },
     title: {

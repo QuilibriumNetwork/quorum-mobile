@@ -708,7 +708,9 @@ export async function uploadUserRegistration(
   // Fetch existing registration to merge with (if any)
   let existingDevices: DeviceRegistration[] = [];
   try {
-    const existingReg = await client.fetchUserRegistration(userAddress);
+    // fresh: read-modify-write — merging into a cached copy could drop
+    // devices registered since the cache was filled.
+    const existingReg = await client.fetchUserRegistration(userAddress, { fresh: true });
     if (existingReg && existingReg.device_registrations) {
       logger.debug(
         `[Register ${me}] server has ${existingReg.device_registrations.length} existing device(s):`,
@@ -879,9 +881,11 @@ export async function removeDeviceFromRegistration(
   const client = getQuorumClient();
 
   // Fetch existing registration
+  // fresh: read-modify-write — deregistering against a cached copy could
+  // resurrect devices removed since the cache was filled.
   let existingReg: UserRegistration;
   try {
-    existingReg = await client.fetchUserRegistration(userAddress);
+    existingReg = await client.fetchUserRegistration(userAddress, { fresh: true });
   } catch (error) {
     return false;
   }

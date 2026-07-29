@@ -2,6 +2,8 @@
  * TranslateLanguageModal — "Translate to…" picker. Lets the user override the
  * device language used as the translation target. Selecting "Device default"
  * clears the override (stored as ''), so the app follows the device language.
+ * "Do not translate" stores the TRANSLATION_OFF sentinel, disabling the
+ * feature everywhere (no inline toggles, no context-menu Translate).
  *
  * The value is read/written reactively via MMKV so visible casts/messages
  * re-evaluate their translation toggle the moment it changes.
@@ -18,6 +20,7 @@ import * as Skin from '@/theme/skins/geometry';
 import {
   translationPrefsStore,
   K_TARGET_LANGUAGE,
+  TRANSLATION_OFF,
   deviceLanguage,
 } from '@/services/translation/translationPrefs';
 import { TRANSLATE_LANGUAGES, languageName } from './languages';
@@ -57,6 +60,17 @@ export function TranslateLanguageModal({
             <Text style={s.rowDescription}>{languageName(device)}</Text>
           </View>
           {effective === '' && (
+            <IconSymbol name="checkmark" size={18} color={theme.colors.accent} />
+          )}
+        </TouchableOpacity>
+
+        {/* Do not translate — disables the feature everywhere */}
+        <TouchableOpacity style={s.row} onPress={() => select(TRANSLATION_OFF)}>
+          <View style={s.rowLeft}>
+            <Text style={s.rowLabel}>Do not translate</Text>
+            <Text style={s.rowDescription}>Never show translation options</Text>
+          </View>
+          {effective === TRANSLATION_OFF && (
             <IconSymbol name="checkmark" size={18} color={theme.colors.accent} />
           )}
         </TouchableOpacity>

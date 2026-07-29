@@ -13,6 +13,7 @@ import { ratchetMutex } from '@/services/crypto/ratchet-mutex';
 import { encryptionStateStorage } from '@/services/crypto/encryption-state-storage';
 import { getDeviceKeyset } from '@/services/onboarding/secureStorage';
 import { queryKeys, bytesToHex, hexToBytes } from '@quilibrium/quorum-shared';
+import { signConfirmedEnvelope } from './useSendDirectMessage';
 import type { Message, ReactionMessage, RemoveReactionMessage, Reaction } from '@quilibrium/quorum-shared';
 
 export interface SendDirectReactionParams {
@@ -59,7 +60,7 @@ export function useSendDirectReaction() {
   const storage = useStorageAdapter();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { enqueueOutbound, isConnected } = useWebSocket();
+  const { enqueueOutbound } = useWebSocket();
   const apiClient = getQuorumClient();
 
   return useMutation({
@@ -108,9 +109,9 @@ export function useSendDirectReaction() {
         throw new Error('Device encryption keys not initialized.');
       }
 
-      if (!isConnected) {
-        throw new Error('WebSocket not connected.');
-      }
+      // Do NOT gate on isConnected: enqueueOutbound buffers the envelope and the
+      // WS client flushes it on (re)connect, so a transient disconnect (or a
+      // stale isConnected) must not drop the send. Mirrors the DM delete/edit paths.
 
       // Fetch recipient info if needed
       let finalRecipientInfo = recipientInfo;
@@ -232,7 +233,7 @@ export function useRemoveDirectReaction() {
   const storage = useStorageAdapter();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { enqueueOutbound, isConnected } = useWebSocket();
+  const { enqueueOutbound } = useWebSocket();
   const apiClient = getQuorumClient();
 
   return useMutation({
@@ -279,9 +280,9 @@ export function useRemoveDirectReaction() {
         throw new Error('Device encryption keys not initialized.');
       }
 
-      if (!isConnected) {
-        throw new Error('WebSocket not connected.');
-      }
+      // Do NOT gate on isConnected: enqueueOutbound buffers the envelope and the
+      // WS client flushes it on (re)connect, so a transient disconnect (or a
+      // stale isConnected) must not drop the send. Mirrors the DM delete/edit paths.
 
       let finalRecipientInfo = recipientInfo;
       if (!finalRecipientInfo && !hasSession) {
@@ -435,13 +436,14 @@ export async function sendEncryptedControlMessage(
         plaintext: envelopeBytes,
       });
 
+      const inboxAuth = await signConfirmedEnvelope(sendingInbox, sealedEnvelope);
       const sealedMessage = {
         type: 'direct',
         inbox_address: sendingInbox.inbox_address,
         envelope: sealedEnvelope,
         ephemeral_public_key: bytesToHex(sealingEphemeralKey.public_key),
-        inbox_public_key: '',
-        inbox_signature: '',
+        inbox_public_key: inboxAuth.inbox_public_key,
+        inbox_signature: inboxAuth.inbox_signature,
       };
 
       outbounds.push(JSON.stringify(sealedMessage));

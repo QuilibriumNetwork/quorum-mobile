@@ -322,7 +322,7 @@ const sliderStyles = createSkinnable(() => StyleSheet.create({
     top: 4,
     width: 20,
     height: 20,
-    borderRadius: Skin.radius(10),
+    borderRadius: Skin.circleOrSquare(10),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.25,
@@ -461,7 +461,7 @@ function SnapIcon({ el, ctx }: { el: SnapElementBase; ctx: RenderCtx }) {
   const color = resolvePaletteColor(p.color as string | undefined, ctx) ?? ctx.theme.colors.textMuted;
   if (!iconName) {
     // Render a fallback dot
-    return <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color, opacity: 0.4 }} />;
+    return <View style={{ width: size, height: size, borderRadius: Skin.circle(size / 2), backgroundColor: color, opacity: 0.4 }} />;
   }
   return <IconSymbol name={iconName} size={size} color={color} />;
 }

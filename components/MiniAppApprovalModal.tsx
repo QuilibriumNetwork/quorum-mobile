@@ -8,9 +8,8 @@
  * Private keys are never passed to or handled by this modal.
  */
 
-import { BaseModal } from '@/components/shared';
+import { BaseModal, ConfirmActions } from '@/components/shared';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
-import { Button } from '@/components/ui/Button';
 import WalletSelector from '@/components/wallet/WalletSelector';
 import { useTheme, type AppTheme } from '@/theme';
 import React from 'react';
@@ -299,28 +298,17 @@ export default function MiniAppApprovalModal({
         </ScrollView>
 
         {/* Actions - fixed at bottom */}
-        <View style={styles.actions}>
-          <Button
-            variant="secondary"
-            size="lg"
-            onPress={handleReject}
-            disabled={isProcessing}
-            style={styles.button}
-          >
-            Reject
-          </Button>
-
-          <Button
-            variant="primary"
-            size="lg"
-            onPress={handleApprove}
-            disabled={isProcessing}
-            loading={isProcessing}
-            style={styles.button}
-          >
-            {request.type === 'transaction' ? 'Confirm' : 'Sign'}
-          </Button>
-        </View>
+        <ConfirmActions
+          confirmLabel={request.type === 'transaction' ? 'Confirm' : 'Sign'}
+          cancelLabel="Reject"
+          variant="primary"
+          onConfirm={handleApprove}
+          onCancel={handleReject}
+          cancelDisabled={isProcessing}
+          confirmDisabled={isProcessing}
+          confirmLoading={isProcessing}
+          style={styles.actions}
+        />
       </View>
     </BaseModal>
   );
@@ -339,7 +327,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     iconContainer: {
       width: 64,
       height: 64,
-      borderRadius: Skin.radius(32),
+      borderRadius: Skin.circleOrSquare(32),
       backgroundColor: theme.colors.surface2,
       alignItems: 'center',
       justifyContent: 'center',
@@ -464,8 +452,5 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       flexDirection: 'row',
       gap: Skin.space(12),
       paddingVertical: Skin.space(16),
-    },
-    button: {
-      flex: 1,
     },
   });

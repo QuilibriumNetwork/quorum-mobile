@@ -87,7 +87,7 @@ const createStyles = (theme: AppTheme) =>
     walletDot: {
       width: 10,
       height: 10,
-      borderRadius: Skin.radius(5),
+      borderRadius: Skin.circle(5),
       backgroundColor: theme.colors.primary,
     },
     walletDotWarpcast: {

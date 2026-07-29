@@ -14,6 +14,7 @@ import { coerceMessagePreview, previewKindIcon } from '@/utils/messagePreview';
 import { formatRowTime } from '@/utils/dateFormat';
 import { useAuth } from '@/context/AuthContext';
 import type { Conversation } from '@/hooks/chat';
+import { useDMConversationSettingsLoader } from '@/hooks/chat/useDMConversationSettings';
 import { useDMMute } from '@/hooks/chat/useDMMute';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
 import { useStorageAdapter } from '@/context/StorageContext';
@@ -50,7 +51,6 @@ interface InboxItem {
   address?: string;
   timestamp: number;
   unreadCount: number;
-  isRepudiable?: boolean;
   isFarcaster?: boolean;
   isMuted?: boolean;
   subtitle?: string;
@@ -171,6 +171,12 @@ export default function MessagesInbox() {
   // muted set, so the list memo re-runs on toggle via its dep on `isMuted`.
   const { isMuted, toggleMute } = useDMMute();
 
+  // Per-conversation DM settings are also config-backed. This screen doesn't
+  // read them, but loading here (as mute does) is what gets the one-time
+  // migration of device-local settings to run on app open, instead of waiting
+  // for the user to open one specific conversation.
+  useDMConversationSettingsLoader();
+
   const storage = useStorageAdapter();
   const queryClient = useQueryClient();
 
@@ -218,7 +224,6 @@ export default function MessagesInbox() {
         address: conv.address,
         timestamp: conv.timestamp,
         unreadCount: hasUnread ? 1 : 0,
-        isRepudiable: conv.isRepudiable,
         isFarcaster: conv.source === 'farcaster',
         isMuted: isMuted(conv.conversationId),
         subtitle: previewText,
@@ -474,7 +479,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
     dmAvatar: {
       width: 48,
       height: 48,
-      borderRadius: Skin.radius(24), // full circle for people
+      borderRadius: Skin.circleOrSquare(24), // full circle for people
     },
     farcasterBadge: {
       position: 'absolute',
@@ -482,7 +487,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
       right: -2,
       width: 18,
       height: 18,
-      borderRadius: Skin.radius(9),
+      borderRadius: Skin.circleOrSquare(9),
       backgroundColor: '#855DCD', // Farcaster brand purple
       borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,
@@ -498,7 +503,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
       left: -2,
       width: 18,
       height: 18,
-      borderRadius: Skin.radius(9),
+      borderRadius: Skin.circleOrSquare(9),
       backgroundColor: theme.colors.surface3,
       borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,

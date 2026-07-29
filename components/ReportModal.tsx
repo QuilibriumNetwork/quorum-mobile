@@ -8,7 +8,7 @@ import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
-import { Button } from '@/components/ui/Button';
+import { ConfirmActions } from '@/components/shared/ConfirmActions';
 import type { AppTheme } from '@/theme';
 import { useTheme } from '@/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -174,27 +174,16 @@ export function ReportModal({ visible, onClose, target, onSubmitted }: ReportMod
               editable={!submitting}
             />
 
-            <View style={styles.actions}>
-              <Button
-                variant="secondary"
-                size="lg"
-                onPress={handleClose}
-                disabled={submitting}
-                style={styles.button}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="lg"
-                onPress={handleSubmit}
-                disabled={!reason || submitting}
-                loading={submitting}
-                style={styles.button}
-              >
-                Submit report
-              </Button>
-            </View>
+            <ConfirmActions
+              confirmLabel="Submit report"
+              variant="primary"
+              onConfirm={handleSubmit}
+              onCancel={handleClose}
+              cancelDisabled={submitting}
+              confirmDisabled={!reason || submitting}
+              confirmLoading={submitting}
+              style={styles.actions}
+            />
           </Pressable>
         </KeyboardAvoidingView>
       </Pressable>
@@ -262,9 +251,6 @@ const createStyles = (theme: AppTheme) =>
       justifyContent: 'flex-end',
       gap: Skin.space(12),
       marginTop: Skin.space(4),
-    },
-    button: {
-      minWidth: 120,
     },
   });
 

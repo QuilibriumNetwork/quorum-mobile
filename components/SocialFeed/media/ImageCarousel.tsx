@@ -25,7 +25,7 @@ function PaginationDot({ index, activeIndex, activeColor, inactiveColor }: Pagin
   return (
     <Animated.View
       style={[
-        { width: 6, height: 6, borderRadius: Skin.radius(3) },
+        { width: 6, height: 6, borderRadius: Skin.circle(3) },
         animatedStyle,
       ]}
     />

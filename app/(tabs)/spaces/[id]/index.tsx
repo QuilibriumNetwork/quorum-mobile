@@ -264,7 +264,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     unreadDot: {
       width: 6,
       height: 6,
-      borderRadius: Skin.radius(3),
+      borderRadius: Skin.circle(3),
       backgroundColor: theme.colors.primary,
     },
     unreadBadge: {

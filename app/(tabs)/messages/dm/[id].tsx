@@ -7,6 +7,7 @@ import { FarcasterDirectMessageView } from '@/components/Chat/FarcasterDirectMes
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useConversation } from '@/hooks/chat/useConversations';
+import { useDMConversationSettings } from '@/hooks/chat/useDMConversationSettings';
 import { useDMMute } from '@/hooks/chat/useDMMute';
 import { useDeleteConversationSignal } from '@/hooks/chat/useDeleteConversationSignal';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
@@ -217,59 +218,99 @@ export default function DMChatScreen() {
     toggleMute(conversationId);
   }, [conversationId, toggleMute]);
 
-  // Persist a per-conversation setting onto the stored Conversation, then
-  // invalidate both the detail (drives the settings toggles) and the list query.
-  const updateConversationSetting = useCallback(
-    async (patch: Partial<Conversation>) => {
-      if (!conversationId) return;
-      const stored = await storage.getConversation(conversationId);
-      if (!stored) return;
-      await storage.saveConversation({ ...stored, ...patch });
-      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.detail(conversationId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all('direct') });
-    },
-    [conversationId, storage, queryClient]
+  // Per-conversation settings live in UserConfig.conversationSettings, so they
+  // sync across this user's devices (same carrier as mute). Writes persist
+  // OVERRIDES ONLY: a value equal to the inherited global/default is written as
+  // `undefined` so it keeps inheriting, which keeps the synced blob free of
+  // default-valued entries and lets a later change to the global still apply.
+  const { getOverride, saveOverrides, globalNonRepudiable } = useDMConversationSettings();
+  const { deliveryReceipts: globalDeliveryReceipts, readReceipts: globalReadReceipts } =
+    useReceiptSettings();
+
+  // Dual-read while the one-time migration sweep may not have run yet: synced
+  // override first, then the legacy field on the local Conversation record.
+  const readSetting = useCallback(
+    (key: 'isRepudiable' | 'saveEditHistory' | 'deliveryReceipts' | 'readReceipts') =>
+      conversationId
+        ? getOverride(conversationId, key) ?? conversation?.[key]
+        : undefined,
+    [conversationId, getOverride, conversation]
   );
 
-  // The edit hooks (useEditDirectMessage) read conversation.saveEditHistory and,
-  // when off, drop prior versions instead of accumulating — matching desktop
-  // (default false).
+  // Signing default comes from the global "always sign" preference (desktop's
+  // UserConfig.nonRepudiable, default on), so an unset conversation follows it.
+  const effectiveIsRepudiable = readSetting('isRepudiable') ?? !globalNonRepudiable;
+  const effectiveSaveEditHistory = readSetting('saveEditHistory') ?? false;
+  // Receipts stay raw (undefined = inherit) — the sheet renders `?? global` and
+  // shows the "Reset to global" link only while an override exists.
+  const conversationDeliveryReceipts = readSetting('deliveryReceipts');
+  const conversationReadReceipts = readSetting('readReceipts');
+
+  // The edit hooks (useEditDirectMessage) read this and, when off, drop prior
+  // versions instead of accumulating — matching desktop (default false), so
+  // only "on" is a genuine override worth storing.
   const handleToggleEditHistory = useCallback(
-    (value: boolean) => updateConversationSetting({ saveEditHistory: value }),
-    [updateConversationSetting]
+    (value: boolean) => {
+      if (!conversationId) return;
+      saveOverrides(conversationId, { saveEditHistory: value ? true : undefined });
+    },
+    [conversationId, saveOverrides]
   );
 
   // "Always sign messages" persists the inverse as isRepudiable. The send path
-  // and composer lock read it back from the conversation.
+  // and composer lock read the effective value back. Stored only when it differs
+  // from the global preference.
   const handleToggleRepudiable = useCallback(
-    (value: boolean) => updateConversationSetting({ isRepudiable: value }),
-    [updateConversationSetting]
+    (value: boolean) => {
+      if (!conversationId) return;
+      saveOverrides(conversationId, {
+        isRepudiable: value === !globalNonRepudiable ? undefined : value,
+      });
+    },
+    [conversationId, saveOverrides, globalNonRepudiable]
   );
 
-  // Per-conversation DM receipt override (stored on the local Conversation, like
-  // desktop; effective value = override ?? global). Cross-device sync is the
-  // unified conversation-settings task (2026-07-20). Delivery-off cascades read-off.
-  const { deliveryReceipts: globalDeliveryReceipts, readReceipts: globalReadReceipts } =
-    useReceiptSettings();
+  // Per-conversation DM receipt override; effective value = override ?? global.
+  // Delivery-off cascades read-off, matching desktop.
   const handleSetDeliveryReceipts = useCallback(
-    (value: boolean) =>
-      updateConversationSetting(value ? { deliveryReceipts: true } : { deliveryReceipts: false, readReceipts: false }),
-    [updateConversationSetting]
+    (value: boolean) => {
+      if (!conversationId) return;
+      saveOverrides(
+        conversationId,
+        value ? { deliveryReceipts: true } : { deliveryReceipts: false, readReceipts: false }
+      );
+    },
+    [conversationId, saveOverrides]
   );
   const handleSetReadReceipts = useCallback(
-    (value: boolean) => updateConversationSetting({ readReceipts: value }),
-    [updateConversationSetting]
+    (value: boolean) => {
+      if (!conversationId) return;
+      saveOverrides(conversationId, { readReceipts: value });
+    },
+    [conversationId, saveOverrides]
   );
   // Reset delivery override also clears read (read inherits when delivery does),
-  // matching desktop; reset read clears read only.
-  const handleResetDelivery = useCallback(
-    () => updateConversationSetting({ deliveryReceipts: undefined, readReceipts: undefined }),
-    [updateConversationSetting]
-  );
-  const handleResetRead = useCallback(
-    () => updateConversationSetting({ readReceipts: undefined }),
-    [updateConversationSetting]
-  );
+  // matching desktop; reset read clears read only. Clearing keeps an
+  // empty-but-timestamped entry, which is what propagates the reset to the
+  // user's other devices.
+  const handleResetDelivery = useCallback(() => {
+    if (!conversationId) return;
+    saveOverrides(conversationId, { deliveryReceipts: undefined, readReceipts: undefined });
+  }, [conversationId, saveOverrides]);
+  const handleResetRead = useCallback(() => {
+    if (!conversationId) return;
+    saveOverrides(conversationId, { readReceipts: undefined });
+  }, [conversationId, saveOverrides]);
+
+  // The chat area reads signing off the conversation record it's handed, so
+  // hand it the EFFECTIVE value (synced override → legacy local field → global).
+  // Without this the composer lock and send path would still follow the stale
+  // device-local field after a change made on another device.
+  const conversationForChat = useMemo(() => {
+    if (!conversation) return conversation;
+    if (conversation.isRepudiable === effectiveIsRepudiable) return conversation;
+    return { ...conversation, isRepudiable: effectiveIsRepudiable };
+  }, [conversation, effectiveIsRepudiable]);
 
   // Delete this conversation. Like desktop, we FIRST signal the counterparty
   // (a `delete-conversation` control message) so they reset their encryption
@@ -425,7 +466,7 @@ export default function DMChatScreen() {
 
       <DMChatArea
         conversationId={conversationId}
-        conversationData={conversation}
+        conversationData={conversationForChat ?? conversation}
         isFarcasterConversation={false}
         recipientAddress={recipientAddress}
         onShowSidebars={handleShowSidebars}
@@ -476,14 +517,14 @@ export default function DMChatScreen() {
             displayName={title}
             theme={theme}
             onDeleteConversation={handleDeleteConversation}
-            isRepudiable={conversation.isRepudiable}
+            isRepudiable={effectiveIsRepudiable}
             onToggleRepudiable={handleToggleRepudiable}
-            saveEditHistory={conversation.saveEditHistory}
+            saveEditHistory={effectiveSaveEditHistory}
             onToggleEditHistory={handleToggleEditHistory}
             isMuted={conversationMuted}
             onToggleMute={handleToggleMute}
-            deliveryReceipts={conversation.deliveryReceipts}
-            readReceipts={conversation.readReceipts}
+            deliveryReceipts={conversationDeliveryReceipts}
+            readReceipts={conversationReadReceipts}
             globalDeliveryReceipts={globalDeliveryReceipts}
             globalReadReceipts={globalReadReceipts}
             onSetDeliveryReceipts={handleSetDeliveryReceipts}
@@ -514,7 +555,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   headerAvatar: {
     width: 28,
     height: 28,
-    borderRadius: Skin.radius(14),
+    borderRadius: Skin.circleOrSquare(14),
   },
   headerName: {
     fontSize: Skin.font(17),

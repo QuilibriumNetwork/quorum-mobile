@@ -93,7 +93,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   actionButton: {
     width: 72,
     height: 72,
-    borderRadius: Skin.radius(36),
+    borderRadius: Skin.circleOrSquare(36),
     alignItems: 'center',
     justifyContent: 'center',
   },

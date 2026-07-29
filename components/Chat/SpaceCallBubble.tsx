@@ -49,7 +49,7 @@ export function SpaceCallBubble({
   theme,
 }: SpaceCallBubbleProps) {
   const isVideo = message.spaceCallMediaType === 'video';
-  const iconName = isVideo ? 'video.fill' : 'speaker.wave.2.fill';
+  const iconName = isVideo ? 'video' : 'speaker.wave.2';
   const label = isVideo ? 'Video' : 'Voice';
   const callId = message.spaceCallId;
 
@@ -182,10 +182,7 @@ export function SpaceCallBubble({
               {joining ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <>
-                  <IconSymbol name="phone.fill" size={14} color="#fff" />
-                  <Text style={styles.joinButtonText}>Join</Text>
-                </>
+                <Text style={styles.joinButtonText}>Join</Text>
               )}
             </TouchableOpacity>
           )}
@@ -223,7 +220,7 @@ const createStyles = (theme: AppTheme) =>
     iconCircle: {
       width: 40,
       height: 40,
-      borderRadius: Skin.radius(20),
+      borderRadius: Skin.circleOrSquare(20),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -299,7 +296,7 @@ const createStyles = (theme: AppTheme) =>
     qualityDot: {
       width: 8,
       height: 8,
-      borderRadius: Skin.radius(4),
+      borderRadius: Skin.circle(4),
     },
     // Ended state
     endedRow: {

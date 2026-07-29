@@ -1,8 +1,21 @@
 diff --git a/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/index.ts b/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/index.ts
-index 48178d9..90b3977 100644
+index 48178d9..2f0ac01 100644
 --- a/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/index.ts
 +++ b/node_modules/react-native-keyboard-controller/src/components/KeyboardChatScrollView/useChatKeyboard/index.ts
-@@ -166,7 +166,16 @@ function useChatKeyboard(
+@@ -82,7 +82,11 @@ function useChatKeyboard(
+       onStart: (e) => {
+         "worklet";
+ 
+-        if (freeze.value) {
++        // Patched (quorum-mobile): see the NO-OP EVENT note on onMove below.
++        // Safe to gate onStart on this condition (unlike a blanket gate) because
++        // the condition itself asserts `padding` is already 0 — so skipping the
++        // `padding.value = effective` bookkeeping cannot leave it stale.
++        if (freeze.value || (e.height === 0 && padding.value === 0)) {
+           return;
+         }
+ 
+@@ -166,7 +170,30 @@ function useChatKeyboard(
        onMove: (e) => {
          "worklet";
  
@@ -16,7 +29,37 @@ index 48178d9..90b3977 100644
 +        // onStart/onEnd, which only do bookkeeping (padding/offset capture) that
 +        // the cold-open emoji-panel lift depends on; gating those left `padding`
 +        // stale and killed that lift. See patches/.
-+        if (freeze.value || e.target <= 0) {
++        //
++        // NO-OP EVENT guard (second condition): a Modal declared
++        // `statusBarTranslucent`/`navigationBarTranslucent` keeps its window
++        // edge-to-edge over the Activity, so the focus-less event it emits can
++        // still carry a POSITIVE target and slip past the check above. Such an
++        // event reports height 0 while the keyboard is ALREADY closed
++        // (`padding === 0`), i.e. nothing to animate — yet the code below would
++        // still `scrollTo(offsetBeforeScroll)`, and onStart has just rewritten
++        // that to `scroll - actualOpenShift` using the LAST real keyboard open's
++        // shift. Each such event therefore yanks the list up by a stale keyboard
++        // height, and repeats (open + close + a native Alert) clamp it to 0 —
++        // the conversation snaps back to its first message. A genuine keyboard
++        // close is unaffected: `padding` still holds the open height until onEnd
++        // runs, so only true no-ops are dropped.
++        if (freeze.value || e.target <= 0 || (e.height === 0 && padding.value === 0)) {
            return;
          }
  
+@@ -355,6 +382,15 @@ function useChatKeyboard(
+         // Record actual scroll displacement so close can be symmetric
+         if (effective > 0 && offsetBeforeScroll.value !== -1) {
+           actualOpenShift.value = scroll.value - offsetBeforeScroll.value;
++        } else if (effective === 0) {
++          // Patched (quorum-mobile): the keyboard has finished closing, so the
++          // open-shift has served its purpose (onStart's close branch already
++          // consumed it to restore offsetBeforeScroll). Leaving it set lets a
++          // later focus-less event compute `scroll - <stale shift>` and yank the
++          // list toward the top; see the NO-OP EVENT note in onMove. Zeroing it
++          // makes that arithmetic a no-op instead of a jump. A real open
++          // recomputes it here at the end of its own animation.
++          actualOpenShift.value = 0;
+         }
+       },
+     },

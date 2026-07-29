@@ -46,6 +46,50 @@ const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
 
+// ---------------------------------------------------------------------------
+// In-memory cache for hot-path key reads.
+//
+// Android Keystore-backed SecureStore reads measured 650-900ms EACH; the DM
+// send path paid ~2s per send re-reading immutable keys. The keys already
+// transit JS memory on every use (they're passed to the native crypto
+// module as strings), so caching them for the session adds no new exposure
+// class; SecureStore remains the at-rest store.
+//
+// Invalidation: every store*/delete* mutator below updates or clears the
+// cache, and clearAllSecureStorage() (the "Reset App Data" path — the app
+// has no separate sign-out) wipes it entirely. Only non-null values are
+// cached so an onboarding-in-progress read never pins a stale null.
+// ---------------------------------------------------------------------------
+let cachedPrivateKey: string | null = null;
+let cachedPublicKey: string | null = null;
+let cachedDeviceKeyset: DeviceKeyset | null = null;
+
+function invalidateDeviceKeysetCache(): void {
+  cachedDeviceKeyset = null;
+}
+
+/** Wipe all in-memory key caches. Called from clearAllSecureStorage. */
+export function clearKeyCache(): void {
+  cachedPrivateKey = null;
+  cachedPublicKey = null;
+  cachedDeviceKeyset = null;
+}
+
+// Defensive copy so callers can never mutate the cached arrays.
+function copyKeyset(k: DeviceKeyset): DeviceKeyset {
+  return {
+    identityPrivateKey: [...k.identityPrivateKey],
+    identityPublicKey: [...k.identityPublicKey],
+    preKeyPrivateKey: [...k.preKeyPrivateKey],
+    preKeyPublicKey: [...k.preKeyPublicKey],
+    inboxEncryptionPrivateKey: [...k.inboxEncryptionPrivateKey],
+    inboxEncryptionPublicKey: [...k.inboxEncryptionPublicKey],
+    inboxSigningPrivateKey: [...k.inboxSigningPrivateKey],
+    inboxSigningPublicKey: [...k.inboxSigningPublicKey],
+    inboxAddress: k.inboxAddress,
+  };
+}
+
 // Quorum Keys
 
 export async function storePrivateKey(privateKey: string): Promise<void> {
@@ -54,14 +98,19 @@ export async function storePrivateKey(privateKey: string): Promise<void> {
     privateKey,
     SECURE_OPTIONS
   );
+  cachedPrivateKey = privateKey;
 }
 
 export async function getPrivateKey(): Promise<string | null> {
-  return SecureStore.getItemAsync(STORAGE_KEYS.QUORUM_PRIVATE_KEY);
+  if (cachedPrivateKey !== null) return cachedPrivateKey;
+  const value = await SecureStore.getItemAsync(STORAGE_KEYS.QUORUM_PRIVATE_KEY);
+  if (value !== null) cachedPrivateKey = value;
+  return value;
 }
 
 export async function deletePrivateKey(): Promise<void> {
   await SecureStore.deleteItemAsync(STORAGE_KEYS.QUORUM_PRIVATE_KEY);
+  cachedPrivateKey = null;
 }
 
 export async function hasPrivateKey(): Promise<boolean> {
@@ -75,10 +124,14 @@ export async function storePublicKey(publicKey: string): Promise<void> {
     publicKey,
     SECURE_OPTIONS
   );
+  cachedPublicKey = publicKey;
 }
 
 export async function getPublicKey(): Promise<string | null> {
-  return SecureStore.getItemAsync(STORAGE_KEYS.QUORUM_PUBLIC_KEY);
+  if (cachedPublicKey !== null) return cachedPublicKey;
+  const value = await SecureStore.getItemAsync(STORAGE_KEYS.QUORUM_PUBLIC_KEY);
+  if (value !== null) cachedPublicKey = value;
+  return value;
 }
 
 // X448 Pre-Key Storage (E2E Encryption)
@@ -101,6 +154,7 @@ export async function storePreKey(privateKey: string, publicKey: string): Promis
     SecureStore.setItemAsync(STORAGE_KEYS.QUORUM_PREKEY_PRIVATE, privateKey, SECURE_OPTIONS),
     SecureStore.setItemAsync(STORAGE_KEYS.QUORUM_PREKEY_PUBLIC, publicKey, SECURE_OPTIONS),
   ]);
+  invalidateDeviceKeysetCache();
 }
 
 export async function getPreKey(): Promise<{ privateKey: number[]; publicKey: number[] } | null> {
@@ -131,6 +185,7 @@ export async function deletePreKey(): Promise<void> {
     SecureStore.deleteItemAsync(STORAGE_KEYS.QUORUM_PREKEY_PRIVATE),
     SecureStore.deleteItemAsync(STORAGE_KEYS.QUORUM_PREKEY_PUBLIC),
   ]);
+  invalidateDeviceKeysetCache();
 }
 
 // X448 Identity Key Storage (X3DH)
@@ -140,6 +195,7 @@ export async function storeIdentityX448(privateKey: string, publicKey: string): 
     SecureStore.setItemAsync(STORAGE_KEYS.QUORUM_IDENTITY_X448_PRIVATE, privateKey, SECURE_OPTIONS),
     SecureStore.setItemAsync(STORAGE_KEYS.QUORUM_IDENTITY_X448_PUBLIC, publicKey, SECURE_OPTIONS),
   ]);
+  invalidateDeviceKeysetCache();
 }
 
 export async function getIdentityX448(): Promise<{ privateKey: number[]; publicKey: number[] } | null> {
@@ -167,6 +223,7 @@ export async function storeInboxEncryptionKey(privateKey: string, publicKey: str
     SecureStore.setItemAsync(STORAGE_KEYS.QUORUM_INBOX_ENCRYPTION_PRIVATE, privateKey, SECURE_OPTIONS),
     SecureStore.setItemAsync(STORAGE_KEYS.QUORUM_INBOX_ENCRYPTION_PUBLIC, publicKey, SECURE_OPTIONS),
   ]);
+  invalidateDeviceKeysetCache();
 }
 
 export async function getInboxEncryptionKey(): Promise<{ privateKey: number[]; publicKey: number[] } | null> {
@@ -194,6 +251,7 @@ export async function storeInboxSigningKey(privateKey: string, publicKey: string
     SecureStore.setItemAsync(STORAGE_KEYS.QUORUM_INBOX_SIGNING_PRIVATE, privateKey, SECURE_OPTIONS),
     SecureStore.setItemAsync(STORAGE_KEYS.QUORUM_INBOX_SIGNING_PUBLIC, publicKey, SECURE_OPTIONS),
   ]);
+  invalidateDeviceKeysetCache();
 }
 
 export async function getInboxSigningKey(): Promise<{ privateKey: number[]; publicKey: number[] } | null> {
@@ -218,6 +276,7 @@ export async function getInboxSigningKey(): Promise<{ privateKey: number[]; publ
 
 export async function storeInboxAddress(address: string): Promise<void> {
   await SecureStore.setItemAsync(STORAGE_KEYS.QUORUM_INBOX_ADDRESS, address, SECURE_OPTIONS);
+  invalidateDeviceKeysetCache();
 }
 
 export async function getInboxAddress(): Promise<string | null> {
@@ -226,6 +285,7 @@ export async function getInboxAddress(): Promise<string | null> {
 
 // Returns null if any required key is missing.
 export async function getDeviceKeyset(): Promise<DeviceKeyset | null> {
+  if (cachedDeviceKeyset !== null) return copyKeyset(cachedDeviceKeyset);
   const [identityX448, preKey, inboxEncryptionKey, inboxSigningKey, inboxAddress] = await Promise.all([
     getIdentityX448(),
     getPreKey(),
@@ -238,7 +298,7 @@ export async function getDeviceKeyset(): Promise<DeviceKeyset | null> {
     return null;
   }
 
-  return {
+  cachedDeviceKeyset = {
     identityPrivateKey: identityX448.privateKey,
     identityPublicKey: identityX448.publicKey,
     preKeyPrivateKey: preKey.privateKey,
@@ -249,6 +309,7 @@ export async function getDeviceKeyset(): Promise<DeviceKeyset | null> {
     inboxSigningPublicKey: inboxSigningKey.publicKey,
     inboxAddress,
   };
+  return copyKeyset(cachedDeviceKeyset);
 }
 
 function hexToNumberArray(hex: string): number[] {
@@ -480,11 +541,16 @@ export async function clearDeviceKeys(): Promise<void> {
     // Inbox address
     SecureStore.deleteItemAsync(STORAGE_KEYS.QUORUM_INBOX_ADDRESS),
   ]);
+  invalidateDeviceKeysetCache();
 }
 
 // Full Reset
 
 export async function clearAllSecureStorage(): Promise<void> {
+  // "Reset App Data" path — the in-memory key cache MUST die with the
+  // stored keys, otherwise a later re-onboard could sign with the old
+  // identity.
+  clearKeyCache();
   await Promise.all([
     deletePrivateKey(),
     SecureStore.deleteItemAsync(STORAGE_KEYS.QUORUM_PUBLIC_KEY),

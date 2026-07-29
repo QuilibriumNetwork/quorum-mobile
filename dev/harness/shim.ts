@@ -1,0 +1,67 @@
+// Browser-surface shim. Side-effect only.
+//
+// MUST evaluate before the SDK bundle. The SDK ships a BROWSER build that does
+// `window.Buffer = buffer.Buffer` at module scope, so merely importing it in a
+// bare Node environment throws `ReferenceError: window is not defined` before a
+// single line of harness code runs.
+//
+// Wired via jest.harness.config.js `setupFiles`, which jest evaluates before the
+// test module and therefore before any import inside it. Doing it with a plain
+// `import './shim'` at the top of a scenario also works, but relies on every
+// future scenario author remembering — setupFiles makes it structural.
+//
+// This is NOT jsdom and NOT a mock. It is the few globals a browser bundle
+// touches at load, deliberately kept minimal so the harness keeps Node's REAL
+// WebSocket and REAL webcrypto — faking either would defeat the point of running
+// the client for real.
+import { Buffer as NodeBuffer } from 'node:buffer';
+
+const g = globalThis as unknown as {
+  window?: unknown;
+  Buffer?: unknown;
+  crypto?: unknown;
+  __DEV__?: boolean;
+};
+
+// React Native's dev global. Metro injects it; in Node nothing does, and modules
+// that branch on it (services/api/config.ts) throw ReferenceError at import.
+//
+// Defaults to TRUE, deliberately. quorum-shared's logger no-ops ENTIRELY when
+// __DEV__ is false, which would make the harness blind to exactly the signals it
+// exists to capture — the desktop harness already lost a round to an observer
+// that could not see decrypt failures. Set HARNESS_DEV=0 to run the
+// production-shaped paths instead, accepting the loss of logging.
+if (g.__DEV__ === undefined) g.__DEV__ = process.env.HARNESS_DEV !== '0';
+
+if (!g.window) g.window = g;
+const w = g.window as { location?: unknown; Buffer?: unknown; crypto?: unknown };
+
+// A concrete origin so any config reader that inspects window.location does not
+// throw. The value is never used: the harness passes explicit URLs to the API
+// client and the transport.
+if (!w.location) w.location = { origin: 'http://localhost' };
+
+if (!g.Buffer) g.Buffer = NodeBuffer;
+if (!w.Buffer) w.Buffer = NodeBuffer;
+
+// Node 22 provides globalThis.crypto (webcrypto). Mirror it onto window for the
+// SDK's window.crypto.subtle paths.
+if (g.crypto && !w.crypto) w.crypto = g.crypto;
+
+// __DEV__ alone is not enough to see mobile's own diagnostics: quorum-shared's
+// logger defaults to minLevel 'log', which drops every logger.debug call. Those
+// are precisely the lines that say which inboxes were subscribed and how a frame
+// was routed — the difference between "the message was lost" and "it went
+// somewhere nobody was listening".
+//
+// Off by default because a busy run emits a great deal of it. HARNESS_LOG_DEBUG=1
+// turns it on.
+if (process.env.HARNESS_LOG_DEBUG === '1') {
+  // Required lazily: this file is a setupFile and runs before the module
+  // mappings matter, but the import must still resolve through them.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { logger } = require('@quilibrium/quorum-shared') as {
+    logger: { configure(c: { minLevel: string }): void };
+  };
+  logger.configure({ minLevel: 'debug' });
+}

@@ -19,6 +19,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth, useWebSocket } from '@/context';
 import { useStorageAdapter } from '@/context/StorageContext';
 import { getQuorumClient } from '@/services/api/quorumClient';
+import { getLocalConversationSetting } from '@/services/config';
 import { encryptionService } from '@/services/crypto/encryption-service';
 import { getDeviceKeyset } from '@/services/onboarding/secureStorage';
 import { generateNonce } from '@/services/onboarding/keyService';
@@ -73,8 +74,15 @@ export function useEditDirectMessage() {
       // match desktop's default everywhere — keeping history is opt-in. The
       // receive path applies the same gate so the peer's echoed edit stays
       // consistent with ours.
+      //
+      // Read the synced per-conversation override first, then fall back to the
+      // legacy device-local field for a device whose one-time migration sweep
+      // hasn't run yet.
       const conversation = await storage.getConversation(params.conversationId);
-      const saveEditHistory = conversation?.saveEditHistory ?? false;
+      const saveEditHistory =
+        getLocalConversationSetting(user.address, params.conversationId, 'saveEditHistory') ??
+        conversation?.saveEditHistory ??
+        false;
 
       // Single edit timestamp + nonce, shared by the local write and the wire
       // send so every device converges on the same edit metadata. The nonce is
@@ -223,7 +231,12 @@ export function useEditDirectMessage() {
       // Same "Save Edit History" gate as the storage write, so the optimistic
       // cache and persisted message don't diverge (default false → desktop).
       const conversation = await storage.getConversation(params.conversationId);
-      const saveEditHistory = conversation?.saveEditHistory ?? false;
+      const saveEditHistory =
+        (user?.address
+          ? getLocalConversationSetting(user.address, params.conversationId, 'saveEditHistory')
+          : undefined) ??
+        conversation?.saveEditHistory ??
+        false;
 
       // Single edit timestamp for this optimistic pass so modifiedDate and the
       // retained prior version share one time. The authoritative editNonce is

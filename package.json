@@ -12,11 +12,14 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest",
+    "harness": "jest --config jest.harness.config.js",
+    "harness:smoke": "jest --config jest.harness.config.js smoke",
     "prebuild": "echo '\\n⚠️  prebuild is NOT a safe operation on this project.\\n\\nThe iOS folder is the source of truth and contains manual customizations\\n(QuorumNotificationService target, App Group entitlements, pinned\\nobjectVersion) that are not declared in app.json and would be lost.\\n\\nIf you genuinely need to prebuild, snapshot first:\\n  scripts/snapshot-ios-customizations.sh\\n  npx expo prebuild --no-install   (or --clean if you must)\\n  scripts/restore-ios-customizations.sh\\n\\nSee PREBUILD.md for the full rationale.\\n' && exit 1",
     "prebuild:snapshot": "scripts/snapshot-ios-customizations.sh",
     "prebuild:restore": "scripts/restore-ios-customizations.sh",
     "postinstall": "patch-package && watchman watch-del-all 2>/dev/null; rm -rf $TMPDIR/metro-* .expo node_modules/.cache 2>/dev/null || true",
-    "clean": "watchman watch-del-all 2>/dev/null; rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-* .expo node_modules/.cache 2>/dev/null; echo 'Caches cleared'"
+    "clean": "watchman watch-del-all 2>/dev/null; rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-* .expo node_modules/.cache 2>/dev/null; echo 'Caches cleared'",
+    "harness:dm": "node dev/harness/run-two-bots.mjs"
   },
   "dependencies": {
     "@bitcoin-js/tiny-secp256k1-asmjs": "2.2.4",
@@ -31,7 +34,7 @@
     "@polkadot/keyring": "14.0.1",
     "@polkadot/util": "14.0.1",
     "@polkadot/util-crypto": "14.0.1",
-    "@quilibrium/quorum-shared": "2.1.0-36",
+    "@quilibrium/quorum-shared": "2.1.0-37",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "11.4.1",
     "@react-navigation/bottom-tabs": "7.4.7",

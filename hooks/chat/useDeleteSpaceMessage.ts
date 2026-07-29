@@ -21,7 +21,7 @@ export interface UseDeleteSpaceMessageParams {
 export function useDeleteSpaceMessage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { enqueueOutbound, isConnected } = useWebSocket();
+  const { enqueueOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: UseDeleteSpaceMessageParams) => {
@@ -29,9 +29,9 @@ export function useDeleteSpaceMessage() {
         throw new Error('User must be logged in to delete messages');
       }
 
-      if (!isConnected) {
-        throw new Error('Not connected to server. Please wait for connection.');
-      }
+      // Do NOT gate on isConnected: enqueueOutbound buffers the envelope and the
+      // WS client flushes it on (re)connect, so a transient disconnect (or a
+      // stale isConnected) must not drop the send. Mirrors the DM delete/edit paths.
 
       const result = await sendDeleteMessage({
         spaceId: params.spaceId,

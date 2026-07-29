@@ -416,7 +416,7 @@ const createStyles = (theme: AppTheme) =>
     avatar: {
       width: 48,
       height: 48,
-      borderRadius: Skin.radius(24),
+      borderRadius: Skin.circleOrSquare(24),
       backgroundColor: theme.colors.surface3,
     },
     unreadBadge: {
@@ -425,7 +425,7 @@ const createStyles = (theme: AppTheme) =>
       right: 0,
       width: 12,
       height: 12,
-      borderRadius: Skin.radius(6),
+      borderRadius: Skin.circle(6),
       backgroundColor: theme.colors.primary,
       borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,
@@ -436,7 +436,7 @@ const createStyles = (theme: AppTheme) =>
       right: -2,
       width: 18,
       height: 18,
-      borderRadius: Skin.radius(9),
+      borderRadius: Skin.circleOrSquare(9),
       backgroundColor: '#855DCD', // Farcaster brand purple
       borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,

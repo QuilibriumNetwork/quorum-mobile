@@ -83,7 +83,7 @@ function BellIcon({ color }: { color: string }) {
     <View>
       <IconSymbol size={24} name="bell" color={color} />
       {unreadCount > 0 && (
-        <View style={[styles.unreadDot, { borderRadius: Skin.radius(5) }]} />
+        <View style={[styles.unreadDot, { borderRadius: Skin.circle(5) }]} />
       )}
     </View>
   );
@@ -534,13 +534,13 @@ const styles = StyleSheet.create({
   avatarWrap: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
+    borderRadius: Skin.circleOrSquare(AVATAR_SIZE / 2),
     overflow: 'hidden',
   },
   avatar: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
+    borderRadius: Skin.circleOrSquare(AVATAR_SIZE / 2),
   },
   unreadDot: {
     position: 'absolute',

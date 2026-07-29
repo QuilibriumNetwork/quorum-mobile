@@ -3,8 +3,8 @@ import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } fro
 import { useTheme } from '@/theme';
 import { createTheme } from '@/theme/themes';
 import * as Skin from '@/theme/skins/geometry';
-import { Button } from '@/components/ui/Button';
 import { CenterModal } from './CenterModal';
+import { ConfirmActions } from './ConfirmActions';
 
 type ThemeType = ReturnType<typeof createTheme>;
 
@@ -106,20 +106,13 @@ export function TypeToConfirmModal({
           accessibilityLabel={`Type ${keyword} to confirm`}
         />
 
-        <View style={styles.actions}>
-          <Button variant="secondary" size="lg" onPress={handleCancel} style={styles.button}>
-            {cancelLabel}
-          </Button>
-          <Button
-            variant="danger"
-            size="lg"
-            onPress={onConfirm}
-            disabled={!matches}
-            style={styles.button}
-          >
-            {confirmLabel}
-          </Button>
-        </View>
+        <ConfirmActions
+          confirmLabel={confirmLabel}
+          cancelLabel={cancelLabel}
+          onConfirm={onConfirm}
+          onCancel={handleCancel}
+          confirmDisabled={!matches}
+        />
       </KeyboardAvoidingView>
     </CenterModal>
   );
@@ -184,13 +177,6 @@ const createStyles = (theme: ThemeType) =>
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
       marginBottom: Skin.space(20),
-    },
-    actions: {
-      flexDirection: 'row',
-      gap: Skin.space(10),
-    },
-    button: {
-      flex: 1,
     },
   });
 

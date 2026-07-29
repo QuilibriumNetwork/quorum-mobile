@@ -271,7 +271,7 @@ const createStyles = (theme: AppTheme) =>
     avatar: {
       width: 32,
       height: 32,
-      borderRadius: Skin.radius(16),
+      borderRadius: Skin.circleOrSquare(16),
       backgroundColor: theme.colors.surface3,
       marginRight: Skin.space(8),
     },
@@ -352,7 +352,7 @@ const createStyles = (theme: AppTheme) =>
     skeletonAvatar: {
       width: 32,
       height: 32,
-      borderRadius: Skin.radius(16),
+      borderRadius: Skin.circleOrSquare(16),
       backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
       marginRight: Skin.space(8),
     },

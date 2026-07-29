@@ -659,7 +659,7 @@ function ScheduledPreview({
           style={{
             width: 56,
             height: 56,
-            borderRadius: Skin.radius(28),
+            borderRadius: Skin.circleOrSquare(28),
             backgroundColor: theme.colors.surface3,
           }}
         />
@@ -904,7 +904,7 @@ function ChatPanel({
             >
               <CachedAvatar
                 source={pfpUrl ? { uri: pfpUrl } : null}
-                style={{ width: 28, height: 28, borderRadius: Skin.radius(14), backgroundColor: theme.colors.surface3 }}
+                style={{ width: 28, height: 28, borderRadius: Skin.circleOrSquare(14), backgroundColor: theme.colors.surface3 }}
               />
               <View style={{ flex: 1, minWidth: 0 }}>
                 {parent && (
@@ -1032,7 +1032,7 @@ function ChatPanel({
             {
               width: 36,
               height: 36,
-              borderRadius: Skin.radius(18),
+              borderRadius: Skin.circleOrSquare(18),
               alignItems: 'center',
               justifyContent: 'center',
               backgroundColor: theme.colors.accent,
@@ -1146,7 +1146,7 @@ function MinimizedPill({
             style={{
               width: 28,
               height: 28,
-              borderRadius: Skin.radius(14),
+              borderRadius: Skin.circleOrSquare(14),
               backgroundColor: theme.colors.danger,
               alignItems: 'center',
               justifyContent: 'center',
@@ -1254,7 +1254,7 @@ function ParticipantTile({
                 right: 6,
                 width: 26,
                 height: 26,
-                borderRadius: Skin.radius(13),
+                borderRadius: Skin.circleOrSquare(13),
                 backgroundColor: 'rgba(0,0,0,0.55)',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1283,7 +1283,7 @@ function ParticipantTile({
             style={{
               width: 56,
               height: 56,
-              borderRadius: Skin.radius(28),
+              borderRadius: Skin.circleOrSquare(28),
               backgroundColor: theme.colors.surface3,
             }}
           />
@@ -1341,7 +1341,7 @@ function ControlButton({
         style={{
           width: 48,
           height: 48,
-          borderRadius: Skin.radius(24),
+          borderRadius: Skin.circleOrSquare(24),
           backgroundColor: active ? theme.colors.accent : theme.colors.surface2,
           alignItems: 'center',
           justifyContent: 'center',
@@ -1400,7 +1400,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   liveDot: {
     width: 6,
     height: 6,
-    borderRadius: Skin.radius(3),
+    borderRadius: Skin.circle(3),
     backgroundColor: '#fff',
   },
   statePillText: {
@@ -1439,7 +1439,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   avatarWrap: {
     width: 60,
     height: 60,
-    borderRadius: Skin.radius(30),
+    borderRadius: Skin.circleOrSquare(30),
     borderWidth: Skin.border(2),
     alignItems: 'center',
     justifyContent: 'center',
@@ -1451,7 +1451,7 @@ const styles = createSkinnable(() => StyleSheet.create({
     right: -2,
     width: 20,
     height: 20,
-    borderRadius: Skin.radius(10),
+    borderRadius: Skin.circleOrSquare(10),
     alignItems: 'center',
     justifyContent: 'center',
   },

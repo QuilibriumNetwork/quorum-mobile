@@ -203,7 +203,7 @@ const createStyles = (theme: AppTheme) =>
     bookmarkIconContainer: {
       width: 32,
       height: 32,
-      borderRadius: Skin.radius(16),
+      borderRadius: Skin.circleOrSquare(16),
       backgroundColor: theme.colors.surface5 ?? theme.colors.surface3,
       justifyContent: 'center',
       alignItems: 'center',

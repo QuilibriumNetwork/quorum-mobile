@@ -462,7 +462,7 @@ function createStyles(theme: AppTheme) {
     avatar: {
       width: 96,
       height: 96,
-      borderRadius: Skin.radius(48),
+      borderRadius: Skin.circleOrSquare(48),
       backgroundColor: theme.colors.surface2,
     },
     avatarBadge: {
@@ -471,7 +471,7 @@ function createStyles(theme: AppTheme) {
       bottom: 0,
       width: 30,
       height: 30,
-      borderRadius: Skin.radius(15),
+      borderRadius: Skin.circleOrSquare(15),
       backgroundColor: theme.colors.accent,
       alignItems: 'center',
       justifyContent: 'center',

@@ -103,7 +103,7 @@ function createStyles(theme: AppTheme) {
     optionIcon: {
       width: 40,
       height: 40,
-      borderRadius: Skin.radius(20),
+      borderRadius: Skin.circleOrSquare(20),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface2,

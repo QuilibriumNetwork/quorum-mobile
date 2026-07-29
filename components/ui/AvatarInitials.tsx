@@ -17,6 +17,7 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Skin from '@/theme/skins/geometry';
 import {
   getInitials,
   getColorFromDisplayName,
@@ -55,7 +56,7 @@ export function AvatarInitials({ name, size, style }: AvatarInitialsProps) {
       colors={gradientColors}
       style={[
         styles.container,
-        { width: size, height: size, borderRadius: size / 2 },
+        { width: size, height: size, borderRadius: Skin.circleOrSquare(size / 2) },
         style,
       ]}
     >

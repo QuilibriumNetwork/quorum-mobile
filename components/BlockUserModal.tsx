@@ -13,7 +13,7 @@ import { truncateAddress } from '@/utils/formatAddress';
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { BaseModal } from '@/components/shared/BaseModal';
-import { Button } from '@/components/ui/Button';
+import { ConfirmActions } from '@/components/shared/ConfirmActions';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
@@ -79,14 +79,12 @@ export function BlockUserModal({
             : `You won't see any of ${userName}'s messages in this space. This only affects your view, and only in this space. You can unblock anytime.`}
         </Text>
 
-        <View style={styles.buttonRow}>
-          <Button variant="secondary" size="lg" onPress={onClose} style={styles.button}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="lg" onPress={handleConfirm} style={styles.button}>
-            {isUnblocking ? 'Unblock' : 'Block'}
-          </Button>
-        </View>
+        <ConfirmActions
+          confirmLabel={isUnblocking ? 'Unblock' : 'Block'}
+          variant={isUnblocking ? 'primary' : 'danger'}
+          onConfirm={handleConfirm}
+          onCancel={onClose}
+        />
       </View>
     </BaseModal>
   );
@@ -120,7 +118,7 @@ const createStyles = (theme: AppTheme) =>
     avatar: {
       width: 40,
       height: 40,
-      borderRadius: Skin.radius(20),
+      borderRadius: Skin.circleOrSquare(20),
       marginRight: Skin.space(12),
     },
     userInfo: {
@@ -146,13 +144,6 @@ const createStyles = (theme: AppTheme) =>
       textAlign: 'center',
       marginBottom: Skin.space(24),
       lineHeight: Skin.font(20),
-    },
-    buttonRow: {
-      flexDirection: 'row',
-      gap: Skin.space(12),
-    },
-    button: {
-      flex: 1,
     },
   });
 

@@ -198,7 +198,7 @@ function ImageCarousel({ urls, maxHeight, theme, onImagePress }: { urls: string[
             style={{
               width: 6,
               height: 6,
-              borderRadius: Skin.radius(3),
+              borderRadius: Skin.circle(3),
               backgroundColor: index === activeIndex ? theme.colors.textMain : theme.colors.surface4,
             }}
           />
@@ -497,7 +497,7 @@ const shareToChatStyles = {
   dmAvatar: (theme: AppTheme) => ({
     width: 40,
     height: 40,
-    borderRadius: Skin.radius(20),
+    borderRadius: Skin.circleOrSquare(20),
     backgroundColor: theme.colors.surface3,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
@@ -505,7 +505,7 @@ const shareToChatStyles = {
   dmAvatarImage: {
     width: 40,
     height: 40,
-    borderRadius: Skin.radius(20),
+    borderRadius: Skin.circleOrSquare(20),
   },
 };
 
@@ -1007,7 +1007,7 @@ function VideoPlayer({
               style={{
                 width: 60,
                 height: 60,
-                borderRadius: Skin.radius(30),
+                borderRadius: Skin.circleOrSquare(30),
                 backgroundColor: 'rgba(0, 0, 0, 0.6)',
                 justifyContent: 'center',
                 alignItems: 'center',
@@ -1068,7 +1068,7 @@ function VideoPlayer({
                 style={{
                   width: 60,
                   height: 60,
-                  borderRadius: Skin.radius(30),
+                  borderRadius: Skin.circleOrSquare(30),
                   backgroundColor: 'rgba(0, 0, 0, 0.6)',
                   justifyContent: 'center',
                   alignItems: 'center',
@@ -1831,7 +1831,7 @@ function QuoteCast({
             style={{
               width: 24,
               height: 24,
-              borderRadius: Skin.radius(12),
+              borderRadius: Skin.circleOrSquare(12),
               marginRight: Skin.space(8),
               backgroundColor: theme.colors.surface3,
             }}
@@ -2414,7 +2414,7 @@ function ThreadDetailView({
           style={{
             width: 44,
             height: 44,
-            borderRadius: Skin.radius(22),
+            borderRadius: Skin.circleOrSquare(22),
             backgroundColor: theme.colors.surface3,
             marginRight: Skin.space(12),
           }}
@@ -2593,7 +2593,7 @@ function ThreadDetailView({
                   style={{
                     width: 44,
                     height: 44,
-                    borderRadius: Skin.radius(22),
+                    borderRadius: Skin.circleOrSquare(22),
                     backgroundColor: theme.colors.surface3,
                   }}
                 />
@@ -2611,7 +2611,7 @@ function ThreadDetailView({
                     right: -2,
                     width: 18,
                     height: 18,
-                    borderRadius: Skin.radius(9),
+                    borderRadius: Skin.circleOrSquare(9),
                     alignItems: 'center',
                     justifyContent: 'center',
                     backgroundColor: theme.colors.primary,
@@ -3108,7 +3108,7 @@ function ThreadDetailView({
                     style={{
                       width: 44,
                       height: 44,
-                      borderRadius: Skin.radius(22),
+                      borderRadius: Skin.circleOrSquare(22),
                       backgroundColor: theme.colors.surface3,
                     }}
                   />
@@ -3198,7 +3198,7 @@ function ThreadDetailView({
                             right: 4,
                             width: 22,
                             height: 22,
-                            borderRadius: Skin.radius(11),
+                            borderRadius: Skin.circleOrSquare(11),
                             backgroundColor: 'rgba(0,0,0,0.6)',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -3292,7 +3292,7 @@ function ThreadDetailView({
             bottom: bottomInset + 16,
             width: 48,
             height: 48,
-            borderRadius: Skin.radius(24),
+            borderRadius: Skin.circleOrSquare(24),
             backgroundColor: theme.colors.accent,
             alignItems: 'center',
             justifyContent: 'center',
@@ -3469,7 +3469,7 @@ export function ProfileView({
                   style={{
                     width: 80,
                     height: 80,
-                    borderRadius: Skin.radius(40),
+                    borderRadius: Skin.circleOrSquare(40),
                     borderWidth: Skin.border(4),
                     borderColor: theme.colors.background,
                     backgroundColor: theme.colors.surface3,
@@ -3637,7 +3637,7 @@ export function ProfileView({
                   style={{
                     width: 44,
                     height: 44,
-                    borderRadius: Skin.radius(22),
+                    borderRadius: Skin.circleOrSquare(22),
                     backgroundColor: theme.colors.surface3,
                   }}
                 />
@@ -4251,7 +4251,7 @@ function ChannelView({
                   style={{
                     width: 44,
                     height: 44,
-                    borderRadius: Skin.radius(22),
+                    borderRadius: Skin.circleOrSquare(22),
                     backgroundColor: theme.colors.surface3,
                   }}
                 />
@@ -7022,7 +7022,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                             style={{
                               width: 44,
                               height: 44,
-                              borderRadius: Skin.radius(22),
+                              borderRadius: Skin.circleOrSquare(22),
                               backgroundColor: theme.colors.surface3,
                               marginRight: Skin.space(12),
                             }}
@@ -7199,7 +7199,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                 right: 16,
                 width: 40,
                 height: 40,
-                borderRadius: Skin.radius(20),
+                borderRadius: Skin.circleOrSquare(20),
                 backgroundColor: theme.colors.surface2,
                 borderWidth: Skin.border(1),
                 borderColor: theme.colors.surface3,
@@ -7526,7 +7526,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                             right: 4,
                             width: 24,
                             height: 24,
-                            borderRadius: Skin.radius(12),
+                            borderRadius: Skin.circleOrSquare(12),
                             backgroundColor: 'rgba(0,0,0,0.6)',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -7808,7 +7808,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       // overflow: hidden so the channel image clips to the circle.
       width: 36,
       height: 36,
-      borderRadius: Skin.radius(18),
+      borderRadius: Skin.circleOrSquare(18),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
@@ -7894,7 +7894,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     avatar: {
       width: 44,
       height: 44,
-      borderRadius: Skin.radius(22),
+      borderRadius: Skin.circleOrSquare(22),
       backgroundColor: theme.colors.surface4,
     },
     followButton: {
@@ -7903,7 +7903,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       right: -2,
       width: 18,
       height: 18,
-      borderRadius: Skin.radius(9),
+      borderRadius: Skin.circleOrSquare(9),
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: Skin.border(2),
@@ -7989,7 +7989,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       right: 16,
       width: 48,
       height: 48,
-      borderRadius: Skin.radius(24),
+      borderRadius: Skin.circleOrSquare(24),
       backgroundColor: theme.colors.accent,
       alignItems: 'center',
       justifyContent: 'center',
@@ -8212,7 +8212,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     searchResultAvatar: {
       width: 44,
       height: 44,
-      borderRadius: Skin.radius(22),
+      borderRadius: Skin.circleOrSquare(22),
       backgroundColor: theme.colors.surface4,
     },
     searchResultInfo: {

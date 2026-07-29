@@ -302,7 +302,7 @@ function createStyles(theme: AppTheme) {
     mergedAvatar: {
       width: 96,
       height: 96,
-      borderRadius: Skin.radius(48),
+      borderRadius: Skin.circleOrSquare(48),
       backgroundColor: theme.colors.surface2,
     },
     editBadge: {
@@ -311,7 +311,7 @@ function createStyles(theme: AppTheme) {
       right: 0,
       width: 28,
       height: 28,
-      borderRadius: Skin.radius(14),
+      borderRadius: Skin.circleOrSquare(14),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.accent,

@@ -4,7 +4,7 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, Switch, Image } from 'react-native';
+import { View, Text, StyleSheet, Switch, Image } from 'react-native';
 import { BaseModal, ActionRow, ActionRowGroup } from '@/components/shared';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { resetDMSession } from '@/hooks/chat/useSendDirectMessage';
@@ -132,15 +132,15 @@ export function DMSettingsSheet({
       title: 'Fix Encryption',
       message: `This will reset the encryption session with ${displayName}. The next message will establish a fresh secure connection.\n\nUse this if messages are failing to send or decrypt.`,
       confirmLabel: 'Reset Session',
+      variant: 'primary',
     });
     setIsConfirming(false);
     if (!ok) return;
     resetDMSession(conversationId);
     onClose();
-    Alert.alert(
-      'Session Reset',
-      'The encryption session has been reset. Your next message will establish a fresh secure connection.'
-    );
+    // No success alert. The confirm dialog already told the user exactly what
+    // would happen and they agreed to it; a second modal restating the same
+    // sentence is one more tap for no new information.
   };
 
   return (
@@ -218,7 +218,7 @@ export function DMSettingsSheet({
           )}
           {onSetReadReceipts && effectiveDelivery && (
             <ActionRow
-              icon="checkmark.circle"
+              icon="checkmark.double"
               label="Read receipts"
               sublabel={receiptSublabel(readOverridden, onResetRead)}
               trailing={
@@ -249,7 +249,7 @@ export function DMSettingsSheet({
           <ActionRow
             icon="arrow.triangle.2.circlepath"
             label="Fix Encryption"
-            sublabel="Reset if messages fail to send/decrypt"
+            sublabel="Reset if messages fail to send or decrypt"
             onPress={handleFixEncryption}
           />
           <ActionRow
@@ -291,7 +291,7 @@ const createStyles = (theme: AppTheme) =>
     headerAvatar: {
       width: 56,
       height: 56,
-      borderRadius: Skin.radius(28),
+      borderRadius: Skin.circleOrSquare(28),
       marginBottom: Skin.space(8),
     },
     headerName: {

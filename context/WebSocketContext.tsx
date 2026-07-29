@@ -9,13 +9,17 @@
  */
 
 import {
+  advanceReadWatermark,
   bytesToHex,
   createRNWebSocketClient,
   int64ToBytes,
+  isReadAckTimestampValid,
   logger,
   MAX_MESSAGE_LENGTH,
   queryKeys,
   ReceiptService,
+  resolveDeliveryAckPatch,
+  resolveReadAckPatch,
 } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { PERSISTABLE_TYPES, DM_GUARD_PASSTHROUGH_TYPES } from '@/components/Chat/types';
@@ -53,7 +57,11 @@ import type {
   WebSocketClient,
   WebSocketConnectionState,
 } from '@quilibrium/quorum-shared';
-import { getLocalUserConfig } from '../services/config/configService';
+import {
+  getLocalUserConfig,
+  getLocalConversationSetting,
+  getConversationSettingForCurrentUser,
+} from '../services/config/configService';
 import { updateMessageDeliveredAt, updateMessagesReadAt } from '../services/storage/messagesDb';
 import { sendEncryptedMessageToAllDevices } from '../hooks/chat/useSendDirectMessage';
 import { toAllDeviceInfos, type DeviceInfo } from '../hooks/chat/useRecipientRegistration';
@@ -192,7 +200,12 @@ function deleteProcessedEnvelope(inboxAddress: string, timestamp: number): void 
   }
 }
 
-async function deleteInboxMessages(
+// Exported (no behaviour change) so the headless harness can clear a device
+// inbox before measuring delivery. The relay redelivers un-acked frames
+// indefinitely, so a run that starts on a backlog counts old undecryptable
+// frames as fresh losses. Reusing this rather than reimplementing the signing
+// keeps the harness from drifting away from the real delete path.
+export async function deleteInboxMessages(
   inboxAddress: string,
   timestamps: number[],
   deviceKeyset: DeviceKeyset
@@ -406,7 +419,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const userAddrRef = useRef<string>('???');
   userAddrRef.current = shortAddr(user?.address);
 
-  // Store full user address for comparison in callbacks (not shortened)
+  // Store full user address for comparison in callbacks (not shortened).
+  //
+  // ALWAYS use this ref for self-comparisons inside the receive callbacks —
+  // never `user?.address` directly. This provider mounts before AuthContext has
+  // restored the user, so `user` is null on the first render, and the big
+  // receive callbacks (handleIncomingMessage, applyDMGroupResults) depend only
+  // on stable singletons. They are therefore created ONCE with `user === null`
+  // and never recreated, which silently turns every `user?.address` inside them
+  // into `undefined` for the app's whole lifetime. That is not theoretical: it
+  // disabled every self-echo guard in the live DM path, so our own messages
+  // echoed from another device were treated as a stranger's and created a
+  // phantom conversation with ourselves, wearing our own name and avatar.
   const fullUserAddrRef = useRef<string | undefined>(undefined);
   fullUserAddrRef.current = user?.address;
 
@@ -548,20 +572,42 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const receiptServiceRef = useRef<ReceiptService | null>(null);
   const sendDmReceiptAckRef = useRef<((partnerAddress: string, ack: ReceiptControlMessage) => void) | null>(null);
 
-  // Effective receipt switch: per-conversation override (stored on the local
-  // Conversation, like desktop) wins over the global setting, else the global
-  // (default OFF). Read live so a settings toggle takes effect immediately.
-  // `partner` is the DM partner address (conversationId is `partner/partner`).
-  // NOTE: the per-conversation override is NOT synced across devices yet — that's
-  // the unified conversation-settings sync task (2026-07-20).
+  // How far the partner has read, per DM conversation. In-memory only: it exists
+  // to bridge the ~5s gap between a read ack and the delivery acks it outran, so
+  // a restart mid-window costs at most a few ✓✓ that the next read ack restores.
+  const readWatermarksRef = useRef<Map<string, number>>(new Map());
+
+  // Effective receipt switch: per-conversation override wins over the global
+  // setting, else the global (default OFF). Read live so a settings toggle takes
+  // effect immediately. `partner` is the DM partner address (conversationId is
+  // `partner/partner`).
+  //
+  // The override comes from the synced UserConfig map, falling back to the
+  // legacy device-local Conversation field for a device whose one-time migration
+  // sweep hasn't run yet. This gate must stay in step with the settings sheet —
+  // gating receipts on a stale local value would keep emitting acks for a
+  // conversation the user switched off from another device.
+  //
+  // Read is NESTED under delivery, matching desktop and the settings sheet (which
+  // hides the read toggle when delivery is off). Enforcing it here and not just in
+  // the UI matters now that delivery is load-bearing for read: ✓✓ is only granted
+  // to a message with a real deliveredAt, so a stale
+  // `readReceipts: true, deliveryReceipts: false` override would otherwise leave a
+  // conversation with permanently blank receipts and no explanation.
   const isReceiptEnabled = useCallback((kind: 'delivery' | 'read', partner?: string): boolean => {
     const self = fullUserAddrRef.current;
     if (!self) return false;
     const cfg = getLocalUserConfig(self);
-    const conv = partner ? getConversationSync(`${partner}/${partner}`) : undefined;
-    return kind === 'delivery'
-      ? (conv?.deliveryReceipts ?? cfg?.deliveryReceipts ?? false)
-      : (conv?.readReceipts ?? cfg?.readReceipts ?? false);
+    const conversationId = partner ? `${partner}/${partner}` : undefined;
+    const conv = conversationId ? getConversationSync(conversationId) : undefined;
+    const resolve = (setting: 'deliveryReceipts' | 'readReceipts'): boolean => {
+      const override = conversationId
+        ? getLocalConversationSetting(self, conversationId, setting)
+        : undefined;
+      return override ?? conv?.[setting] ?? cfg?.[setting] ?? false;
+    };
+    const delivery = resolve('deliveryReceipts');
+    return kind === 'delivery' ? delivery : delivery && resolve('readReceipts');
   }, []);
 
   // Intercept DM receipts on the decrypt path (both receive branches), BEFORE
@@ -586,6 +632,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       if (svc && raw.senderId !== self && isReceiptEnabled('read', partner) && raw.upToMessageId && raw.upToTimestamp) {
         svc.onReadAckReceived(raw.upToMessageId, raw.upToTimestamp, partner);
       }
+      return true;
+    }
+    // Flat typing signals (same wire shape as the acks: top-level `type`, no
+    // content, no messageId). Desktop sends them over the DM session; mobile
+    // has no typing UI yet, so consume them — un-intercepted they fell
+    // through to saveMessage, crashed on the NOT NULL messageId constraint,
+    // were never acked, and redelivered forever (124 crash-loops in one
+    // 5-minute capture).
+    if (raw.type === 'typing-start' || raw.type === 'typing-stop') {
       return true;
     }
 
@@ -2731,15 +2786,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 ts: message.timestamp,
                 ageSec: Math.round((Date.now() - message.timestamp) / 1000),
               }));
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
               return;
             }
             if (!sessionResult) {
               // Decryption failed - message was likely for a different device.
               // Count toward the bounded-retry skip-list so an undecryptable
               // init envelope can't replay through this path unbounded.
+              logger.debug(
+                `[DM-recv] device-inbox init not decryptable here (likely another device's frame) inbox=${message.inboxAddress?.slice(0, 12)} ts=${message.timestamp}`
+              );
               recordInboxAttempt(message.inboxAddress, message.timestamp);
               return;
             }
@@ -2765,7 +2821,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // message carries no channelId, we cannot determine the real partner.
             // Drop it to prevent a phantom selfAddress/selfAddress conversation row.
             const initSenderAddress = conversationId.split('/')[0];
-            if (initSenderAddress === user?.address) {
+            if (initSenderAddress === fullUserAddrRef.current) {
               if (decryptedMessage.channelId) {
                 // Has channelId — redirect to the real partner conversation.
                 const actualRecipient = decryptedMessage.channelId;
@@ -2788,7 +2844,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               }
             }
           } catch (initError) {
-            // Manual reset via resetDMSession() is available if needed
+            // Manual reset via resetDMSession() is available if needed.
+            // NEVER silent: a throw after initializeRecipientSession has
+            // advanced the ratchet strands a frame that can no longer
+            // decrypt on redelivery — a permanently lost message.
+            logger.error(
+              '[DM-recv] device-inbox init path FAILED',
+              JSON.stringify({
+                inbox: message.inboxAddress?.slice(0, 12),
+                ts: message.timestamp,
+              }),
+              String(initError)
+            );
             return;
           }
         } else {
@@ -2912,10 +2979,33 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                           break;
                         }
                       } catch (decryptErr) {
+                        // Per-state trial failure is expected mid-loop; the
+                        // all-states-failed case below is the loud signal.
+                        logger.debug(
+                          `[DM-recv] trial decrypt failed for state ${encState.inboxId?.slice(0, 10)}: ${String(decryptErr).slice(0, 120)}`
+                        );
                       }
                     }
 
                     if (!decryptedText || decryptedText.startsWith('Decryption failed') || !successInboxId) {
+                      // Bound the redelivery loop (PR #170 parity): a frame no
+                      // stored state can decrypt replays forever otherwise —
+                      // this branch previously returned without counting the
+                      // attempt, and dead frames re-drained several times a
+                      // minute indefinitely.
+                      // Logged loudly: an init-wrapped frame on OUR
+                      // conversation inbox that no state decrypts is a
+                      // message-loss signal (peer ahead of our ratchet, or a
+                      // consumed-then-stranded frame), not routine noise.
+                      logger.warn(
+                        '[DM-recv] init-wrapped frame undecryptable by ALL states — dropping after bounded retries',
+                        JSON.stringify({
+                          inbox: message.inboxAddress?.slice(0, 12),
+                          ts: message.timestamp,
+                          states: existingStates.length,
+                        })
+                      );
+                      recordInboxAttempt(message.inboxAddress, message.timestamp);
                       return;
                     }
 
@@ -2975,7 +3065,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                       return;
                     }
                     if (!sessionResult) {
-                      // Decryption failed - message was likely for a different device
+                      // Decryption failed - message was likely for a different device.
+                      // Warn (not debug): this is OUR conversation inbox, so a
+                      // failed init here can be a lost first message.
+                      logger.warn(
+                        '[DM-recv] init on conversation inbox failed to build a session — dropping after bounded retries',
+                        JSON.stringify({
+                          inbox: message.inboxAddress?.slice(0, 12),
+                          ts: message.timestamp,
+                        })
+                      );
                       recordInboxAttempt(message.inboxAddress, message.timestamp);
                       return;
                     }
@@ -2995,6 +3094,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   }
                 }
               } catch (unsealError) {
+                // NEVER silent: if confirmSenderSession already advanced the
+                // ratchet, the frame cannot decrypt on redelivery — a throw
+                // here is a permanently lost message.
+                logger.error(
+                  '[DM-recv] conversation-inbox init/confirm path FAILED',
+                  JSON.stringify({
+                    inbox: message.inboxAddress?.slice(0, 12),
+                    ts: message.timestamp,
+                  }),
+                  String(unsealError)
+                );
                 return;
               }
             } else {
@@ -3043,9 +3153,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           if (decryptedMessage.content?.type?.startsWith('call-') && decryptedMessage.content?.type !== 'call-event') {
             callSignalingHandlerRef.current?.(decryptedMessage);
             // Best-effort: delete from server so stale signals don't replay on next launch
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
             return;
           }
 
@@ -3062,10 +3170,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // This matches desktop behavior in MessageService.ts lines 2082-2086
           const senderAddress = conversationId.split('/')[0];
           authenticatedDmSender = senderAddress; // before the rewrite below
-          if (senderAddress === user?.address && decryptedMessage.channelId) {
+          if (senderAddress === fullUserAddrRef.current && decryptedMessage.channelId) {
             const actualRecipient = decryptedMessage.channelId;
             conversationId = `${actualRecipient}/${actualRecipient}`;
-          } else if (senderAddress === user?.address) {
+          } else if (senderAddress === fullUserAddrRef.current) {
             // Channel-less self-echo — can't attribute to a partner, nothing to
             // display. Drop it so it can't create a self-address conversation row.
             return;
@@ -3080,7 +3188,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // overwrite the partner's row. Mirrors desktop's
         // `envelope.user_address != self_address` check. authenticatedDmSender
         // is the true (pre-rewrite) sender.
-        if (authenticatedDmSender && authenticatedDmSender === user?.address) {
+        if (authenticatedDmSender && authenticatedDmSender === fullUserAddrRef.current) {
           userProfileFromEnvelope = undefined;
         }
 
@@ -3089,9 +3197,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // parse branches above (new-session + subsequent-message) since both
         // converge here. Best-effort: delete from server so it doesn't replay.
         if (await applyDmProfileUpdate(decryptedMessage, senderAddress)) {
-          getDeviceKeyset().then(dk => {
-            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-          });
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
           return;
         }
 
@@ -3125,9 +3231,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             );
           }
           // Best-effort: clear the control message from the inbox.
-          getDeviceKeyset().then(dk => {
-            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-          });
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
           return;
         }
 
@@ -3160,7 +3264,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
             if (withinWindow && withinLength) {
               const conversation = await storage.getConversation(conversationId);
-              const saveEditHistory = conversation?.saveEditHistory ?? false;
+              // Synced per-conversation override first, then the legacy local
+              // field (pre-migration devices). Must match the send-side gate in
+              // useEditDirectMessage or an incoming edit would retain history
+              // this device's own edits drop, and vice versa.
+              const saveEditHistory =
+                getConversationSettingForCurrentUser(conversationId, 'saveEditHistory') ??
+                conversation?.saveEditHistory ??
+                false;
               const applied = applyEdit(
                 {
                   text: targetMsg.content.text,
@@ -3218,9 +3329,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             );
           }
           // Best-effort: clear the control message from the inbox.
-          getDeviceKeyset().then(dk => {
-            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-          });
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
           return;
         }
 
@@ -3228,9 +3337,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // branch): reset the session only, before the save.
         if (decryptedMessage.content?.type === 'delete-conversation') {
           encryptionStateStorage.deleteAllEncryptionStates(conversationId);
-          getDeviceKeyset().then(dk => {
-            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-          });
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
           return;
         }
 
@@ -3240,12 +3347,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // also receives the fan-out but must NEVER delete our copy.
         if ((decryptedMessage.content?.type as string) === 'delete-conversation-self') {
           const selfContent = decryptedMessage.content as { senderId?: string; conversationAddress?: string };
-          const isSelfSender = !!selfContent.senderId && selfContent.senderId === user?.address;
+          const isSelfSender = !!selfContent.senderId && selfContent.senderId === fullUserAddrRef.current;
 
           // Always clear the processed control message from the inbox (self or not).
-          getDeviceKeyset().then(dk => {
-            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-          });
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
 
           if (isSelfSender) {
             encryptionStateStorage.deleteAllEncryptionStates(conversationId);
@@ -3279,9 +3384,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           !DM_GUARD_PASSTHROUGH_TYPES.has(dmContentType)
         ) {
           logger.debug(`[DM] default-deny dropped unsupported type=${dmContentType}`);
-          getDeviceKeyset().then(dk => {
-            if (dk) deleteInboxMessages(message.inboxAddress, [message.timestamp], dk).catch(() => {});
-          });
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
+          return;
+        }
+
+        // Backstop for ANY flat payload that slips every intercept above:
+        // the messages table requires message_id NOT NULL, so saving would
+        // throw, skip the ack, and redeliver-crash forever. Consume instead.
+        if (!decryptedMessage.messageId) {
+          logger.warn(
+            '[DM-recv] payload has no messageId — consuming without saving',
+            JSON.stringify({
+              inbox: message.inboxAddress?.slice(0, 12),
+              ts: message.timestamp,
+              type: (decryptedMessage as any).type ?? decryptedMessage.content?.type ?? '?',
+            })
+          );
+          deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
           return;
         }
 
@@ -3400,8 +3519,19 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             }
           }
         }
-      } catch {
-        // Message processing failed — isolate so other messages continue processing
+      } catch (processingError) {
+        // Message processing failed — isolate so other messages continue
+        // processing. NEVER silent: by this point the ratchet has usually
+        // consumed the frame's position, so a throw here can be a
+        // permanently lost message.
+        logger.error(
+          '[DM-recv] message processing FAILED after decrypt stage',
+          JSON.stringify({
+            inbox: message.inboxAddress?.slice(0, 12),
+            ts: message.timestamp,
+          }),
+          String(processingError)
+        );
       }
     },
     [queryClient, storage, applyDmProfileUpdate]
@@ -4464,9 +4594,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           // Best-effort: delete from server so stale signals don't replay on next launch
           const originalMsg = batch.find(m => m.timestamp === msgResult.timestamp);
           if (originalMsg) {
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(originalMsg.inboxAddress, originalMsg.timestamp);
           }
           continue;
         }
@@ -4476,9 +4604,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         if (handleDmReceipt(decryptedMessage, conversationId.split('/')[0])) {
           const originalMsg = batch.find(m => m.timestamp === msgResult.timestamp);
           if (originalMsg) {
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(originalMsg.inboxAddress, originalMsg.timestamp);
           }
           continue;
         }
@@ -4504,9 +4630,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         if (await applyDmProfileUpdate(decryptedMessage, batchProfileSender)) {
           const originalMsg = batch.find(m => m.timestamp === msgResult.timestamp);
           if (originalMsg) {
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(originalMsg.inboxAddress, originalMsg.timestamp);
           }
           continue;
         }
@@ -4530,9 +4654,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               };
               deleteConversationInboxMessages(originalDeleteMsg.inboxAddress, [originalDeleteMsg.timestamp], signingKey).catch(() => {});
             } else {
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(originalDeleteMsg.inboxAddress, [originalDeleteMsg.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(originalDeleteMsg.inboxAddress, originalDeleteMsg.timestamp);
             }
           }
           continue;
@@ -4547,14 +4669,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // is self. Runs before the conversation-save so it can't resurrect a row.
         if ((decryptedMessage.content?.type as string) === 'delete-conversation-self') {
           const selfContent = decryptedMessage.content as { senderId?: string; conversationAddress?: string };
-          const isSelfSender = !!selfContent.senderId && selfContent.senderId === user?.address;
+          const isSelfSender = !!selfContent.senderId && selfContent.senderId === fullUserAddrRef.current;
 
           // Always clear the processed control message from the inbox (self or not).
           const originalSelfMsg = batch.find(m => m.timestamp === msgResult.timestamp);
           if (originalSelfMsg) {
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(originalSelfMsg.inboxAddress, [originalSelfMsg.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(originalSelfMsg.inboxAddress, originalSelfMsg.timestamp);
           }
 
           if (isSelfSender) {
@@ -4659,9 +4779,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               };
               deleteConversationInboxMessages(originalReactionMsg.inboxAddress, [originalReactionMsg.timestamp], signingKey).catch(() => {});
             } else {
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(originalReactionMsg.inboxAddress, [originalReactionMsg.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(originalReactionMsg.inboxAddress, originalReactionMsg.timestamp);
             }
           }
           continue;
@@ -4716,9 +4834,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               };
               deleteConversationInboxMessages(originalRemoveMsg.inboxAddress, [originalRemoveMsg.timestamp], signingKey).catch(() => {});
             } else {
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(originalRemoveMsg.inboxAddress, [originalRemoveMsg.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(originalRemoveMsg.inboxAddress, originalRemoveMsg.timestamp);
             }
           }
           continue;
@@ -4755,7 +4871,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
             if (withinWindow && withinLength) {
               const conversation = await storage.getConversation(conversationId);
-              const saveEditHistory = conversation?.saveEditHistory ?? false;
+              // Synced per-conversation override first, then the legacy local
+              // field (pre-migration devices). Must match the send-side gate in
+              // useEditDirectMessage or an incoming edit would retain history
+              // this device's own edits drop, and vice versa.
+              const saveEditHistory =
+                getConversationSettingForCurrentUser(conversationId, 'saveEditHistory') ??
+                conversation?.saveEditHistory ??
+                false;
               const applied = applyEdit(
                 {
                   text: targetMsg.content.text,
@@ -4824,9 +4947,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               };
               deleteConversationInboxMessages(originalEditMsg.inboxAddress, [originalEditMsg.timestamp], signingKey).catch(() => {});
             } else {
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(originalEditMsg.inboxAddress, [originalEditMsg.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(originalEditMsg.inboxAddress, originalEditMsg.timestamp);
             }
           }
           continue;
@@ -4862,11 +4983,26 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               };
               deleteConversationInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], signingKey).catch(() => {});
             } else {
-              getDeviceKeyset().then(dk => {
-                if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
-              });
+              deleteProcessedEnvelope(originalMsg.inboxAddress, originalMsg.timestamp);
             }
           }
+          continue;
+        }
+
+        // Backstop for ANY flat payload that slips every intercept above
+        // (mirrors the JS fallback path): the messages table requires
+        // message_id NOT NULL — saving would throw, skip the ack, and
+        // redeliver-crash forever. Consume instead.
+        if (!decryptedMessage.messageId) {
+          logger.warn(
+            '[DM-recv] payload has no messageId — consuming without saving (batch)',
+            JSON.stringify({
+              ts: msgResult.timestamp,
+              type: (decryptedMessage as any).type ?? decryptedMessage.content?.type ?? '?',
+            })
+          );
+          const originalFlat = batch.find(m => m.timestamp === msgResult.timestamp);
+          if (originalFlat) deleteProcessedEnvelope(originalFlat.inboxAddress, originalFlat.timestamp);
           continue;
         }
 
@@ -4928,9 +5064,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             };
             deleteConversationInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], signingKey).catch(() => {});
           } else {
-            getDeviceKeyset().then(dk => {
-              if (dk) deleteInboxMessages(originalMsg.inboxAddress, [originalMsg.timestamp], dk).catch(() => {});
-            });
+            deleteProcessedEnvelope(originalMsg.inboxAddress, originalMsg.timestamp);
           }
         }
       }
@@ -5231,9 +5365,25 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
    */
   const throttledMessageHandler = useCallback((message: EncryptedWebSocketMessage) => {
     const me = fullUserAddrRef.current?.slice(0, 8) ?? '???';
-    // Diagnostic: confirm WS messages are reaching the client at all.
+    // The server's only channel for telling us a write was refused. It was
+    // logged at debug and dropped, which made a rejected inbox write
+    // indistinguishable from a delivered one: frames left the socket, never
+    // reached the peer, and nothing anywhere said why. Warn, and keep the
+    // whole payload — the reason is the point.
     if ('error' in message && message.error) {
-      logger.debug(`[WS-in ${me}] error msg`, message.error);
+      logger.warn(`[WS-in ${me}] SERVER REJECTED`, JSON.stringify(message));
+      return;
+    }
+
+    // Anything inbound that is neither an error, nor a known frame type, nor a
+    // sealed message is by definition unhandled. Silence here hid the case
+    // above for months; if the server answers writes in some other shape, this
+    // is what surfaces it.
+    if (
+      !(message as { encryptedContent?: unknown }).encryptedContent &&
+      !(message as { type?: unknown }).type
+    ) {
+      logger.warn(`[WS-in ${me}] UNHANDLED inbound payload`, JSON.stringify(message).slice(0, 400));
       return;
     }
 
@@ -5430,7 +5580,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         try {
           envelopes = await prepareMessage();
         } catch (err) {
-          logger.debug(`[WS-send ${me}] prepareMessage threw`, err);
+          // The transport discards this whole batch without requeueing it, so
+          // one device's failure silently costs every device in the fan-out.
+          // Debug level made that invisible under a warnings-only capture.
+          logger.warn(`[WS-send ${me}] prepareMessage threw, WHOLE batch dropped`, err);
           throw err;
         }
         for (const env of envelopes) {
@@ -5554,23 +5707,36 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         sendDmReceiptAckRef.current?.(address, { senderId: self, type: 'delivery-ack', messageIds });
       },
       onAckProcessed: (messageIds) => {
+        // Delivery acks carry real message IDs, so they are the source of truth
+        // for "it arrived". If a read ack already covered the message, this also
+        // completes the ✓✓ upgrade it could not grant on its own.
         const now = Date.now();
         const ids = new Set(messageIds);
-        // We don't know which conversation — patch deliveredAt across all DM caches.
-        queryClient.setQueriesData<InfiniteMessagesData>({ queryKey: ['messages', 'infinite'] }, (old) => {
-          if (!old?.pages) return old;
+        // The ack does not say which conversation it belongs to, but the query
+        // key does — so read the caches out and patch each one by key, rather
+        // than blind-updating them all.
+        const cached = queryClient.getQueriesData<InfiniteMessagesData>({ queryKey: ['messages', 'infinite'] });
+        for (const [queryKey, old] of cached) {
+          if (!old?.pages) continue;
+          // ['messages', 'infinite', spaceId, channelId] — for DMs both are the partner.
+          const readWatermark = readWatermarksRef.current.get(String(queryKey[2] ?? '')) ?? 0;
           let changed = false;
           const pages = old.pages.map((page) => {
             let pageChanged = false;
             const messages = page.messages.map((m) => {
-              if (ids.has(m.messageId) && !m.deliveredAt) { changed = true; pageChanged = true; return { ...m, deliveredAt: now }; }
-              return m;
+              if (!ids.has(m.messageId)) return m;
+              const patch = resolveDeliveryAckPatch(m, { readWatermark, now });
+              if (!patch) return m;
+              changed = true; pageChanged = true;
+              return { ...m, ...patch };
             });
             return pageChanged ? { ...page, messages } : page;
           });
-          return changed ? { ...old, pages } : old;
-        });
-        for (const id of messageIds) updateMessageDeliveredAt(id, now).catch(() => {});
+          if (changed) queryClient.setQueryData<InfiniteMessagesData>(queryKey, { ...old, pages });
+        }
+        for (const id of messageIds) {
+          updateMessageDeliveredAt(id, now, readWatermarksRef.current).catch(() => {});
+        }
       },
       onReadFlush: (address, hwm) => {
         sendDmReceiptAckRef.current?.(address, {
@@ -5579,6 +5745,19 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       },
       onReadAckProcessed: (upToMessageId, upToTimestamp, conversationAddress) => {
         const now = Date.now();
+
+        // A peer sending an unbounded timestamp would otherwise mark our entire
+        // outbound history read.
+        if (!isReadAckTimestampValid(upToTimestamp, now)) return;
+
+        // Remember how far they have read, so delivery acks still in flight can
+        // finish the upgrade when they land (see onAckProcessed).
+        readWatermarksRef.current.set(
+          conversationAddress,
+          advanceReadWatermark(readWatermarksRef.current.get(conversationAddress) ?? 0, upToTimestamp),
+        );
+
+        const ctx = { upToMessageId, upToTimestamp, now };
         const key = queryKeys.messages.infinite(conversationAddress, conversationAddress);
         queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {
           if (!old?.pages) return old;
@@ -5586,17 +5765,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           const pages = old.pages.map((page) => {
             let pageChanged = false;
             const messages = page.messages.map((m) => {
-              if (m.content?.senderId === self && m.createdDate <= upToTimestamp && !m.readAt) {
-                changed = true; pageChanged = true;
-                return { ...m, readAt: now, deliveredAt: m.deliveredAt || now };
-              }
-              return m;
+              if (m.content?.senderId !== self) return m;
+              const patch = resolveReadAckPatch(m, ctx);
+              if (!patch) return m;
+              changed = true; pageChanged = true;
+              return { ...m, ...patch };
             });
             return pageChanged ? { ...page, messages } : page;
           });
           return changed ? { ...old, pages } : old;
         });
-        updateMessagesReadAt(conversationAddress, self, upToTimestamp, now).catch(() => {});
+        updateMessagesReadAt(conversationAddress, self, upToMessageId, upToTimestamp, now).catch(() => {});
       },
     });
 
