@@ -2269,7 +2269,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     assetIcon: {
       width: 32,
       height: 32,
-      borderRadius: Skin.circle(16),
+      borderRadius: Skin.circleOrSquare(16),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -2326,7 +2326,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       borderColor: theme.colors.background,
       width: 36,
       height: 36,
-      borderRadius: Skin.circle(18),
+      borderRadius: Skin.circleOrSquare(18),
       alignItems: 'center',
       justifyContent: 'center',
     },

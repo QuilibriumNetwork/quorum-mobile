@@ -88,7 +88,7 @@ function createStyles(theme: AppTheme) {
     avatar: {
       width: 24,
       height: 24,
-      borderRadius: Skin.circle(12),
+      borderRadius: Skin.circleOrSquare(12),
       marginRight: Skin.space(8),
       backgroundColor: theme.colors.surface3,
     },

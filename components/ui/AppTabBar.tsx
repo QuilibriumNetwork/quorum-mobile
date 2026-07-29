@@ -534,13 +534,13 @@ const styles = StyleSheet.create({
   avatarWrap: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
+    borderRadius: Skin.circleOrSquare(AVATAR_SIZE / 2),
     overflow: 'hidden',
   },
   avatar: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
+    borderRadius: Skin.circleOrSquare(AVATAR_SIZE / 2),
   },
   unreadDot: {
     position: 'absolute',

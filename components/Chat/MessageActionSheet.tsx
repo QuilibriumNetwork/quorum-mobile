@@ -348,7 +348,7 @@ const createStyles = (theme: AppTheme) =>
     quickReactionButton: {
       width: 44,
       height: 44,
-      borderRadius: Skin.circle(22),
+      borderRadius: Skin.circleOrSquare(22),
       backgroundColor: theme.colors.surface3 ?? theme.colors.surface2,
       justifyContent: 'center',
       alignItems: 'center',

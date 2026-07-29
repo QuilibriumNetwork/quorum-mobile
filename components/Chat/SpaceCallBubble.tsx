@@ -220,7 +220,7 @@ const createStyles = (theme: AppTheme) =>
     iconCircle: {
       width: 40,
       height: 40,
-      borderRadius: Skin.circle(20),
+      borderRadius: Skin.circleOrSquare(20),
       alignItems: 'center',
       justifyContent: 'center',
     },

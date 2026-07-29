@@ -1593,7 +1593,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   messageAvatar: {
     width: 40,
     height: 40,
-    borderRadius: Skin.circle(20),
+    borderRadius: Skin.circleOrSquare(20),
   },
   // The avatar's right margin lives on the ApexAvatarRing wrapper so the
   // gold ring hugs the image instead of enclosing the margin.

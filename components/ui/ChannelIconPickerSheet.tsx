@@ -222,7 +222,7 @@ const createStyles = (theme: AppTheme) =>
     previewCircle: {
       width: 56,
       height: 56,
-      borderRadius: Skin.circle(28),
+      borderRadius: Skin.circleOrSquare(28),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -277,7 +277,7 @@ const createStyles = (theme: AppTheme) =>
     // comfortable inset. flexGrow:0 so it doesn't fill leftover column space.
     colorRow: { flexGrow: 0, marginHorizontal: -Skin.space(20), marginBottom: Skin.space(16) },
     colorRowContent: { flexDirection: 'row', gap: Skin.space(10), paddingHorizontal: Skin.space(20), paddingVertical: Skin.space(3), alignItems: 'center' },
-    colorSwatch: { width: 32, height: 32, borderRadius: Skin.circle(16) },
+    colorSwatch: { width: 32, height: 32, borderRadius: Skin.circleOrSquare(16) },
     colorSwatchActive: {
       borderWidth: Skin.border(3),
       borderColor: '#fff',

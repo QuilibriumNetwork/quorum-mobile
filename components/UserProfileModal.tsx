@@ -446,7 +446,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     avatar: {
       width: 100,
       height: 100,
-      borderRadius: Skin.circle(50),
+      borderRadius: Skin.circleOrSquare(50),
     },
     displayName: {
       fontSize: Skin.font(24),

@@ -291,7 +291,7 @@ const createStyles = (theme: AppTheme) =>
     headerAvatar: {
       width: 56,
       height: 56,
-      borderRadius: Skin.circle(28),
+      borderRadius: Skin.circleOrSquare(28),
       marginBottom: Skin.space(8),
     },
     headerName: {

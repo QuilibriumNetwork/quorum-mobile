@@ -132,18 +132,18 @@ const createStyles = (
     container: {
       width: dimension,
       height: dimension,
-      borderRadius: dimension / 2,
+      borderRadius: Skin.circleOrSquare(dimension / 2),
       position: 'relative',
     },
     image: {
       width: dimension,
       height: dimension,
-      borderRadius: dimension / 2,
+      borderRadius: Skin.circleOrSquare(dimension / 2),
     },
     fallbackContainer: {
       width: dimension,
       height: dimension,
-      borderRadius: dimension / 2,
+      borderRadius: Skin.circleOrSquare(dimension / 2),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
@@ -160,7 +160,8 @@ const createStyles = (
       right: 0,
       width: badgeSize,
       height: badgeSize,
-      borderRadius: badgeSize / 2,
+      // Status dot, no content — stays a circle on every skin.
+      borderRadius: Skin.circle(badgeSize / 2),
       backgroundColor: badgeColor || theme.colors.success,
       borderWidth: Skin.border(2),
       borderColor: theme.colors.background,
