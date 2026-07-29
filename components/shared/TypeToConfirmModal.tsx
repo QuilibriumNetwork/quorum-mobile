@@ -107,12 +107,19 @@ export function TypeToConfirmModal({
         />
 
         <View style={styles.actions}>
-          <Button variant="secondary" size="lg" onPress={handleCancel} style={styles.button}>
+          <Button
+            variant="ghost"
+            size="lg"
+            color={theme.colors.textSubtle}
+            onPress={handleCancel}
+            style={styles.button}
+          >
             {cancelLabel}
           </Button>
           <Button
-            variant="danger"
+            variant="ghost"
             size="lg"
+            color={theme.colors.danger}
             onPress={onConfirm}
             disabled={!matches}
             style={styles.button}
@@ -187,10 +194,15 @@ const createStyles = (theme: ThemeType) =>
     },
     actions: {
       flexDirection: 'row',
-      gap: Skin.space(10),
+      justifyContent: 'flex-end',
+      alignItems: 'center',
+      gap: Skin.space(4),
+      // Matches ConfirmDialog: pull the row out by the links' own horizontal
+      // padding so the last label optically aligns with the card's text edge.
+      marginRight: -Skin.space(12),
     },
     button: {
-      flex: 1,
+      paddingHorizontal: Skin.space(12),
     },
   });
 

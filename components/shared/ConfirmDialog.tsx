@@ -25,8 +25,15 @@ export interface ConfirmDialogProps {
 
 /**
  * ConfirmDialog — a center-anchored "are you sure?" for destructive actions
- * (T1/T2). The action button uses the skin danger token, so it's visibly red on
- * BOTH iOS and Android (native Alert.alert can't do this on Android).
+ * (T1/T2).
+ *
+ * Actions render as right-aligned text links, not filled slabs: two filled
+ * buttons side by side give equal visual weight to "cancel" and "destroy", and
+ * a full-width red block reads as the modal's subject rather than its action.
+ * The action link carries the skin danger token (or the accent for a
+ * non-destructive confirm) so intent stays legible on BOTH iOS and Android —
+ * native Alert.alert can't colour its buttons on Android. Cancel is a subtle
+ * text colour, present but not competing.
  *
  * Backdrop tap and Android back resolve to Cancel (owned by CenterModal).
  */
@@ -54,10 +61,22 @@ export function ConfirmDialog({
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.message}>{message}</Text>
       <View style={styles.actions}>
-        <Button variant="secondary" size="lg" onPress={onCancel} style={styles.button}>
+        <Button
+          variant="ghost"
+          size="lg"
+          color={theme.colors.textSubtle}
+          onPress={onCancel}
+          style={styles.button}
+        >
           {cancelLabel}
         </Button>
-        <Button variant={variant} size="lg" onPress={onConfirm} style={styles.button}>
+        <Button
+          variant="ghost"
+          size="lg"
+          color={variant === 'danger' ? theme.colors.danger : theme.colors.primary}
+          onPress={onConfirm}
+          style={styles.button}
+        >
           {confirmLabel}
         </Button>
       </View>
@@ -83,10 +102,18 @@ const createStyles = (theme: ThemeType) =>
     },
     actions: {
       flexDirection: 'row',
-      gap: Skin.space(10),
+      justifyContent: 'flex-end',
+      alignItems: 'center',
+      gap: Skin.space(4),
+      // The links keep a generous tap target via their own horizontal padding;
+      // pull the row out by that much so the last label optically aligns with
+      // the card's text edge rather than sitting inset from it.
+      marginRight: -Skin.space(12),
     },
     button: {
-      flex: 1,
+      // Tighter than the `lg` default (28) — these read as links, not slabs.
+      // Vertical padding is untouched, so the tap target stays ~50pt tall.
+      paddingHorizontal: Skin.space(12),
     },
   });
 
