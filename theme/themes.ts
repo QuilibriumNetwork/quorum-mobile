@@ -122,7 +122,15 @@ const createTheme = (
     sm: skin?.radii?.sm ?? rad(BASE_RADII.sm),
     md: skin?.radii?.md ?? rad(BASE_RADII.md),
     lg: skin?.radii?.lg ?? rad(BASE_RADII.lg),
-    pill: skin?.radii?.pill ?? BASE_RADII.pill,
+    // `pill` scales too, and the huge base value is what makes that safe: a skin
+    // can never make a capsule rounder (999 * 2.2 still clamps to half the
+    // element's height), so the only scale that changes anything is 0 — and a
+    // skin that squares every other corner should square its chips as well,
+    // otherwise a 'square' skin leaves capsule filter rows next to squared tab
+    // rows on the same screen. A `set` skin pins them to its one value. An
+    // explicit `radii.pill` still wins, so capsules-on-a-square-app stays
+    // expressible.
+    pill: skin?.radii?.pill ?? rad(BASE_RADII.pill),
   };
   const spacing: SkinSpacing = {
     xs: skin?.spacing?.xs ?? Math.round(BASE_SPACING.xs * geo.spacingScale),
