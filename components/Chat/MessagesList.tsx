@@ -1239,9 +1239,9 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               <View style={styles.messageHeader}>
                 <Text style={styles.messageUser} numberOfLines={1}>{item.userName}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
-                {item.originalMessage?.isPinned && (
-                  <IconSymbol name="pin.fill" size={10} color={theme.colors.textMuted} style={{ marginLeft: Skin.space(4) }} />
-                )}
+                {/* No per-message pinned/bookmarked glyph. Both states have a
+                    dedicated surface (PinnedMessagesPanel / BookmarksPanel), and
+                    on a narrow phone header the extra glyph is redundant. */}
                 {item.isEdited && (
                   <Text style={styles.editedIndicator}>(edited)</Text>
                 )}
@@ -1615,7 +1615,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   messageHeader: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    // Fixed line box so non-text indicators (warning/pin/edited/spinner) can't
+    // Fixed line box so non-text indicators (warning/edited/spinner) can't
     // stretch the row taller than the username line and widen the header→text gap.
     height: Skin.font(20),
   },
