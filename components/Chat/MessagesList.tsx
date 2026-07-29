@@ -797,7 +797,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       return (
         // Yellow tint for the inline warning. (Header/media unsigned still uses
         // theme.colors.warning; see renderUnsignedWarning.)
-        <UnsignedIndicator color="#EAB308" onPress={showUnsignedToast} size={13} />
+        <UnsignedIndicator color="#EAB308" onPress={showUnsignedToast} />
       );
     },
     [showUnsignedToast]
@@ -876,7 +876,10 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       if (read === null) return null;
       return (
         <View style={styles.receiptOverlay} pointerEvents="none">
-          <ReceiptTicks read={read} color={theme.colors.textMuted} inline={false} size={9} />
+          {/* Default box size: the checks are padded inside it, so shrinking the
+              box here would shrink the checks too and desync them from the
+              inline receipts. */}
+          <ReceiptTicks read={read} color={theme.colors.textMuted} inline={false} />
         </View>
       );
     },
@@ -1215,15 +1218,39 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       // for the link-card branch (ends in a BrowserLink) or a bodyless message,
       // it falls back to a compact row beneath the content.
       const receiptNode = renderReceipt(item);
-      // Trailing inline group: unsigned warning first, then the receipt. Both
-      // trail the last word of the message text (and wrap with it). Composed
-      // here so ordering is guaranteed regardless of the underlying renderer.
+      // Trailing inline group: receipt first, unsigned warning last. Both trail
+      // the last word of the message text (and wrap with it). Composed here so
+      // ordering is guaranteed regardless of the underlying renderer.
+      //
+      // The group MUST be a single <Text>, never a fragment of two. Inside a
+      // parent <Text> a fragment is fine — both glyphs become inline runs on one
+      // line. But MentionableText's emoji-only branch renders the trailing node
+      // as a flex child of a `flexDirection: 'row'` / `alignItems: 'flex-end'`
+      // View, and there a fragment expands into two independent boxes: they
+      // align by box edge, then drift apart by their own transforms. Wrapping in
+      // one <Text> keeps the group a single box in every layout it lands in.
       const unsignedNode = renderUnsignedInline(item);
-      const trailingInline = unsignedNode || receiptNode ? (
-        <>
-          {unsignedNode}
+      const trailingInline = receiptNode || unsignedNode ? (
+        <Text style={styles.trailingGroup}>
           {receiptNode}
-        </>
+          {unsignedNode}
+        </Text>
+      ) : null;
+      // Block variant of the same group, for the layouts that place it in a View
+      // row rather than in a text run — MentionableText's emoji-only branch.
+      // There the inline form cannot be used: an <Image> inline in a <Text> that
+      // is itself a flex child draws outside the box the <Text> measured, which
+      // is what put the receipt and the warning in different places on
+      // emoji-only messages. Bare <Image>s in a real row lay out predictably.
+      const trailingBlock = receiptNode || unsignedNode ? (
+        <View style={styles.trailingBlock}>
+          {receiptRead(item) !== null && (
+            <ReceiptTicks read={!!receiptRead(item)} color={theme.colors.textMuted} inline={false} />
+          )}
+          {unsignedNode && (
+            <UnsignedIndicator color="#EAB308" onPress={showUnsignedToast} inline={false} />
+          )}
+        </View>
       ) : null;
       const trailingInlined = !(item.hasLink && item.link) && !!messageTextWithoutLink;
 
@@ -1239,9 +1266,9 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               <View style={styles.messageHeader}>
                 <Text style={styles.messageUser} numberOfLines={1}>{item.userName}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
-                {item.originalMessage?.isPinned && (
-                  <IconSymbol name="pin.fill" size={10} color={theme.colors.textMuted} style={{ marginLeft: Skin.space(4) }} />
-                )}
+                {/* No per-message pinned/bookmarked glyph. Both states have a
+                    dedicated surface (PinnedMessagesPanel / BookmarksPanel), and
+                    on a narrow phone header the extra glyph is redundant. */}
                 {item.isEdited && (
                   <Text style={styles.editedIndicator}>(edited)</Text>
                 )}
@@ -1303,6 +1330,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   onChannelPress={onChannelLinkPress}
                   onLinkPress={onLinkPress}
                   receipt={trailingInline}
+                  receiptBlock={trailingBlock}
                 />
               ) : null}
               {!trailingInlined && trailingInline ? (
@@ -1349,7 +1377,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedInline, renderCompactIndicators, renderReceipt, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds]
+    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedInline, renderCompactIndicators, renderReceipt, receiptRead, showUnsignedToast, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds]
   );
 
   const renderCast = useCallback(
@@ -1615,7 +1643,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   messageHeader: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    // Fixed line box so non-text indicators (warning/pin/edited/spinner) can't
+    // Fixed line box so non-text indicators (warning/edited/spinner) can't
     // stretch the row taller than the username line and widen the header→text gap.
     height: Skin.font(20),
   },
@@ -1755,6 +1783,24 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: Skin.font(11),
     fontFamily: theme.fonts.regular.fontFamily,
     marginLeft: Skin.space(6),
+  },
+  // The trailing indicator group (receipt + unsigned warning). flexShrink 0 so
+  // that when it lands in a flex row — MentionableText's emoji-only branch — it
+  // keeps its measured width instead of being compressed until its contents
+  // wrap onto a second line. Ignored when it renders as an inline text run.
+  trailingGroup: {
+    flexShrink: 0,
+  },
+  // Block form of the trailing group: a real row of bare <Image>s, used where
+  // the group sits in a View rather than in a text run. alignItems center lines
+  // the glyphs up on their shared centre — the assets are padded onto a common
+  // box precisely so that centring them is correct (see trailingGlyphs.ts).
+  trailingBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: Skin.space(3),
+    marginLeft: Skin.space(4),
   },
   // DM receipt fallback row — used when the tick can't inline into the message
   // text (link card / bodyless message). Left-aligned beneath the content.

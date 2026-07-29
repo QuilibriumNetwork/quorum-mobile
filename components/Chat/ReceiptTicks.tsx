@@ -21,27 +21,39 @@ import {
   RECEIPT_CHECK_SINGLE_ASPECT,
   RECEIPT_CHECK_DOUBLE_ASPECT,
 } from './receiptCheckAssets';
+import {
+  TRAILING_GLYPH_SIZE,
+  TRAILING_GLYPH_NUDGE,
+  TRAILING_GLYPH_GAP,
+} from './trailingGlyphs';
 
 interface ReceiptTicksProps {
   /** true → double check (read); false → single check (delivered). */
   read: boolean;
   /** Tint colour — muted theme token inline; white on a media overlay. */
   color: string;
-  /** Rendered height in dp. Width is derived from the asset aspect. Default 9. */
+  /**
+   * Rendered height of the glyph BOX in dp — not of the check marks themselves,
+   * which are padded into a taller canvas so every trailing glyph shares one box
+   * (see trailingGlyphs.ts). Width is derived from the asset aspect. Leave unset
+   * unless you need a deliberately larger or smaller receipt.
+   */
   size?: number;
   /**
    * Inline (in message text) vs standalone (media corner overlay).
-   * - inline (default): wrapped in a <Text> with a leading space so it gaps from
-   *   the last word and flows/wraps with the text; margins on an inline <Image>
-   *   in <Text> are ignored on Android, so a real space is the reliable gap. The
-   *   <Text> wrapper is valid both inside a parent <Text> and inside a <View>.
+   * - inline (default): wrapped in a <Text> with a leading no-break space so it
+   *   gaps from the last word and flows/wraps with the text; margins on an
+   *   inline <Image> in <Text> are ignored on Android, so a real character is
+   *   the reliable gap, and it must be non-breaking or the group can split
+   *   across lines (see TRAILING_GLYPH_GAP). The <Text> wrapper is valid both
+   *   inside a parent <Text> and inside a <View>.
    * - standalone: a bare <Image>, tightly packed for an overlay pill (no leading
    *   space, no baseline nudge).
    */
   inline?: boolean;
 }
 
-function ReceiptTicksBase({ read, color, size = 9, inline = true }: ReceiptTicksProps) {
+function ReceiptTicksBase({ read, color, size = TRAILING_GLYPH_SIZE, inline = true }: ReceiptTicksProps) {
   const aspect = read ? RECEIPT_CHECK_DOUBLE_ASPECT : RECEIPT_CHECK_SINGLE_ASPECT;
   // width from aspect so the check glyph is never stretched; both states share
   // the same glyph size, so delivered→read doesn't appear to resize.
@@ -55,7 +67,7 @@ function ReceiptTicksBase({ read, color, size = 9, inline = true }: ReceiptTicks
   if (!inline) return img;
   return (
     <Text>
-      {' '}
+      {TRAILING_GLYPH_GAP}
       {img}
     </Text>
   );
@@ -63,9 +75,9 @@ function ReceiptTicksBase({ read, color, size = 9, inline = true }: ReceiptTicks
 
 const styles = StyleSheet.create({
   tickInline: {
-    // Baseline nudge so the glyph sits level with the text rather than on the
-    // descender line (inline <Image> in <Text> rides slightly low). Tune on device.
-    transform: [{ translateY: 1 }],
+    // Shared with every other trailing glyph so they can't drift apart — see
+    // trailingGlyphs.ts. Do not tune this one on its own.
+    transform: [{ translateY: TRAILING_GLYPH_NUDGE }],
   },
 });
 

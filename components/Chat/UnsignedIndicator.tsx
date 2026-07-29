@@ -13,19 +13,57 @@
  */
 
 import React from 'react';
-import { Text, Image, StyleSheet } from 'react-native';
+import { Text, Image, Pressable, StyleSheet } from 'react-native';
 import { UNSIGNED_ICON_URI, UNSIGNED_ICON_ASPECT } from './unsignedIconAsset';
+import {
+  TRAILING_GLYPH_SIZE,
+  TRAILING_GLYPH_NUDGE,
+  TRAILING_GLYPH_GAP,
+} from './trailingGlyphs';
 
 interface UnsignedIndicatorProps {
   /** Tint colour — pass the amber warning theme token. */
   color: string;
   /** Fired on tap — surface the "unsigned message" explanation. */
   onPress: () => void;
-  /** Rendered height in dp. Width is derived from the asset aspect. Default 11. */
+  /**
+   * Rendered height of the glyph BOX in dp — the triangle is padded into that
+   * box so every trailing glyph shares one box (see trailingGlyphs.ts). Width is
+   * derived from the asset aspect. Leave unset outside deliberate one-offs.
+   */
   size?: number;
+  /**
+   * Inline (a text run inside the message <Text>) vs block (a bare tappable
+   * <Image> for a View-based row).
+   *
+   * Block exists because an inline <Image> inside a <Text> that is itself a flex
+   * child does not lay out reliably — the image draws outside the box the <Text>
+   * measured. Any caller placing this in a View row must use block.
+   */
+  inline?: boolean;
 }
 
-function UnsignedIndicatorBase({ color, onPress, size = 11 }: UnsignedIndicatorProps) {
+function UnsignedIndicatorBase({
+  color,
+  onPress,
+  size = TRAILING_GLYPH_SIZE,
+  inline = true,
+}: UnsignedIndicatorProps) {
+  if (!inline) {
+    return (
+      <Pressable
+        onPress={onPress}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        accessibilityRole="button"
+        accessibilityLabel="Unsigned message"
+      >
+        <Image
+          source={{ uri: UNSIGNED_ICON_URI }}
+          style={{ width: size * UNSIGNED_ICON_ASPECT, height: size, tintColor: color }}
+        />
+      </Pressable>
+    );
+  }
   return (
     <Text
       onPress={onPress}
@@ -33,7 +71,7 @@ function UnsignedIndicatorBase({ color, onPress, size = 11 }: UnsignedIndicatorP
       accessibilityRole="button"
       accessibilityLabel="Unsigned message"
     >
-      {' '}
+      {TRAILING_GLYPH_GAP}
       <Image
         source={{ uri: UNSIGNED_ICON_URI }}
         style={[styles.icon, { width: size * UNSIGNED_ICON_ASPECT, height: size, tintColor: color }]}
@@ -44,9 +82,9 @@ function UnsignedIndicatorBase({ color, onPress, size = 11 }: UnsignedIndicatorP
 
 const styles = StyleSheet.create({
   icon: {
-    // Inline <Image> in <Text> rides high (top-aligned) on Android; push it down
-    // so its bottom sits on the text baseline. Tune on device.
-    transform: [{ translateY: 4 }],
+    // Shared with every other trailing glyph so they can't drift apart — see
+    // trailingGlyphs.ts. Do not tune this one on its own.
+    transform: [{ translateY: TRAILING_GLYPH_NUDGE }],
   },
 });
 
