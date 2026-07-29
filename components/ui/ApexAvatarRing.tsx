@@ -18,6 +18,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Image, View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-native';
+import * as Skin from '@/theme/skins/geometry';
 
 /**
  * Apex brand colors, derived from the metallic Apex mark (a gold star whose
@@ -73,7 +74,7 @@ export function ApexAvatarRing({ active, size, style, children }: ApexAvatarRing
         style={{
           width: ringSize,
           height: ringSize,
-          borderRadius: ringSize / 2,
+          borderRadius: Skin.circleOrSquare(ringSize / 2),
           alignItems: 'center',
           justifyContent: 'center',
         }}

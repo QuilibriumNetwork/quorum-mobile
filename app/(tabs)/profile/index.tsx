@@ -447,7 +447,7 @@ const createStyles = (theme: AppTheme) =>
     iconWrap: {
       width: 36,
       height: 36,
-      borderRadius: Skin.circle(18),
+      borderRadius: Skin.circleOrSquare(18),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
@@ -455,7 +455,7 @@ const createStyles = (theme: AppTheme) =>
     avatar: {
       width: 36,
       height: 36,
-      borderRadius: Skin.circle(18),
+      borderRadius: Skin.circleOrSquare(18),
       backgroundColor: theme.colors.surface3,
     },
     body: {

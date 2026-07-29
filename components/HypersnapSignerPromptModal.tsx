@@ -85,7 +85,7 @@ function createStyles(theme: AppTheme) {
       alignSelf: 'center',
       width: 56,
       height: 56,
-      borderRadius: Skin.circle(28),
+      borderRadius: Skin.circleOrSquare(28),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface2,
@@ -126,7 +126,7 @@ function createStyles(theme: AppTheme) {
     optionIcon: {
       width: 40,
       height: 40,
-      borderRadius: Skin.circle(20),
+      borderRadius: Skin.circleOrSquare(20),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface2,
@@ -134,7 +134,7 @@ function createStyles(theme: AppTheme) {
     optionIconPrimary: {
       width: 40,
       height: 40,
-      borderRadius: Skin.circle(20),
+      borderRadius: Skin.circleOrSquare(20),
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface2,

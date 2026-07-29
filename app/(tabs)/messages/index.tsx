@@ -479,7 +479,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
     dmAvatar: {
       width: 48,
       height: 48,
-      borderRadius: Skin.circle(24), // full circle for people
+      borderRadius: Skin.circleOrSquare(24), // full circle for people
     },
     farcasterBadge: {
       position: 'absolute',
@@ -487,7 +487,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
       right: -2,
       width: 18,
       height: 18,
-      borderRadius: Skin.circle(9),
+      borderRadius: Skin.circleOrSquare(9),
       backgroundColor: '#855DCD', // Farcaster brand purple
       borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,
@@ -503,7 +503,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
       left: -2,
       width: 18,
       height: 18,
-      borderRadius: Skin.circle(9),
+      borderRadius: Skin.circleOrSquare(9),
       backgroundColor: theme.colors.surface3,
       borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,

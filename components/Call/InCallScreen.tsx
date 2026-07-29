@@ -309,7 +309,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   videoControlButton: {
     width: 48,
     height: 48,
-    borderRadius: Skin.circle(24),
+    borderRadius: Skin.circleOrSquare(24),
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -348,7 +348,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   hangupButton: {
     width: 72,
     height: 72,
-    borderRadius: Skin.circle(36),
+    borderRadius: Skin.circleOrSquare(36),
     alignItems: 'center',
     justifyContent: 'center',
   },

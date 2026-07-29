@@ -577,7 +577,7 @@ const createStyles = (theme: AppTheme) =>
     iconPreview: {
       width: 36,
       height: 36,
-      borderRadius: Skin.circle(18),
+      borderRadius: Skin.circleOrSquare(18),
       alignItems: 'center',
       justifyContent: 'center',
     },

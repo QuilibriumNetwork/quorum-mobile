@@ -1650,7 +1650,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   autocompleteAvatar: {
     width: 28,
     height: 28,
-    borderRadius: Skin.circle(14),
+    borderRadius: Skin.circleOrSquare(14),
     backgroundColor: theme.colors.primary + '30',
     justifyContent: 'center',
     alignItems: 'center',

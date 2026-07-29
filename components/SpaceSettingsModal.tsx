@@ -1525,7 +1525,7 @@ export default function SpaceSettingsModal({
           style={{
             width: 72,
             height: 72,
-            borderRadius: Skin.circle(36),
+            borderRadius: Skin.circleOrSquare(36),
             backgroundColor: theme.colors.surface3,
             justifyContent: 'center',
             alignItems: 'center',
@@ -3230,7 +3230,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     memberAvatarImage: {
       width: 44,
       height: 44,
-      borderRadius: Skin.circle(22),
+      borderRadius: Skin.circleOrSquare(22),
     },
     memberInfo: {
       flex: 1,

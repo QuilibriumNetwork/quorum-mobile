@@ -122,7 +122,7 @@ const createStyles = (theme: AppTheme) =>
     iconContainer: {
       width: 64,
       height: 64,
-      borderRadius: Skin.circle(32),
+      borderRadius: Skin.circleOrSquare(32),
       backgroundColor: (theme.colors.warning ?? '#f59e0b') + '20',
       alignItems: 'center',
       justifyContent: 'center',

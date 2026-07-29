@@ -198,7 +198,7 @@ const createStyles = (theme: AppTheme) =>
     avatar: {
       width: 40,
       height: 40,
-      borderRadius: Skin.circle(20),
+      borderRadius: Skin.circleOrSquare(20),
       marginRight: Skin.space(12),
     },
     userInfo: {

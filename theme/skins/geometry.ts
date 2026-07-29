@@ -69,22 +69,44 @@ export function radius(n: number): number {
   return Math.round(n * current.radiusScale);
 }
 
+/** Has the active skin squared every corner? `set: 0` and `scale: 0` both mean
+ *  "square"; any other set/scale is some degree of rounded. */
+function skinIsSquare(): boolean {
+  if (current.radiusSet !== undefined) return current.radiusSet === 0;
+  return current.radiusScale === 0;
+}
+
 /**
- * A corner radius that skins deliberately do NOT get a vote on, for objects that
- * are circles rather than rectangles with softened corners.
+ * Always a circle — skins get no vote at all.
  *
- * The distinction is identity, not style: a card with square corners is still a
- * card, but a 9px status dot with square corners is a stray red square, and an
- * avatar with square corners is a photo tile. Passing those through `radius()`
- * meant a 'square' skin turned every avatar, presence dot and round icon button
- * in the app into a box. Ask "at radius 0, is this still the same object?" — if
- * no, it belongs here; if yes, use `radius()` and let the skin shape it.
+ * Reserved for PURE-SHAPE indicators: status dots, unread dots, radio dots,
+ * toggle knobs. Their shape is their entire meaning, so squaring them doesn't
+ * restyle them, it breaks them — a square 9px status dot reads as a rendering
+ * glitch, and a square radio dot reads as a checkbox.
  *
- * Callers still pass half the element's size, so the call site keeps reading as
- * `borderRadius: circle(24)` next to `width: 48, height: 48`.
+ * Anything that CONTAINS something (an image, a glyph, a label) is not this.
+ * Use `circleOrSquare` for round containers, or `radius` for rounded rectangles.
  */
 export function circle(n: number): number {
   return n;
+}
+
+/**
+ * A perfect circle, or a perfect square on a skin that squares its corners.
+ * Never anything in between.
+ *
+ * For round CONTAINERS: avatars, round icon buttons, FABs, call buttons. A
+ * squared avatar is a legitimate look (it's a photo tile, and that IS the
+ * brutalist aesthetic), so unlike `circle` these do follow the skin — but only
+ * to the two endpoints. `radius()` is wrong here: under a `radii: { set: 4 }`
+ * skin it would return 4, giving a slightly-rounded avatar, and a squircle is
+ * exactly the third state this is meant to prevent.
+ *
+ * Callers pass half the element's size, so the call site reads as
+ * `borderRadius: circleOrSquare(24)` next to `width: 48, height: 48`.
+ */
+export function circleOrSquare(n: number): number {
+  return skinIsSquare() ? 0 : n;
 }
 
 /** Scale a padding/margin/gap by the active skin. */

@@ -536,7 +536,7 @@ function createStyles(theme: AppTheme) {
     avatar: {
       width: 80,
       height: 80,
-      borderRadius: Skin.circle(40),
+      borderRadius: Skin.circleOrSquare(40),
       borderWidth: Skin.border(4),
       borderColor: theme.colors.background,
       backgroundColor: theme.colors.surface3,
@@ -586,7 +586,7 @@ function createStyles(theme: AppTheme) {
     castAvatar: {
       width: 44,
       height: 44,
-      borderRadius: Skin.circle(22),
+      borderRadius: Skin.circleOrSquare(22),
       marginRight: Skin.space(12),
       backgroundColor: theme.colors.surface3,
     },
