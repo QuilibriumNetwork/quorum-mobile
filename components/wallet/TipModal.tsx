@@ -704,7 +704,7 @@ const createStyles = (theme: AppTheme) =>
     assetIcon: {
       width: 36,
       height: 36,
-      borderRadius: Skin.radius(18),
+      borderRadius: Skin.circle(18),
       alignItems: 'center',
       justifyContent: 'center',
     },

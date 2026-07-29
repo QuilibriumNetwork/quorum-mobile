@@ -360,7 +360,7 @@ const livePulseStyles = createSkinnable(() => StyleSheet.create({
   dot: {
     width: 6,
     height: 6,
-    borderRadius: Skin.radius(3),
+    borderRadius: Skin.circle(3),
   },
   label: {
     fontSize: Skin.font(9),
@@ -432,7 +432,7 @@ const castRowStyles = createSkinnable(() => StyleSheet.create({
   avatar: {
     width: 32,
     height: 32,
-    borderRadius: Skin.radius(16),
+    borderRadius: Skin.circle(16),
   },
   body: {
     flex: 1,

@@ -1403,7 +1403,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     actionButtonIcon: {
       width: 44,
       height: 44,
-      borderRadius: Skin.radius(22),
+      borderRadius: Skin.circle(22),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -1429,7 +1429,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     assetIcon: {
       width: 44,
       height: 44,
-      borderRadius: Skin.radius(22),
+      borderRadius: Skin.circle(22),
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
@@ -1437,7 +1437,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     assetIconImage: {
       width: 44,
       height: 44,
-      borderRadius: Skin.radius(22),
+      borderRadius: Skin.circle(22),
     },
     assetSymbolText: {
       fontSize: Skin.font(18),
@@ -1459,7 +1459,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     chainDot: {
       width: 6,
       height: 6,
-      borderRadius: Skin.radius(3),
+      borderRadius: Skin.circle(3),
     },
     assetChain: {
       fontSize: Skin.font(12),
@@ -1527,14 +1527,14 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     chainIconContainer: {
       width: 40,
       height: 40,
-      borderRadius: Skin.radius(20),
+      borderRadius: Skin.circle(20),
       alignItems: 'center',
       justifyContent: 'center',
     },
     chainLogo: {
       width: 40,
       height: 40,
-      borderRadius: Skin.radius(20),
+      borderRadius: Skin.circle(20),
     },
     chainIconText: {
       fontSize: Skin.font(20),
@@ -1774,7 +1774,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     settingsToggleKnob: {
       width: 22,
       height: 22,
-      borderRadius: Skin.radius(11),
+      borderRadius: Skin.circle(11),
       backgroundColor: '#fff',
     },
     settingsToggleKnobActive: {

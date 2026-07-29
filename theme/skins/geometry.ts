@@ -69,6 +69,24 @@ export function radius(n: number): number {
   return Math.round(n * current.radiusScale);
 }
 
+/**
+ * A corner radius that skins deliberately do NOT get a vote on, for objects that
+ * are circles rather than rectangles with softened corners.
+ *
+ * The distinction is identity, not style: a card with square corners is still a
+ * card, but a 9px status dot with square corners is a stray red square, and an
+ * avatar with square corners is a photo tile. Passing those through `radius()`
+ * meant a 'square' skin turned every avatar, presence dot and round icon button
+ * in the app into a box. Ask "at radius 0, is this still the same object?" — if
+ * no, it belongs here; if yes, use `radius()` and let the skin shape it.
+ *
+ * Callers still pass half the element's size, so the call site keeps reading as
+ * `borderRadius: circle(24)` next to `width: 48, height: 48`.
+ */
+export function circle(n: number): number {
+  return n;
+}
+
 /** Scale a padding/margin/gap by the active skin. */
 export function space(n: number): number {
   return Math.round(n * current.spacingScale);

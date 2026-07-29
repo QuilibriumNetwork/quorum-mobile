@@ -457,7 +457,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   minimizeButton: {
     width: 36,
     height: 36,
-    borderRadius: Skin.radius(18),
+    borderRadius: Skin.circle(18),
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -506,7 +506,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   videoControlButton: {
     width: 48,
     height: 48,
-    borderRadius: Skin.radius(24),
+    borderRadius: Skin.circle(24),
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -553,7 +553,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   moreParticipants: {
     width: 64,
     height: 64,
-    borderRadius: Skin.radius(32),
+    borderRadius: Skin.circle(32),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -582,7 +582,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   hangupButton: {
     width: 72,
     height: 72,
-    borderRadius: Skin.radius(36),
+    borderRadius: Skin.circle(36),
     alignItems: 'center',
     justifyContent: 'center',
   },

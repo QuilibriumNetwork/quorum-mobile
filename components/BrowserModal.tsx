@@ -1774,7 +1774,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     walletDot: {
       width: 8,
       height: 8,
-      borderRadius: Skin.radius(4),
+      borderRadius: Skin.circle(4),
       backgroundColor: theme.colors.primary,
     },
     walletDotWarpcast: {
@@ -1838,7 +1838,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     walletOptionDot: {
       width: 12,
       height: 12,
-      borderRadius: Skin.radius(6),
+      borderRadius: Skin.circle(6),
       backgroundColor: theme.colors.primary,
     },
     walletOptionInfo: {

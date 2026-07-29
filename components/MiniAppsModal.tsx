@@ -949,7 +949,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     authBadge: {
       width: 18,
       height: 18,
-      borderRadius: Skin.radius(9),
+      borderRadius: Skin.circle(9),
       backgroundColor: '#855DCD',
       alignItems: 'center',
       justifyContent: 'center',

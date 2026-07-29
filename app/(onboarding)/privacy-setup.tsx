@@ -193,7 +193,7 @@ const createStyles = (theme: AppTheme) =>
     iconContainer: {
       width: 64,
       height: 64,
-      borderRadius: Skin.radius(32),
+      borderRadius: Skin.circle(32),
       backgroundColor: theme.colors.primary + '20',
       alignItems: 'center',
       justifyContent: 'center',
@@ -276,7 +276,7 @@ const createStyles = (theme: AppTheme) =>
     radioOuter: {
       width: 22,
       height: 22,
-      borderRadius: Skin.radius(11),
+      borderRadius: Skin.circle(11),
       borderWidth: Skin.border(2),
       borderColor: theme.colors.textMuted,
       alignItems: 'center',
@@ -288,7 +288,7 @@ const createStyles = (theme: AppTheme) =>
     radioInner: {
       width: 12,
       height: 12,
-      borderRadius: Skin.radius(6),
+      borderRadius: Skin.circle(6),
       backgroundColor: theme.colors.primary,
     },
     optionDescription: {

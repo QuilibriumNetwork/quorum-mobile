@@ -83,7 +83,7 @@ function BellIcon({ color }: { color: string }) {
     <View>
       <IconSymbol size={24} name="bell" color={color} />
       {unreadCount > 0 && (
-        <View style={[styles.unreadDot, { borderRadius: Skin.radius(5) }]} />
+        <View style={[styles.unreadDot, { borderRadius: Skin.circle(5) }]} />
       )}
     </View>
   );

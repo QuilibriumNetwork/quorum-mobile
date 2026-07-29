@@ -220,7 +220,7 @@ const createStyles = (theme: AppTheme) =>
     iconCircle: {
       width: 40,
       height: 40,
-      borderRadius: Skin.radius(20),
+      borderRadius: Skin.circle(20),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -296,7 +296,7 @@ const createStyles = (theme: AppTheme) =>
     qualityDot: {
       width: 8,
       height: 8,
-      borderRadius: Skin.radius(4),
+      borderRadius: Skin.circle(4),
     },
     // Ended state
     endedRow: {

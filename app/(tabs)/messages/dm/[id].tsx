@@ -555,7 +555,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   headerAvatar: {
     width: 28,
     height: 28,
-    borderRadius: Skin.radius(14),
+    borderRadius: Skin.circle(14),
   },
   headerName: {
     fontSize: Skin.font(17),

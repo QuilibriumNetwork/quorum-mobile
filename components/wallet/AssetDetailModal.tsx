@@ -1096,12 +1096,12 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     assetIcon: {
       width: 48,
       height: 48,
-      borderRadius: Skin.radius(24),
+      borderRadius: Skin.circle(24),
     },
     assetIconPlaceholder: {
       width: 48,
       height: 48,
-      borderRadius: Skin.radius(24),
+      borderRadius: Skin.circle(24),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -1205,7 +1205,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     actionButtonIcon: {
       width: 48,
       height: 48,
-      borderRadius: Skin.radius(24),
+      borderRadius: Skin.circle(24),
       alignItems: 'center',
       justifyContent: 'center',
     },

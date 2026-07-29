@@ -106,14 +106,14 @@ const styles = createSkinnable(() => StyleSheet.create({
   controlButton: {
     width: 56,
     height: 56,
-    borderRadius: Skin.radius(28),
+    borderRadius: Skin.circle(28),
     alignItems: 'center',
     justifyContent: 'center',
   },
   hangupButton: {
     width: 72,
     height: 72,
-    borderRadius: Skin.radius(36),
+    borderRadius: Skin.circle(36),
     alignItems: 'center',
     justifyContent: 'center',
   },

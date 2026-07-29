@@ -326,7 +326,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
       left: -2,
       width: 18,
       height: 18,
-      borderRadius: Skin.radius(9),
+      borderRadius: Skin.circle(9),
       backgroundColor: theme.colors.surface3,
       borderWidth: Skin.border(2),
       borderColor: theme.colors.surface1,

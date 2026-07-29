@@ -651,7 +651,7 @@ const createStyles = (theme: AppTheme) =>
     tokenIcon: {
       width: 32,
       height: 32,
-      borderRadius: Skin.radius(16),
+      borderRadius: Skin.circle(16),
     },
     tokenIconPlaceholder: {
       backgroundColor: theme.colors.surface3,

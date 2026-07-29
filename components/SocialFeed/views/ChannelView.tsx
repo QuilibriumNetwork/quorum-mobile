@@ -571,7 +571,7 @@ function createStyles(theme: AppTheme) {
     castAvatar: {
       width: 44,
       height: 44,
-      borderRadius: Skin.radius(22),
+      borderRadius: Skin.circle(22),
       marginRight: Skin.space(12),
       backgroundColor: theme.colors.surface3,
     },

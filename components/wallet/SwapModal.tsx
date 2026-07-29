@@ -2227,7 +2227,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     tokenDot: {
       width: 8,
       height: 8,
-      borderRadius: Skin.radius(4),
+      borderRadius: Skin.circle(4),
     },
     tokenSymbol: {
       fontSize: Skin.font(14),
@@ -2269,7 +2269,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     assetIcon: {
       width: 32,
       height: 32,
-      borderRadius: Skin.radius(16),
+      borderRadius: Skin.circle(16),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -2326,7 +2326,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
       borderColor: theme.colors.background,
       width: 36,
       height: 36,
-      borderRadius: Skin.radius(18),
+      borderRadius: Skin.circle(18),
       alignItems: 'center',
       justifyContent: 'center',
     },
