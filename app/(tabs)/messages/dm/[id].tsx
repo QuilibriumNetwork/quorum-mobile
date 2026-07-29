@@ -42,6 +42,17 @@ const DMSettingsSheet = React.lazy(() =>
   importDMSettingsSheet().then((m) => ({ default: m.DMSettingsSheet }))
 );
 
+// Dev-only "DM test burst" control (T2 of the transport-debugging tool
+// suite). Gated at the require() itself, not just at render — `__DEV__`
+// inlines to `false` in a release build, so this whole line reduces to
+// `const DmBurstSheet = null` and the require() (and therefore every module
+// it pulls in: DmBurstSheet.tsx, dmBurstPrefs, dmBurstRecorder) never
+// executes. Mirrors services/crypto/initEnvelopeGuard.ts's lazy MMKV
+// require, which exists for the same "must not run outside its gate" reason.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const DmBurstSheetModule = __DEV__ ? (require('@/components/dev/DmBurstSheet') as typeof import('@/components/dev/DmBurstSheet')) : null;
+const DmBurstSheet = DmBurstSheetModule?.DmBurstSheet ?? null;
+
 export default function DMChatScreen() {
   const params = useLocalSearchParams<{
     id: string;
@@ -162,6 +173,7 @@ export default function DMChatScreen() {
   const { openMiniapp } = useMiniappOverlay();
   const [selectedUserProfile, setSelectedUserProfile] = useState<MessageUserInfo | null>(null);
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [burstVisible, setBurstVisible] = useState(false);
 
   const handleShowSidebars = useCallback(() => {
     router.back();
@@ -206,6 +218,12 @@ export default function DMChatScreen() {
 
   const handleOpenDmSettings = useCallback(() => {
     setSettingsVisible(true);
+  }, []);
+
+  // Dev-build-only entry for T2 (DM test burst) — see the desktop repo's
+  // .agents/tasks/2026-07-29-transport-debug-workflow-and-tooling.md §2.
+  const handleOpenDevBurst = useCallback(() => {
+    setBurstVisible(true);
   }, []);
 
   // DM mute is config-backed (syncs across devices). `isMuted`/`toggleMute`
@@ -367,6 +385,15 @@ export default function DMChatScreen() {
     <View style={styles.headerRight}>
       {!isFarcasterConversation && (
         <>
+          {__DEV__ && (
+            <TouchableOpacity
+              onPress={handleOpenDevBurst}
+              hitSlop={8}
+              accessibilityLabel="DM test burst (dev)"
+            >
+              <IconSymbol name="flask" color={theme.colors.textMuted} size={20} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={handleVideoCallPress} hitSlop={8}>
             <IconSymbol name="video" color={theme.colors.primary} size={20} />
           </TouchableOpacity>
@@ -379,7 +406,7 @@ export default function DMChatScreen() {
         </>
       )}
     </View>
-  ), [theme, isFarcasterConversation, handleVideoCallPress, handleCallPress]);
+  ), [theme, isFarcasterConversation, handleVideoCallPress, handleCallPress, handleOpenDevBurst]);
 
   // Tapping the avatar or name in the header opens the same profile
   // modal that tapping a pfp inside the chat opens. Builds a minimal
@@ -533,6 +560,17 @@ export default function DMChatScreen() {
             onResetRead={handleResetRead}
           />
         </Suspense>
+      )}
+
+      {__DEV__ && DmBurstSheet && burstVisible && recipientAddress && (
+        <DmBurstSheet
+          visible
+          onClose={() => setBurstVisible(false)}
+          conversationId={conversationId}
+          recipientAddress={recipientAddress}
+          isRepudiable={effectiveIsRepudiable}
+          theme={theme}
+        />
       )}
     </View>
   );
