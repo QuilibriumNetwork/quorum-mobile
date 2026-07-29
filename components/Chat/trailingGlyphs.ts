@@ -32,6 +32,20 @@ export const TRAILING_GLYPH_SIZE = 13;
 export const TRAILING_GLYPH_NUDGE = 4;
 
 /**
+ * TEMPORARY layout diagnostic — set to false (or delete this block and its three
+ * call sites) once the emoji-only alignment question is settled.
+ *
+ * Tints each box in the trailing group so a single screenshot shows what static
+ * reading of the code cannot: how many boxes exist, how wide they are, and
+ * whether the glyphs are wrapping inside one box or being laid out by different
+ * paths. Red = the group wrapper, green = the receipt, blue = the warning.
+ */
+export const DEBUG_TRAILING_LAYOUT = true;
+export const DEBUG_GROUP_BG = 'rgba(255,0,0,0.35)';
+export const DEBUG_RECEIPT_BG = 'rgba(0,255,0,0.45)';
+export const DEBUG_UNSIGNED_BG = 'rgba(0,140,255,0.5)';
+
+/**
  * The gap that precedes each trailing glyph.
  *
  * It has to be a real character: margins on an inline <Image> inside a <Text>

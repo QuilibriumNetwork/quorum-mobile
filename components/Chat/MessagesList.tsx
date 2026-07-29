@@ -23,6 +23,7 @@ import { MessageActionSheet } from './MessageActionSheet';
 import { MessageRenderer } from './MessageRenderer';
 import { ReceiptTicks } from './ReceiptTicks';
 import { UnsignedIndicator } from './UnsignedIndicator';
+import { DEBUG_TRAILING_LAYOUT, DEBUG_GROUP_BG } from './trailingGlyphs';
 import { EditHistoryModal } from './EditHistoryModal';
 import { ReactionDetailsModal } from './ReactionDetailsModal';
 import { SpaceCallBubble } from './SpaceCallBubble';
@@ -1231,7 +1232,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       // one <Text> keeps the group a single box in every layout it lands in.
       const unsignedNode = renderUnsignedInline(item);
       const trailingInline = receiptNode || unsignedNode ? (
-        <Text style={styles.trailingGroup}>
+        <Text style={[styles.trailingGroup, DEBUG_TRAILING_LAYOUT && { backgroundColor: DEBUG_GROUP_BG }]}>
           {receiptNode}
           {unsignedNode}
         </Text>

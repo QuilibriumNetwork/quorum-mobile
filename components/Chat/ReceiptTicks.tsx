@@ -21,7 +21,13 @@ import {
   RECEIPT_CHECK_SINGLE_ASPECT,
   RECEIPT_CHECK_DOUBLE_ASPECT,
 } from './receiptCheckAssets';
-import { TRAILING_GLYPH_SIZE, TRAILING_GLYPH_NUDGE, TRAILING_GLYPH_GAP } from './trailingGlyphs';
+import {
+  TRAILING_GLYPH_SIZE,
+  TRAILING_GLYPH_NUDGE,
+  TRAILING_GLYPH_GAP,
+  DEBUG_TRAILING_LAYOUT,
+  DEBUG_RECEIPT_BG,
+} from './trailingGlyphs';
 
 interface ReceiptTicksProps {
   /** true → double check (read); false → single check (delivered). */
@@ -62,7 +68,7 @@ function ReceiptTicksBase({ read, color, size = TRAILING_GLYPH_SIZE, inline = tr
   );
   if (!inline) return img;
   return (
-    <Text>
+    <Text style={DEBUG_TRAILING_LAYOUT ? { backgroundColor: DEBUG_RECEIPT_BG } : undefined}>
       {TRAILING_GLYPH_GAP}
       {img}
     </Text>
