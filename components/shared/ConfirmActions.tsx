@@ -94,10 +94,15 @@ const createStyles = (_theme: ThemeType) =>
       justifyContent: 'flex-end',
       alignItems: 'center',
       gap: Skin.space(4),
-      // The links keep a generous tap target via their own horizontal padding;
-      // pull the row out by that much so the last label optically aligns with
-      // the surrounding text edge rather than sitting inset from it.
+      // The links carry padding on all four sides purely to keep a ~50pt tap
+      // target. That padding is invisible, so it stacks on the host's own
+      // padding and reads as dead space — most obviously below the row, where
+      // the link's 16 and the card's 20 left the labels floating well off the
+      // bottom edge. Pull the row back out by roughly the overhang so the
+      // labels optically align with the surrounding text block, without
+      // shrinking the touch area.
       marginRight: -Skin.space(12),
+      marginBottom: -Skin.space(10),
     },
     link: {
       // Tighter than the `lg` default (28) — these read as links, not slabs.

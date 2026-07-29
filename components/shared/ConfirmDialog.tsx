@@ -85,7 +85,9 @@ const createStyles = (theme: ThemeType) =>
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textSubtle,
       lineHeight: Skin.font(20),
-      marginBottom: Skin.space(20),
+      // The action links contribute their own top padding, so this only needs
+      // to cover the difference — 20 here stacked into an oversized gap.
+      marginBottom: Skin.space(12),
     },
   });
 
