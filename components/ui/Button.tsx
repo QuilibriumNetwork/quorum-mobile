@@ -5,7 +5,6 @@ import {
   StyleProp,
   Text,
   TouchableOpacity,
-  View,
   ViewStyle,
   TextStyle,
 } from 'react-native';
@@ -165,6 +164,11 @@ const createStyles = (
   color?: string
 ) => {
   const getBackgroundColor = () => {
+    // Ghost/outline stay transparent even when disabled — the disabled fill
+    // would turn a link into what looks like a filled button, which is exactly
+    // backwards (see TypeToConfirmModal, whose action is disabled until the
+    // keyword matches). Disabled is conveyed by the muted label + opacity.
+    if (variant === 'ghost' || variant === 'outline') return 'transparent';
     if (disabled) return theme.colors.surface3;
     switch (variant) {
       case 'primary':
@@ -175,9 +179,6 @@ const createStyles = (
         return color ?? theme.colors.danger;
       case 'success':
         return color ?? theme.colors.success;
-      case 'ghost':
-      case 'outline':
-        return 'transparent';
     }
   };
 
@@ -224,7 +225,9 @@ const createStyles = (
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: getBackgroundColor(),
-      borderRadius: size === 'sm' ? 6 : size === 'md' ? 8 : 12,
+      // Skin-scaled like every other corner in the app — without this a 'square'
+      // or 'pill' skin left every button at the default rounding.
+      borderRadius: Skin.radius(size === 'sm' ? 6 : size === 'md' ? 8 : 12),
       ...getPadding(),
       ...(variant === 'outline'
         ? {

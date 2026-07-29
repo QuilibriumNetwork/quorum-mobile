@@ -671,7 +671,8 @@ export default function ProfileModal({
       });
       if (!ok) return;
       encryptionStateStorage.clearAll();
-      Alert.alert('Encryption Reset', 'Your next message to each contact will establish a fresh secure connection.');
+      // No success alert — the confirm dialog already stated this outcome and
+      // the user accepted it. Restating it in a second modal is pure friction.
     })();
   }, [confirm]);
 

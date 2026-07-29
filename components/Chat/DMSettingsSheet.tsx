@@ -4,7 +4,7 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, Switch, Image } from 'react-native';
+import { View, Text, StyleSheet, Switch, Image } from 'react-native';
 import { BaseModal, ActionRow, ActionRowGroup } from '@/components/shared';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { resetDMSession } from '@/hooks/chat/useSendDirectMessage';
@@ -138,10 +138,9 @@ export function DMSettingsSheet({
     if (!ok) return;
     resetDMSession(conversationId);
     onClose();
-    Alert.alert(
-      'Encryption Reset',
-      'Your next message will establish a fresh secure connection.'
-    );
+    // No success alert. The confirm dialog already told the user exactly what
+    // would happen and they agreed to it; a second modal restating the same
+    // sentence is one more tap for no new information.
   };
 
   return (

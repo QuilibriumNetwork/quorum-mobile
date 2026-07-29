@@ -1,6 +1,5 @@
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
-import { BaseModal } from '@/components/shared';
-import { Button } from '@/components/ui/Button';
+import { BaseModal, ConfirmActions } from '@/components/shared';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
@@ -154,19 +153,13 @@ export default function TransactionWarningModal({
         </>)}
 
       {/* Action Buttons */}
-      <View style={styles.buttonContainer}>
-        <Button variant="secondary" size="lg" onPress={onClose} style={styles.button}>
-          Cancel
-        </Button>
-        <Button
-          variant={warningConfig.severity === 'high' ? 'danger' : 'primary'}
-          size="lg"
-          onPress={onProceed}
-          style={styles.button}
-        >
-          {warningConfig.severity === 'high' ? 'Proceed Anyway' : 'Continue'}
-        </Button>
-      </View>
+      <ConfirmActions
+        confirmLabel={warningConfig.severity === 'high' ? 'Proceed Anyway' : 'Continue'}
+        variant={warningConfig.severity === 'high' ? 'danger' : 'primary'}
+        onConfirm={onProceed}
+        onCancel={onClose}
+        style={styles.buttonContainer}
+      />
     </BaseModal>
   );
 }
@@ -260,8 +253,5 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       paddingHorizontal: Skin.space(20),
       paddingBottom: insets.bottom + 16,
       gap: Skin.space(12),
-    },
-    button: {
-      flex: 1,
     },
   });

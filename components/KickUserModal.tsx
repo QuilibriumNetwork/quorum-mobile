@@ -12,7 +12,7 @@ import { truncateAddress } from '@/utils/formatAddress';
 import React, { useEffect, useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { BaseModal } from '@/components/shared/BaseModal';
-import { Button } from '@/components/ui/Button';
+import { ConfirmActions } from '@/components/shared/ConfirmActions';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
 import { useUserKicking } from '@/hooks/chat/useUserKicking';
@@ -120,26 +120,13 @@ export function KickUserModal({
         </Text>
 
         {/* Buttons */}
-        <View style={styles.buttonRow}>
-          <Button
-            variant="secondary"
-            size="lg"
-            onPress={onClose}
-            disabled={isSaving}
-            style={styles.button}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            size="lg"
-            onPress={handleKickWithOverlay}
-            disabled={isSaving || kicking}
-            style={styles.button}
-          >
-            Kick
-          </Button>
-        </View>
+        <ConfirmActions
+          confirmLabel="Kick"
+          onConfirm={handleKickWithOverlay}
+          onCancel={onClose}
+          cancelDisabled={isSaving}
+          confirmDisabled={isSaving || kicking}
+        />
       </View>
     </BaseModal>
   );
@@ -210,13 +197,6 @@ const createStyles = (theme: AppTheme) =>
       fontFamily: theme.fonts.regular.fontFamily,
       textAlign: 'center',
       marginBottom: Skin.space(24),
-    },
-    buttonRow: {
-      flexDirection: 'row',
-      gap: Skin.space(12),
-    },
-    button: {
-      flex: 1,
     },
   });
 

@@ -1,10 +1,10 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { useTheme } from '@/theme';
 import { createTheme } from '@/theme/themes';
 import * as Skin from '@/theme/skins/geometry';
-import { Button } from '@/components/ui/Button';
 import { CenterModal } from './CenterModal';
+import { ConfirmActions } from './ConfirmActions';
 
 type ThemeType = ReturnType<typeof createTheme>;
 
@@ -25,8 +25,15 @@ export interface ConfirmDialogProps {
 
 /**
  * ConfirmDialog — a center-anchored "are you sure?" for destructive actions
- * (T1/T2). The action button uses the skin danger token, so it's visibly red on
- * BOTH iOS and Android (native Alert.alert can't do this on Android).
+ * (T1/T2).
+ *
+ * Actions render as right-aligned text links, not filled slabs: two filled
+ * buttons side by side give equal visual weight to "cancel" and "destroy", and
+ * a full-width red block reads as the modal's subject rather than its action.
+ * The action link carries the skin danger token (or the accent for a
+ * non-destructive confirm) so intent stays legible on BOTH iOS and Android —
+ * native Alert.alert can't colour its buttons on Android. Cancel is a subtle
+ * text colour, present but not competing.
  *
  * Backdrop tap and Android back resolve to Cancel (owned by CenterModal).
  */
@@ -53,14 +60,13 @@ export function ConfirmDialog({
     >
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.message}>{message}</Text>
-      <View style={styles.actions}>
-        <Button variant="secondary" size="lg" onPress={onCancel} style={styles.button}>
-          {cancelLabel}
-        </Button>
-        <Button variant={variant} size="lg" onPress={onConfirm} style={styles.button}>
-          {confirmLabel}
-        </Button>
-      </View>
+      <ConfirmActions
+        confirmLabel={confirmLabel}
+        cancelLabel={cancelLabel}
+        variant={variant}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
     </CenterModal>
   );
 }
@@ -79,14 +85,9 @@ const createStyles = (theme: ThemeType) =>
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textSubtle,
       lineHeight: Skin.font(20),
-      marginBottom: Skin.space(20),
-    },
-    actions: {
-      flexDirection: 'row',
-      gap: Skin.space(10),
-    },
-    button: {
-      flex: 1,
+      // The action links contribute their own top padding, so this only needs
+      // to cover the difference — 20 here stacked into an oversized gap.
+      marginBottom: Skin.space(12),
     },
   });
 
