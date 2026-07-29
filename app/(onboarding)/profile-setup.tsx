@@ -277,12 +277,12 @@ const createStyles = (theme: AppTheme) =>
     avatarImage: {
       width: 100,
       height: 100,
-      borderRadius: Skin.radius(50),
+      borderRadius: Skin.circle(50),
     },
     avatarPlaceholder: {
       width: 100,
       height: 100,
-      borderRadius: Skin.radius(50),
+      borderRadius: Skin.circle(50),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
@@ -293,7 +293,7 @@ const createStyles = (theme: AppTheme) =>
       right: 0,
       width: 32,
       height: 32,
-      borderRadius: Skin.radius(16),
+      borderRadius: Skin.circle(16),
       backgroundColor: theme.colors.primary,
       alignItems: 'center',
       justifyContent: 'center',

@@ -139,7 +139,7 @@ function CreateTile({ onPress }: { onPress: () => void }) {
         style={{
           width: 36,
           height: 36,
-          borderRadius: Skin.radius(18),
+          borderRadius: Skin.circle(18),
           backgroundColor: theme.colors.accent,
           alignItems: 'center',
           justifyContent: 'center',
@@ -327,7 +327,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   liveDot: {
     width: 6,
     height: 6,
-    borderRadius: Skin.radius(3),
+    borderRadius: Skin.circle(3),
     backgroundColor: '#fff',
   },
   livePillText: {
@@ -352,14 +352,14 @@ const styles = createSkinnable(() => StyleSheet.create({
   avatarWrap: {
     width: 24,
     height: 24,
-    borderRadius: Skin.radius(12),
+    borderRadius: Skin.circle(12),
     borderWidth: Skin.border(2),
     overflow: 'hidden',
   },
   avatar: {
     width: 20,
     height: 20,
-    borderRadius: Skin.radius(10),
+    borderRadius: Skin.circle(10),
   },
   hostName: {
     fontSize: Skin.font(12),

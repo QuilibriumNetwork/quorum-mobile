@@ -242,7 +242,7 @@ function createStyles(theme: AppTheme) {
     avatar: {
       width: 36,
       height: 36,
-      borderRadius: Skin.radius(18),
+      borderRadius: Skin.circle(18),
       backgroundColor: theme.colors.surface3,
     },
     rowText: {
@@ -262,7 +262,7 @@ function createStyles(theme: AppTheme) {
     checkbox: {
       width: 22,
       height: 22,
-      borderRadius: Skin.radius(11),
+      borderRadius: Skin.circle(11),
       borderWidth: Skin.border(2),
       borderColor: theme.colors.surface3,
       alignItems: 'center',

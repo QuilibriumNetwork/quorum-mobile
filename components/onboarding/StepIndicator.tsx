@@ -85,7 +85,7 @@ const createStyles = (theme: AppTheme) =>
     dot: {
       width: 32,
       height: 32,
-      borderRadius: Skin.radius(16),
+      borderRadius: Skin.circle(16),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',

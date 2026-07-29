@@ -322,7 +322,7 @@ const sliderStyles = createSkinnable(() => StyleSheet.create({
     top: 4,
     width: 20,
     height: 20,
-    borderRadius: Skin.radius(10),
+    borderRadius: Skin.circle(10),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.25,

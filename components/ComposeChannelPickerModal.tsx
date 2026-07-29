@@ -207,14 +207,14 @@ function createStyles(theme: AppTheme) {
     homeIconWrap: {
       width: 36,
       height: 36,
-      borderRadius: Skin.radius(18),
+      borderRadius: Skin.circle(18),
       alignItems: 'center',
       justifyContent: 'center',
     },
     avatar: {
       width: 36,
       height: 36,
-      borderRadius: Skin.radius(18),
+      borderRadius: Skin.circle(18),
       backgroundColor: theme.colors.surface3,
     },
     rowText: {

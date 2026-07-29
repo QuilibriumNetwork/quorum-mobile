@@ -442,7 +442,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     transactionIcon: {
       width: 40,
       height: 40,
-      borderRadius: Skin.radius(20),
+      borderRadius: Skin.circle(20),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',

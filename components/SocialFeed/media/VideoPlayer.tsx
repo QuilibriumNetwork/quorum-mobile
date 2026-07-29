@@ -44,7 +44,7 @@ const staticStyles = createSkinnable(() => StyleSheet.create({
   playButton: {
     width: 60,
     height: 60,
-    borderRadius: Skin.radius(30),
+    borderRadius: Skin.circle(30),
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',

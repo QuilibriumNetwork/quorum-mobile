@@ -284,7 +284,7 @@ const createStyles = (theme: AppTheme, insets: { top: number; bottom: number; le
     avatar: {
       width: 40,
       height: 40,
-      borderRadius: Skin.radius(20),
+      borderRadius: Skin.circle(20),
       backgroundColor: theme.colors.surface3,
     },
     footer: {

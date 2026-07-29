@@ -245,7 +245,7 @@ const createStyles = (theme: AppTheme, isDark: boolean) =>
     chainDot: {
       width: 8,
       height: 8,
-      borderRadius: Skin.radius(4),
+      borderRadius: Skin.circle(4),
     },
     chainText: {
       fontSize: Skin.font(13),

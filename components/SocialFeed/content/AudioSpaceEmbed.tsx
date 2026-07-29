@@ -123,7 +123,7 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
               style={{
                 width: 6,
                 height: 6,
-                borderRadius: Skin.radius(3),
+                borderRadius: Skin.circle(3),
                 backgroundColor: '#fff',
               }}
             />
@@ -151,7 +151,7 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
           style={{
             width: 36,
             height: 36,
-            borderRadius: Skin.radius(18),
+            borderRadius: Skin.circle(18),
             backgroundColor: theme.colors.surface3,
           }}
         />

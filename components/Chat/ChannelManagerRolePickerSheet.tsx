@@ -101,5 +101,5 @@ const createStyles = (theme: AppTheme) =>
       marginBottom: Skin.space(14),
     },
     list: { flex: 1, marginBottom: Skin.space(12) },
-    dot: { width: 12, height: 12, borderRadius: Skin.radius(6) },
+    dot: { width: 12, height: 12, borderRadius: Skin.circle(6) },
   });

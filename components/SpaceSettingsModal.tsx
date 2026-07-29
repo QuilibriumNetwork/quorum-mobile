@@ -1525,7 +1525,7 @@ export default function SpaceSettingsModal({
           style={{
             width: 72,
             height: 72,
-            borderRadius: Skin.radius(36),
+            borderRadius: Skin.circle(36),
             backgroundColor: theme.colors.surface3,
             justifyContent: 'center',
             alignItems: 'center',
@@ -2878,7 +2878,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     roleColorDot: {
       width: 12,
       height: 12,
-      borderRadius: Skin.radius(6),
+      borderRadius: Skin.circle(6),
       marginRight: Skin.space(12),
     },
     roleInfo: {
@@ -3230,7 +3230,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     memberAvatarImage: {
       width: 44,
       height: 44,
-      borderRadius: Skin.radius(22),
+      borderRadius: Skin.circle(22),
     },
     memberInfo: {
       flex: 1,
@@ -3264,7 +3264,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     memberRoleDot: {
       width: 6,
       height: 6,
-      borderRadius: Skin.radius(3),
+      borderRadius: Skin.circle(3),
     },
     memberRoleText: {
       fontSize: Skin.font(11),
