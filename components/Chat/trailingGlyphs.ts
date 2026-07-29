@@ -30,3 +30,15 @@ export const TRAILING_GLYPH_SIZE = 13;
  * this pushes it down onto it. Tuned on device for a 13dp box.
  */
 export const TRAILING_GLYPH_NUDGE = 4;
+
+/**
+ * The gap that precedes each trailing glyph.
+ *
+ * It has to be a real character: margins on an inline <Image> inside a <Text>
+ * are ignored on Android, so a space is the only reliable gap. But a normal
+ * space is also a LINE-BREAK OPPORTUNITY, which let the group split across two
+ * lines — the receipt ending one line and the warning wrapping onto the next.
+ * A no-break space (U+00A0) is the same width and gives the line breaker nothing
+ * to break on, so the glyphs stay together as one unbreakable run.
+ */
+export const TRAILING_GLYPH_GAP = '\u00A0';

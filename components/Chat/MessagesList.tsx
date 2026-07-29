@@ -1231,7 +1231,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       // one <Text> keeps the group a single box in every layout it lands in.
       const unsignedNode = renderUnsignedInline(item);
       const trailingInline = receiptNode || unsignedNode ? (
-        <Text>
+        <Text style={styles.trailingGroup}>
           {receiptNode}
           {unsignedNode}
         </Text>
@@ -1766,6 +1766,13 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: Skin.font(11),
     fontFamily: theme.fonts.regular.fontFamily,
     marginLeft: Skin.space(6),
+  },
+  // The trailing indicator group (receipt + unsigned warning). flexShrink 0 so
+  // that when it lands in a flex row — MentionableText's emoji-only branch — it
+  // keeps its measured width instead of being compressed until its contents
+  // wrap onto a second line. Ignored when it renders as an inline text run.
+  trailingGroup: {
+    flexShrink: 0,
   },
   // DM receipt fallback row — used when the tick can't inline into the message
   // text (link card / bodyless message). Left-aligned beneath the content.

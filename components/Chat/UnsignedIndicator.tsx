@@ -15,7 +15,7 @@
 import React from 'react';
 import { Text, Image, StyleSheet } from 'react-native';
 import { UNSIGNED_ICON_URI, UNSIGNED_ICON_ASPECT } from './unsignedIconAsset';
-import { TRAILING_GLYPH_SIZE, TRAILING_GLYPH_NUDGE } from './trailingGlyphs';
+import { TRAILING_GLYPH_SIZE, TRAILING_GLYPH_NUDGE, TRAILING_GLYPH_GAP } from './trailingGlyphs';
 
 interface UnsignedIndicatorProps {
   /** Tint colour — pass the amber warning theme token. */
@@ -38,7 +38,7 @@ function UnsignedIndicatorBase({ color, onPress, size = TRAILING_GLYPH_SIZE }: U
       accessibilityRole="button"
       accessibilityLabel="Unsigned message"
     >
-      {' '}
+      {TRAILING_GLYPH_GAP}
       <Image
         source={{ uri: UNSIGNED_ICON_URI }}
         style={[styles.icon, { width: size * UNSIGNED_ICON_ASPECT, height: size, tintColor: color }]}

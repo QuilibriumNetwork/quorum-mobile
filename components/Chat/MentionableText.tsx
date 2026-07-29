@@ -470,7 +470,9 @@ function MentionableTextBase({
       // up the tall line box. `receipt` is a <Text>-wrapped node, valid here.
       return renderWithToggle(
         <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-          <Text style={[style, { fontSize: size, lineHeight: emojiLineHeight(size) }]}>{text}</Text>
+          {/* flexShrink so a wide emoji run gives way to the trailing indicators
+              rather than squeezing them into a width that makes them wrap. */}
+          <Text style={[style, { fontSize: size, lineHeight: emojiLineHeight(size), flexShrink: 1 }]}>{text}</Text>
           {receipt}
         </View>
       );
@@ -635,7 +637,9 @@ function MentionableTextBase({
   if (isEmojiOnlyMessage) {
     return renderWithToggle(
       <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-        <Text style={effectiveStyle}>{renderedParts}</Text>
+        {/* flexShrink so a wide emoji run gives way to the trailing indicators
+            rather than squeezing them into a width that makes them wrap. */}
+        <Text style={[effectiveStyle, { flexShrink: 1 }]}>{renderedParts}</Text>
         {receipt}
       </View>
     );

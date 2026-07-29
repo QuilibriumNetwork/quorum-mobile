@@ -21,7 +21,7 @@ import {
   RECEIPT_CHECK_SINGLE_ASPECT,
   RECEIPT_CHECK_DOUBLE_ASPECT,
 } from './receiptCheckAssets';
-import { TRAILING_GLYPH_SIZE, TRAILING_GLYPH_NUDGE } from './trailingGlyphs';
+import { TRAILING_GLYPH_SIZE, TRAILING_GLYPH_NUDGE, TRAILING_GLYPH_GAP } from './trailingGlyphs';
 
 interface ReceiptTicksProps {
   /** true → double check (read); false → single check (delivered). */
@@ -37,10 +37,12 @@ interface ReceiptTicksProps {
   size?: number;
   /**
    * Inline (in message text) vs standalone (media corner overlay).
-   * - inline (default): wrapped in a <Text> with a leading space so it gaps from
-   *   the last word and flows/wraps with the text; margins on an inline <Image>
-   *   in <Text> are ignored on Android, so a real space is the reliable gap. The
-   *   <Text> wrapper is valid both inside a parent <Text> and inside a <View>.
+   * - inline (default): wrapped in a <Text> with a leading no-break space so it
+   *   gaps from the last word and flows/wraps with the text; margins on an
+   *   inline <Image> in <Text> are ignored on Android, so a real character is
+   *   the reliable gap, and it must be non-breaking or the group can split
+   *   across lines (see TRAILING_GLYPH_GAP). The <Text> wrapper is valid both
+   *   inside a parent <Text> and inside a <View>.
    * - standalone: a bare <Image>, tightly packed for an overlay pill (no leading
    *   space, no baseline nudge).
    */
@@ -61,7 +63,7 @@ function ReceiptTicksBase({ read, color, size = TRAILING_GLYPH_SIZE, inline = tr
   if (!inline) return img;
   return (
     <Text>
-      {' '}
+      {TRAILING_GLYPH_GAP}
       {img}
     </Text>
   );
