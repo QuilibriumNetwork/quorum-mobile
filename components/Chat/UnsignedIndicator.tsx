@@ -19,8 +19,6 @@ import {
   TRAILING_GLYPH_SIZE,
   TRAILING_GLYPH_NUDGE,
   TRAILING_GLYPH_GAP,
-  DEBUG_TRAILING_LAYOUT,
-  DEBUG_UNSIGNED_BG,
 } from './trailingGlyphs';
 
 interface UnsignedIndicatorProps {
@@ -72,7 +70,6 @@ function UnsignedIndicatorBase({
       suppressHighlighting
       accessibilityRole="button"
       accessibilityLabel="Unsigned message"
-      style={DEBUG_TRAILING_LAYOUT ? { backgroundColor: DEBUG_UNSIGNED_BG } : undefined}
     >
       {TRAILING_GLYPH_GAP}
       <Image

@@ -4,21 +4,26 @@
  *
  * WHY THIS EXISTS: these glyphs used to carry their own render height and their
  * own baseline nudge — the receipt at 9dp/translateY(1), the warning at
- * 13dp/translateY(4). Inside a parent <Text> that only looked slightly off, but
- * MentionableText's emoji-only branch lays the trailing node out as a flex child
- * of a `flexDirection: 'row'` / `alignItems: 'flex-end'` View. Two glyphs meant
- * two boxes of unequal height, bottom-aligned by box and then shifted apart by
- * the difference of their nudges — the visibly broken layout on emoji-only rows.
+ * 13dp/translateY(4). Two glyphs of different box heights with independently
+ * tuned nudges cannot be made to line up, and every size change re-broke them.
  *
  * The fix is to make the box uniform and let the ARTWORK carry the size
  * difference: every trailing asset is a 64px-tall canvas with its ink centered
  * and padded with transparency, so rendering them all at one height with one
  * nudge keeps their optical sizes while guaranteeing they share a center line.
  * Alignment is therefore structural — changing one glyph's artwork can't drag it
- * off the others.
+ * off the others. It is also what makes the block form below correct: `alignItems:
+ * 'center'` on a row of these images aligns the ink, not just the boxes.
  *
  * If the whole group ever needs to move relative to the text, change the nudge
  * here rather than per-glyph; that is the knob that keeps them together.
+ *
+ * SEPARATE ISSUE, DO NOT CONFLATE: on emoji-only messages the group is laid out
+ * as a flex child of a row, and an inline <Image> inside a <Text> that is itself
+ * a flex child draws OUTSIDE the box the <Text> measured. No amount of shared
+ * geometry fixes that, because the glyph isn't in the box being positioned. Those
+ * call sites use the block form (bare <Image>s in a View row) instead — see
+ * `receiptBlock` in MessageRenderer/MentionableText.
  */
 
 /** Render height in dp for every trailing glyph. Widths come from each asset's aspect. */
@@ -32,27 +37,16 @@ export const TRAILING_GLYPH_SIZE = 13;
 export const TRAILING_GLYPH_NUDGE = 4;
 
 /**
- * TEMPORARY layout diagnostic — set to false (or delete this block and its three
- * call sites) once the emoji-only alignment question is settled.
- *
- * Tints each box in the trailing group so a single screenshot shows what static
- * reading of the code cannot: how many boxes exist, how wide they are, and
- * whether the glyphs are wrapping inside one box or being laid out by different
- * paths. Red = the group wrapper, green = the receipt, blue = the warning.
- */
-export const DEBUG_TRAILING_LAYOUT = true;
-export const DEBUG_GROUP_BG = 'rgba(255,0,0,0.35)';
-export const DEBUG_RECEIPT_BG = 'rgba(0,255,0,0.45)';
-export const DEBUG_UNSIGNED_BG = 'rgba(0,140,255,0.5)';
-
-/**
  * The gap that precedes each trailing glyph.
  *
  * It has to be a real character: margins on an inline <Image> inside a <Text>
- * are ignored on Android, so a space is the only reliable gap. But a normal
- * space is also a LINE-BREAK OPPORTUNITY, which let the group split across two
- * lines — the receipt ending one line and the warning wrapping onto the next.
- * A no-break space (U+00A0) is the same width and gives the line breaker nothing
- * to break on, so the glyphs stay together as one unbreakable run.
+ * are ignored on Android, so a space is the only reliable gap. It is a no-break
+ * space (U+00A0) rather than a plain one because a plain space is a line-break
+ * opportunity, and the group should never be split across two lines with the
+ * receipt ending one and the warning starting the next. Same width, nothing for
+ * the line breaker to act on.
+ *
+ * Defensive: this was NOT the cause of the emoji-only misplacement (see the file
+ * header). It is here so the group can't break in the inline path either.
  */
 export const TRAILING_GLYPH_GAP = '\u00A0';

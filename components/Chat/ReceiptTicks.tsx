@@ -25,8 +25,6 @@ import {
   TRAILING_GLYPH_SIZE,
   TRAILING_GLYPH_NUDGE,
   TRAILING_GLYPH_GAP,
-  DEBUG_TRAILING_LAYOUT,
-  DEBUG_RECEIPT_BG,
 } from './trailingGlyphs';
 
 interface ReceiptTicksProps {
@@ -68,7 +66,7 @@ function ReceiptTicksBase({ read, color, size = TRAILING_GLYPH_SIZE, inline = tr
   );
   if (!inline) return img;
   return (
-    <Text style={DEBUG_TRAILING_LAYOUT ? { backgroundColor: DEBUG_RECEIPT_BG } : undefined}>
+    <Text>
       {TRAILING_GLYPH_GAP}
       {img}
     </Text>
