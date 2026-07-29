@@ -797,7 +797,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       return (
         // Yellow tint for the inline warning. (Header/media unsigned still uses
         // theme.colors.warning; see renderUnsignedWarning.)
-        <UnsignedIndicator color="#EAB308" onPress={showUnsignedToast} size={13} />
+        <UnsignedIndicator color="#EAB308" onPress={showUnsignedToast} />
       );
     },
     [showUnsignedToast]
@@ -876,7 +876,10 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       if (read === null) return null;
       return (
         <View style={styles.receiptOverlay} pointerEvents="none">
-          <ReceiptTicks read={read} color={theme.colors.textMuted} inline={false} size={9} />
+          {/* Default box size: the checks are padded inside it, so shrinking the
+              box here would shrink the checks too and desync them from the
+              inline receipts. */}
+          <ReceiptTicks read={read} color={theme.colors.textMuted} inline={false} />
         </View>
       );
     },
@@ -1215,15 +1218,23 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       // for the link-card branch (ends in a BrowserLink) or a bodyless message,
       // it falls back to a compact row beneath the content.
       const receiptNode = renderReceipt(item);
-      // Trailing inline group: unsigned warning first, then the receipt. Both
-      // trail the last word of the message text (and wrap with it). Composed
-      // here so ordering is guaranteed regardless of the underlying renderer.
+      // Trailing inline group: receipt first, unsigned warning last. Both trail
+      // the last word of the message text (and wrap with it). Composed here so
+      // ordering is guaranteed regardless of the underlying renderer.
+      //
+      // The group MUST be a single <Text>, never a fragment of two. Inside a
+      // parent <Text> a fragment is fine — both glyphs become inline runs on one
+      // line. But MentionableText's emoji-only branch renders the trailing node
+      // as a flex child of a `flexDirection: 'row'` / `alignItems: 'flex-end'`
+      // View, and there a fragment expands into two independent boxes: they
+      // align by box edge, then drift apart by their own transforms. Wrapping in
+      // one <Text> keeps the group a single box in every layout it lands in.
       const unsignedNode = renderUnsignedInline(item);
-      const trailingInline = unsignedNode || receiptNode ? (
-        <>
-          {unsignedNode}
+      const trailingInline = receiptNode || unsignedNode ? (
+        <Text>
           {receiptNode}
-        </>
+          {unsignedNode}
+        </Text>
       ) : null;
       const trailingInlined = !(item.hasLink && item.link) && !!messageTextWithoutLink;
 

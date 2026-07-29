@@ -15,17 +15,22 @@
 import React from 'react';
 import { Text, Image, StyleSheet } from 'react-native';
 import { UNSIGNED_ICON_URI, UNSIGNED_ICON_ASPECT } from './unsignedIconAsset';
+import { TRAILING_GLYPH_SIZE, TRAILING_GLYPH_NUDGE } from './trailingGlyphs';
 
 interface UnsignedIndicatorProps {
   /** Tint colour — pass the amber warning theme token. */
   color: string;
   /** Fired on tap — surface the "unsigned message" explanation. */
   onPress: () => void;
-  /** Rendered height in dp. Width is derived from the asset aspect. Default 11. */
+  /**
+   * Rendered height of the glyph BOX in dp — the triangle is padded into that
+   * box so every trailing glyph shares one box (see trailingGlyphs.ts). Width is
+   * derived from the asset aspect. Leave unset outside deliberate one-offs.
+   */
   size?: number;
 }
 
-function UnsignedIndicatorBase({ color, onPress, size = 11 }: UnsignedIndicatorProps) {
+function UnsignedIndicatorBase({ color, onPress, size = TRAILING_GLYPH_SIZE }: UnsignedIndicatorProps) {
   return (
     <Text
       onPress={onPress}
@@ -44,9 +49,9 @@ function UnsignedIndicatorBase({ color, onPress, size = 11 }: UnsignedIndicatorP
 
 const styles = StyleSheet.create({
   icon: {
-    // Inline <Image> in <Text> rides high (top-aligned) on Android; push it down
-    // so its bottom sits on the text baseline. Tune on device.
-    transform: [{ translateY: 4 }],
+    // Shared with every other trailing glyph so they can't drift apart — see
+    // trailingGlyphs.ts. Do not tune this one on its own.
+    transform: [{ translateY: TRAILING_GLYPH_NUDGE }],
   },
 });
 
