@@ -3,7 +3,7 @@
  * transport-debugging tool suite; see the desktop repo's
  * .agents/tasks/2026-07-29-transport-debug-workflow-and-tooling.md §2).
  *
- * Sends `"<letter> 1"` … `"<letter> N"` sequentially, through the SAME send
+ * Sends `"<prefix> 1"` … `"<prefix> N"` sequentially, through the SAME send
  * mutation a manually typed message uses (useSendDirectMessage), and writes a
  * per-message send-side record to a JSONL file the operator can pull with adb
  * — replacing a manual round of hand-typing "V 1"…"V 20" with no send-side
@@ -23,6 +23,7 @@ import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
 import { useRecipientRegistration, toRecipientInfo } from '@/hooks/chat/useRecipientRegistration';
 import { encryptionStateStorage } from '@/services/crypto/encryption-state-storage';
 import { getSuggestedBurstPrefix, markBurstPrefixUsed } from '@/services/dev/dmBurstPrefs';
+import { isValidBurstPrefix } from '@/services/dev/dmBurstPrefix';
 import { createBurstRecorder, type BurstRecorder } from '@/services/dev/dmBurstRecorder';
 import { logger } from '@quilibrium/quorum-shared';
 
@@ -93,6 +94,13 @@ export function DmBurstSheet({
     cancelRef.current = false;
   }, [visible]);
 
+  // Live validation: 1-3 letters/digits, trimmed. Recomputed every render so
+  // the inline message and the Start button's disabled state always agree —
+  // no separate error state to fall out of sync.
+  const prefixError = isValidBurstPrefix(prefix)
+    ? null
+    : 'Prefix must be 1-3 letters or digits (A-Z, 0-9)';
+
   const sendDirectMessageMutation = useSendDirectMessage();
   const { data: recipientRegistration } = useRecipientRegistration(recipientAddress, {
     enabled: visible,
@@ -127,7 +135,10 @@ export function DmBurstSheet({
   }, []);
 
   const handleStart = useCallback(async () => {
-    const letter = (prefix.trim()[0] || 'A').toUpperCase();
+    const prefixValue = prefix.trim().toUpperCase();
+    // Belt-and-suspenders: Start is already disabled while prefixError is
+    // set, but guard here too in case this ever gets called another way.
+    if (!isValidBurstPrefix(prefixValue)) return;
     const n = clamp(parseInt(countText, 10), MIN_COUNT, MAX_COUNT);
     const interval = clamp(parseInt(intervalText, 10), MIN_INTERVAL_MS, MAX_INTERVAL_MS);
 
@@ -138,10 +149,10 @@ export function DmBurstSheet({
     setLastError(null);
     setResult(null);
 
-    // The letter counts as "used" the moment the run starts — even a
-    // cancelled run has already put `<letter> 1..k` on the wire, so the next
+    // The prefix counts as "used" the moment the run starts — even a
+    // cancelled run has already put `<prefix> 1..k` on the wire, so the next
     // suggestion must not collide with it.
-    markBurstPrefixUsed(letter);
+    markBurstPrefixUsed(prefixValue);
 
     const startedAt = Date.now();
     const startedAtIso = new Date(startedAt).toISOString();
@@ -160,7 +171,7 @@ export function DmBurstSheet({
     for (let seq = 1; seq <= n; seq++) {
       if (cancelRef.current) break;
 
-      const text = `${letter} ${seq}`;
+      const text = `${prefixValue} ${seq}`;
       const tsQueuedIso = new Date().toISOString();
       const t0 = Date.now();
       try {
@@ -195,7 +206,7 @@ export function DmBurstSheet({
 
     const wallTimeMs = Date.now() - startedAt;
     recorder.appendSummary({
-      prefix: letter,
+      prefix: prefixValue,
       requested: n,
       sent,
       intervalMs: interval,
@@ -230,12 +241,13 @@ export function DmBurstSheet({
             <TextInput
               style={styles.input}
               value={prefix}
-              onChangeText={(v) => setPrefix(v.slice(0, 1).toUpperCase())}
+              onChangeText={(v) => setPrefix(v.toUpperCase())}
               autoCapitalize="characters"
               autoCorrect={false}
-              maxLength={1}
+              maxLength={12}
               editable={!isRunning}
-              accessibilityLabel="Burst message letter prefix"
+              accessibilityLabel="Burst message prefix"
+              aria-invalid={!!prefixError}
             />
           </View>
           <View style={styles.field}>
@@ -261,6 +273,12 @@ export function DmBurstSheet({
             />
           </View>
         </View>
+
+        {prefixError && (
+          <Text style={styles.error} accessibilityRole="alert">
+            {prefixError}
+          </Text>
+        )}
 
         {status !== 'idle' && (
           <Text style={styles.progress}>
@@ -293,7 +311,7 @@ export function DmBurstSheet({
               Cancel
             </Button>
           ) : (
-            <Button variant="primary" onPress={handleStart} fullWidth>
+            <Button variant="primary" onPress={handleStart} fullWidth disabled={!!prefixError}>
               Start
             </Button>
           )}
@@ -330,7 +348,7 @@ const createStyles = (theme: AppTheme) =>
       marginBottom: Skin.space(12),
     },
     fieldNarrow: {
-      width: 64,
+      width: 76,
     },
     field: {
       flex: 1,
