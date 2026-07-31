@@ -904,6 +904,9 @@ export async function removeDeviceFromRegistration(
   try {
     existingReg = await client.fetchUserRegistration(userAddress, { fresh: true });
   } catch (error) {
+    // Keep the error: the caller only sees a status, so dropping it here is
+    // the difference between "why do devices linger" being answerable or not.
+    logger.warn('[UserRegistration] could not read the device list', error);
     return 'failed';
   }
 
@@ -936,6 +939,7 @@ export async function removeDeviceFromRegistration(
       remainingDevices
     );
   } catch (error) {
+    logger.warn('[UserRegistration] could not upload the reduced device list', error);
     return 'failed';
   }
 

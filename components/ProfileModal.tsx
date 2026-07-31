@@ -839,7 +839,9 @@ export default function ProfileModal({
       // bug in here) must never stop the user from resetting — people reset
       // precisely when things are broken. The cost of failing is a stale entry
       // they can remove by hand from another device.
-      if (user?.address) {
+      if (!user?.address) {
+        logger.warn('[Reset] no user address — skipping the goodbye');
+      } else {
         const outcome = await deregisterThisDevice({
           userAddress: user.address,
           enqueueOutbound,
@@ -857,6 +859,20 @@ export default function ProfileModal({
           logger.warn(
             `[Reset] space revocation ${outcome.spaces} — other members may keep trusting this device's signing key`
           );
+        }
+        // Say it out loud, not only to a logger that is disabled in release
+        // builds. The entire fallback for a failed goodbye is the user removing
+        // the device by hand later, and they can only do that if they know it
+        // failed. Unlike desktop, nothing reloads here, so a toast survives to
+        // be read.
+        if (outcome.hub !== 'ok' || outcome.spaces !== 'ok') {
+          showToast({
+            type: 'error',
+            title: 'This device may still be listed',
+            duration: 8000,
+            message:
+              'Your data was erased, but removing this device from your account did not finish. Sign in on another device to remove it.',
+          });
         }
       }
 

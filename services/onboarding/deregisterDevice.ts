@@ -15,21 +15,32 @@ export type LegOutcome =
 export interface DeregisterOutcome {
   /** The hub's device list no longer includes this device. */
   hub: LegOutcome;
-  /** revoke-device tombstones for this device reached the socket. */
+  /**
+   * revoke-device tombstones were written to a socket that still looked alive.
+   *
+   * 'ok' here is deliberately weaker than the hub leg's: the hub write is a
+   * round trip the server answered, while this is a one-way send with no
+   * acknowledgement anywhere in the protocol. A socket the relay has already
+   * killed still accepts writes for seconds (see flushOutbound), so 'ok' means
+   * "sent, as far as anything here can tell", not "other members received it".
+   */
   spaces: LegOutcome;
 }
 
 /**
  * Per-leg budgets. Separate on purpose: the hub leg is an HTTP round trip,
- * while the socket leg either drains quickly or is not going to. Sharing one
- * budget lets a slow socket report the hub write as failed after it succeeded,
- * which is how the desktop version of this told users their device might still
- * be listed when it had already been removed.
+ * while the socket leg is a write plus a short watch for the socket dying.
+ * Sharing one budget lets a slow socket report the hub write as failed after it
+ * succeeded, which is how the desktop version of this told users their device
+ * might still be listed when it had already been removed.
  *
  * The legs run in parallel, so the user waits for the longer one, not the sum.
+ * Each wrapper gets headroom over the call it wraps, so the inner timeout is
+ * the one that governs and reports precisely rather than being pre-empted.
  */
 export const HUB_TIMEOUT_MS = 8000;
-export const SPACES_TIMEOUT_MS = 4000;
+export const SPACES_FLUSH_MS = 6000;
+export const SPACES_TIMEOUT_MS = SPACES_FLUSH_MS + 2000;
 
 const TIMED_OUT = Symbol('timed-out');
 
@@ -128,14 +139,23 @@ export async function deregisterThisDevice({
         privateKeyHex,
         publicKeyHex,
       });
-      if (frames.length === 0) return 'skipped';
+      // Frames go missing per space when its hub key is unreadable, which is
+      // exactly the corrupted state people reach for Reset to escape. Building
+      // none out of N spaces is a failure, not the "no spaces to revoke in"
+      // case above, and collapsing the two would hide it.
+      if (frames.length === 0) {
+        logger.warn(
+          `[Deregister] built 0 revoke frames from ${spaceIds.length} space(s) — space key storage may be unreadable`
+        );
+        return 'failed';
+      }
 
       for (const frame of frames) enqueueOutbound(async () => [frame]);
 
       // Enqueueing isn't sending. Signing out disconnects the client, so
-      // without confirming the flush these frames are discarded and the
-      // revoke silently never happens.
-      const flushed = await flushOutbound(SPACES_TIMEOUT_MS);
+      // without waiting these frames are discarded and the revoke silently
+      // never happens.
+      const flushed = await flushOutbound(SPACES_FLUSH_MS);
       if (!flushed) {
         logger.warn('[Deregister] revoke frames were not confirmed on the wire');
         return 'failed';

@@ -162,6 +162,15 @@ export type LogFrame =
 
 const WebSocketContext = createContext<WebSocketContextValue | null>(null);
 
+/**
+ * How long flushOutbound() watches a socket after writing to it, and how often
+ * it re-checks. The relay kills a late client without a close frame, so a dead
+ * socket keeps reading OPEN for 3.5-5s; this is a partial look into that window,
+ * traded against how long a user waits before Reset App Data wipes anything.
+ */
+const FLUSH_SETTLE_MS = 2500;
+const FLUSH_SETTLE_POLL_MS = 100;
+
 interface WebSocketProviderProps {
   children: React.ReactNode;
 }
@@ -5608,32 +5617,48 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   );
 
   /**
-   * Resolve once everything enqueued BEFORE this call has been written to the
-   * socket, or false if that can't be confirmed in time.
+   * Wait until everything enqueued BEFORE this call has been written to a
+   * socket that still looks alive afterwards. Returns false if that can't be
+   * established in time.
    *
-   * enqueueOutbound only appends to a queue that processQueues drains on its
-   * own schedule, which is fine while the app keeps running — the transport
-   * retains frames and retries them on the next connect. It stops being fine
-   * for a caller that is about to end the session: signing out flips
-   * isAuthenticated, and the effect watching it disconnects the client, so
-   * anything still queued is discarded and its goodbye never happens.
+   * READ THIS BEFORE TRUSTING THE RESULT: true means "handed to a live socket",
+   * NOT "delivered". No acknowledgement exists at this layer. `ws.send()`
+   * accepting bytes is never proof of delivery, and the relay kills a late
+   * client with no close frame, so a socket can read OPEN for 3.5-5s after it
+   * is already dead (see send-retention.ts in quorum-shared — 15-25% loss was
+   * measured through exactly that window). Everywhere else that is survivable
+   * because the transport retains frames and replays them on the next connect;
+   * for a caller that is about to sign out there is no next connect, so this
+   * does what it can and is honest about the rest.
    *
-   * The barrier is a sentinel enqueued behind the caller's frames. The queue is
-   * FIFO and drained serially, so reaching the sentinel means every earlier
-   * frame has already been handed to the socket. There is no bufferedAmount
-   * check like the desktop equivalent has: React Native's WebSocket does not
-   * expose it, and the client owns its socket rather than exposing it here.
+   * Why it exists at all: enqueueOutbound only appends to a queue processQueues
+   * drains on its own schedule. Signing out flips isAuthenticated, the effect
+   * watching it disconnects the client, and anything still queued is discarded.
+   * So without waiting, the frames are not merely unconfirmed, they are never
+   * written at all.
+   *
+   * Two phases. First a sentinel enqueued behind the caller's frames: the queue
+   * is FIFO and drained serially, so reaching it means every earlier frame has
+   * been written. Then a short settle, because the write above proves nothing
+   * if the socket was already dead — if the relay killed it, the client
+   * typically notices during this wait and we can report the truth instead of a
+   * comfortable lie. It narrows the blind window; it does not close it.
+   *
+   * There is no bufferedAmount check like the desktop equivalent has: React
+   * Native does not expose it, and the client owns its socket.
    *
    * Never rejects and never waits on a disconnected client, so resetting while
    * offline stays instant.
    */
   const flushOutbound = useCallback(
-    (timeoutMs: number = 4000): Promise<boolean> => {
+    async (timeoutMs: number = 6000): Promise<boolean> => {
       const client = wsClientRef.current;
-      if (!client?.isConnected) return Promise.resolve(false);
+      if (!client?.isConnected) return false;
+
+      const deadline = Date.now() + timeoutMs;
 
       let timer: ReturnType<typeof setTimeout>;
-      return Promise.race([
+      const written = await Promise.race([
         new Promise<boolean>((resolve) => {
           client.enqueueOutbound(async () => {
             resolve(true);
@@ -5643,7 +5668,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         new Promise<boolean>((resolve) => {
           timer = setTimeout(() => resolve(false), timeoutMs);
         }),
-      ]).finally(() => clearTimeout(timer));
+      ]).finally(() => clearTimeout(timer!));
+
+      if (!written) return false;
+
+      // Settle: give a socket the relay already killed a chance to surface as
+      // disconnected, using whatever budget the caller left us.
+      const settleUntil = Math.min(deadline, Date.now() + FLUSH_SETTLE_MS);
+      while (Date.now() < settleUntil) {
+        if (!wsClientRef.current?.isConnected) return false;
+        await new Promise((r) => setTimeout(r, FLUSH_SETTLE_POLL_MS));
+      }
+      return wsClientRef.current?.isConnected ?? false;
     },
     []
   );

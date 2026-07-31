@@ -159,6 +159,19 @@ describe('deregisterThisDevice', () => {
     expect(flushOutbound).not.toHaveBeenCalled();
   });
 
+  it('fails rather than skips when no frames could be built for the spaces we are in', async () => {
+    // Frames go missing per space when its hub key is unreadable — the same
+    // corrupted state people reach for Reset to escape. Reporting 'skipped'
+    // here would file real, unrevoked admissions under "nothing to do".
+    mockGetSpaceIds.mockReturnValue(['space-1', 'space-2']);
+    mockBuildRevokeFrames.mockResolvedValue([]);
+
+    const outcome = await run();
+
+    expect(outcome.spaces).toBe('failed');
+    expect(flushOutbound).not.toHaveBeenCalled();
+  });
+
   it('never throws, so a broken goodbye cannot block the wipe', async () => {
     mockGetSpaceIds.mockImplementation(() => {
       throw new Error('storage exploded');
