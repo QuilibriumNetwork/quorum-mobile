@@ -26,6 +26,7 @@
 // it as moving probability, not settling the question.
 //
 // ⚠️ Talks to the PRODUCTION relay with throwaway accounts. See identity.ts.
+import type { Message } from '@quilibrium/quorum-shared';
 import { createBot, type MobileBot } from './bot';
 import { awaitPeer, publish, waitUntil, type Role } from './rendezvous';
 
@@ -51,8 +52,20 @@ const parse = (text: string): { from: Role; n: number } | null => {
   return { from: m[1] === 'A' ? 'a' : 'b', n: Number(m[2]) };
 };
 
-function textOf(m: { content?: { type?: string; text?: string } }): string {
-  return m.content?.type === 'post' ? (m.content.text ?? '') : '';
+// Typed against the real Message, not a hand-narrowed shape. The local type this
+// used to declare said `text?: string`, but PostMessage.text is
+// `string | string[]` — so an array arrived as an array, and `parse()` then
+// regex-matched its stringified form. A one-element array coerces to exactly the
+// text and matches; a multi-element one silently does not, and a message that
+// fails to parse is counted as LOST. That is the one error this harness exists
+// to measure, so the normalisation is load-bearing rather than cosmetic.
+//
+// Joins with '' to match mobile's own DM send path (useSendDirectMessage.ts),
+// which is what produced these messages.
+function textOf(m: Message): string {
+  if (m.content?.type !== 'post') return '';
+  const { text } = m.content;
+  return Array.isArray(text) ? text.join('') : (text ?? '');
 }
 
 maybe(`dm-two-bot (role ${ROLE} — production relay)`, () => {

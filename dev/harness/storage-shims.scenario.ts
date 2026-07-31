@@ -54,9 +54,15 @@ describe('storage shims (offline)', () => {
 
     await messagesDb.saveMessage(message as never);
 
+    // getMessages returns GetMessagesResult — `{ messages, nextCursor,
+    // prevCursor }`, with `messages` non-optional. The previous read guessed at
+    // that shape, treating the result as possibly an array itself; the array
+    // branch was unreachable and could not be typed, and the `?? []`-style
+    // fallback would have turned a genuinely empty read into a pass rather than
+    // the failure it should be. Read the field directly and let a shape change
+    // break here.
     const back = await messagesDb.getMessages({ spaceId, channelId, limit: 10 } as never);
-    const rows = (back as { messages?: unknown[] })?.messages ?? (back as unknown[]);
-    expect(Array.isArray(rows) ? rows.length : 0).toBeGreaterThan(0);
+    expect(back.messages.length).toBeGreaterThan(0);
   });
 
   it('rolls a transaction back when the callback throws', async () => {

@@ -43,7 +43,11 @@ import React from 'react';
 import { act } from 'react';
 import TestRenderer from 'react-test-renderer';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { Message, UserRegistration } from '@quilibrium/quorum-shared';
+// UserRegistration is mobile's own client type, NOT a shared export — it is
+// declared in services/api/quorumClient.ts alongside the fetch that returns it.
+// Importing it from shared compiled to nothing (type imports are erased) but
+// broke tsc, so the harness looked green while the name did not exist.
+import type { Message } from '@quilibrium/quorum-shared';
 import AuthContext, { type UserInfo } from '@/context/AuthContext';
 import StorageContext from '@/context/StorageContext';
 import { WebSocketProvider, useWebSocket, deleteInboxMessages } from '@/context/WebSocketContext';
@@ -51,7 +55,7 @@ import { getApiConfig } from '@/services/api/config';
 import { getDeviceKeyset } from '@/services/onboarding/secureStorage';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
-import { getQuorumClient } from '@/services/api/quorumClient';
+import { getQuorumClient, type UserRegistration } from '@/services/api/quorumClient';
 import { loadOrCreateIdentity, type HarnessIdentity } from './identity';
 
 /**
@@ -213,7 +217,7 @@ export async function createBot(
   let renderer: { unmount: () => void } | undefined;
   setActEnvironment(true);
   await act(async () => {
-    renderer = TestRenderer.create(tree) as unknown as { unmount: () => void };
+    renderer = TestRenderer.create(tree);
   });
   setActEnvironment(false);
 

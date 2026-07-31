@@ -127,7 +127,7 @@ describe('two-bot feasibility (offline)', () => {
 
     let renderer: { unmount: () => void } | undefined;
     await act(async () => {
-      renderer = TestRenderer.create(tree) as unknown as { unmount: () => void };
+      renderer = TestRenderer.create(tree);
     });
 
     try {

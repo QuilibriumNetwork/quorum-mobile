@@ -55,11 +55,14 @@ maybe('ping (networked — production relay)', () => {
     try {
       await ws.connect();
       expect(ws.state).toBe('connected');
-      await ws.listen?.([bot.inboxAddress]);
+      // subscribe(), not listen() — see the note in transport.scenario.ts.
+      // RNWebSocketClient has no listen(); calling it optionally made this a
+      // no-op that still passed.
+      await ws.subscribe([bot.inboxAddress]);
       await new Promise((r) => setTimeout(r, 1500));
       expect(ws.state).toBe('connected');
     } finally {
-      ws.disconnect?.();
+      ws.disconnect();
     }
   }, 180_000);
 });
