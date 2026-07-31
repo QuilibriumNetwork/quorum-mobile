@@ -266,6 +266,16 @@ describe('saveConfig — truncated Space lists are never published', () => {
       expect(getLocalUserConfig(ADDRESS)!.items).toEqual([folder(['space-1'])]);
     });
 
+    it('still removes it locally when allowSync is off', async () => {
+      seed({ allowSync: false });
+
+      await removeSpaceFromConfig(ADDRESS, 'space-2');
+
+      // Sync-off must not mean the Space lingers in this device's own list
+      expect(mockPostUserSettings).not.toHaveBeenCalled();
+      expect(getLocalUserConfig(ADDRESS)!.spaceIds).toEqual(['space-1']);
+    });
+
     it('does nothing when the Space is not in the config', async () => {
       seed({});
 

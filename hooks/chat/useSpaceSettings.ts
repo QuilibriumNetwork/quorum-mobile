@@ -122,9 +122,14 @@ export function useDeleteSpace() {
       // then failed, the Space would be left listed in config.spaceIds with its
       // keys already deleted — permanently unkeyable, and the exact state that
       // makes every later save publish a truncated list.
-      if (user?.address) {
-        await removeSpaceFromConfig(user.address, params.spaceId);
+      //
+      // Abort rather than skip when there is no address: silently falling
+      // through would wipe local storage anyway and produce that same state.
+      // The caller surfaces the failure and leaves the modal open.
+      if (!user?.address) {
+        throw new Error('Cannot remove Space: no authenticated user address');
       }
+      await removeSpaceFromConfig(user.address, params.spaceId);
 
       // Delete from spaceStorage (includes keys)
       deleteSpaceFromStorage(params.spaceId);
@@ -158,10 +163,12 @@ export function useLeaveSpace() {
       // Separate from the config write below: that removes the Space from THIS
       // user's devices; the hub leave is what tells the other MEMBERS.
 
-      // Remove from the synced config first — see the note in useDeleteSpace
-      if (user?.address) {
-        await removeSpaceFromConfig(user.address, params.spaceId);
+      // Remove from the synced config first — see the note in useDeleteSpace,
+      // including why a missing address aborts instead of skipping
+      if (!user?.address) {
+        throw new Error('Cannot leave Space: no authenticated user address');
       }
+      await removeSpaceFromConfig(user.address, params.spaceId);
 
       // Delete from spaceStorage (includes keys)
       deleteSpaceFromStorage(params.spaceId);
