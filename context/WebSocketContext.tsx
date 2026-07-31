@@ -61,6 +61,7 @@ import {
   getLocalUserConfig,
   getLocalConversationSetting,
   getConversationSettingForCurrentUser,
+  removeSpaceFromConfig,
 } from '../services/config/configService';
 import { updateMessageDeliveredAt, updateMessagesReadAt } from '../services/storage/messagesDb';
 import { sendEncryptedMessageToAllDevices } from '../hooks/chat/useSendDirectMessage';
@@ -1211,14 +1212,30 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                           encryptionStateStorage.deleteEncryptionState(spaceConversationId, state.inboxId);
                         }
 
-                        // 2. Update user config to remove space
-                        const userConfig = await adapter.getUserConfig(ownAddress);
-                        if (userConfig) {
-                          const updatedConfig = {
-                            ...userConfig,
-                            spaceIds: userConfig.spaceIds.filter((id: string) => id !== spaceId),
-                          };
-                          await adapter.saveUserConfig(updatedConfig);
+                        // 2. Update user config to remove space.
+                        // Must go through configService, NOT adapter: the
+                        // adapter's user-config helpers use a different MMKV
+                        // instance and key prefix ('quorum-cache' /
+                        // 'userConfig:') from the real synced config
+                        // ('quorum-config' / 'user_config:'), so the previous
+                        // adapter.saveUserConfig here never landed anywhere the
+                        // app reads — leaving the kicked Space listed in
+                        // spaceIds with its keys deleted, on every device.
+                        //
+                        // Isolated deliberately. The old adapter write was a
+                        // plain MMKV set that could not throw, so steps 3+
+                        // always ran. saveConfig reaches SecureStore and the
+                        // crypto provider, and parts of it sit outside its own
+                        // try/catch — letting that abort the block would leave
+                        // the encryption state (step 1) already deleted while
+                        // the Space, its keys and the config entry all survive:
+                        // unreadable, still listed, and worse than before.
+                        try {
+                          await removeSpaceFromConfig(ownAddress, spaceId);
+                        } catch (configError) {
+                          logger.warn(
+                            `[Kicked] could not publish Space removal for ${spaceId}: ${configError instanceof Error ? configError.message : String(configError)}`
+                          );
                         }
 
                         // 3. Delete the space (this clears space data including members)
@@ -1230,6 +1247,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                         // Set kicked space ID so consumers can navigate away
                         setKickedFromSpaceId(spaceId);
                       } catch (cleanupError) {
+                        // Silence here used to hide a half-finished cleanup
+                        // completely: no toast, no log, and the user still in a
+                        // Space they were kicked from.
+                        logger.warn(
+                          `[Kicked] local cleanup failed for ${spaceId}: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`
+                        );
                       }
                     } else {
                       // Someone else was kicked - mark them as kicked
