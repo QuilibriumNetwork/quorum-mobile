@@ -129,15 +129,7 @@ describe('saveConfig — truncated Space lists are never published', () => {
     mockGetEncryptionStates.mockImplementation((id) => [encState(id)]);
   };
 
-  it('does not POST when local storage is missing Spaces', async () => {
-    arrangePartialStorage();
-
-    await saveConfig(partialConfig());
-
-    expect(mockPostUserSettings).not.toHaveBeenCalled();
-  });
-
-  it('persists the full Space list locally even though the upload was held', async () => {
+  it('persists the full Space list locally even when storage is incomplete', async () => {
     arrangePartialStorage();
 
     await saveConfig(partialConfig());
@@ -152,15 +144,20 @@ describe('saveConfig — truncated Space lists are never published', () => {
     ]);
   });
 
-  it('does not advance the stored timestamp when the upload is held', async () => {
+  it('narrows only the published payload, never local state', async () => {
     arrangePartialStorage();
 
     await saveConfig(partialConfig());
 
-    // getConfig resolves purely by timestamp and never merges the losing side,
-    // so claiming to be newer than the server without publishing would make
-    // this device ignore every remote config while it holds.
-    expect(getLocalUserConfig(ADDRESS)!.timestamp).toBe(1000);
+    // Mobile still publishes a narrowed list (see the comment in saveConfig:
+    // it cannot yet distinguish mid-sync from a genuine leave), but the local
+    // copy must survive intact.
+    expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
+    expect(getLocalUserConfig(ADDRESS)!.spaceIds).toEqual([
+      'space-1',
+      'space-2',
+      'space-3',
+    ]);
   });
 
   it('publishes, and advances the timestamp, once every Space is known', async () => {
@@ -200,24 +197,25 @@ describe('saveConfig — truncated Space lists are never published', () => {
     expect(getLocalUserConfig(ADDRESS)!.spaceIds).toEqual(['space-1']);
   });
 
-  it('holds when a listed Space is absent from local storage entirely', async () => {
-    // The re-key path writes a new spaceId into the config before the Space
-    // exists under that id, so getAllSpaces cannot see it yet.
-    const midRename = {
+  it('keeps a Space absent from local storage in the local list', async () => {
+    // A Space the user left keeps its id here, because no mobile removal path
+    // prunes config.spaceIds. Local state must still not be rewritten.
+    const staleId = {
       address: ADDRESS,
       allowSync: true,
       timestamp: 500,
-      spaceIds: ['space-new'],
-      items: [{ type: 'space', id: 'space-new' }],
+      spaceIds: ['space-gone'],
+      items: [{ type: 'space', id: 'space-gone' }],
     } as unknown as UserConfig;
 
     mockGetAllSpaces.mockReturnValue([]);
     mockGetEncryptionStates.mockReturnValue([]);
 
-    await saveConfig(midRename);
+    await saveConfig(staleId);
 
-    expect(mockPostUserSettings).not.toHaveBeenCalled();
-    expect(getLocalUserConfig(ADDRESS)!.spaceIds).toEqual(['space-new']);
-    expect(getLocalUserConfig(ADDRESS)!.timestamp).toBe(500);
+    expect(getLocalUserConfig(ADDRESS)!.spaceIds).toEqual(['space-gone']);
+    // Publishing still happens: refusing here would wedge sync permanently,
+    // since this id can never regain keys.
+    expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
   });
 });

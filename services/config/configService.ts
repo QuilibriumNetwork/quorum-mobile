@@ -588,9 +588,6 @@ export async function saveConfig(config: UserConfig): Promise<void> {
   const privateKey = await getPrivateKey();
   const publicKey = await getPublicKey();
 
-  // Kept so a held publish can roll the timestamp back: advancing it without
-  // the server agreeing makes this device ignore every remote config.
-  const incomingTs = config.timestamp;
   const ts = Date.now();
   config.timestamp = ts;
 
@@ -647,29 +644,33 @@ export async function saveConfig(config: UserConfig): Promise<void> {
       const finalSpaceIds = new Set(uploadConfig.spaceIds);
       uploadConfig.spaceKeys = spaceKeys.filter((sk) => finalSpaceIds.has(sk.spaceId));
 
-      // A Space dropped here is one this device still wants but cannot prove a
-      // key for right now: incomplete local storage, not a removal. Deliberate
-      // removals never reach this branch, because leaving or deleting a Space
-      // takes it out of config.spaceIds before saveConfig runs — nothing is
-      // dropped and the upload proceeds as before, so removals still propagate.
-      //
       // Publishing a truncated list is what turns this device's incomplete
       // storage into every device's problem: the config wins on timestamp, and
       // both clients apply a remote Space list verbatim, so every other device
       // adopts the shorter list and Spaces vanish from their nav.
+      //
+      // Desktop refuses to publish when that would happen. Mobile deliberately
+      // does NOT yet, because here it cannot tell a Space that is mid-sync from
+      // one the user genuinely left: no removal path on this platform takes a
+      // Space out of config.spaceIds. useDeleteSpace/useLeaveSpace
+      // (hooks/chat/useSpaceSettings.ts) only clear spaceStorage, and the kicked
+      // handler (context/WebSocketContext.tsx) writes its update through
+      // mmkvAdapter, which uses a different MMKV instance AND key prefix
+      // ('quorum-cache' / 'userConfig:') from this file's own store
+      // ('quorum-config' / 'user_config:'), so it never lands. A left Space
+      // therefore keeps its id in spaceIds with its keys gone, for good —
+      // refusing to publish on that would wedge this device's config sync
+      // permanently, which is worse than the bug being fixed.
+      //
+      // Fix the removal paths first, then adopt desktop's refusal here.
       const droppedSpaceIds = (config.spaceIds ?? []).filter((id) => !finalSpaceIds.has(id));
-
       if (droppedSpaceIds.length > 0) {
         logger.warn(
-          `[ConfigSync] NOT publishing — would upload ${uploadConfig.spaceIds.length}/${(config.spaceIds ?? []).length} Spaces; the change is local-only until these finish syncing: ${droppedSpaceIds.join(', ')}`
+          `[ConfigSync] publishing a NARROWER Space list than this device holds (${uploadConfig.spaceIds.length}/${(config.spaceIds ?? []).length}); other devices will adopt the shorter list: ${droppedSpaceIds.join(', ')}`
         );
-        // Keep the timestamp we came in with. getConfig above resolves purely
-        // by timestamp and never merges the losing side, so a device that
-        // advanced its local timestamp without the server agreeing would treat
-        // its own config as newer than every remote one and quietly stop
-        // applying other devices' changes. Publishing earns a newer timestamp.
-        config.timestamp = incomingTs ?? 0;
-      } else {
+      }
+
+      {
         const key = deriveConfigKey(privateKey);
         const encryptedConfig = encryptConfig(uploadConfig, key);
         const signature = await signConfigData(encryptedConfig, ts, privateKey);
