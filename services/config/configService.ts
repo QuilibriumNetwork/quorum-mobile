@@ -749,6 +749,56 @@ export async function updateConfig(
   return updatedConfig;
 }
 
+/**
+ * Remove a Space from the synced config, so leaving it reaches the user's other
+ * devices.
+ *
+ * Create and join already publish their side (`spaceService.ts`, which appends
+ * to spaceIds/items then saveConfig). Removal had no equivalent: delete/leave
+ * only cleared local MMKV, and the kicked handler wrote through mmkvAdapter,
+ * a different store entirely. So a removed Space kept its id in spaceIds with
+ * its keys deleted — invisible locally, but permanently unkeyable, and never
+ * removed from any other device.
+ *
+ * This is the write half of the add-only sync bug. The read half (purging the
+ * Space's local rows on the OTHER device) still needs the shared deletedSpaceIds
+ * tombstone contract; until then the other device drops it from its list by the
+ * same by-omission rule desktop already relies on.
+ */
+export async function removeSpaceFromConfig(
+  address: string,
+  spaceId: string
+): Promise<void> {
+  const config = getLocalUserConfig(address);
+  if (!config) return;
+
+  const inSpaceIds = (config.spaceIds ?? []).includes(spaceId);
+  const inItems = (config.items ?? []).some((item) =>
+    item.type === 'space' ? item.id === spaceId : item.spaceIds.includes(spaceId)
+  );
+  // Nothing to publish — don't burn a config write (or a timestamp bump) on it.
+  if (!inSpaceIds && !inItems) return;
+
+  const updated: UserConfig = {
+    ...config,
+    spaceIds: (config.spaceIds ?? []).filter((id) => id !== spaceId),
+    items: (config.items ?? [])
+      // Clone folders rather than filtering in place: `config` is the object
+      // just read from storage, and callers may still be holding it.
+      .map((item) =>
+        item.type === 'space'
+          ? item
+          : { ...item, spaceIds: item.spaceIds.filter((id) => id !== spaceId) }
+      )
+      .filter((item) =>
+        item.type === 'space' ? item.id !== spaceId : item.spaceIds.length > 0
+      ),
+  };
+
+  // saveConfig persists locally as well, and publishes only when allowSync is on.
+  await saveConfig(updated);
+}
+
 export function getDisplayName(address: string): string | undefined {
   const config = getLocalUserConfig(address);
   return config?.name;

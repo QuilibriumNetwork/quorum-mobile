@@ -18,8 +18,10 @@ import {
   deleteSpace as deleteSpaceFromStorage,
 } from '@/services/config/spaceStorage';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
+import { removeSpaceFromConfig } from '@/services/config/configService';
 import { broadcastSpaceUpdate } from '@/services/space/broadcastSpaceUpdate';
 import { useWebSocket } from '@/context/WebSocketContext';
+import { useAuth } from '@/context/AuthContext';
 import type { Space } from '@quilibrium/quorum-shared';
 
 interface UpdateSpaceParams {
@@ -106,12 +108,22 @@ interface DeleteSpaceParams {
  */
 export function useDeleteSpace() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (params: DeleteSpaceParams): Promise<void> => {
       const space = getSpace(params.spaceId);
       if (!space) {
         throw new Error('Space not found');
+      }
+
+      // Publish the removal before wiping local storage. Either order produces
+      // a consistent published list, but if the wipe ran first and this step
+      // then failed, the Space would be left listed in config.spaceIds with its
+      // keys already deleted — permanently unkeyable, and the exact state that
+      // makes every later save publish a truncated list.
+      if (user?.address) {
+        await removeSpaceFromConfig(user.address, params.spaceId);
       }
 
       // Delete from spaceStorage (includes keys)
@@ -132,6 +144,7 @@ export function useDeleteSpace() {
  */
 export function useLeaveSpace() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (params: DeleteSpaceParams): Promise<void> => {
@@ -141,7 +154,14 @@ export function useLeaveSpace() {
       }
 
       // TODO: Send leave message to space before deleting
-      // This would notify other members that the user has left
+      // This would notify other members that the user has left.
+      // Separate from the config write below: that removes the Space from THIS
+      // user's devices; the hub leave is what tells the other MEMBERS.
+
+      // Remove from the synced config first — see the note in useDeleteSpace
+      if (user?.address) {
+        await removeSpaceFromConfig(user.address, params.spaceId);
+      }
 
       // Delete from spaceStorage (includes keys)
       deleteSpaceFromStorage(params.spaceId);

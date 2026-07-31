@@ -27,6 +27,11 @@ jest.mock('react-native-mmkv', () => ({
     return {
       getString: (k: string) => store.get(k),
       set: (k: string, v: string) => store.set(k, v),
+      // configService calls .remove(); keep .delete() too so the fake matches
+      // whichever the real binding exposes. Omitting .remove made
+      // clearDeletedBookmarkIds throw AFTER the POST, so the publish path
+      // silently landed in the catch block during tests.
+      remove: (k: string) => store.delete(k),
       delete: (k: string) => store.delete(k),
       clearAll: () => store.clear(),
       getAllKeys: () => Array.from(store.keys()),
@@ -85,7 +90,12 @@ jest.mock('../services/offline/storage', () => ({
   mmkvStorage: { getItem: () => null, setItem: jest.fn(), removeItem: jest.fn() },
 }));
 
-import { saveConfig, getLocalUserConfig } from '../services/config/configService';
+import {
+  saveConfig,
+  getLocalUserConfig,
+  saveLocalUserConfig,
+  removeSpaceFromConfig,
+} from '../services/config/configService';
 import type { UserConfig } from '@quilibrium/quorum-shared';
 
 const ADDRESS = 'QmUserAddress';
@@ -195,6 +205,76 @@ describe('saveConfig — truncated Space lists are never published', () => {
 
     expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
     expect(getLocalUserConfig(ADDRESS)!.spaceIds).toEqual(['space-1']);
+  });
+
+  describe('removeSpaceFromConfig — leaving a Space reaches other devices', () => {
+    const folder = (spaceIds: string[]) => ({
+      type: 'folder' as const,
+      id: 'folder-1',
+      name: 'Work',
+      spaceIds,
+      createdDate: 1,
+      modifiedDate: 1,
+    });
+
+    const seed = (config: Partial<UserConfig>) =>
+      saveLocalUserConfig({
+        address: ADDRESS,
+        allowSync: true,
+        timestamp: 1000,
+        spaceIds: ['space-1', 'space-2'],
+        items: [{ type: 'space', id: 'space-1' }, folder(['space-2'])],
+        ...config,
+      } as unknown as UserConfig);
+
+    beforeEach(() => {
+      // Every Space is still keyed at removal time: the local wipe happens
+      // after this call, so nothing is dropped by narrowing.
+      mockGetAllSpaces.mockReturnValue([keyedSpace('space-1'), keyedSpace('space-2')]);
+      mockGetEncryptionStates.mockImplementation((id) => [encState(id)]);
+    });
+
+    it('publishes the removal so other devices see it', async () => {
+      seed({});
+
+      await removeSpaceFromConfig(ADDRESS, 'space-2');
+
+      // Publishing is the whole point: without it the other device never learns
+      expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
+      expect(getLocalUserConfig(ADDRESS)!.spaceIds).toEqual(['space-1']);
+    });
+
+    it('prunes the Space out of folders too', async () => {
+      seed({});
+
+      await removeSpaceFromConfig(ADDRESS, 'space-2');
+
+      // The folder held only space-2, so it goes with it
+      expect(getLocalUserConfig(ADDRESS)!.items).toEqual([
+        { type: 'space', id: 'space-1' },
+      ]);
+    });
+
+    it('leaves other Spaces and folders untouched', async () => {
+      seed({
+        spaceIds: ['space-1', 'space-2'],
+        items: [folder(['space-1', 'space-2'])],
+      });
+
+      await removeSpaceFromConfig(ADDRESS, 'space-2');
+
+      expect(getLocalUserConfig(ADDRESS)!.items).toEqual([folder(['space-1'])]);
+    });
+
+    it('does nothing when the Space is not in the config', async () => {
+      seed({});
+
+      await removeSpaceFromConfig(ADDRESS, 'never-joined');
+
+      // No pointless publish, and no timestamp bump
+      expect(mockPostUserSettings).not.toHaveBeenCalled();
+      expect(getLocalUserConfig(ADDRESS)!.timestamp).toBe(1000);
+    });
   });
 
   it('keeps a Space absent from local storage in the local list', async () => {

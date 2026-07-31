@@ -61,6 +61,7 @@ import {
   getLocalUserConfig,
   getLocalConversationSetting,
   getConversationSettingForCurrentUser,
+  removeSpaceFromConfig,
 } from '../services/config/configService';
 import { updateMessageDeliveredAt, updateMessagesReadAt } from '../services/storage/messagesDb';
 import { sendEncryptedMessageToAllDevices } from '../hooks/chat/useSendDirectMessage';
@@ -1211,15 +1212,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                           encryptionStateStorage.deleteEncryptionState(spaceConversationId, state.inboxId);
                         }
 
-                        // 2. Update user config to remove space
-                        const userConfig = await adapter.getUserConfig(ownAddress);
-                        if (userConfig) {
-                          const updatedConfig = {
-                            ...userConfig,
-                            spaceIds: userConfig.spaceIds.filter((id: string) => id !== spaceId),
-                          };
-                          await adapter.saveUserConfig(updatedConfig);
-                        }
+                        // 2. Update user config to remove space.
+                        // Must go through configService, NOT adapter: the
+                        // adapter's user-config helpers use a different MMKV
+                        // instance and key prefix ('quorum-cache' /
+                        // 'userConfig:') from the real synced config
+                        // ('quorum-config' / 'user_config:'), so the previous
+                        // adapter.saveUserConfig here never landed anywhere the
+                        // app reads — leaving the kicked Space listed in
+                        // spaceIds with its keys deleted, on every device.
+                        await removeSpaceFromConfig(ownAddress, spaceId);
 
                         // 3. Delete the space (this clears space data including members)
                         await adapter.deleteSpace(spaceId);
