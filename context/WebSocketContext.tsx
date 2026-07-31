@@ -5363,7 +5363,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
    * Throttled message handler - queues messages for processing
    * This prevents the UI from freezing when many messages arrive at once
    */
-  const throttledMessageHandler = useCallback((message: EncryptedWebSocketMessage) => {
+  // async only to satisfy MessageHandler's `=> Promise<void>`. The body stays
+  // fully synchronous and awaits nothing, so behaviour is unchanged: shared
+  // calls this as `await this.messageHandler(message)` inside a try/catch, which
+  // catches a sync throw and a rejected promise identically.
+  const throttledMessageHandler = useCallback(async (message: EncryptedWebSocketMessage) => {
     const me = fullUserAddrRef.current?.slice(0, 8) ?? '???';
     // The server's only channel for telling us a write was refused. It was
     // logged at debug and dropped, which made a rejected inbox write

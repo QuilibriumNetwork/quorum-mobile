@@ -7,6 +7,25 @@
       "@/*": [
         "./*"
       ],
+      // dev/harness ONLY. The channel SDK is deliberately not a mobile
+      // dependency — the app reaches the same Rust crate through uniffi
+      // (libchannel.so), and only the harness needs the crate's WASM binding,
+      // which Node can actually execute. See dev/harness/README.md §"The SDK
+      // alias".
+      //
+      // This mirrors the mapping jest.harness.config.js already applies at
+      // runtime, and the sibling path the harness sources already hardcode for
+      // the .wasm binary, so it adds no coupling that was not there. It exists
+      // so tsc can resolve the import that jest resolves; without it the two
+      // harness files importing the SDK fail to typecheck.
+      //
+      // It does NOT make the SDK shippable: it is absent from package.json, so
+      // Metro cannot bundle it regardless of what tsc believes. Keep it that
+      // way. Requires a quorum-desktop checkout beside this repo, same as the
+      // harness itself.
+      "@quilibrium/quilibrium-js-sdk-channels": [
+        "../quorum-desktop/node_modules/@quilibrium/quilibrium-js-sdk-channels"
+      ],
     }
   },
   "include": [

@@ -1300,7 +1300,7 @@ function normalizeFarcasterNotification(
         // "Someone — mini-app" when the shape shifts.
         frame?: { name?: string; iconUrl?: string; url?: string; body?: string };
         miniApp?: { name?: string; iconUrl?: string; url?: string; body?: string };
-        app?: { name?: string; iconUrl?: string; url?: string };
+        app?: { name?: string; iconUrl?: string; url?: string; body?: string };
         title?: string;
         body?: string;
       };

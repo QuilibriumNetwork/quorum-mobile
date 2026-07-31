@@ -50,24 +50,32 @@ maybe('transport (networked — production relay)', () => {
     });
 
     const states: string[] = [];
-    client.onStateChange?.((s: string) => states.push(s));
+    // Called directly, NOT as `onStateChange?.()`. Every method used here is a
+    // required member of RNWebSocketClient, so optional-call syntax buys no
+    // safety and costs the only signal that the API moved: an earlier version
+    // called `listen?.()`, which this class has never had. The `?.` swallowed
+    // it, the subscribe never ran, and the assertions below still passed
+    // because they only re-checked a connection that was already up. Keep
+    // these calls unguarded so a rename fails loudly instead of silently
+    // hollowing the scenario out.
+    client.onStateChange((s: string) => states.push(s));
 
     try {
       await client.connect();
       expect(client.state).toBe('connected');
 
-      // Subscribe to an address nobody owns. The relay accepts the listen and
-      // has nothing to deliver, which exercises the send path without creating
-      // any state — no registration, no frames, nothing to clean up.
+      // Subscribe to an address nobody owns. The relay accepts the subscribe
+      // and has nothing to deliver, which exercises the send path without
+      // creating any state — no registration, no frames, nothing to clean up.
       const orphan = 'Qm' + 'h'.repeat(44);
-      await client.listen?.([orphan]);
+      await client.subscribe([orphan]);
 
       // Still connected after a write proves the socket is genuinely open, not
       // merely reported open by a handshake that the relay then dropped.
       await new Promise((r) => setTimeout(r, 1500));
       expect(client.state).toBe('connected');
     } finally {
-      client.disconnect?.();
+      client.disconnect();
     }
 
     expect(states).toContain('connected');

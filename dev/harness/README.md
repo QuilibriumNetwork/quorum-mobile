@@ -159,6 +159,7 @@ the WASM binary, so this is the existing convention rather than a new one.
 | `wasm-signing-shim.ts`, `crypto-barrel-shim.ts` | the other two spellings of that seam |
 | `context-barrel-shim.ts` | narrows `@/context` to the DM contexts |
 | `mmkv-shim.ts`, `securestore-shim.ts`, `sqlite-shim.ts`, `filesystem-shim.ts`, `react-native-shim.ts` | device APIs with no Node equivalent |
+| `react-test-renderer.d.ts` | ambient types for the untyped renderer — a local declaration, not a devDependency, because the harness adds none |
 | `identity.ts` | registers/reuses an account through mobile's own onboarding |
 | `bot.ts` | a full headless client: renders mobile's real `WebSocketProvider` |
 | `rendezvous.ts`, `run-two-bots.mjs` | pairs two bot processes and reports loss |
@@ -197,5 +198,12 @@ Three findings that cost real time and are worth knowing before touching this:
    initiator; simultaneous open deserves its own scenario.
 3. **App suite unaffected**: 13 suites / 108 tests, unchanged. `jest.config.js`
    is untouched, no dependency was added, `yarn.lock` was never modified.
+4. **Optional-call syntax on a required method hides an API rename.**
+   `ping` and `transport` called `ws.listen?.([...])`; `RNWebSocketClient` has
+   never had `listen()` — the method is `subscribe()`. The `?.` swallowed it, so
+   the subscribe never ran and both scenarios still passed, because their only
+   assertion re-checked a connection that was already up. `tsc` had been
+   reporting it the whole time and nothing runs `tsc`. Call required members
+   unguarded here: a loud failure is the entire value of a scenario.
 
-*Last updated: 2026-07-28*
+*Last updated: 2026-07-31*

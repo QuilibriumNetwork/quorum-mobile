@@ -12,15 +12,14 @@
  */
 
 import { Platform } from 'react-native';
-import { EventEmitter, type Subscription } from 'expo-modules-core';
+// EventSubscription, not Subscription — renamed in expo-modules-core 3.x.
+import { type EventSubscription } from 'expo-modules-core';
 import * as Device from 'expo-device';
 import QuorumCrypto from '../../modules/quorum-crypto/src/QuorumCryptoModule';
 
 // CallKit on iOS simulator auto-ends calls immediately after reporting them.
 // Skip native integration on simulator — use the React Native overlay instead.
 const useNativeCallUI = Device.isDevice;
-
-const emitter = new EventEmitter(QuorumCrypto);
 
 export type NativeCallAction =
   | { type: 'answerCall'; callId: string }
@@ -98,12 +97,17 @@ export async function reportCallEnded(callId: string): Promise<void> {
  */
 export function onNativeCallAction(
   handler: (action: NativeCallAction) => void,
-): Subscription {
-  return emitter.addListener('onCallAction', (event: Record<string, string | boolean>) => {
-    const actionType = event.action as string;
-    const callId = event.callId as string;
+): EventSubscription {
+  // Listen on the module itself. Since Expo SDK 52 a NativeModule already IS an
+  // EventEmitter, so the `new EventEmitter(QuorumCrypto)` wrapper this used to
+  // build is the constructor overload expo marks @deprecated for exactly that
+  // reason — same listener registry either way. Dropping it also lets the
+  // events map on QuorumCryptoModule type the callback, which is what removed
+  // the four casts that used to be on every field below.
+  return QuorumCrypto.addListener('onCallAction', (event) => {
+    const { callId } = event;
 
-    switch (actionType) {
+    switch (event.action) {
       case 'answer':
         handler({ type: 'answerCall', callId });
         break;
@@ -111,10 +115,10 @@ export function onNativeCallAction(
         handler({ type: 'endCall', callId });
         break;
       case 'setMuted':
-        handler({ type: 'setMuted', callId, muted: event.muted as boolean });
+        handler({ type: 'setMuted', callId, muted: event.muted ?? false });
         break;
       case 'setHeld':
-        handler({ type: 'setHeld', callId, held: event.held as boolean });
+        handler({ type: 'setHeld', callId, held: event.held ?? false });
         break;
     }
   });

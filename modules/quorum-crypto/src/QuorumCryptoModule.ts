@@ -1,4 +1,4 @@
-import { NativeModule, requireNativeModule } from 'expo-modules-core';
+import { NativeModule, requireNativeModule, type EventSubscription } from 'expo-modules-core';
 
 /**
  * Keypair result from key generation
@@ -18,12 +18,51 @@ export interface MessageCiphertext {
 }
 
 /**
+ * Payload of the `onCallAction` event, emitted when the user acts on the native
+ * call UI (CallKit on iOS, the call notification on Android).
+ *
+ * Mirrors what the native side actually sends: `ios/QuorumCryptoModule.swift`
+ * (the four CXProvider delegate methods) and Android's `handleCallAction`.
+ * `muted` accompanies only `setMuted` and `held` only `setHeld`, which is why
+ * both are optional.
+ */
+export type CallActionEvent = {
+  action: 'answer' | 'end' | 'setMuted' | 'setHeld';
+  callId: string;
+  muted?: boolean;
+  held?: boolean;
+};
+
+/** Events this module emits. Declared so addListener can type its callback. */
+export type QuorumCryptoEvents = {
+  onCallAction: (event: CallActionEvent) => void;
+};
+
+/**
  * QuorumCrypto native module interface
  *
  * Provides cryptographic operations using the channel Rust crate
  * via uniffi-generated Swift/Kotlin bindings.
+ *
+ * ⚠️ `addListener` is declared here by hand rather than inherited, and passing
+ * an events map to `NativeModule<...>` does not work. In expo-modules-core
+ * 3.0.29 the exported type is
+ *
+ *     type NativeModule<TEventsMap> = typeof ExpoGlobal.NativeModule<EventsMap>
+ *
+ * — the *constructor* type, with TEventsMap declared and then discarded. So
+ * `extends NativeModule<X>` inherits no instance members (hence "Property
+ * 'addListener' does not exist") and silently ignores X. Declaring the one
+ * method this module actually exposes is self-contained and survives whatever
+ * upstream does with that type next.
  */
 interface QuorumCryptoModule extends NativeModule {
+  /** Subscribe to a module event. Currently only `onCallAction` is emitted. */
+  addListener<EventName extends keyof QuorumCryptoEvents>(
+    eventName: EventName,
+    listener: QuorumCryptoEvents[EventName]
+  ): EventSubscription;
+
   // Native call integration (CallKit on iOS, notification on Android)
   reportIncomingCall(callId: string, callerName: string, hasVideo: boolean): Promise<boolean>;
   reportOutgoingCall(callId: string, calleeName: string, hasVideo: boolean): Promise<boolean>;
