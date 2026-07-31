@@ -588,6 +588,9 @@ export async function saveConfig(config: UserConfig): Promise<void> {
   const privateKey = await getPrivateKey();
   const publicKey = await getPublicKey();
 
+  // Kept so a held publish can roll the timestamp back: advancing it without
+  // the server agreeing makes this device ignore every remote config.
+  const incomingTs = config.timestamp;
   const ts = Date.now();
   config.timestamp = ts;
 
@@ -615,67 +618,102 @@ export async function saveConfig(config: UserConfig): Promise<void> {
       const spaceKeys = collectSpaceKeysForSync();
       config.spaceKeys = spaceKeys;
 
-      // Ensure spaceIds and items only include spaces that have encryption keys
-      // This prevents server validation errors
+      // Build the payload we POST. The server rejects a config whose spaceIds
+      // and spaceKeys disagree, so the parcel is narrowed to Spaces this device
+      // can currently prove it holds encryption keys for.
+      //
+      // This narrowing MUST stay on `uploadConfig`. `config` is what
+      // saveLocalUserConfig persists at the end of this function; trimming it
+      // there deletes Spaces from this device's own nav whenever local storage
+      // is momentarily incomplete. Folder items are cloned rather than filtered
+      // in place, because a shallow spread still shares those nested objects.
+      const uploadConfig: UserConfig = { ...config };
       const validSpaceIds = new Set(spaceKeys.map((sk) => sk.spaceId));
-      config.spaceIds = (config.spaceIds ?? []).filter((id) => validSpaceIds.has(id));
+      uploadConfig.spaceIds = (config.spaceIds ?? []).filter((id) => validSpaceIds.has(id));
 
       if (config.items) {
-        config.items = config.items.filter((item) => {
-          if (item.type === 'space') {
-            return validSpaceIds.has(item.id);
-          } else {
-            // For folders, filter out spaces without encryption keys
-            item.spaceIds = item.spaceIds.filter((id) => validSpaceIds.has(id));
-            // Remove empty folders
-            return item.spaceIds.length > 0;
-          }
-        });
+        uploadConfig.items = config.items
+          .map((item) =>
+            item.type === 'space'
+              ? item
+              : { ...item, spaceIds: item.spaceIds.filter((id) => validSpaceIds.has(id)) }
+          )
+          .filter((item) =>
+            item.type === 'space' ? validSpaceIds.has(item.id) : item.spaceIds.length > 0
+          );
       }
 
-      const key = deriveConfigKey(privateKey);
-      const encryptedConfig = encryptConfig(config, key);
-      const signature = await signConfigData(encryptedConfig, ts, privateKey);
+      // Bidirectional consistency: spaceIds <-> spaceKeys, as the server requires
+      const finalSpaceIds = new Set(uploadConfig.spaceIds);
+      uploadConfig.spaceKeys = spaceKeys.filter((sk) => finalSpaceIds.has(sk.spaceId));
 
-      const client = getQuorumClient();
-      await client.postUserSettings(config.address, {
-        user_address: config.address,
-        user_public_key: publicKey,
-        user_config: encryptedConfig,
-        timestamp: ts,
-        signature,
-      });
+      // A Space dropped here is one this device still wants but cannot prove a
+      // key for right now: incomplete local storage, not a removal. Deliberate
+      // removals never reach this branch, because leaving or deleting a Space
+      // takes it out of config.spaceIds before saveConfig runs — nothing is
+      // dropped and the upload proceeds as before, so removals still propagate.
+      //
+      // Publishing a truncated list is what turns this device's incomplete
+      // storage into every device's problem: the config wins on timestamp, and
+      // both clients apply a remote Space list verbatim, so every other device
+      // adopts the shorter list and Spaces vanish from their nav.
+      const droppedSpaceIds = (config.spaceIds ?? []).filter((id) => !finalSpaceIds.has(id));
 
-      // Clear deleted bookmark tombstones after successful sync
-      clearDeletedBookmarkIds(address);
-      config.deletedBookmarkIds = [];
-
-      // Success is as diagnostic as failure: without it, "no logs" is
-      // indistinguishable between published-fine and never-attempted.
-      const convEntries = Object.keys(config.conversationSettings ?? {}).length;
-      logger.log(
-        `[ConfigSync] published ts=${ts} bytes=${encryptedConfig.length} conversationSettings=${convEntries}`
-      );
-
-      if (CONFIG_TRACE) {
-        logger.log(
-          `[ConfigSync] payload conversationSettings=${redactedSettings(config.conversationSettings)}`
+      if (droppedSpaceIds.length > 0) {
+        logger.warn(
+          `[ConfigSync] NOT publishing — would upload ${uploadConfig.spaceIds.length}/${(config.spaceIds ?? []).length} Spaces; the change is local-only until these finish syncing: ${droppedSpaceIds.join(', ')}`
         );
-        // Read straight back from the server. This is the only check that
-        // proves the write actually landed rather than just being accepted:
-        // a matching timestamp means another device pulling now would see it.
-        try {
-          const echo = await client.getUserSettings(address);
-          const storedTs = echo?.timestamp;
+        // Keep the timestamp we came in with. getConfig above resolves purely
+        // by timestamp and never merges the losing side, so a device that
+        // advanced its local timestamp without the server agreeing would treat
+        // its own config as newer than every remote one and quietly stop
+        // applying other devices' changes. Publishing earns a newer timestamp.
+        config.timestamp = incomingTs ?? 0;
+      } else {
+        const key = deriveConfigKey(privateKey);
+        const encryptedConfig = encryptConfig(uploadConfig, key);
+        const signature = await signConfigData(encryptedConfig, ts, privateKey);
+
+        const client = getQuorumClient();
+        await client.postUserSettings(config.address, {
+          user_address: config.address,
+          user_public_key: publicKey,
+          user_config: encryptedConfig,
+          timestamp: ts,
+          signature,
+        });
+
+        // Clear deleted bookmark tombstones after successful sync
+        clearDeletedBookmarkIds(address);
+        config.deletedBookmarkIds = [];
+
+        // Success is as diagnostic as failure: without it, "no logs" is
+        // indistinguishable between published-fine and never-attempted.
+        const convEntries = Object.keys(config.conversationSettings ?? {}).length;
+        logger.log(
+          `[ConfigSync] published ts=${ts} bytes=${encryptedConfig.length} conversationSettings=${convEntries}`
+        );
+
+        if (CONFIG_TRACE) {
           logger.log(
-            storedTs === ts
-              ? `[ConfigSync] server read-back CONFIRMS ts=${ts}`
-              : `[ConfigSync] server read-back MISMATCH — wrote ts=${ts}, server has ts=${storedTs}`
+            `[ConfigSync] payload conversationSettings=${redactedSettings(config.conversationSettings)}`
           );
-        } catch (echoError) {
-          logger.warn(
-            `[ConfigSync] server read-back failed: ${echoError instanceof Error ? echoError.message : String(echoError)}`
-          );
+          // Read straight back from the server. This is the only check that
+          // proves the write actually landed rather than just being accepted:
+          // a matching timestamp means another device pulling now would see it.
+          try {
+            const echo = await client.getUserSettings(address);
+            const storedTs = echo?.timestamp;
+            logger.log(
+              storedTs === ts
+                ? `[ConfigSync] server read-back CONFIRMS ts=${ts}`
+                : `[ConfigSync] server read-back MISMATCH — wrote ts=${ts}, server has ts=${storedTs}`
+            );
+          } catch (echoError) {
+            logger.warn(
+              `[ConfigSync] server read-back failed: ${echoError instanceof Error ? echoError.message : String(echoError)}`
+            );
+          }
         }
       }
     } catch (error) {
