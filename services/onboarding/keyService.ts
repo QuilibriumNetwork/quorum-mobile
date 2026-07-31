@@ -866,21 +866,35 @@ export async function uploadUserRegistrationWithDevices(
   await client.uploadRegistration(registration);
 }
 
+export type DeviceRemovalStatus =
+  /** Re-signed and uploaded without this device. */
+  | 'removed'
+  /** Not in the list to begin with — nothing to write. */
+  | 'not-listed'
+  /** Refused: removing it would leave the account with no devices. */
+  | 'last-device'
+  /** Could not read or write the registration. */
+  | 'failed';
+
 /**
- * Remove a device from user registration
+ * Remove a device from user registration.
+ *
+ * Returns a status rather than a boolean because the four outcomes are not
+ * interchangeable to a caller: 'not-listed' means the end state is already
+ * correct, while 'failed' means it is not and nobody knows it. Collapsing both
+ * into `false` is how a reset reports a leftover device as a clean goodbye.
  *
  * @param userAddress - User's address (Qm...)
  * @param userPublicKey - User's Ed448 public key (hex)
  * @param userPrivateKey - User's Ed448 private key (hex) - for signing
  * @param inboxAddressToRemove - Inbox address of the device to remove
- * @returns true if device was removed, false if device not found or is the only device
  */
 export async function removeDeviceFromRegistration(
   userAddress: string,
   userPublicKey: string,
   userPrivateKey: string,
   inboxAddressToRemove: string
-): Promise<boolean> {
+): Promise<DeviceRemovalStatus> {
   const client = getQuorumClient();
 
   // Fetch existing registration
@@ -890,11 +904,14 @@ export async function removeDeviceFromRegistration(
   try {
     existingReg = await client.fetchUserRegistration(userAddress, { fresh: true });
   } catch (error) {
-    return false;
+    // Keep the error: the caller only sees a status, so dropping it here is
+    // the difference between "why do devices linger" being answerable or not.
+    logger.warn('[UserRegistration] could not read the device list', error);
+    return 'failed';
   }
 
   if (!existingReg?.device_registrations || existingReg.device_registrations.length === 0) {
-    return false;
+    return 'not-listed';
   }
 
   // Filter out the device to remove
@@ -903,22 +920,30 @@ export async function removeDeviceFromRegistration(
   );
 
   if (remainingDevices.length === existingReg.device_registrations.length) {
-    return false;
+    return 'not-listed';
   }
 
+  // Desktop attempts this and lets the hub decide; mobile has always refused,
+  // and the two are documented as deliberately divergent until the server's
+  // behaviour on an empty device list is confirmed.
   if (remainingDevices.length === 0) {
-    return false;
+    return 'last-device';
   }
 
   // Re-upload with remaining devices
-  await uploadUserRegistrationWithDevices(
-    userAddress,
-    userPublicKey,
-    userPrivateKey,
-    remainingDevices
-  );
+  try {
+    await uploadUserRegistrationWithDevices(
+      userAddress,
+      userPublicKey,
+      userPrivateKey,
+      remainingDevices
+    );
+  } catch (error) {
+    logger.warn('[UserRegistration] could not upload the reduced device list', error);
+    return 'failed';
+  }
 
-  return true;
+  return 'removed';
 }
 
 // Decaf448 Schnorr Signatures for QNS
