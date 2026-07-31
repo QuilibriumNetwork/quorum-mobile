@@ -57,6 +57,7 @@ import { languageName } from '@/components/translation/languages';
 import { TranslateLanguageModal } from '@/components/translation/TranslateLanguageModal';
 import { getAllSpaces, getSpaceIds } from '@/services/config/spaceStorage';
 import { buildRevokeDeviceFrames } from '@/services/space/deviceKeyStatements';
+import { deregisterThisDevice } from '@/services/onboarding/deregisterDevice';
 import { encryptionStateStorage } from '@/services/crypto/encryption-state-storage';
 import {
   deriveFarcasterKeys,
@@ -332,7 +333,7 @@ export default function ProfileModal({
 }: ProfileModalProps) {
   const { theme, isDark, activeSkin } = useTheme();
   const { user, signOut, updateProfile } = useAuth();
-  const { enqueueOutbound, subscribe } = useWebSocket();
+  const { enqueueOutbound, flushOutbound, subscribe } = useWebSocket();
   const { showToast } = useToast();
   const { allowSync, setAllowSync, isLoading: isSyncLoading } = useSyncSettings();
   const {
@@ -459,6 +460,9 @@ export default function ProfileModal({
   const [pendingRemovals, setPendingRemovals] = React.useState<string[]>([]);
   const [isLoadingDevices, setIsLoadingDevices] = React.useState(false);
   const [isRemovingDevice, setIsRemovingDevice] = React.useState(false);
+  // The reset now waits on a bounded network goodbye before wiping, so the
+  // button needs to say it is working rather than looking dead.
+  const [isResetting, setIsResetting] = React.useState(false);
 
   // Warpcast wallet import
   const { shouldPromptImport: hasWarpcastWallet, isImported: hasImportedWarpcastWallet, importedWallet } = useWarpcastWallet();
@@ -824,11 +828,46 @@ export default function ProfileModal({
 
   const handleResetAppData = async () => {
     setShowResetConfirm(false);
-    // Clear React Query cache
-    queryClient.clear();
-    // Sign out clears MMKV storage and secure storage
-    await signOut();
-    onClose();
+    setIsResetting(true);
+    try {
+      // Say goodbye BEFORE anything is destroyed. The keys signOut() clears are
+      // the only handle to this device's hub entry and the only key that can
+      // revoke its space signing admission, so wiping first strands both and
+      // every reset + re-login appends a fresh entry instead of replacing one.
+      //
+      // The catch is load-bearing: a goodbye that fails (offline, hub down, a
+      // bug in here) must never stop the user from resetting — people reset
+      // precisely when things are broken. The cost of failing is a stale entry
+      // they can remove by hand from another device.
+      if (user?.address) {
+        const outcome = await deregisterThisDevice({
+          userAddress: user.address,
+          enqueueOutbound,
+          flushOutbound,
+        }).catch((err) => {
+          logger.warn('[Reset] deregistration threw', err);
+          return { hub: 'failed', spaces: 'failed' } as const;
+        });
+        if (outcome.hub !== 'ok') {
+          logger.warn(
+            `[Reset] hub deregistration ${outcome.hub} — this device may stay listed until removed manually`
+          );
+        }
+        if (outcome.spaces !== 'ok') {
+          logger.warn(
+            `[Reset] space revocation ${outcome.spaces} — other members may keep trusting this device's signing key`
+          );
+        }
+      }
+
+      // Clear React Query cache
+      queryClient.clear();
+      // Sign out clears MMKV storage and secure storage
+      await signOut();
+      onClose();
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   const handleExportRecoveryPhrase = React.useCallback(() => {
@@ -2393,9 +2432,15 @@ export default function ProfileModal({
             {/* Danger Zone */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, styles.dangerText]}>Danger Zone</Text>
-              <TouchableOpacity style={[styles.actionButton, styles.dangerButton]} onPress={() => setShowResetConfirm(true)}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.dangerButton]}
+                onPress={() => setShowResetConfirm(true)}
+                disabled={isResetting}
+              >
                 <IconSymbol name="trash" size={20} color={theme.colors.danger} />
-                <Text style={[styles.actionButtonText, styles.dangerText]}>Reset App Data</Text>
+                <Text style={[styles.actionButtonText, styles.dangerText]}>
+                  {isResetting ? 'Resetting…' : 'Reset App Data'}
+                </Text>
               </TouchableOpacity>
             </View>
           </>

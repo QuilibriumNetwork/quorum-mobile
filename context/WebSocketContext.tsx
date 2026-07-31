@@ -123,6 +123,7 @@ interface WebSocketContextValue {
 
   // Message sending
   enqueueOutbound: (prepareMessage: () => Promise<string[]>) => void;
+  flushOutbound: (timeoutMs?: number) => Promise<boolean>;
 
   // Inbox subscriptions
   subscribe: (inboxAddresses: string[]) => Promise<void>;
@@ -5607,6 +5608,47 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   );
 
   /**
+   * Resolve once everything enqueued BEFORE this call has been written to the
+   * socket, or false if that can't be confirmed in time.
+   *
+   * enqueueOutbound only appends to a queue that processQueues drains on its
+   * own schedule, which is fine while the app keeps running — the transport
+   * retains frames and retries them on the next connect. It stops being fine
+   * for a caller that is about to end the session: signing out flips
+   * isAuthenticated, and the effect watching it disconnects the client, so
+   * anything still queued is discarded and its goodbye never happens.
+   *
+   * The barrier is a sentinel enqueued behind the caller's frames. The queue is
+   * FIFO and drained serially, so reaching the sentinel means every earlier
+   * frame has already been handed to the socket. There is no bufferedAmount
+   * check like the desktop equivalent has: React Native's WebSocket does not
+   * expose it, and the client owns its socket rather than exposing it here.
+   *
+   * Never rejects and never waits on a disconnected client, so resetting while
+   * offline stays instant.
+   */
+  const flushOutbound = useCallback(
+    (timeoutMs: number = 4000): Promise<boolean> => {
+      const client = wsClientRef.current;
+      if (!client?.isConnected) return Promise.resolve(false);
+
+      let timer: ReturnType<typeof setTimeout>;
+      return Promise.race([
+        new Promise<boolean>((resolve) => {
+          client.enqueueOutbound(async () => {
+            resolve(true);
+            return [];
+          });
+        }),
+        new Promise<boolean>((resolve) => {
+          timer = setTimeout(() => resolve(false), timeoutMs);
+        }),
+      ]).finally(() => clearTimeout(timer));
+    },
+    []
+  );
+
+  /**
    * Subscribe to inbox addresses
    */
   const subscribe = useCallback(async (inboxAddresses: string[]) => {
@@ -6188,6 +6230,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       connect,
       disconnect,
       enqueueOutbound,
+      flushOutbound,
       subscribe,
       unsubscribe,
       notifyDmRead,
@@ -6196,7 +6239,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       registerCallSignalingHandler,
       registerLogFrameHandler,
     }),
-    [connectionState, connect, disconnect, enqueueOutbound, subscribe, unsubscribe, notifyDmRead, kickedFromSpaceId, clearKickedFromSpace, registerCallSignalingHandler, registerLogFrameHandler]
+    [connectionState, connect, disconnect, enqueueOutbound, flushOutbound, subscribe, unsubscribe, notifyDmRead, kickedFromSpaceId, clearKickedFromSpace, registerCallSignalingHandler, registerLogFrameHandler]
   );
 
   return (
