@@ -86,7 +86,10 @@ export interface ValidationResult {
  * Note: Uses HKDF workaround for Quilibrium address since there's no mnemonic
  */
 export function generateKeyPair(): KeyPair {
-  const privateKeyBytes = ed448.utils.randomPrivateKey();
+  // randomSecretKey, not randomPrivateKey — @noble/curves 2.x renamed it, and
+  // the old name is plain `undefined` on the installed build. This function has
+  // no callers today, which is the only reason the TypeError never fired.
+  const privateKeyBytes = ed448.utils.randomSecretKey();
   const publicKeyBytes = ed448.getPublicKey(privateKeyBytes);
 
   const privateKey = bytesToHex(privateKeyBytes);

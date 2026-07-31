@@ -393,11 +393,22 @@ export async function sendStickerMessage(
     privateKey: hexToNumberArray(hubKey.privateKey),
   };
 
+  // Argument order matches sealHubEnvelope(hubAddress, hubKeypair, message,
+  // configKey?) and sendSpaceMessage's call above. It previously passed the
+  // config key third and the payload fourth, so the sealed `message` was a
+  // number[] and `configKey` was the JSON string — which is truthy, sending
+  // native-provider down its config-key branch to read `.publicKey` off a
+  // string and get undefined. Sticker sends cannot have worked.
   const sealedMessage = await cryptoProvider.sealHubEnvelope(
     hubKey.address,
     hubKeypair,
-    configKey?.publicKey ? hexToNumberArray(configKey.publicKey) : undefined,
-    hubMessagePayload
+    hubMessagePayload,
+    configKey
+      ? {
+          publicKey: hexToNumberArray(configKey.publicKey),
+          privateKey: hexToNumberArray(configKey.privateKey),
+        }
+      : undefined
   );
 
   // Create WebSocket envelope
