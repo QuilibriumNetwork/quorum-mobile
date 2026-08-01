@@ -226,10 +226,9 @@ export default function UnifiedProfileScreen({
   if (!user) return null;
 
   return (
-    // The host (profile tab) renders an opaque Stack header above us
-    // that already covers the status-bar safe area, so we don't add
-    // another `insets.top` here — that would double up and leave a
-    // visible gap between the header and the pill row.
+    // The host route owns the status-bar safe area, so we add no
+    // `insets.top` here — that would double up and push the profile
+    // card down by a second status bar's worth.
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
       <UnifiedProfileHeader
         user={user}
