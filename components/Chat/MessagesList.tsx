@@ -379,28 +379,6 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     blankSpace.value = bottomInset;
   }, [bottomInset, blankSpace]);
 
-  // ⚠️ TEMPORARY INSTRUMENTATION — remove before merge.
-  // Deliberately NOT __DEV__-gated: the bug it is chasing has only been seen on
-  // release builds, so this has to survive one. Tag `[chatdiag]`.
-  const diagRef = useRef({ viewport: 0, content: 0, inset: 0, offset: 0 });
-  const diag = useCallback((what: string) => {
-    const d = diagRef.current;
-    console.warn(
-      `[chatdiag] ${what} viewport=${Math.round(d.viewport)} content=${Math.round(d.content)}` +
-      ` inset=${Math.round(d.inset)} offset=${Math.round(d.offset)}` +
-      ` short=${d.content > 0 && d.viewport > 0 && d.content <= d.viewport + 1}` +
-      ` gapBelowLast=${Math.round(d.content - d.offset - d.viewport)}`,
-    );
-  }, []);
-
-  // ⚠️ TEMPORARY INSTRUMENTATION — settled-state samples after entry.
-  useEffect(() => {
-    console.warn('[chatdiag] MOUNT build=fix-4');
-    const a = setTimeout(() => diag('t+400'), 400);
-    const b = setTimeout(() => diag('t+1500'), 1500);
-    return () => { clearTimeout(a); clearTimeout(b); };
-  }, [diag]);
-
   // ── Short-conversation bottom alignment ──────────────────────────────────
   // FlashList's `startRenderingFromBottom` bottom-aligns a conversation shorter
   // than the screen by padding the cells down until they fill the VIEWPORT
@@ -426,7 +404,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   const scrollViewRef = useRef<any>(null);
   const insetBottomRef = useRef(0);
   const alignTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const alignShortContentToBottom = useCallback((why: string) => {
+  const alignShortContentToBottom = useCallback(() => {
     const viewport = viewportHeightRef.current;
     const content = contentHeightRef.current;
     // Taller than the viewport ⇒ a genuinely scrollable list; leave it alone.
@@ -443,11 +421,6 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     // `content + inset − viewport` synchronously, which is exactly the target.
     const target = content + insetBottomRef.current - viewport;
     const sv = scrollViewRef.current;
-    console.warn(
-      `[chatdiag] align(${why}) target=${Math.round(target)}` +
-      ` hasScrollTo=${typeof sv?.scrollTo} hasScrollToEnd=${typeof sv?.scrollToEnd}` +
-      ` hasFL=${typeof flatListRef.current?.scrollToEnd}`,
-    );
     if (target <= 0) return;
     if (typeof sv?.scrollTo === 'function') sv.scrollTo({ y: target, animated: false });
     else flatListRef.current?.scrollToEnd({ animated: false });
@@ -496,30 +469,24 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
           onLayout={(e) => {
             scrollProps.onLayout?.(e);
             viewportHeightRef.current = e.nativeEvent.layout.height;
-            diagRef.current.viewport = e.nativeEvent.layout.height;
-            diag('layout');
-            alignShortContentToBottom('layout');
+            alignShortContentToBottom();
           }}
           onContentSizeChange={(w, h) => {
             scrollProps.onContentSizeChange?.(w, h);
             contentHeightRef.current = h;
-            diagRef.current.content = h;
-            diag('contentSize');
-            alignShortContentToBottom('contentSize');
+            alignShortContentToBottom();
           }}
           onContentInsetChange={(insets) => {
-            diagRef.current.inset = insets.bottom;
             insetBottomRef.current = insets.bottom;
-            diag('inset');
             // The inset lands AFTER the content size (measured: ~77ms later),
             // and native scrollToEnd targets `content + inset − viewport`. So
             // aligning on the content-size event alone computes a target of 0
             // and does nothing — this is the trigger that actually matters.
-            alignShortContentToBottom('inset');
+            alignShortContentToBottom();
           }}
         />
       )),
-    [blankSpace, diag, alignShortContentToBottom],
+    [blankSpace, alignShortContentToBottom],
   );
 
   // Ref to hold latest messages — used inside callbacks to avoid re-creating them when messages change
@@ -1617,7 +1584,6 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         maintainVisibleContentPosition={maintainVisibleContentPosition}
         onScroll={(e) => {
           const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-          diagRef.current.offset = contentOffset.y; // TEMPORARY INSTRUMENTATION
           distanceFromBottomRef.current = Math.max(
             0,
             contentSize.height - (contentOffset.y + layoutMeasurement.height),
