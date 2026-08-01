@@ -130,11 +130,18 @@ export default function DiscoverSpacesScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false, title: 'Discover Spaces' }} />
 
+      {/*
+        No separator: the search field sits directly beneath the bar, so a rule
+        between them reads as a stray line rather than an edge. Matches the
+        other list screens (Spaces, Messages, Wallet, Profile), none of which
+        separate their header either.
+      */}
       <ScreenHeader
         title="Discover Spaces"
         insetTop={insets.top}
         onBack={() => router.back()}
         accessibilityBackLabel="Back to spaces"
+        showBorder={false}
         theme={theme}
       />
 

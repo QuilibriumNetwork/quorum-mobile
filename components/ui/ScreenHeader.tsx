@@ -47,7 +47,19 @@ export interface ScreenHeaderProps {
   right?: React.ReactNode;
   /** Defaults to `surface1`. Screens whose body is a different surface pass theirs. */
   backgroundColor?: string;
-  /** Hairline separator below the bar. On by default. */
+  /**
+   * Hairline separator below the bar. On by default.
+   *
+   * The convention in this app:
+   * - **Keep it** on conversation screens (a channel, a DM). Content scrolls up
+   *   underneath the bar, so the rule is what stops messages appearing to
+   *   collide with the title.
+   * - **Turn it off** on list and settings screens (Spaces, Messages, Wallet,
+   *   Profile, Discover, Account). Those put a search field, a segmented
+   *   control or a section header directly beneath the bar, and a rule between
+   *   the two reads as a stray line. None of the app's own list headers draw
+   *   one, so a separator here is what looks inconsistent, not its absence.
+   */
   showBorder?: boolean;
   accessibilityBackLabel?: string;
   theme: AppTheme;
