@@ -15,7 +15,7 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
-import { useHeaderHeight } from '@react-navigation/elements';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -28,7 +28,6 @@ function formatMemberCount(count: number): string {
 
 export default function DiscoverSpacesScreen() {
   const { theme, isDark } = useTheme();
-  const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const { isConnected } = useWebSocket();
   const { showToast } = useToast();
@@ -128,8 +127,16 @@ export default function DiscoverSpacesScreen() {
   }, [styles, joinedIds, joiningId, handleJoin]);
 
   return (
-    <View style={[styles.container, { paddingTop: headerHeight }]}>
-      <Stack.Screen options={{ title: 'Discover Spaces' }} />
+    <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false, title: 'Discover Spaces' }} />
+
+      <ScreenHeader
+        title="Discover Spaces"
+        insetTop={insets.top}
+        onBack={() => router.back()}
+        accessibilityBackLabel="Back to spaces"
+        theme={theme}
+      />
 
       <View style={styles.searchContainer}>
         <IconSymbol name="magnifyingglass" size={18} color={theme.colors.textMuted} />

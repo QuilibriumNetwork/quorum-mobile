@@ -12,15 +12,15 @@ export default function ProfileLayout() {
         headerStyle: { backgroundColor: theme.colors.surface1 },
         headerTintColor: theme.colors.textMain,
         contentStyle: { backgroundColor: theme.colors.surface1 },
-        // Default off; profile/index.tsx opts in so the bell-icon header
-        // is visible on the main profile screen. Sub-routes can re-opt
-        // out via their own Stack.Screen options if needed.
+        // Off for every route in this stack; each screen draws its own header
+        // (see components/ui/ScreenHeader).
         headerShown: false,
+        // The iOS branch is intentionally EMPTY, not absent — removing the key
+        // would make iOS inherit Android's slide_from_right. It previously held
+        // headerTransparent + headerBlurEffect, which clash with iOS 26's
+        // Liquid Glass buttons. See spaces/_layout.tsx.
         ...Platform.select({
-          ios: {
-            headerTransparent: true,
-            headerBlurEffect: 'systemChromeMaterial' as const,
-          },
+          ios: {},
           // Android: explicit slide_from_right to avoid the
           // overlay-scrim persistence bug on some devices. See
           // spaces/_layout.tsx for the full reasoning.

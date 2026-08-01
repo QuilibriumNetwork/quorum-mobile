@@ -1,12 +1,15 @@
 import UnifiedProfileScreen from '@/components/UnifiedProfileScreen';
 import WarpcastWalletImportModal from '@/components/WarpcastWalletImportModal';
 import { useTheme } from '@/theme';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ProfileAccountScreen() {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [warpcastImportVisible, setWarpcastImportVisible] = useState(false);
 
   // Deep-link entry — `?openWarpcastImport=1` (used by the miniapp
@@ -23,21 +26,24 @@ export default function ProfileAccountScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: 'Account',
-          // Override layout-level transparent header on iOS — see the
-          // comment in profile/index.tsx for the rationale.
-          headerTransparent: false,
-          headerShadowVisible: false,
-          // Match body background so the header reads as a continuous
-          // surface (UnifiedProfileScreen renders against
-          // theme.colors.background).
-          headerStyle: { backgroundColor: theme.colors.background },
-          headerBlurEffect: undefined,
-        }}
+      <Stack.Screen options={{ headerShown: false, title: 'Account' }} />
+
+      {/*
+        Drawn in RN rather than by the native stack — see ScreenHeader. This
+        screen previously had to override the layout's transparent/blurred iOS
+        header back to an opaque one anyway, so it gains a continuous surface
+        for free: the bar takes the same background the body renders against
+        and drops the separator.
+      */}
+      <ScreenHeader
+        title="Account"
+        insetTop={insets.top}
+        onBack={() => router.back()}
+        backgroundColor={theme.colors.background}
+        showBorder={false}
+        theme={theme}
       />
+
       <UnifiedProfileScreen
         onOpenWarpcastImport={() => setWarpcastImportVisible(true)}
       />
