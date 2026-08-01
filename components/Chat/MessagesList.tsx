@@ -404,47 +404,75 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   const scrollViewRef = useRef<any>(null);
   const insetBottomRef = useRef(0);
   const alignTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The resting clearance, held in a REF and deliberately NEVER in a dependency
+  // array. `bottomInset` is `useChatListBottomInset(effectiveChromeHeight)` and
+  // the screens pass `composerPanelOpen ? 0 : tabBarHeight`, so it CHANGES the
+  // moment the emoji panel opens. Taking it as a dep propagates through
+  // scheduleAlign into ScrollComponent's useMemo, changing the scroll
+  // component's identity — and FlashList REMOUNTS the scroll view when that
+  // type changes, wiping the rendered messages mid-swap. (Shipped once, caught
+  // on device, reverted. See the gotcha in the design doc.)
+  const restingInsetRef = useRef(bottomInset);
+  restingInsetRef.current = bottomInset;
+
   const alignShortContentToBottom = useCallback(() => {
     const viewport = viewportHeightRef.current;
     const content = contentHeightRef.current;
     // Taller than the viewport ⇒ a genuinely scrollable list; leave it alone.
     if (viewport <= 0 || content <= 0 || content > viewport + 1) return;
-    // Never while the emoji panel owns the bottom (open, or mid panel↔keyboard
-    // hand-off): it runs its own list choreography (freeze / cold-open lift)
-    // and a scroll here would fight it. Same guard the send-time correction
-    // below uses, for the same reason.
+    // RESTING STATE ONLY — load-bearing, not an optimisation.
+    //
+    // `onContentInsetChange` fires on EVERY FRAME of a keyboard animation:
+    // useChatKeyboard's onMove worklet moves `padding` per frame, totalPadding
+    // recomputes, and ScrollViewWithBottomPadding relays each distinct value to
+    // JS. Without this gate, a short chat re-scrolls on every one of those
+    // frames while KeyboardChatScrollView is already lifting the list per frame
+    // on the UI THREAD toward its own, different target — two drivers writing
+    // one scroll offset on two threads, which is visible jitter.
+    //
+    // composerBottomBusySV does NOT cover this: it is scoped to the emoji panel
+    // and is never set for a plain keyboard show/hide.
+    //
+    // Above the resting clearance the keyboard or panel owns the scroll, so we
+    // stay out. The bug this exists for is a resting-state bug, so nothing is
+    // lost by only acting at rest.
+    if (insetBottomRef.current > restingInsetRef.current + 1) return;
+    // And never while the emoji panel owns the bottom (open, or mid
+    // panel↔keyboard hand-off): it runs its own choreography (freeze /
+    // cold-open lift). Same guard the send-time correction below uses.
     if (composerBottomBusySV.value === 1) return;
-    // Call the underlying scroll view directly, NOT FlashList's scrollToEnd:
-    // that one awaits a scrollToIndex retry chain and then defers through a
-    // setTimeout, so it lands frames later and loses the race against
-    // FlashList's own deferred initial scroll. The native scrollToEnd computes
-    // `content + inset − viewport` synchronously, which is exactly the target.
     const target = content + insetBottomRef.current - viewport;
-    const sv = scrollViewRef.current;
     if (target <= 0) return;
+    // Call the underlying scroll view directly, NOT FlashList's scrollToEnd:
+    // that awaits a scrollToIndex retry chain then defers through a setTimeout,
+    // so it lands frames later and loses the race against FlashList's own
+    // deferred initial scroll.
+    const sv = scrollViewRef.current;
     if (typeof sv?.scrollTo === 'function') sv.scrollTo({ y: target, animated: false });
     else flatListRef.current?.scrollToEnd({ animated: false });
-    // Re-assert twice: FlashList re-runs its own initial scroll for ~100ms
-    // after first layout (`initialScrollCompletedRef`) plus one nested deferred
-    // pass, either of which would otherwise land last and undo this one.
-    // scrollToEnd on an already-ended list is a no-op, so the extra passes are
-    // free when they are not needed.
+    // Deps MUST stay empty — see restingInsetRef above.
+  }, []);
+
+  // Re-assert a few times: FlashList re-runs its own initial scroll for ~100ms
+  // after first layout (`initialScrollCompletedRef`) plus one nested deferred
+  // pass, either of which would otherwise land last and undo the correction.
+  //
+  // EVERY pass goes back through the full guard above. An earlier version
+  // inlined a partial copy (content-vs-viewport only), so once armed the chain
+  // kept firing for ~250ms and would still scroll if a keyboard or panel opened
+  // inside that window.
+  const scheduleAlign = useCallback(() => {
+    alignShortContentToBottom();
     if (alignTimerRef.current) clearTimeout(alignTimerRef.current);
     let n = 0;
-    const reassert = () => {
+    const again = () => {
       n += 1;
-      if (contentHeightRef.current <= viewportHeightRef.current + 1) {
-        const t = contentHeightRef.current + insetBottomRef.current - viewportHeightRef.current;
-        if (t > 0) {
-          const s2 = scrollViewRef.current;
-          if (typeof s2?.scrollTo === 'function') s2.scrollTo({ y: t, animated: false });
-          else flatListRef.current?.scrollToEnd({ animated: false });
-        }
-      }
-      alignTimerRef.current = n < 3 ? setTimeout(reassert, 60 * n) : null;
+      alignShortContentToBottom();
+      alignTimerRef.current = n < 3 ? setTimeout(again, 60 * n) : null;
     };
-    alignTimerRef.current = setTimeout(reassert, 40);
-  }, []);
+    alignTimerRef.current = setTimeout(again, 40);
+  }, [alignShortContentToBottom]);
+
   useEffect(() => () => {
     if (alignTimerRef.current) clearTimeout(alignTimerRef.current);
   }, []);
@@ -469,12 +497,12 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
           onLayout={(e) => {
             scrollProps.onLayout?.(e);
             viewportHeightRef.current = e.nativeEvent.layout.height;
-            alignShortContentToBottom();
+            scheduleAlign();
           }}
           onContentSizeChange={(w, h) => {
             scrollProps.onContentSizeChange?.(w, h);
             contentHeightRef.current = h;
-            alignShortContentToBottom();
+            scheduleAlign();
           }}
           onContentInsetChange={(insets) => {
             insetBottomRef.current = insets.bottom;
@@ -482,11 +510,11 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
             // and native scrollToEnd targets `content + inset − viewport`. So
             // aligning on the content-size event alone computes a target of 0
             // and does nothing — this is the trigger that actually matters.
-            alignShortContentToBottom();
+            scheduleAlign();
           }}
         />
       )),
-    [blankSpace, alignShortContentToBottom],
+    [blankSpace, scheduleAlign],
   );
 
   // Ref to hold latest messages — used inside callbacks to avoid re-creating them when messages change
