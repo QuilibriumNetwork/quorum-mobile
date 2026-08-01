@@ -81,11 +81,26 @@ export function readGateRecord(
       parsed !== null &&
       typeof parsed === 'object' &&
       !Array.isArray(parsed) &&
-      typeof (parsed as DmProfileGateRecord).sig === 'string' &&
-      typeof (parsed as DmProfileGateRecord).at === 'number' &&
-      typeof (parsed as DmProfileGateRecord).attempts === 'number'
+      typeof (parsed as DmProfileGateRecord).sig === 'string'
     ) {
-      return { record: parsed as DmProfileGateRecord, migrated: false };
+      // Only `sig` is required to recognise the object form. The numbers are
+      // validated separately so a record with unusable ones still migrates with
+      // its REAL signature, rather than falling through and having the whole
+      // JSON blob mistaken for a bare signature.
+      const { sig, at, attempts } = parsed as DmProfileGateRecord;
+      // `Number.isFinite` / `Number.isInteger`, not `typeof === 'number'`: NaN
+      // and Infinity are both numbers, and either breaks the gate silently — a
+      // NaN `attempts` defeats the cap (`NaN >= 3` is false, so it sends
+      // forever) and a NaN `at` wedges the interval shut. Both serialise to
+      // `null` through JSON, so this covers stored ones too. Desktop applies the
+      // identical check.
+      if (Number.isFinite(at) && Number.isInteger(attempts) && attempts >= 0) {
+        return { record: { sig, at, attempts }, migrated: false };
+      }
+      return {
+        record: { sig, at: now, attempts: MIGRATED_ATTEMPTS },
+        migrated: true,
+      };
     }
   } catch {
     // Not JSON — fall through. The legacy value is a bare signature, which is

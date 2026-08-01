@@ -113,6 +113,45 @@ function gateKey(selfAddress: string, partnerAddress: string): string {
   return `${selfAddress}:${partnerAddress}`;
 }
 
+/**
+ * Guarded gate read. FAILS OPEN — a redundant identity push is harmless, a
+ * missed one leaves the partner stuck on a placeholder.
+ *
+ * These wrappers are not decoration. `broadcastProfileToAllDMs` documents itself
+ * as fire-and-forget and never-throwing, and three of its four call sites invoke
+ * it with NO rejection handler (ProfileModal x2, UnifiedProfileEditModal — all
+ * `void import(...).then(...)`). An MMKV failure on a bare `store.getString` /
+ * `store.set` would therefore escape the per-partner try/catch below, abandon the
+ * rest of the sweep, and surface as an unhandled promise rejection.
+ *
+ * Desktop takes the same posture inside its own readRecord/writeRecord.
+ */
+function readGate(
+  store: MMKV,
+  key: string,
+  now: number
+): { record: DmProfileGateRecord | null; migrated: boolean } {
+  try {
+    return readGateRecord(store.getString(key), now);
+  } catch {
+    return { record: null, migrated: false };
+  }
+}
+
+/**
+ * Guarded gate write. Swallows storage failures deliberately, so a failed WRITE
+ * is never mistaken for a failed SEND: the message has already gone out at that
+ * point, and routing the error through the send-failure path would leave the
+ * gate open and produce a real duplicate send the counter never saw.
+ */
+function writeGate(store: MMKV, key: string, record: DmProfileGateRecord): void {
+  try {
+    store.set(key, JSON.stringify(record));
+  } catch {
+    // Gate stays as it was; the next connect re-evaluates.
+  }
+}
+
 // Canonical signature of the exact wire payload. Field presence matters
 // (avatar-only vs name-only have different signatures), and values matter.
 function payloadSignature(p: DMProfilePayload): string {
@@ -199,10 +238,10 @@ export async function broadcastProfileToAllDMs(
     // identity is re-sent at most MAX_SENDS_PER_IDENTITY times, spaced by
     // RESEND_INTERVAL_MS, then never again until the signature changes.
     const key = gateKey(payload.selfAddress, partnerAddress);
-    const { record, migrated } = readGateRecord(store.getString(key), now);
+    const { record, migrated } = readGate(store, key, now);
     // Persist a migrated record even if we do not send, so it is anchored once
     // and can age out from there rather than being re-anchored on every read.
-    if (migrated && record) store.set(key, JSON.stringify(record));
+    if (migrated && record) writeGate(store, key, record);
     if (!shouldSendProfile(record, sig, now)) continue;
 
     try {
@@ -240,14 +279,8 @@ export async function broadcastProfileToAllDMs(
       );
 
       // Record only after a successful enqueue so a throw retries next round.
-      store.set(
-        key,
-        JSON.stringify({
-          sig,
-          at: now,
-          attempts: nextAttempts(record, sig),
-        } satisfies DmProfileGateRecord)
-      );
+      // writeGate swallows storage errors on purpose — see its comment.
+      writeGate(store, key, { sig, at: now, attempts: nextAttempts(record, sig) });
     } catch {
       // Per-partner failure (no session, encrypt error) is non-fatal — the
       // gate stays open for this partner so the next broadcast retries.

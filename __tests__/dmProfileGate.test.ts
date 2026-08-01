@@ -158,4 +158,29 @@ describe('migration off the pre-cap format', () => {
     expect(readGateRecord(null, T0)).toEqual({ record: null, migrated: false });
     expect(readGateRecord(undefined, T0)).toEqual({ record: null, migrated: false });
   });
+
+  // typeof NaN === 'number', so a naive shape check lets these through — and
+  // then NaN >= MAX is false, which defeats the cap silently and sends forever.
+  // NaN and Infinity both serialise to null through JSON, so a stored record can
+  // carry them even though nothing here writes one.
+  it.each([
+    ['NaN attempts', { sig: SIG, at: T0, attempts: NaN }],
+    ['Infinity attempts', { sig: SIG, at: T0, attempts: Infinity }],
+    ['negative attempts', { sig: SIG, at: T0, attempts: -5 }],
+    ['fractional attempts', { sig: SIG, at: T0, attempts: 1.5 }],
+    ['NaN at', { sig: SIG, at: NaN, attempts: 1 }],
+    ['missing attempts', { sig: SIG, at: T0 }],
+  ])('re-migrates a corrupt record, keeping its real signature (%s)', (_label, bad) => {
+    const { record, migrated } = readGateRecord(JSON.stringify(bad), T0);
+    expect(migrated).toBe(true);
+    // The signature must survive, or the gate forgets what it already announced.
+    expect(record!.sig).toBe(SIG);
+    expect(Number.isInteger(record!.attempts)).toBe(true);
+    expect(Number.isFinite(record!.at)).toBe(true);
+    // Anchored at now, so it is not instantly due...
+    expect(shouldSendProfile(record, SIG, T0)).toBe(false);
+    // ...and the cap still bites rather than sending forever.
+    const { sentAt } = simulate(days(10), JSON.stringify(bad));
+    expect(sentAt.length).toBeLessThanOrEqual(MAX_SENDS_PER_IDENTITY);
+  });
 });
