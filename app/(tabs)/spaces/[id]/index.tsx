@@ -85,7 +85,18 @@ export default function SpaceChannelsScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
+      {/*
+        `title` must be re-set here even though the header is hidden. Screen
+        options are MERGED by setOptions, so the `title: 'Loading...'` set by
+        the branch above survives once we hide the header — and on iOS the
+        native back button of the screen pushed on top of us takes its label
+        from THIS screen's navigationItem.title. That is why the channel
+        header showed "‹ Loading…" whenever the space had to be fetched, and
+        showed "‹ Space" whenever it was already cached (hence "sporadic").
+        Setting the real space name both clears the stale value and gives the
+        channel screen a correctly-labelled back button.
+      */}
+      <Stack.Screen options={{ headerShown: false, title: spaceData.spaceName }} />
 
       <SpaceBannerHeader
         space={spaceData}
