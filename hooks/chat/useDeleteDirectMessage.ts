@@ -20,6 +20,7 @@ import { getDeviceKeyset } from '@/services/onboarding/secureStorage';
 import { logger, queryKeys } from '@quilibrium/quorum-shared';
 import type { Message, RemoveMessage } from '@quilibrium/quorum-shared';
 import { sendEncryptedMessageToAllDevices } from './useSendDirectMessage';
+import { withPiggybackedAcks } from '@/services/dm/piggybackAcks';
 
 export interface UseDeleteDirectMessageParams {
   conversationId: string;
@@ -40,7 +41,7 @@ export function useDeleteDirectMessage() {
   const queryClient = useQueryClient();
   const storage = useStorageAdapter();
   const { user } = useAuth();
-  const { enqueueOutbound, subscribe } = useWebSocket();
+  const { enqueueOutbound, subscribe, takePendingReceiptAcks } = useWebSocket();
   const apiClient = getQuorumClient();
 
   return useMutation({
@@ -113,10 +114,12 @@ export function useDeleteDirectMessage() {
 
         if (allTargetDevices.length === 0) return params.messageId;
 
+        // A DM delete is a DM to the same partner, so it is an equally valid
+        // carrier for pending acks. Copy, never mutate — see withPiggybackedAcks.
         await sendEncryptedMessageToAllDevices(
           params.conversationId,
           params.recipientAddress,
-          message,
+          withPiggybackedAcks(message, takePendingReceiptAcks(params.recipientAddress)),
           allTargetDevices,
           enqueueOutbound,
           subscribe,

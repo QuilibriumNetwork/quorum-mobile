@@ -32,6 +32,7 @@ import {
   type EditMessage,
 } from '@quilibrium/quorum-shared';
 import { sendEncryptedMessageToAllDevices } from './useSendDirectMessage';
+import { withPiggybackedAcks } from '@/services/dm/piggybackAcks';
 import type { InfiniteMessagesData } from './queryTypes';
 
 export interface UseEditDirectMessageParams {
@@ -53,7 +54,7 @@ export function useEditDirectMessage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const storage = useStorageAdapter();
-  const { enqueueOutbound, subscribe } = useWebSocket();
+  const { enqueueOutbound, subscribe, takePendingReceiptAcks } = useWebSocket();
   const apiClient = getQuorumClient();
 
   return useMutation({
@@ -197,10 +198,12 @@ export function useEditDirectMessage() {
           `[useEditDirectMessage] posting edit-message for ${params.messageId.slice(0, 12)} to ${allTargetDevices.length} device(s)`
         );
 
+        // A DM edit is a DM to the same partner, so it is an equally valid
+        // carrier for pending acks. Copy, never mutate — see withPiggybackedAcks.
         await sendEncryptedMessageToAllDevices(
           params.conversationId,
           params.recipientAddress,
-          message,
+          withPiggybackedAcks(message, takePendingReceiptAcks(params.recipientAddress)),
           allTargetDevices,
           enqueueOutbound,
           subscribe,

@@ -165,6 +165,30 @@ describe('WebSocketContext — receipt ack wiring', () => {
     });
   });
 
+  // Producing piggybacked acks. The decision logic is pure and tested directly
+  // in piggybackAcks.test.ts; what can only regress here is the wiring.
+  describe('piggybacked acks — the producing side', () => {
+    it('exposes the drain on the context so the send hooks can reach it', () => {
+      // The buffers live in receiptServiceRef inside this provider; the DM send
+      // lives in useSendDirectMessage. Without this method there is no route.
+      expect(source).toContain('takePendingReceiptAcks: (partnerAddress: string) => ReceiptEnvelopeFields | null;');
+      expect(source).toMatch(/value = useMemo[\s\S]{0,600}takePendingReceiptAcks,/);
+    });
+
+    it('delegates the drain decision instead of inlining it', () => {
+      const body = section('const takePendingReceiptAcks = useCallback', '}, [isReceiptEnabled]);');
+      expect(body).toContain('drainPiggybackAcks(svc, partnerAddress, isReceiptEnabled)');
+      // The settings gate is the shared function's job, and it must actually be
+      // handed the gate rather than a stub that always allows.
+      expect(body).not.toMatch(/drainPiggybackAcks\([^)]*=>\s*true/);
+    });
+
+    it('no-ops before the service exists rather than throwing into a send', () => {
+      const body = section('const takePendingReceiptAcks = useCallback', '}, [isReceiptEnabled]);');
+      expect(body).toMatch(/if\s*\(!svc\)\s*return null;/);
+    });
+  });
+
   describe('receipt settings', () => {
     it('gates read receipts on delivery receipts at the service layer', () => {
       // Delivery is load-bearing for read now: ✓✓ requires a real deliveredAt.
@@ -173,5 +197,73 @@ describe('WebSocketContext — receipt ack wiring', () => {
       const body = section('const isReceiptEnabled = useCallback', '}, []);');
       expect(body).toContain("kind === 'delivery' ? delivery : delivery && resolve('readReceipts')");
     });
+  });
+});
+
+/**
+ * The DM send sites that carry piggybacked acks.
+ *
+ * These assertions exist for one specific silent failure. Mobile's send is
+ * deferred: sendEncryptedMessageToAllDevices serializes nothing, it hands a
+ * thunk to enqueueOutbound, and the JSON.stringify that puts bytes on the wire
+ * runs later when the queue drains. So desktop's attach-to-the-message-then-
+ * strip-after-the-await pattern strips the fields BEFORE they are written —
+ * draining the buffers, cancelling the standalone timers, and sending nothing.
+ * No throw, no log, and receipts have no observable behaviour to notice it by.
+ *
+ * Passing a copy is what makes it correct, so "did it pass a copy" is the thing
+ * worth pinning down. A future edit that reverts to attach/strip because it
+ * "matches desktop" is exactly the regression this catches.
+ */
+describe('DM send sites — piggyback carriers', () => {
+  const CARRIERS = [
+    { file: 'useSendDirectMessage.ts', address: 'recipientAddress' },
+    { file: 'useEditDirectMessage.ts', address: 'params.recipientAddress' },
+    { file: 'useDeleteDirectMessage.ts', address: 'params.recipientAddress' },
+  ];
+
+  const hookSource = (file: string) =>
+    fs.readFileSync(path.join(__dirname, '..', 'hooks', 'chat', file), 'utf8');
+
+  it.each(CARRIERS)('$file drains for the partner it is sending to', ({ file, address }) => {
+    expect(hookSource(file)).toContain(`takePendingReceiptAcks(${address})`);
+  });
+
+  it.each(CARRIERS)('$file sends a copy, never a mutated original', ({ file }) => {
+    const src = hookSource(file);
+    // The copy reaches the send…
+    expect(src).toMatch(/withPiggybackedAcks\(\s*message,/);
+    // …and the original is never given the fields directly.
+    expect(src).not.toMatch(/message\.(ackMessageIds|readAckUpTo)\s*=/);
+    expect(src).not.toMatch(/delete\s+message\.(ackMessageIds|readAckUpTo)/);
+    expect(src).not.toMatch(/Object\.assign\(\s*message,/);
+  });
+
+  it('never piggybacks onto a send that reaches only one of the partner devices', () => {
+    // A carrier must fan out to EVERY device of the partner, because that is
+    // what the standalone ack does. Draining into a single-session send trades
+    // "arrives everywhere within 10s" for "arrives on one device now, and on
+    // the others never" — the buffer is emptied either way. Reactions and
+    // embeds both seal against one getLatestState session, so they are excluded
+    // on that ground; revisit if they ever gain full fan-out.
+    for (const file of ['useSendDirectReaction.ts', 'useSendDirectEmbedMessage.ts']) {
+      const src = hookSource(file);
+      expect(src).not.toContain('takePendingReceiptAcks');
+      expect(src).not.toContain('withPiggybackedAcks');
+    }
+  });
+
+  it('never piggybacks an ack onto an ack', () => {
+    // sendDmReceiptAck is itself a standalone ack. Attaching there would be an
+    // ack riding an ack — and would drain the buffer into a message the peer
+    // handles on the flat-control-message path, which never reads the envelope
+    // fields, destroying them.
+    const ackSend = source.slice(
+      source.indexOf('const sendDmReceiptAck = useCallback'),
+      source.indexOf('sendDmReceiptAckRef.current = sendDmReceiptAck;'),
+    );
+    expect(ackSend.length).toBeGreaterThan(0);
+    expect(ackSend).not.toContain('takePendingReceiptAcks');
+    expect(ackSend).not.toContain('withPiggybackedAcks');
   });
 });
