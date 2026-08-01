@@ -421,7 +421,8 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
   }, [fetchMoreMessages, hasMoreMessages]);
 
   const handleSendMessage = useCallback(() => {
-    if (sendMessageMutation.isPending || sendEmbedMutation.isPending) return;
+    // No isPending re-entrancy guard — see the matching note in DMChatArea. It
+    // silently swallowed every send after the first while disconnected.
     if (!spaceId || !channelId) return;
 
     if (editingMessage && messageText.trim()) {
@@ -798,7 +799,11 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             onSend={handleSendMessage}
             channelName={selectedChannelData?.name || 'general'}
             theme={theme}
-            isSending={sendMessageMutation.isPending || sendEmbedMutation.isPending}
+            // Deliberately NOT bound to the send mutation's isPending — see the
+            // matching note in DMChatArea. The outbound queue is durable, so a
+            // send while disconnected must not lock the composer; the optimistic
+            // bubble's own spinner is the honest indicator.
+            isSending={false}
             onAttachmentPress={handleAttachmentPress}
             pendingAttachment={pendingAttachment}
             onClearAttachment={handleClearAttachment}
