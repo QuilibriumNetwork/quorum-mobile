@@ -23,6 +23,13 @@ export default function TabsLayout() {
         panel is open or a keyboard is up, so transitions never flash. */}
     <Tabs
       tabBar={(props) => <AppTabBar {...props} />}
+      // Back returns to the tab you actually came from. React Navigation
+      // defaults to 'firstRoute', which sent every back press to Spaces no
+      // matter where the user started — most visibly from Account, which is
+      // entered from the avatar rather than from a tab icon. 'history'
+      // de-duplicates as it records, so the trail can never exceed one entry
+      // per tab and back still reaches the exit in a few presses.
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         // NOTE: `freezeOnBlur` was tried here to stop off-screen tabs

@@ -1,7 +1,6 @@
 import UnifiedProfileScreen from '@/components/UnifiedProfileScreen';
 import WarpcastWalletImportModal from '@/components/WarpcastWalletImportModal';
 import { useTheme } from '@/theme';
-import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -25,24 +24,25 @@ export default function ProfileAccountScreen() {
   }, [params.openWarpcastImport]);
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false, title: 'Account' }} />
+    /*
+      No title bar. Account is entered from the always-visible avatar in the tab
+      bar and switching to it is a tab jump, not a push — so it is a top-level
+      destination like Spaces or Messages, and those don't carry one either. The
+      bar it used to have said "Account" directly above a pill row whose first
+      entry says "Profile", and its back chevron went to Spaces regardless of
+      where the user came from. Leaving to any tab is one tap on the bar below.
 
-      {/*
-        Drawn in RN rather than by the native stack — see ScreenHeader. This
-        screen previously had to override the layout's transparent/blurred iOS
-        header back to an opaque one anyway, so it gains a continuous surface
-        for free: the bar takes the same background the body renders against
-        and drops the separator.
-      */}
-      <ScreenHeader
-        title="Account"
-        insetTop={insets.top}
-        onBack={() => router.back()}
-        backgroundColor={theme.colors.background}
-        showBorder={false}
-        theme={theme}
-      />
+      Owning the top inset here is what the bar used to do implicitly: it painted
+      into the status-bar area, which is why the screen below it adds no inset of
+      its own.
+    */
+    <View
+      style={[
+        styles.container,
+        { paddingTop: insets.top, backgroundColor: theme.colors.background },
+      ]}
+    >
+      <Stack.Screen options={{ headerShown: false, title: 'Account' }} />
 
       <UnifiedProfileScreen
         onOpenWarpcastImport={() => setWarpcastImportVisible(true)}
