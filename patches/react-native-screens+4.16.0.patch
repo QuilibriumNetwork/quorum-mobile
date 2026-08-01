@@ -1,0 +1,31 @@
+diff --git a/node_modules/react-native-screens/ios/RNSScreenStack.mm b/node_modules/react-native-screens/ios/RNSScreenStack.mm
+--- a/node_modules/react-native-screens/ios/RNSScreenStack.mm
++++ b/node_modules/react-native-screens/ios/RNSScreenStack.mm
+@@ -230,13 +230,20 @@
+     // which we check indirectly by checking if transitionCoordinator is set.
+     // If it's not, we are safe to proceed.
+     if (self.transitionCoordinator == nil) {
+-      // We still need to disable interactions for back button so click effects are not applied,
+-      // and there is unfortunately no better place for it currently
+-      UIView *button = [navigationBar rnscreens_findBackButtonWrapperView];
+-      if (button != nil) {
+-        button.userInteractionEnabled = false;
+-      }
+-
++      // PATCHED (quorum-mobile): upstream disabled interaction on the back button
++      // here, purely so the tap highlight isn't drawn while the pop animates, and
++      // re-enabled it in -navigationBar:didPopItem: below. When the screen being
++      // revealed hides its header (headerShown: false) UIKit never delivers
++      // didPopItem:, so `userInteractionEnabled = false` stayed latched on the
++      // back-button wrapper view. UIKit reuses that view, so every later push
++      // inherited a dead back button for the rest of the app session — the user
++      // could only escape by swiping back or relaunching.
++      //
++      // Upstream deleted this whole delegate pair in
++      // software-mansion/react-native-screens#3173, shipped in 4.17.0; Expo SDK 54
++      // pins ~4.16.0, and the maintainer's recommendation for 4.16 is to patch.
++      // We keep the transitionCoordinator guard — that is what actually prevents a
++      // double pop — and drop only the cosmetic latch that caused the lockout.
+       return true;
+     }
+ 

@@ -285,6 +285,11 @@ export default function SpaceChannelChat() {
       <Stack.Screen
         options={{
           title: channelName ? `# ${channelName}` : 'Channel',
+          // Label the back button explicitly instead of letting iOS inherit it
+          // from the space screen's title. The space screen hides its header
+          // and its stale title used to surface here as "‹ Loading…". iOS
+          // shortens this to "Back" on its own when the name doesn't fit.
+          headerBackTitle: spaceData?.spaceName ?? 'Space',
           headerRight,
         }}
       />

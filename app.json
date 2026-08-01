@@ -37,6 +37,7 @@
         "NSMicrophoneUsageDescription": "Quorum uses the microphone for voice and video calls.",
         "NSPhotoLibraryUsageDescription": "Quorum uses your photo library to select profile photos.",
         "NSPhotoLibraryAddUsageDescription": "Quorum saves photos and videos from chats and feeds to your photo library.",
+        "UIDesignRequiresCompatibility": true,
         "UIBackgroundModes": [
           "fetch",
           "processing",
