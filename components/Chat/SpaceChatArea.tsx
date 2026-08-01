@@ -8,13 +8,11 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ChatBottomChrome, useChatListBottomInset } from './ChatBottomChrome';
-import { useHeaderHeight } from '@react-navigation/elements';
 
 import {
-  ChannelHeader,
   MessageInput,
   MessagesList,
   PinnedMessagesPanel,
@@ -227,9 +225,11 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
   // API requires auth). Surface a banner so they know why the linked
   // channel produces nothing in chat instead of showing an empty void.
   const showFarcasterRequiredBanner = Boolean(primaryLinkedChannel) && !farcasterAuthToken;
-  // The Spaces stack uses a translucent header on iOS — pad the banner
-  // by the header height so it sits below the chrome instead of underneath.
-  const headerHeight = useHeaderHeight();
+  // NOTE: the channel screen now draws its own header (ChannelHeader) as a
+  // normal layout element on both platforms, so nothing here sits underneath
+  // floating chrome any more and no header inset is needed. This removed the
+  // last `Platform.OS === 'ios'` branch in this file — which mattered, because
+  // an iOS-only layout branch is a branch this project cannot test.
 
   // Pre-compute the unique sender addresses we're about to render so
   // the public-profile fallback hook can fetch missing entries.
@@ -712,7 +712,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
               flexDirection: 'row',
               alignItems: 'center',
               gap: Skin.space(8),
-              paddingTop: Skin.space(10) + (Platform.OS === 'ios' ? headerHeight : 0),
+              paddingTop: Skin.space(10),
               paddingBottom: Skin.space(10),
               paddingHorizontal: Skin.space(14),
               backgroundColor: theme.colors.surface2,
@@ -739,7 +739,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
           messages={spaceSearch.isSearchOpen && spaceSearch.query.trim().length > 0 ? spaceSearch.results.map(r => r.message) : messages}
           spaceId={spaceId}
           channelId={channelId}
-          topInset={Platform.OS === 'ios' ? headerHeight : 0}
+          topInset={0}
           bottomInset={listBottomInset}
           theme={theme}
           isLoading={messagesLoading}

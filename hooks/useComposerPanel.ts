@@ -72,9 +72,10 @@ export interface ComposerPanelOptions {
 export interface ComposerPanel {
   /** Whether the custom (emoji) panel is currently shown. */
   panelOpen: boolean;
-  /** Whether a soft keyboard is currently up. Lets the composer PRELOAD the
-   *  panel in the keyboard's footprint (rendered behind where the OS draws the
-   *  keyboard) so dismissing the keyboard reveals an already-painted panel. */
+  /** Whether a soft keyboard is currently up. Lets the composer MOUNT the panel
+   *  ahead of first use (the mount latch in MessageInput), so opening it is a
+   *  reveal rather than a ~120-node build. It is deliberately not used to PAINT
+   *  the panel behind the keyboard any more — see panelVisibleSV. */
   keyboardVisible: boolean;
   /**
    * Animated height for the spacer/panel container under the pill. Includes
@@ -83,8 +84,8 @@ export interface ComposerPanel {
    */
   spacerHeight: SharedValue<number>;
   /** UI-thread 1/0: whether the panel content should be painted. Drives the
-   *  panel's opacity so it preloads behind a fully-up keyboard and hides in
-   *  lockstep as the keyboard descends — no React-lagged peek. */
+   *  panel's opacity, and is 1 only while the panel is actually open — nothing
+   *  is painted underneath the keyboard, which iOS 26 renders translucent. */
   panelVisibleSV: DerivedValue<number>;
   /** Show the panel: dismiss the keyboard, hold its footprint. */
   openPanel: () => void;
@@ -370,20 +371,30 @@ export function useComposerPanel(options: ComposerPanelOptions = {}): ComposerPa
   );
 
   // Whether the emoji panel should be PAINTED (1) or hidden (0), on the UI
-  // thread so it tracks the keyboard with no React lag. Painted when:
-  //   - the panel is open; or
-  //   - a keyboard is essentially fully up (preload behind it, so opening the
-  //     panel reveals an already-painted grid).
-  // As the keyboard DESCENDS to dismiss-to-idle (panel not open), it drops below
-  // the threshold immediately, so the panel hides in lockstep with the slide —
-  // no peek in the strip below the tab bar (which a lagged React flag caused).
+  // thread so it tracks the keyboard with no React lag. Painted only when the
+  // panel is actually open.
+  //
+  // This used to ALSO paint the grid whenever a keyboard was essentially fully
+  // up — a preload, on the assumption that a full keyboard covers it, so
+  // opening the panel could reveal an already-painted grid. That assumption
+  // held on every platform with an opaque keyboard, which is every Android
+  // keyboard and every iOS keyboard before 26. iOS 26 made the system keyboard
+  // translucent, so the preloaded emoji grid started showing THROUGH the keys —
+  // reported as "the keyboard is semi-transparent with weird yellow artifacts",
+  // the yellow being emoji faces.
+  //
+  // The grid is still MOUNTED ahead of time (the separate mount latch in
+  // MessageInput builds it on first keyboard), so this only gives up the
+  // pre-rasterisation, not the ~120-node build. Opening the panel flips
+  // panelOpenSV on the UI thread in the same frame as the tap, so the reveal
+  // still has no React round-trip in it.
+  //
+  // Deliberately NOT branched on Platform.OS: an iOS-only paint path is a path
+  // this project cannot test. Painting identically on both platforms means any
+  // hitch this introduces on the keyboard→panel transition is visible on
+  // Android, where it can actually be caught.
   const panelVisibleSV = useDerivedValue<number>(() => {
-    if (panelOpenSV.value === 1) return 1;
-    const liveKeyboardHeight = Math.max(-keyboardHeight.value, 0);
-    const kbTarget = lastKeyboardHeight.value;
-    // "Essentially up" = within 90% of the last full height. Anything less means
-    // the keyboard is rising-not-yet-there or descending — hide the preload.
-    return kbTarget > 0 && liveKeyboardHeight >= kbTarget * 0.9 ? 1 : 0;
+    return panelOpenSV.value === 1 ? 1 : 0;
   });
 
   const openPanel = useCallback(() => {
