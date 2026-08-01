@@ -39,21 +39,35 @@ const PILL_RADIUS = 0;
 
 const AVATAR_SIZE = 32;
 
+// Profile / settings screen behind the avatar button. Not a tab-bar entry — it
+// is reachable only from the avatar, so nothing else can re-enter it.
+const ACCOUNT_PATH = '/account';
+
 // ─── Avatar button ────────────────────────────────────────────────────────────
 
 function AvatarButton() {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const pathname = usePathname();
 
   const uri = user?.profileImage || user?.farcaster?.pfpUrl || undefined;
   const fallbackName = user?.displayName || user?.primaryUsername || '';
 
+  const onAccount = pathname === ACCOUNT_PATH || pathname.startsWith(`${ACCOUNT_PATH}/`);
+
   const handlePress = useCallback(() => {
+    // Already on Account → do nothing. An unguarded push stacks a SECOND copy
+    // of the screen on top of the first: /account lives in its own stack, and
+    // once that stack is the focused one expo-router resolves the push into it
+    // rather than treating it as a tab jump. Each copy mounts a fresh
+    // UnifiedProfileScreen, so the Quorum/Farcaster switcher resets to Quorum
+    // and every tap adds one more back press before the user gets out.
+    if (onAccount) return;
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    router.push('/account');
-  }, []);
+    router.push(ACCOUNT_PATH);
+  }, [onAccount]);
 
   return (
     <TouchableOpacity
@@ -62,6 +76,7 @@ function AvatarButton() {
       activeOpacity={0.75}
       accessibilityLabel="Open profile and settings"
       accessibilityRole="button"
+      accessibilityState={{ selected: onAccount }}
       style={styles.tabSlot}
     >
       <View style={[styles.avatarWrap, { backgroundColor: theme.colors.surface3 }]}>
