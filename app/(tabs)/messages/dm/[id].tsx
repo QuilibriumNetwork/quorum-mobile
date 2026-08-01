@@ -2,10 +2,9 @@
  * DM chat screen — wraps DMChatArea with data hooks.
  */
 
-import { DMChatArea, type MessageUserInfo } from '@/components/Chat';
+import { DMChatArea, DMChatHeader, type MessageUserInfo } from '@/components/Chat';
 import { FarcasterDirectMessageView } from '@/components/Chat/FarcasterDirectMessageView';
-import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useConversation } from '@/hooks/chat/useConversations';
 import { useDMConversationSettings } from '@/hooks/chat/useDMConversationSettings';
 import { useDMMute } from '@/hooks/chat/useDMMute';
@@ -25,9 +24,8 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, Image, StyleSheet, Text, View } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
-import * as Skin from '@/theme/skins/geometry';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 // Prefetch helpers: warm the lazy chunks in the background after the screen
@@ -74,6 +72,9 @@ export default function DMChatScreen() {
 
   const { theme } = useTheme();
   const tabBarHeight = useBottomTabBarHeight();
+  // The header is ours now, so we own the status-bar inset it used to get for
+  // free from the native navigation bar.
+  const insets = useSafeAreaInsets();
   // While the composer emoji panel is open the tab bar is hidden, so reclaim
   // its space: zero the bottom padding here and pass 0 chrome height to the
   // chat area so the panel extends to the screen bottom with no gap.
@@ -176,7 +177,15 @@ export default function DMChatScreen() {
   const [burstVisible, setBurstVisible] = useState(false);
 
   const handleShowSidebars = useCallback(() => {
-    router.back();
+    // Normally pops back to the conversation list. The fallback matters: a DM
+    // opened from a push-notification tap or a deep link may have no history
+    // entry beneath it, and router.back() would then be a silent no-op leaving
+    // the user stuck in the conversation.
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/(tabs)/messages');
   }, []);
 
   const handleUserPress = useCallback((info: MessageUserInfo) => {
@@ -381,33 +390,6 @@ export default function DMChatScreen() {
     conversation?.displayName ||
     (conversation?.address ? truncateAddress(conversation.address, 'long') : 'Conversation');
 
-  const headerRight = useCallback(() => (
-    <View style={styles.headerRight}>
-      {!isFarcasterConversation && (
-        <>
-          {__DEV__ && (
-            <TouchableOpacity
-              onPress={handleOpenDevBurst}
-              hitSlop={8}
-              accessibilityLabel="DM test burst (dev)"
-            >
-              <IconSymbol name="flask" color={theme.colors.textMuted} size={20} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={handleVideoCallPress} hitSlop={8}>
-            <IconSymbol name="video" color={theme.colors.primary} size={20} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleCallPress} hitSlop={8}>
-            <IconSymbol name="phone" color={theme.colors.primary} size={20} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setSettingsVisible(true)} hitSlop={8}>
-            <IconSymbol name="gearshape" color={theme.colors.textMain} size={20} />
-          </TouchableOpacity>
-        </>
-      )}
-    </View>
-  ), [theme, isFarcasterConversation, handleVideoCallPress, handleCallPress, handleOpenDevBurst]);
-
   // Tapping the avatar or name in the header opens the same profile
   // modal that tapping a pfp inside the chat opens. Builds a minimal
   // MessageUserInfo from the conversation row + public-profile merge.
@@ -426,32 +408,32 @@ export default function DMChatScreen() {
     });
   }, [conversation]);
 
-  const headerTitle = useCallback(() => {
-    if (!conversation) return null;
-    return (
-      <TouchableOpacity
-        onPress={handleHeaderPress}
-        activeOpacity={0.7}
-        hitSlop={8}
-        style={styles.headerTitle}
-        accessibilityLabel={`Open ${title}'s profile`}
-      >
-        {conversation.icon ? (
-          <Image source={{ uri: conversation.icon }} style={styles.headerAvatar} />
-        ) : (
-          <DefaultAvatar displayName={title} address={conversation.address || ''} size={28} />
-        )}
-        <Text style={[styles.headerName, { color: theme.colors.textMain }]} numberOfLines={1}>
-          {title}
-        </Text>
-      </TouchableOpacity>
-    );
-  }, [conversation, title, theme, handleHeaderPress]);
+  // The bar is ours, not the navigation stack's — see ScreenHeader for why.
+  // Each branch below still sets the route `title`, so anything reading it
+  // (deep links, accessibility) gets a meaningful value even though nothing
+  // renders it.
+  const dmHeader = conversation ? (
+    <DMChatHeader
+      title={title}
+      icon={conversation.icon}
+      address={conversation.address || ''}
+      insetTop={insets.top}
+      onBack={handleShowSidebars}
+      onTitlePress={handleHeaderPress}
+      isFarcasterConversation={isFarcasterConversation}
+      onVideoCall={handleVideoCallPress}
+      onAudioCall={handleCallPress}
+      onOpenSettings={() => setSettingsVisible(true)}
+      onDevBurst={__DEV__ ? handleOpenDevBurst : undefined}
+      theme={theme}
+    />
+  ) : null;
 
   if (!conversationId) {
     return (
       <View style={containerStyle}>
-        <Stack.Screen options={{ title: 'Chat' }} />
+        <Stack.Screen options={{ headerShown: false, title: 'Chat' }} />
+        <ScreenHeader title="Chat" insetTop={insets.top} onBack={handleShowSidebars} theme={theme} />
       </View>
     );
   }
@@ -459,7 +441,8 @@ export default function DMChatScreen() {
   if (!conversation) {
     return (
       <View style={containerStyle}>
-        <Stack.Screen options={{ title: 'Loading...' }} />
+        <Stack.Screen options={{ headerShown: false, title: 'Chat' }} />
+        <ScreenHeader title="Chat" insetTop={insets.top} onBack={handleShowSidebars} theme={theme} />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
@@ -471,7 +454,8 @@ export default function DMChatScreen() {
   if (isFarcasterConversation) {
     return (
       <View style={containerStyle}>
-        <Stack.Screen options={{ title, headerTitle, headerRight }} />
+        <Stack.Screen options={{ headerShown: false, title }} />
+        {dmHeader}
         <FarcasterDirectMessageView
           conversation={conversation}
           onBack={handleShowSidebars}
@@ -489,7 +473,8 @@ export default function DMChatScreen() {
 
   return (
     <View style={containerStyle}>
-      <Stack.Screen options={{ title, headerTitle, headerRight }} />
+      <Stack.Screen options={{ headerShown: false, title }} />
+      {dmHeader}
 
       <DMChatArea
         conversationId={conversationId}
@@ -584,26 +569,5 @@ const styles = createSkinnable(() => StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  headerTitle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Skin.space(8),
-  },
-  headerAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: Skin.circleOrSquare(14),
-  },
-  headerName: {
-    fontSize: Skin.font(17),
-    fontWeight: '600',
-    flexShrink: 1,
-    maxWidth: Dimensions.get('window').width - 200,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Skin.space(16),
   },
 }));

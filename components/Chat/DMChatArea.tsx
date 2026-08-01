@@ -8,12 +8,10 @@
 
 import type { AppTheme } from '@/theme';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
-import { useHeaderHeight } from '@react-navigation/elements';
+import { StyleSheet, View } from 'react-native';
 import { ChatBottomChrome, useChatListBottomInset } from './ChatBottomChrome';
 
 import {
-  DMChatHeader,
   MessageInput,
   MessagesList,
   BookmarksPanel,
@@ -112,7 +110,11 @@ export const DMChatArea = React.memo(function DMChatArea({
 
   const dmMessagesListRef = useRef<MessagesListHandle>(null);
   const dmMessageInputRef = useRef<MessageInputHandle>(null);
-  const headerHeight = useHeaderHeight();
+  // NOTE: the DM screen now draws its own header (DMChatHeader) as a normal
+  // layout element on both platforms, so nothing here sits underneath floating
+  // chrome any more and no header inset is needed. This removed the last
+  // `Platform.OS === 'ios'` branch in this file — an iOS-only layout branch is
+  // a branch this project cannot test.
 
   // Data hooks
   const {
@@ -490,7 +492,7 @@ export const DMChatArea = React.memo(function DMChatArea({
         ref={dmMessagesListRef}
         messages={dmSearch.isSearchOpen && dmSearch.query.trim().length > 0 ? dmSearch.results.map(r => r.message) : dmMessages}
         currentUserId={user?.address}
-        topInset={Platform.OS === 'ios' ? headerHeight : 0}
+        topInset={0}
         bottomInset={listBottomInset}
         theme={theme}
         isLoading={dmMessagesLoading}

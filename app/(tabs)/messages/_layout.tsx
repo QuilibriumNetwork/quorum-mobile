@@ -22,16 +22,10 @@ export default function MessagesLayout() {
         // on native-stack unless explicit.
         gestureEnabled: true,
         fullScreenGestureEnabled: false,
+        // The iOS branch is intentionally EMPTY, not absent — see
+        // spaces/_layout.tsx for why removing it would change the iOS animation.
         ...Platform.select({
-          ios: {
-            headerLargeTitle: true,
-            headerTransparent: true,
-            headerBlurEffect: 'systemChromeMaterial' as const,
-            headerLargeTitleStyle: {
-              fontFamily: theme.fonts.bold.fontFamily,
-              fontWeight: theme.fonts.bold.fontWeight,
-            },
-          },
+          ios: {},
           // Android: explicit slide_from_right to avoid the
           // overlay-scrim persistence bug on some devices. See
           // spaces/_layout.tsx for the full reasoning.
@@ -41,15 +35,14 @@ export default function MessagesLayout() {
         }),
       }}
     >
+      {/*
+        Both screens hide the native header and draw their own (see
+        components/ui/ScreenHeader). Titles are kept for deep links and
+        accessibility. Do NOT reintroduce headerTransparent / headerBlurEffect —
+        see the note in spaces/_layout.tsx.
+      */}
       <Stack.Screen name="index" options={{ title: 'Messages' }} />
-      <Stack.Screen
-        name="dm/[id]"
-        options={{
-          title: 'Chat',
-          headerLargeTitle: false,
-          headerBackTitle: 'Messages',
-        }}
-      />
+      <Stack.Screen name="dm/[id]" options={{ title: 'Chat' }} />
     </Stack>
   );
 }

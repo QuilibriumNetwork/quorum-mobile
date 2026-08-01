@@ -1,138 +1,153 @@
 /**
- * DMChatHeader - Header for DM conversation chat view
+ * DMChatHeader — the top bar for a direct-message conversation.
+ *
+ * A thin composition over ScreenHeader, which owns all header geometry and
+ * explains why these bars are drawn in React Native rather than by the native
+ * navigation stack. Only the DM-specific content lives here: a tappable
+ * avatar + name that opens the counterparty's profile, and the call/settings
+ * controls (all suppressed for Farcaster conversations, which have neither).
  */
 
 import type { AppTheme } from '@/theme';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { truncateAddress } from '@/utils/formatAddress';
-import type { Conversation } from '@/hooks/chat/useConversations';
-import React, { useMemo } from 'react';
-import { Dimensions, Image, StyleSheet, Text, View } from 'react-native';
+import { ScreenHeader, headerIconHitSlop } from '@/components/ui/ScreenHeader';
+import React from 'react';
+import { Image, StyleSheet, Text } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Expands the tap target of header icon buttons without changing layout (the
-// glyphs and their 16px spacing stay identical). Horizontal slop is kept at 8
-// so adjacent icons' touch zones meet but don't overlap; vertical slop is
-// larger since nothing sits above/below in the header row. ~34x42 effective.
-const headerIconHitSlop = { top: 12, bottom: 12, left: 8, right: 8 };
-
 interface DMChatHeaderProps {
-  conversation: Conversation;
-  sidebarsVisible: boolean;
-  onShowSidebars: () => void;
-  onInfoPress?: () => void;
-  onOpenSearch?: () => void;
-  onCallPress?: () => void;
-  onVideoCallPress?: () => void;
+  /** Resolved display name — the caller already falls back to a short address. */
+  title: string;
+  /** Avatar URL, if the conversation has one. */
+  icon?: string;
+  /** Counterparty address, for the deterministic initials avatar fallback. */
+  address: string;
+  /** Safe-area top inset — the bar paints into the status bar area itself. */
+  insetTop: number;
+  onBack: () => void;
+  /** Tapping the avatar or name opens the same profile modal an in-chat pfp does. */
+  onTitlePress: () => void;
+  /**
+   * Farcaster DMs are read through the upstream API and support neither calls
+   * nor our DM settings, so the whole trailing group is dropped for them.
+   */
+  isFarcasterConversation: boolean;
+  onVideoCall: () => void;
+  onAudioCall: () => void;
+  onOpenSettings: () => void;
+  /** Dev-only test-burst affordance; pass undefined outside __DEV__. */
+  onDevBurst?: () => void;
   theme: AppTheme;
 }
 
 export const DMChatHeader = React.memo(function DMChatHeader({
-  conversation,
-  sidebarsVisible,
-  onShowSidebars,
-  onInfoPress,
-  onOpenSearch,
-  onCallPress,
-  onVideoCallPress,
+  title,
+  icon,
+  address,
+  insetTop,
+  onBack,
+  onTitlePress,
+  isFarcasterConversation,
+  onVideoCall,
+  onAudioCall,
+  onOpenSettings,
+  onDevBurst,
   theme,
 }: DMChatHeaderProps) {
-  const styles = createStyles(theme);
-
-  // Format display name
-  const displayName = useMemo(() => {
-    if (conversation.displayName) return conversation.displayName;
-    return truncateAddress(conversation.address, 'long');
-  }, [conversation.displayName, conversation.address]);
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.left}>
-        {!sidebarsVisible && (
-          <TouchableOpacity
-            onPress={onShowSidebars}
-            style={styles.menuButton}
-            hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
-          >
-            <IconSymbol name="line.3.horizontal" color={theme.colors.textMuted} size={20} />
-          </TouchableOpacity>
-        )}
-        {conversation.icon ? (
-          <Image source={{ uri: conversation.icon }} style={styles.avatar} />
-        ) : (
-          <DefaultAvatar displayName={conversation.displayName} address={conversation.address || ''} size={32} />
-        )}
-        <Text style={styles.title} numberOfLines={1}>{displayName}</Text>
-      </View>
-      <View style={styles.right}>
-        {onVideoCallPress && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onVideoCallPress} hitSlop={headerIconHitSlop}>
-            <IconSymbol name="video" color={theme.colors.textMuted} size={18} />
-          </TouchableOpacity>
-        )}
-        {onCallPress && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onCallPress} hitSlop={headerIconHitSlop}>
-            <IconSymbol name="phone" color={theme.colors.textMuted} size={18} />
-          </TouchableOpacity>
-        )}
-        {onOpenSearch && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenSearch} hitSlop={headerIconHitSlop}>
-            <IconSymbol name="magnifyingglass" color={theme.colors.textMuted} size={18} />
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity style={styles.headerIconButton} onPress={onInfoPress} hitSlop={headerIconHitSlop}>
-          <IconSymbol name="gearshape" color={theme.colors.textMain} size={18} />
+    <ScreenHeader
+      insetTop={insetTop}
+      onBack={onBack}
+      accessibilityBackLabel="Back to messages"
+      theme={theme}
+      title={
+        <TouchableOpacity
+          onPress={onTitlePress}
+          activeOpacity={0.7}
+          hitSlop={8}
+          style={styles.titleRow}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${title}'s profile`}
+        >
+          {icon ? (
+            <Image source={{ uri: icon }} style={styles.avatar} />
+          ) : (
+            <DefaultAvatar displayName={title} address={address} size={28} />
+          )}
+          <Text style={styles.name} numberOfLines={1}>
+            {title}
+          </Text>
         </TouchableOpacity>
-      </View>
-    </View>
+      }
+      right={
+        isFarcasterConversation ? undefined : (
+          <>
+            {onDevBurst && (
+              <TouchableOpacity
+                onPress={onDevBurst}
+                hitSlop={headerIconHitSlop}
+                accessibilityRole="button"
+                accessibilityLabel="DM test burst (dev)"
+              >
+                <IconSymbol name="flask" color={theme.colors.textMuted} size={20} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={onVideoCall}
+              hitSlop={headerIconHitSlop}
+              accessibilityRole="button"
+              accessibilityLabel="Start a video call"
+            >
+              <IconSymbol name="video" color={theme.colors.primary} size={20} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onAudioCall}
+              hitSlop={headerIconHitSlop}
+              accessibilityRole="button"
+              accessibilityLabel="Start a voice call"
+            >
+              <IconSymbol name="phone" color={theme.colors.primary} size={20} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onOpenSettings}
+              hitSlop={headerIconHitSlop}
+              accessibilityRole="button"
+              accessibilityLabel="Conversation settings"
+            >
+              <IconSymbol name="gearshape" color={theme.colors.textMain} size={20} />
+            </TouchableOpacity>
+          </>
+        )
+      }
+    />
   );
 });
 
-const createStyles = (theme: AppTheme) => StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: theme.colors.surface3,
-    paddingHorizontal: Skin.space(16),
-    paddingVertical: Skin.space(12),
-    borderBottomWidth: Skin.border(1),
-    borderBottomColor: theme.colors.border,
-    width: SCREEN_WIDTH,
-  },
-  left: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  right: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  menuButton: {
-    marginRight: Skin.space(12),
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: Skin.circleOrSquare(16),
-    backgroundColor: theme.colors.surface5,
-  },
-  title: {
-    color: theme.colors.textMain,
-    fontFamily: theme.fonts.medium.fontFamily,
-    fontWeight: theme.fonts.medium.fontWeight,
-    marginLeft: Skin.space(10),
-    marginRight: Skin.space(12),
-    flex: 1,
-  },
-  headerIconButton: {
-    marginLeft: Skin.space(16),
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(8),
+      minWidth: 0,
+    },
+    avatar: {
+      width: 28,
+      height: 28,
+      borderRadius: Skin.circleOrSquare(14),
+      backgroundColor: theme.colors.surface5,
+    },
+    name: {
+      flexShrink: 1,
+      ...theme.textStyles.headline,
+      fontFamily: theme.fonts.bold.fontFamily,
+      fontWeight: theme.fonts.bold.fontWeight,
+      color: theme.colors.textMain,
+    },
+  });
 
 export default DMChatHeader;
