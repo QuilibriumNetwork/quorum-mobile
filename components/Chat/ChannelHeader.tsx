@@ -1,138 +1,153 @@
-import { IconSymbol } from '@/components/ui/IconSymbol';
+/**
+ * ChannelHeader — the top bar for a Space channel, rendered in React Native
+ * rather than by the native navigation stack.
+ *
+ * Why not the native header: on iOS the navigation bar is a real UIKit
+ * `UINavigationBar`, so its back button, its button chrome and its title
+ * alignment are Apple's to change — iOS 26 wrapped every bar button in a
+ * Liquid Glass capsule, and a bug in the pinned react-native-screens could
+ * leave the native back button permanently unresponsive. None of that is
+ * visible from an Android device, which is the only platform this project
+ * can test on. Drawing the bar ourselves removes the whole class of problem
+ * and makes Android a faithful preview of iOS.
+ *
+ * The trade-off is that the native large-title and scroll-edge behaviours are
+ * gone here, and the title is left-aligned on both platforms (iOS centres it)
+ * — matching SpaceBannerHeader one level up, so the two Space screens finally
+ * agree with each other.
+ */
+
 import type { AppTheme } from '@/theme';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import React from 'react';
-import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Expands the tap target of header icon buttons without changing layout (the
-// glyphs and their 16px spacing stay identical). Horizontal slop is kept at 8
+// Expands the tap target of the header icon buttons without changing layout
+// (the glyphs and their spacing stay identical). Horizontal slop is kept at 8
 // so adjacent icons' touch zones meet but don't overlap; vertical slop is
-// larger since nothing sits above/below in the header row. ~34x42 effective.
+// larger since nothing sits above or below in the header row.
 const headerIconHitSlop = { top: 12, bottom: 12, left: 8, right: 8 };
+
+// Matches the height of a standard native nav bar so the chat area below keeps
+// the vertical rhythm it had when the header was native.
+const BAR_HEIGHT = 44;
 
 interface ChannelHeaderProps {
   channelName: string;
-  sidebarsVisible: boolean;
-  onShowSidebars: () => void;
+  /** Safe-area top inset — the bar paints into the status bar area itself. */
+  insetTop: number;
+  onBack: () => void;
+  onStartVideoCall: () => void;
+  onStartAudioCall: () => void;
+  /** Invite is owner-only, mirroring the space settings entry point. */
   onInvite?: () => void;
-  onOpenSettings?: () => void;
-  onOpenPinnedMessages?: () => void;
-  onOpenBookmarks?: () => void;
-  onOpenSearch?: () => void;
-  pinnedCount?: number;
+  onOpenSettings: () => void;
   theme: AppTheme;
 }
 
 export const ChannelHeader = React.memo(function ChannelHeader({
   channelName,
-  sidebarsVisible,
-  onShowSidebars,
+  insetTop,
+  onBack,
+  onStartVideoCall,
+  onStartAudioCall,
   onInvite,
   onOpenSettings,
-  onOpenPinnedMessages,
-  onOpenBookmarks,
-  onOpenSearch,
-  pinnedCount = 0,
   theme,
 }: ChannelHeaderProps) {
-  const styles = createStyles(theme);
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.left}>
-        {!sidebarsVisible && (
-          <TouchableOpacity onPress={onShowSidebars} style={styles.menuButton} hitSlop={headerIconHitSlop}>
-            <IconSymbol name="line.3.horizontal" color={theme.colors.textMuted} size={20} />
+    <View style={[styles.container, { paddingTop: insetTop }]}>
+      <View style={styles.bar}>
+        <TouchableOpacity
+          onPress={onBack}
+          style={styles.backButton}
+          hitSlop={headerIconHitSlop}
+          accessibilityRole="button"
+          accessibilityLabel="Back to channel list"
+        >
+          <IconSymbol name="chevron.left" color={theme.colors.textMain} size={22} />
+        </TouchableOpacity>
+
+        <Text style={styles.title} numberOfLines={1}>
+          {`# ${channelName}`}
+        </Text>
+
+        <View style={styles.right}>
+          <TouchableOpacity
+            onPress={onStartVideoCall}
+            hitSlop={headerIconHitSlop}
+            accessibilityRole="button"
+            accessibilityLabel="Start a video call"
+          >
+            <IconSymbol name="video" color={theme.colors.primary} size={20} />
           </TouchableOpacity>
-        )}
-        <IconSymbol name="number" color={theme.colors.textMuted} size={16} />
-        <Text style={styles.title} numberOfLines={1}>{channelName}</Text>
-      </View>
-      <View style={styles.right}>
-        {onOpenSearch && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenSearch} hitSlop={headerIconHitSlop}>
-            <IconSymbol name="magnifyingglass" color={theme.colors.textMuted} size={18} />
+          <TouchableOpacity
+            onPress={onStartAudioCall}
+            hitSlop={headerIconHitSlop}
+            accessibilityRole="button"
+            accessibilityLabel="Start a voice call"
+          >
+            <IconSymbol name="phone" color={theme.colors.primary} size={20} />
           </TouchableOpacity>
-        )}
-        {onOpenPinnedMessages && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenPinnedMessages} hitSlop={headerIconHitSlop}>
-            <IconSymbol name="pin.fill" color={pinnedCount > 0 ? theme.colors.primary : theme.colors.textMuted} size={18} />
+          {onInvite && (
+            <TouchableOpacity
+              onPress={onInvite}
+              hitSlop={headerIconHitSlop}
+              accessibilityRole="button"
+              accessibilityLabel="Invite people to this space"
+            >
+              <IconSymbol name="person.badge.plus" color={theme.colors.textMain} size={20} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={onOpenSettings}
+            hitSlop={headerIconHitSlop}
+            accessibilityRole="button"
+            accessibilityLabel="Space settings"
+          >
+            <IconSymbol name="gearshape" color={theme.colors.textMain} size={20} />
           </TouchableOpacity>
-        )}
-        {onOpenBookmarks && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenBookmarks} hitSlop={headerIconHitSlop}>
-            <IconSymbol name="bookmark" color={theme.colors.textMuted} size={18} />
-          </TouchableOpacity>
-        )}
-        {onInvite && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onInvite} hitSlop={headerIconHitSlop}>
-            <IconSymbol name="person.badge.plus" color={theme.colors.textMuted} size={18} />
-          </TouchableOpacity>
-        )}
-        {onOpenSettings && (
-          <TouchableOpacity style={styles.headerIconButton} onPress={onOpenSettings} hitSlop={headerIconHitSlop}>
-            <IconSymbol name="gearshape" color={theme.colors.textMuted} size={18} />
-          </TouchableOpacity>
-        )}
+        </View>
       </View>
     </View>
   );
 });
 
-const createStyles = (theme: AppTheme) => StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: theme.colors.surface3,
-    paddingHorizontal: Skin.space(16),
-    paddingVertical: Skin.space(12),
-    borderBottomWidth: Skin.border(1),
-    borderBottomColor: theme.colors.border,
-    width: SCREEN_WIDTH,
-  },
-  left: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    minWidth: 0,
-  },
-  right: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  menuButton: {
-    marginRight: Skin.space(12),
-  },
-  title: {
-    color: theme.colors.textMain,
-    fontFamily: theme.fonts.medium.fontFamily,
-    fontWeight: theme.fonts.medium.fontWeight,
-    marginLeft: Skin.space(8),
-    marginRight: Skin.space(12),
-    flex: 1,
-  },
-  headerIconButton: {
-    marginRight: Skin.space(16),
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface5,
-    borderRadius: Skin.radius(4),
-    paddingHorizontal: Skin.space(8),
-    paddingVertical: Skin.space(4),
-  },
-  searchInput: {
-    color: theme.colors.textMain,
-    fontSize: Skin.font(14),
-    marginLeft: Skin.space(8),
-    width: 80,
-    fontFamily: theme.fonts.regular.fontFamily,
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    container: {
+      backgroundColor: theme.colors.surface1,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.border ?? theme.colors.surface3,
+    },
+    bar: {
+      height: BAR_HEIGHT,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: Skin.space(12),
+      gap: Skin.space(12),
+    },
+    backButton: {
+      // Nudged left so the chevron optically aligns with the 16px content
+      // gutter the channel list and message rows use.
+      marginLeft: Skin.space(-4),
+    },
+    title: {
+      flex: 1,
+      ...theme.textStyles.headline,
+      fontFamily: theme.fonts.bold.fontFamily,
+      fontWeight: theme.fonts.bold.fontWeight,
+      color: theme.colors.textMain,
+    },
+    right: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(16),
+    },
+  });
 
 export default ChannelHeader;

@@ -2,7 +2,7 @@
  * Space chat screen — wraps SpaceChatArea with data hooks.
  */
 
-import { SpaceChatArea, type MemberMap, type MessageUserInfo } from '@/components/Chat';
+import { ChannelHeader, SpaceChatArea, type MemberMap, type MessageUserInfo } from '@/components/Chat';
 import { useAuth } from '@/context/AuthContext';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { useChannels } from '@/hooks/chat/useChannels';
@@ -19,14 +19,12 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Alert, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWebSocket, useSpaceCall } from '@/context';
 import { useQueryClient } from '@tanstack/react-query';
 import { canManageReadOnlyChannel, queryKeys, type Message } from '@quilibrium/quorum-shared';
 import { sendSpaceCallStartMessage } from '@/services/space/spaceMessageService';
-import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 // Prefetch helpers: warm the lazy chunks in the background after the screen
@@ -59,6 +57,9 @@ export default function SpaceChannelChat() {
   const { user } = useAuth();
   const { enqueueOutbound, isConnected } = useWebSocket();
   const tabBarHeight = useBottomTabBarHeight();
+  // The header is ours now, so we own the status-bar inset it used to get for
+  // free from the native navigation bar.
+  const insets = useSafeAreaInsets();
   // While the composer emoji panel is open the tab bar is hidden, so reclaim
   // its space (zero padding + 0 chrome height) and let the panel reach the
   // screen bottom.
@@ -170,8 +171,17 @@ export default function SpaceChannelChat() {
   const [castThread, setCastThread] = useState<{ username: string; castHashPrefix: string } | null>(null);
 
   const handleShowSidebars = useCallback(() => {
-    router.back();
-  }, []);
+    // Normally this pops back to the space's channel list. The fallback matters:
+    // if this screen was reached without a history entry beneath it (a push
+    // notification tap, a deep link, a channel link followed by a replace),
+    // router.back() is a no-op and the user is stranded in the channel with no
+    // way out but force-quitting. Route to the channel list explicitly instead.
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    if (spaceId) router.replace(`/spaces/${spaceId}`);
+  }, [spaceId]);
 
   const handleUserPress = useCallback((info: MessageUserInfo) => {
     setSelectedUserProfile(info);
@@ -249,24 +259,8 @@ export default function SpaceChannelChat() {
     }
   }, [spaceId, channelId, user?.address, isConnected, enqueueOutbound, queryClient, joinSpaceCall]);
 
-  const headerRight = useCallback(() => (
-    <View style={styles.headerRight}>
-      <TouchableOpacity onPress={() => startSpaceCall('video')} hitSlop={8}>
-        <IconSymbol name="video" color={theme.colors.primary} size={20} />
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => startSpaceCall('audio')} hitSlop={8}>
-        <IconSymbol name="phone" color={theme.colors.primary} size={20} />
-      </TouchableOpacity>
-      {isSpaceOwner && (
-        <TouchableOpacity onPress={handleOpenInviteModal} hitSlop={8}>
-          <IconSymbol name="person.badge.plus" color={theme.colors.textMain} size={20} />
-        </TouchableOpacity>
-      )}
-      <TouchableOpacity onPress={handleOpenSpaceSettings} hitSlop={8}>
-        <IconSymbol name="gearshape" color={theme.colors.textMain} size={20} />
-      </TouchableOpacity>
-    </View>
-  ), [theme, isSpaceOwner, startSpaceCall, handleOpenInviteModal, handleOpenSpaceSettings]);
+  const handleStartVideoCall = useCallback(() => { void startSpaceCall('video'); }, [startSpaceCall]);
+  const handleStartAudioCall = useCallback(() => { void startSpaceCall('audio'); }, [startSpaceCall]);
 
   return (
     <View
@@ -282,18 +276,29 @@ export default function SpaceChannelChat() {
         },
       ]}
     >
+      {/*
+        The bar is ours, not the navigation stack's — see ChannelHeader for why.
+        The screen keeps `title` set so anything that reads the route's title
+        (deep links, accessibility, the space screen's own back affordance)
+        still gets a meaningful value even though nothing renders it here.
+      */}
       <Stack.Screen
         options={{
+          headerShown: false,
           title: channelName ? `# ${channelName}` : 'Channel',
-          // Label the back button explicitly instead of letting iOS inherit it
-          // from the space screen's title. The space screen hides its header
-          // and its stale title used to surface here as "‹ Loading…". iOS
-          // shortens this to "Back" on its own when the name doesn't fit.
-          headerBackTitle: spaceData?.spaceName ?? 'Space',
-          headerRight,
         }}
       />
 
+      <ChannelHeader
+        channelName={channelName}
+        insetTop={insets.top}
+        onBack={handleShowSidebars}
+        onStartVideoCall={handleStartVideoCall}
+        onStartAudioCall={handleStartAudioCall}
+        onInvite={isSpaceOwner ? handleOpenInviteModal : undefined}
+        onOpenSettings={handleOpenSpaceSettings}
+        theme={theme}
+      />
 
       <SpaceChatArea
         spaceId={spaceId}
@@ -405,10 +410,5 @@ export default function SpaceChannelChat() {
 const styles = createSkinnable(() => StyleSheet.create({
   container: {
     flex: 1,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Skin.space(16),
   },
 }));
