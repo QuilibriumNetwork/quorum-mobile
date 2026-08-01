@@ -25,6 +25,12 @@ import type { DMUpdateProfileMessage, Message } from '@quilibrium/quorum-shared'
 import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
 import { getDeviceKeyset } from '../onboarding/secureStorage';
+import {
+  readGateRecord,
+  shouldSendProfile,
+  nextAttempts,
+  type DmProfileGateRecord,
+} from './dmProfileGate';
 
 export interface DMProfilePayload {
   selfAddress: string;
@@ -89,6 +95,11 @@ function buildDmProfileMessage(
 // identity re-sent (= a real DM + push) on every reconnect. Skip a send whose
 // payload matches the last one recorded for that (self, partner). Recorded only
 // after a successful enqueue so a failure leaves the gate open for retry.
+//
+// The DECISION half of this gate — dedup, the bounded retry, and the migration
+// off the pre-cap format — lives in ./dmProfileGate, kept free of MMKV (and so
+// of native modules) so it is directly unit-testable. What stays here is the
+// persistence shim.
 
 let dmProfileBroadcastStore: MMKV | null = null;
 function getStore(): MMKV {
@@ -145,6 +156,10 @@ export async function broadcastProfileToAllDMs(
   // Empty payload would no-op on every receiver — nothing to send.
   if (sig === '{}') return;
 
+  // One clock reading for the whole sweep, so every partner in this run is
+  // judged against the same instant rather than drifting across a long loop.
+  const now = Date.now();
+
   let deviceKeyset: Awaited<ReturnType<typeof getDeviceKeyset>>;
   try {
     deviceKeyset = await getDeviceKeyset();
@@ -180,8 +195,15 @@ export async function broadcastProfileToAllDMs(
     if (!partnerAddress || partnerAddress === payload.selfAddress) continue;
     if (conv.source === 'farcaster') continue;
 
-    // Dedup: already sent this exact identity to this partner.
-    if (store.getString(gateKey(payload.selfAddress, partnerAddress)) === sig) continue;
+    // Dedup + bounded retry. Almost always a no-op on the wire: an unchanged
+    // identity is re-sent at most MAX_SENDS_PER_IDENTITY times, spaced by
+    // RESEND_INTERVAL_MS, then never again until the signature changes.
+    const key = gateKey(payload.selfAddress, partnerAddress);
+    const { record, migrated } = readGateRecord(store.getString(key), now);
+    // Persist a migrated record even if we do not send, so it is anchored once
+    // and can age out from there rather than being re-anchored on every read.
+    if (migrated && record) store.set(key, JSON.stringify(record));
+    if (!shouldSendProfile(record, sig, now)) continue;
 
     try {
       let allTargetDevices: {
@@ -218,7 +240,14 @@ export async function broadcastProfileToAllDMs(
       );
 
       // Record only after a successful enqueue so a throw retries next round.
-      store.set(gateKey(payload.selfAddress, partnerAddress), sig);
+      store.set(
+        key,
+        JSON.stringify({
+          sig,
+          at: now,
+          attempts: nextAttempts(record, sig),
+        } satisfies DmProfileGateRecord)
+      );
     } catch {
       // Per-partner failure (no session, encrypt error) is non-fatal — the
       // gate stays open for this partner so the next broadcast retries.
