@@ -641,7 +641,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     }
     if (raw.type === 'read-ack') {
       if (svc && raw.senderId !== self && isReceiptEnabled('read', partner) && raw.upToMessageId && raw.upToTimestamp) {
-        svc.onReadAckReceived(raw.upToMessageId, raw.upToTimestamp, partner);
+        // `messageIds` is absent from peers on older builds — the mark alone
+        // still works. It is untrusted peer JSON of any shape, so it goes in
+        // raw: the shared service sanitizes it and degrades to mark-only rather
+        // than letting a malformed value throw away the whole ack.
+        svc.onReadAckReceived(raw.upToMessageId, raw.upToTimestamp, partner, raw.messageIds);
       }
       return true;
     }
@@ -661,7 +665,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       const fromPartner = decryptedMessage.content?.senderId !== self;
       if (fromPartner && raw.ackMessageIds && isReceiptEnabled('delivery', partner)) svc.onAckReceived(raw.ackMessageIds);
       if (fromPartner && raw.readAckUpTo && isReceiptEnabled('read', partner)) {
-        svc.onReadAckReceived(raw.readAckUpTo.messageId, raw.readAckUpTo.timestamp, partner);
+        svc.onReadAckReceived(
+          raw.readAckUpTo.messageId, raw.readAckUpTo.timestamp, partner, raw.readAckUpTo.messageIds,
+        );
       }
       delete raw.ackMessageIds;
       delete raw.readAckUpTo;
@@ -5843,12 +5849,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           updateMessageDeliveredAt(id, now, readWatermarksRef.current).catch(() => {});
         }
       },
-      onReadFlush: (address, hwm) => {
+      onReadFlush: (address, payload) => {
         sendDmReceiptAckRef.current?.(address, {
-          senderId: self, type: 'read-ack', upToMessageId: hwm.messageId, upToTimestamp: hwm.timestamp,
+          senderId: self, type: 'read-ack', upToMessageId: payload.messageId, upToTimestamp: payload.timestamp,
+          // Naming what was read lets the peer settle ✓✓ for messages whose
+          // delivery ack was lost. The mark still rides along and still heals a
+          // dropped read ack, so both failure modes stay covered. Omitted when
+          // empty so the wire shape is byte-identical to the pre-2b one.
+          ...(payload.messageIds.length ? { messageIds: payload.messageIds } : {}),
         });
       },
-      onReadAckProcessed: (upToMessageId, upToTimestamp, conversationAddress) => {
+      onReadAckProcessed: (upToMessageId, upToTimestamp, conversationAddress, messageIds) => {
         const now = Date.now();
 
         // A peer sending an unbounded timestamp would otherwise mark our entire
@@ -5856,13 +5867,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         if (!isReadAckTimestampValid(upToTimestamp, now)) return;
 
         // Remember how far they have read, so delivery acks still in flight can
-        // finish the upgrade when they land (see onAckProcessed).
+        // finish the upgrade when they land (see onAckProcessed). Kept even now
+        // that acks name messages: naming dies with a dropped ack, the watermark
+        // is restated by every later one and so repairs it.
         readWatermarksRef.current.set(
           conversationAddress,
           advanceReadWatermark(readWatermarksRef.current.get(conversationAddress) ?? 0, upToTimestamp),
         );
 
-        const ctx = { upToMessageId, upToTimestamp, now };
+        // Named ids are self-proving, so they settle ✓✓ even when the delivery
+        // ack was lost. Absent for peers on older builds.
+        const readMessageIds = messageIds?.length ? new Set(messageIds) : undefined;
+        const ctx = { upToMessageId, upToTimestamp, now, readMessageIds };
         const key = queryKeys.messages.infinite(conversationAddress, conversationAddress);
         queryClient.setQueryData<InfiniteMessagesData>(key, (old) => {
           if (!old?.pages) return old;
@@ -5880,7 +5896,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           });
           return changed ? { ...old, pages } : old;
         });
-        updateMessagesReadAt(conversationAddress, self, upToMessageId, upToTimestamp, now).catch(() => {});
+        updateMessagesReadAt(
+          conversationAddress, self, upToMessageId, upToTimestamp, now, readMessageIds,
+        ).catch(() => {});
       },
     });
 

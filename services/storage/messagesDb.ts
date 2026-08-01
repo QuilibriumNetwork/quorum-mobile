@@ -649,13 +649,31 @@ export async function updateMessageDeliveredAt(
  * Only messages carrying a genuine deliveredAt are marked — a read ack must
  * never invent a delivery, or messages lost in transport light up with ✓✓ they
  * never earned. The HWM message itself is exempt: reading it proves it arrived.
+ *
+ * Messages the peer NAMED are exempt on the same grounds, so a named message
+ * settles ✓✓ even when its own delivery ack was lost in transport.
+ * `readMessageIds` is absent for peers on older builds, which leaves only the
+ * high-water-mark message self-proving, exactly as before.
+ *
+ * The SELECT is bounded by upToTimestamp, which covers every named id from a
+ * well-behaved peer: the mark is the newest message read in the window, and the
+ * ids are collected over the same createdDate range the bound is keyed on.
+ *
+ * KNOWN DIVERGENCE (pre-dates named ids, inherited by them): the shared resolver
+ * honours a self-proving message regardless of its date, but this SELECT never
+ * visits anything past upToTimestamp, while the React Query cache walk in
+ * WebSocketContext has no date bound at all. So an ack naming an id NEWER than
+ * its own mark — which our own sender never produces, but a buggy or hostile
+ * peer could — marks it in the live cache and not on disk, and the tick
+ * disappears on reload. Cosmetic, and self-correcting in the safe direction.
  */
 export async function updateMessagesReadAt(
   conversationAddress: string,
   selfAddress: string,
   upToMessageId: string,
   upToTimestamp: number,
-  readAt: number
+  readAt: number,
+  readMessageIds?: ReadonlySet<string>
 ): Promise<void> {
   const db = await ensureDb();
   if (!db) return;
@@ -664,7 +682,7 @@ export async function updateMessagesReadAt(
      WHERE space_id = ? AND channel_id = ? AND created_date <= ?;`,
     [conversationAddress, conversationAddress, upToTimestamp]
   );
-  const ctx = { upToMessageId, upToTimestamp, now: readAt };
+  const ctx = { upToMessageId, upToTimestamp, now: readAt, readMessageIds };
   for (const row of rows) {
     let msg: Message;
     try { msg = JSON.parse(row.payload) as Message; } catch { continue; }

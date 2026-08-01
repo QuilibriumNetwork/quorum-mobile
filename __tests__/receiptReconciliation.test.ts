@@ -99,8 +99,12 @@ describe('messagesDb — DM receipt reconciliation', () => {
 
   const get = (messageId: string) => db.getMessage({ spaceId: PEER, channelId: PEER, messageId });
 
-  const readAck = (upToMessageId: string, upToTimestamp: number, at = 9_000) =>
-    db.updateMessagesReadAt(PEER, ME, upToMessageId, upToTimestamp, at);
+  const readAck = (
+    upToMessageId: string,
+    upToTimestamp: number,
+    at = 9_000,
+    readMessageIds?: ReadonlySet<string>
+  ) => db.updateMessagesReadAt(PEER, ME, upToMessageId, upToTimestamp, at, readMessageIds);
 
   describe('read acks', () => {
     it('does NOT mark an undelivered message as read or delivered', async () => {
@@ -176,6 +180,75 @@ describe('messagesDb — DM receipt reconciliation', () => {
       expect(results[3]?.deliveredAt).toBeUndefined();
       expect(results[6]?.readAt).toBeUndefined(); // m7 lost
       expect(results[6]?.deliveredAt).toBeUndefined();
+    });
+  });
+
+  // A read ack may also NAME the messages it read. Naming one proves it
+  // arrived — you cannot read what you never got — so a named message reaches
+  // ✓✓ even when its own delivery ack died in transport, which nothing before
+  // this could do for anything but the high-water-mark message itself.
+  describe('read acks that name what they read', () => {
+    it('settles messages whose delivery acks were ALL lost', async () => {
+      await saveDm({ messageId: 'm1', createdDate: 300 });
+      await saveDm({ messageId: 'm2', createdDate: 400 });
+      await saveDm({ messageId: 'm3', createdDate: 500 });
+
+      await readAck('m3', 500, 9_000, new Set(['m1', 'm2', 'm3']));
+
+      for (const id of ['m1', 'm2', 'm3']) {
+        const m = await get(id);
+        expect(m?.readAt).toBe(9_000);
+        expect(m?.deliveredAt).toBe(9_000);
+      }
+    });
+
+    it('WITHOUT names, that same ack upgrades only the high-water mark', async () => {
+      // The paired control for the test above: identical setup, no names. Proves
+      // the upgrade there comes from naming and not from some other path.
+      await saveDm({ messageId: 'm1', createdDate: 300 });
+      await saveDm({ messageId: 'm2', createdDate: 400 });
+      await saveDm({ messageId: 'm3', createdDate: 500 });
+
+      await readAck('m3', 500);
+
+      expect((await get('m1'))?.readAt).toBeUndefined();
+      expect((await get('m2'))?.readAt).toBeUndefined();
+      expect((await get('m3'))?.readAt).toBe(9_000);
+    });
+
+    it('still refuses an undelivered message the ack did NOT name', async () => {
+      // The delivery gate is unchanged: naming widens the self-proving exemption,
+      // it does not open the range up.
+      await saveDm({ messageId: 'unnamed', createdDate: 300 });
+      await saveDm({ messageId: 'named', createdDate: 400 });
+      await saveDm({ messageId: 'hwm', createdDate: 500 });
+
+      await readAck('hwm', 500, 9_000, new Set(['named']));
+
+      const unnamed = await get('unnamed');
+      expect(unnamed?.readAt).toBeUndefined();
+      expect(unnamed?.deliveredAt).toBeUndefined();
+      expect((await get('named'))?.deliveredAt).toBe(9_000);
+    });
+
+    it("ignores a named id that belongs to the peer's own message", async () => {
+      await saveDm({ messageId: 'theirs', createdDate: 400, senderId: PEER });
+
+      await readAck('hwm', 500, 9_000, new Set(['theirs']));
+
+      const theirs = await get('theirs');
+      expect(theirs?.readAt).toBeUndefined();
+      expect(theirs?.deliveredAt).toBeUndefined();
+    });
+
+    it('does not overwrite a real deliveredAt on a named message', async () => {
+      await saveDm({ messageId: 'm1', createdDate: 400, deliveredAt: 800 });
+
+      await readAck('hwm', 500, 9_000, new Set(['m1']));
+
+      const m1 = await get('m1');
+      expect(m1?.readAt).toBe(9_000);
+      expect(m1?.deliveredAt).toBe(800);
     });
   });
 

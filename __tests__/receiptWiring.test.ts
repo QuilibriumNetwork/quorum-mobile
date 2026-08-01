@@ -37,6 +37,8 @@ function section(startAnchor: string, endAnchor: string): string {
 
 const readAckBody = () => section('onReadAckProcessed: (', '\n    });');
 const deliveryAckBody = () => section('onAckProcessed: (messageIds)', 'onReadFlush:');
+const readFlushBody = () => section('onReadFlush: (address, payload)', 'onReadAckProcessed:');
+const interceptBody = () => section('const handleDmReceipt = useCallback', '}, [isReceiptEnabled]);');
 
 describe('WebSocketContext — receipt ack wiring', () => {
   describe('read acks', () => {
@@ -72,9 +74,77 @@ describe('WebSocketContext — receipt ack wiring', () => {
     it('passes the high-water-mark id through to persistence', () => {
       // The HWM message is the one case a read ack may stamp deliveredAt on
       // (reading it proves it arrived), so the id has to reach the DB layer.
-      expect(readAckBody()).toContain(
-        'updateMessagesReadAt(conversationAddress, self, upToMessageId, upToTimestamp, now)'
+      expect(readAckBody()).toMatch(
+        /updateMessagesReadAt\(\s*conversationAddress,\s*self,\s*upToMessageId,\s*upToTimestamp,\s*now,/
       );
+    });
+  });
+
+  // A read ack may also name the messages it read. Each named id is self-proving
+  // on the same grounds as the high-water mark, so it settles ✓✓ for a message
+  // whose delivery ack was lost. The mark is NOT retired by it: naming dies with
+  // a dropped ack, the mark is restated by every later one and so repairs it.
+  describe('read acks that name what they read', () => {
+    it('sends the named ids alongside the mark', () => {
+      const body = readFlushBody();
+      expect(body).toContain('upToMessageId: payload.messageId');
+      expect(body).toContain('upToTimestamp: payload.timestamp');
+      expect(body).toContain('messageIds: payload.messageIds');
+    });
+
+    it('omits the field entirely when nothing was named', () => {
+      // Keeps the wire shape byte-identical to the pre-naming one, so a peer on
+      // an older build sees exactly what it saw before.
+      expect(readFlushBody()).toMatch(/payload\.messageIds\.length\s*\?/);
+    });
+
+    it('keeps the high-water mark on the wire', () => {
+      // Deleting the mark once ids are on the wire is the tempting mistake: the
+      // mark is the only thing that repairs a read ack lost in transport.
+      const body = readFlushBody();
+      expect(body).toContain('upToMessageId:');
+      expect(body).toContain('upToTimestamp:');
+    });
+
+    it('still records the watermark on receive', () => {
+      expect(readAckBody()).toContain('advanceReadWatermark(');
+    });
+
+    it('passes the received ids into the resolver context and to persistence', () => {
+      const body = readAckBody();
+      expect(body).toMatch(/const readMessageIds = messageIds\?\.length \? new Set\(messageIds\) : undefined;/);
+      expect(body).toContain('const ctx = { upToMessageId, upToTimestamp, now, readMessageIds };');
+      expect(body).toContain('now, readMessageIds,');
+    });
+
+    it('forwards the raw peer value to the shared service, which sanitizes it', () => {
+      // The value is untrusted peer JSON. An array-LIKE object is valid JSON and
+      // throws inside `new Set(...)`, and this intercept has no try/catch around
+      // it — a throw here would discard the whole ack, mark included. The shared
+      // service coerces it and degrades to mark-only instead.
+      const body = interceptBody();
+      expect(body).toContain(
+        'svc.onReadAckReceived(raw.upToMessageId, raw.upToTimestamp, partner, raw.messageIds)'
+      );
+      expect(body).not.toMatch(/new Set\(raw\.messageIds\)/);
+    });
+
+    it('forwards them on the piggyback path too', () => {
+      // Same ids ride the envelope on a normal outgoing DM; the two receive
+      // sites must not drift.
+      expect(interceptBody()).toMatch(
+        /raw\.readAckUpTo\.messageId,\s*raw\.readAckUpTo\.timestamp,\s*partner,\s*raw\.readAckUpTo\.messageIds/
+      );
+    });
+
+    it('keeps the self-echo guard in front of both', () => {
+      // Our own acks fan out to our other devices. A self-echoed read ack would
+      // mark our own sent messages read; named ids do not change that.
+      const body = interceptBody();
+      const guardAt = body.indexOf("raw.type === 'read-ack'");
+      const callAt = body.indexOf('svc.onReadAckReceived(raw.upToMessageId');
+      expect(guardAt).toBeGreaterThan(-1);
+      expect(body.slice(guardAt, callAt)).toContain('raw.senderId !== self');
     });
   });
 
