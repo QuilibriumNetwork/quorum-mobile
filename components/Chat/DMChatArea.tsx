@@ -263,7 +263,13 @@ export const DMChatArea = React.memo(function DMChatArea({
   }, [hasMoreDmMessages, fetchMoreDmMessages]);
 
   const handleSendDirectMessage = useCallback(() => {
-    if (sendDirectMessageMutation.isPending || sendDirectEmbedMutation.isPending) return;
+    // No isPending re-entrancy guard here: the outbound queue is durable, so a
+    // send started while disconnected stays pending until the socket reopens.
+    // Gating on it meant the whole offline window allowed exactly one message —
+    // every later send returned here silently. Double-tap is still covered: the
+    // empty-text guard below plus MessageInput's canSend both fail once
+    // setMessageText('') has rendered, and a repeat within one frame is not a
+    // human input rate.
     if (!conversationId || !recipientAddress) return;
 
     if (editingMessage && messageText.trim()) {
@@ -528,7 +534,14 @@ export const DMChatArea = React.memo(function DMChatArea({
           channelName={conversationData.displayName || conversationData.address?.slice(0, 8) || 'DM'}
           isDM
           theme={theme}
-          isSending={sendDirectMessageMutation.isPending || sendDirectEmbedMutation.isPending}
+          // Deliberately NOT bound to the send mutation's isPending. The
+          // outbound queue is durable, so a send while disconnected stays
+          // pending until the socket reopens — binding the button to it locked
+          // the composer for the whole offline window, letting the user queue
+          // exactly one message. The optimistic bubble carries its own
+          // per-message spinner, which is the honest indicator now that 'sent'
+          // is driven by real transmission.
+          isSending={false}
           onAttachmentPress={handleAttachmentPress}
           pendingAttachment={pendingAttachment}
           onClearAttachment={handleClearAttachment}
