@@ -10,7 +10,7 @@ import { hasPermission, getRoleColorHex } from '@quilibrium/quorum-shared';
 import { searchEmojis } from '@/data/emojiData';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, useWindowDimensions, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputSubmitEditingEventData, TouchableOpacity as RNTouchableOpacity, View } from 'react-native';
-import Reanimated, { useAnimatedStyle, useDerivedValue, withTiming, interpolate, interpolateColor, Easing } from 'react-native-reanimated';
+import Reanimated, { useAnimatedStyle, useDerivedValue, withTiming, interpolate, interpolateColor, Easing, useAnimatedRef, useFrameCallback, useSharedValue, measure, runOnJS } from 'react-native-reanimated';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useComposerPanel } from '@/hooks/useComposerPanel';
 import { composerPanelVisibleStore } from '@/services/ui/composerPanelVisible';
@@ -92,6 +92,11 @@ interface MessageInputProps {
   /** Lock open ⇒ this message will be sent unsigned (repudiable). */
   skipSigning?: boolean;
   onToggleSkipSigning?: () => void;
+}
+
+// ⚠️ TEMPORARY INSTRUMENTATION — see the [posdiag] probe in the component.
+function logPosDiag(line: string) {
+  console.warn(line);
 }
 
 export interface MessageInputHandle {
@@ -942,8 +947,54 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     theme,
   ]);
 
+  // ⚠️ TEMPORARY INSTRUMENTATION — bug B (composer sits under the tab bar on
+  // chat entry, then snaps up). Tag `[posdiag]`. Remove once root-caused.
+  //
+  // Why it is shaped like this. Every probe in the June investigation was blind
+  // to the bad frame: onLayout only reports React-committed layout, and it never
+  // fires AT ALL for a Reanimated-driven height, so the spacer's real timeline
+  // was unobservable. This measures the pill's ACTUAL on-screen box on the UI
+  // thread via measure() inside a frame callback, which is the only thing that
+  // can see the bad frame.
+  //
+  // Crash-safety: a previous attempt crashed the app with no JS error by calling
+  // runOnJS with six positional args from a worklet. ONE pre-serialised string
+  // argument only — do not fan out.
+  const pillProbeRef = useAnimatedRef<View>();
+  const probeStartedAt = useSharedValue(0);
+  const probeLastLine = useSharedValue('');
+  const probeWindowH = useWindowDimensions().height;
+  useFrameCallback((frame) => {
+    'worklet';
+    if (probeStartedAt.value === 0) probeStartedAt.value = frame.timeSinceFirstFrame;
+    const elapsed = frame.timeSinceFirstFrame - probeStartedAt.value;
+    if (elapsed > 2500) return; // only the entry window
+    const m = measure(pillProbeRef);
+    if (m === null) return;
+    // The measured box is the whole composer (footprint + spacer), whose bottom
+    // is the screen bottom by construction. The PILL's bottom is therefore
+    // `pageY + height - spacer`, and its distance to the window bottom is the
+    // clearance that must equal restingChromeHeight at rest.
+    //
+    // This is the measurement that discriminates the two live hypotheses:
+    //   clearance short  -> the composer itself is low: spacer/resting is wrong.
+    //   clearance right, but the pill still LOOKS low -> the screen's own frame
+    //   extends below the visible window (the Android entering-transition inset
+    //   theory), and nothing inside the composer can fix it.
+    const spacerNow = composerPanel.spacerHeight.value;
+    const clearance = Math.round(probeWindowH - (m.pageY + m.height - spacerNow));
+    const line =
+      'spacer=' + Math.round(spacerNow) +
+      ' resting=' + Math.round(restingChromeHeight + bottomInset) +
+      ' clearance=' + clearance +
+      ' pageY=' + Math.round(m.pageY) + ' h=' + Math.round(m.height) + ' win=' + Math.round(probeWindowH);
+    if (line === probeLastLine.value) return; // only log transitions
+    probeLastLine.value = line;
+    runOnJS(logPosDiag)('[posdiag] t=' + Math.round(elapsed) + ' ' + line);
+  });
+
   return (
-    <View style={[styles.container, containerDynamicStyle]}>
+    <View style={[styles.container, containerDynamicStyle]} ref={pillProbeRef} collapsable={false}>
       {/* Composer footprint: everything above the keyboard/panel spacer (banners
           + attachment preview + autocomplete anchor + pill). Measured so the
           chat list can lift to clear the composer exactly in every state. */}
