@@ -379,6 +379,103 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     blankSpace.value = bottomInset;
   }, [bottomInset, blankSpace]);
 
+  // ⚠️ TEMPORARY INSTRUMENTATION — remove before merge.
+  // Deliberately NOT __DEV__-gated: the bug it is chasing has only been seen on
+  // release builds, so this has to survive one. Tag `[chatdiag]`.
+  const diagRef = useRef({ viewport: 0, content: 0, inset: 0, offset: 0 });
+  const diag = useCallback((what: string) => {
+    const d = diagRef.current;
+    console.warn(
+      `[chatdiag] ${what} viewport=${Math.round(d.viewport)} content=${Math.round(d.content)}` +
+      ` inset=${Math.round(d.inset)} offset=${Math.round(d.offset)}` +
+      ` short=${d.content > 0 && d.viewport > 0 && d.content <= d.viewport + 1}` +
+      ` gapBelowLast=${Math.round(d.content - d.offset - d.viewport)}`,
+    );
+  }, []);
+
+  // ⚠️ TEMPORARY INSTRUMENTATION — settled-state samples after entry.
+  useEffect(() => {
+    console.warn('[chatdiag] MOUNT build=fix-4');
+    const a = setTimeout(() => diag('t+400'), 400);
+    const b = setTimeout(() => diag('t+1500'), 1500);
+    return () => { clearTimeout(a); clearTimeout(b); };
+  }, [diag]);
+
+  // ── Short-conversation bottom alignment ──────────────────────────────────
+  // FlashList's `startRenderingFromBottom` bottom-aligns a conversation shorter
+  // than the screen by padding the cells down until they fill the VIEWPORT
+  // (`getAdjustmentMargin` = windowHeight − cellsHeight − firstItemOffset). It
+  // knows nothing about the bottom contentInset that KeyboardChatScrollView
+  // applies — the composer + tab-bar clearance — because that inset lives on the
+  // native scroll view, not in the layout. Its initial scroll then targets the
+  // LAST CELL'S OWN OFFSET, which on a short conversation falls short of the
+  // real end, so the newest message comes to rest UNDER the composer and
+  // dragging down does nothing: the only room left is below.
+  //
+  // Measured on device (Test channel, one message): viewport 878, content 878
+  // (⇒ the adjustment margin is active), inset 174, and the list settled at
+  // offset 85 — exactly the last cell's own y — where it needed to be at 174.
+  // A long conversation is unaffected: the same initial scroll asks for an
+  // offset past the end and the platform clamps it to the true end, inset
+  // included (measured: offset 1534, gapBelowLast −174, i.e. correct).
+  //
+  // Correction: whenever the content is no taller than the viewport, land on the
+  // true end, which the platform's own scrollToEnd computes WITH the inset.
+  const viewportHeightRef = useRef(0);
+  const contentHeightRef = useRef(0);
+  const scrollViewRef = useRef<any>(null);
+  const insetBottomRef = useRef(0);
+  const alignTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const alignShortContentToBottom = useCallback((why: string) => {
+    const viewport = viewportHeightRef.current;
+    const content = contentHeightRef.current;
+    // Taller than the viewport ⇒ a genuinely scrollable list; leave it alone.
+    if (viewport <= 0 || content <= 0 || content > viewport + 1) return;
+    // Never while the emoji panel owns the bottom (open, or mid panel↔keyboard
+    // hand-off): it runs its own list choreography (freeze / cold-open lift)
+    // and a scroll here would fight it. Same guard the send-time correction
+    // below uses, for the same reason.
+    if (composerBottomBusySV.value === 1) return;
+    // Call the underlying scroll view directly, NOT FlashList's scrollToEnd:
+    // that one awaits a scrollToIndex retry chain and then defers through a
+    // setTimeout, so it lands frames later and loses the race against
+    // FlashList's own deferred initial scroll. The native scrollToEnd computes
+    // `content + inset − viewport` synchronously, which is exactly the target.
+    const target = content + insetBottomRef.current - viewport;
+    const sv = scrollViewRef.current;
+    console.warn(
+      `[chatdiag] align(${why}) target=${Math.round(target)}` +
+      ` hasScrollTo=${typeof sv?.scrollTo} hasScrollToEnd=${typeof sv?.scrollToEnd}` +
+      ` hasFL=${typeof flatListRef.current?.scrollToEnd}`,
+    );
+    if (target <= 0) return;
+    if (typeof sv?.scrollTo === 'function') sv.scrollTo({ y: target, animated: false });
+    else flatListRef.current?.scrollToEnd({ animated: false });
+    // Re-assert twice: FlashList re-runs its own initial scroll for ~100ms
+    // after first layout (`initialScrollCompletedRef`) plus one nested deferred
+    // pass, either of which would otherwise land last and undo this one.
+    // scrollToEnd on an already-ended list is a no-op, so the extra passes are
+    // free when they are not needed.
+    if (alignTimerRef.current) clearTimeout(alignTimerRef.current);
+    let n = 0;
+    const reassert = () => {
+      n += 1;
+      if (contentHeightRef.current <= viewportHeightRef.current + 1) {
+        const t = contentHeightRef.current + insetBottomRef.current - viewportHeightRef.current;
+        if (t > 0) {
+          const s2 = scrollViewRef.current;
+          if (typeof s2?.scrollTo === 'function') s2.scrollTo({ y: t, animated: false });
+          else flatListRef.current?.scrollToEnd({ animated: false });
+        }
+      }
+      alignTimerRef.current = n < 3 ? setTimeout(reassert, 60 * n) : null;
+    };
+    alignTimerRef.current = setTimeout(reassert, 40);
+  }, []);
+  useEffect(() => () => {
+    if (alignTimerRef.current) clearTimeout(alignTimerRef.current);
+  }, []);
+
   // A stable component (not an inline render fn) for FlashList's
   // renderScrollComponent, closing over the chat-specific keyboard props. Memo'd
   // so FlashList doesn't see a new scroll component type every render (which
@@ -387,12 +484,42 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     () =>
       forwardRef<any, ScrollViewProps>((scrollProps, scrollRef) => (
         <ChatKeyboardScrollView
-          ref={scrollRef}
+          ref={(node) => {
+            scrollViewRef.current = node;
+            if (typeof scrollRef === 'function') scrollRef(node);
+            else if (scrollRef) scrollRef.current = node;
+          }}
           {...scrollProps}
           blankSpace={blankSpace}
+          // Chained, never replaced: FlashList drives its own measurement off
+          // these, so dropping its handlers would break cell layout.
+          onLayout={(e) => {
+            scrollProps.onLayout?.(e);
+            viewportHeightRef.current = e.nativeEvent.layout.height;
+            diagRef.current.viewport = e.nativeEvent.layout.height;
+            diag('layout');
+            alignShortContentToBottom('layout');
+          }}
+          onContentSizeChange={(w, h) => {
+            scrollProps.onContentSizeChange?.(w, h);
+            contentHeightRef.current = h;
+            diagRef.current.content = h;
+            diag('contentSize');
+            alignShortContentToBottom('contentSize');
+          }}
+          onContentInsetChange={(insets) => {
+            diagRef.current.inset = insets.bottom;
+            insetBottomRef.current = insets.bottom;
+            diag('inset');
+            // The inset lands AFTER the content size (measured: ~77ms later),
+            // and native scrollToEnd targets `content + inset − viewport`. So
+            // aligning on the content-size event alone computes a target of 0
+            // and does nothing — this is the trigger that actually matters.
+            alignShortContentToBottom('inset');
+          }}
         />
       )),
-    [blankSpace],
+    [blankSpace, diag, alignShortContentToBottom],
   );
 
   // Ref to hold latest messages — used inside callbacks to avoid re-creating them when messages change
@@ -1490,6 +1617,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         maintainVisibleContentPosition={maintainVisibleContentPosition}
         onScroll={(e) => {
           const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+          diagRef.current.offset = contentOffset.y; // TEMPORARY INSTRUMENTATION
           distanceFromBottomRef.current = Math.max(
             0,
             contentSize.height - (contentOffset.y + layoutMeasurement.height),
