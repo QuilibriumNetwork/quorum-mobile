@@ -49,6 +49,7 @@ import type {
   Message,
   MuteMessage,
   ReceiptControlMessage,
+  ReceiptEnvelopeFields,
   RemoveMessage,
   SealedMessage,
   Space,
@@ -64,6 +65,7 @@ import {
   removeSpaceFromConfig,
 } from '../services/config/configService';
 import { updateMessageDeliveredAt, updateMessagesReadAt } from '../services/storage/messagesDb';
+import { drainPiggybackAcks } from '../services/dm/piggybackAcks';
 import { sendEncryptedMessageToAllDevices } from '../hooks/chat/useSendDirectMessage';
 import { toAllDeviceInfos, type DeviceInfo } from '../hooks/chat/useRecipientRegistration';
 import { getQuorumClient } from '../services/api/quorumClient';
@@ -132,6 +134,12 @@ interface WebSocketContextValue {
 
   // DM read receipts — mark a partner's message read (gated on the read setting)
   notifyDmRead: (partnerAddress: string, messageId: string, timestamp: number) => void;
+
+  // DM receipt piggybacking — drain this partner's pending acks so an outgoing
+  // DM can carry them for free. Returns null when there is nothing pending.
+  // Callers must send a COPY carrying the fields, never a mutated original:
+  // see withPiggybackedAcks for why (the send is deferred).
+  takePendingReceiptAcks: (partnerAddress: string) => ReceiptEnvelopeFields | null;
 
   // Kick events - space ID that user was kicked from, null when acknowledged
   kickedFromSpaceId: string | null;
@@ -5805,6 +5813,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     receiptServiceRef.current?.onMessageRead(partnerAddress, messageId, timestamp);
   }, [isReceiptEnabled]);
 
+  // Drain a partner's pending acks so an outgoing DM can carry them. The timers
+  // are a debounce, so in an active exchange the standalone ack waits for the
+  // conversation to pause; riding out on the reply is the escape valve from that.
+  // Decision logic is in drainPiggybackAcks (pure, unit-tested); this only
+  // supplies the live service and the settings gate.
+  const takePendingReceiptAcks = useCallback((partnerAddress: string): ReceiptEnvelopeFields | null => {
+    const svc = receiptServiceRef.current;
+    if (!svc) return null;
+    return drainPiggybackAcks(svc, partnerAddress, isReceiptEnabled);
+  }, [isReceiptEnabled]);
+
   // Build the ReceiptService once per session. Callbacks bridge to the send
   // transport (via ref, so display-name changes don't recreate it), the React
   // Query cache and SQLite. Display is unconditional; the master switch only
@@ -6311,12 +6330,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       subscribe,
       unsubscribe,
       notifyDmRead,
+      takePendingReceiptAcks,
       kickedFromSpaceId,
       clearKickedFromSpace,
       registerCallSignalingHandler,
       registerLogFrameHandler,
     }),
-    [connectionState, connect, disconnect, enqueueOutbound, flushOutbound, subscribe, unsubscribe, notifyDmRead, kickedFromSpaceId, clearKickedFromSpace, registerCallSignalingHandler, registerLogFrameHandler]
+    [connectionState, connect, disconnect, enqueueOutbound, flushOutbound, subscribe, unsubscribe, notifyDmRead, takePendingReceiptAcks, kickedFromSpaceId, clearKickedFromSpace, registerCallSignalingHandler, registerLogFrameHandler]
   );
 
   return (

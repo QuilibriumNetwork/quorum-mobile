@@ -28,6 +28,7 @@ import { deriveAddress } from '@/services/onboarding/keyService';
 import { logger, queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope } from '@quilibrium/quorum-shared';
 import type { Message } from '@quilibrium/quorum-shared';
 import { NativeSigningProvider } from '@/services/crypto/native-signing-provider';
+import { withPiggybackedAcks } from '@/services/dm/piggybackAcks';
 import { sha256 } from '@noble/hashes/sha2.js';
 
 interface SendDirectMessageParams {
@@ -204,7 +205,7 @@ export function useSendDirectMessage() {
   const storage = useStorageAdapter();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { enqueueOutbound, isConnected, subscribe } = useWebSocket();
+  const { enqueueOutbound, isConnected, subscribe, takePendingReceiptAcks } = useWebSocket();
   const apiClient = getQuorumClient();
 
   // Flip an optimistic DM bubble from 'sending' to 'sent' in the cache. Called
@@ -389,11 +390,23 @@ export function useSendDirectMessage() {
         allTargetDevices.map((d) => d.inboxAddress.slice(0, 12)),
       );
 
+      // Any acks pending for this partner ride out attached to this message —
+      // free, because the encryption is already being paid for, and immediate
+      // rather than waiting for the conversation to pause (the standalone timer
+      // is a debounce that each new inbound message pushes back).
+      //
+      // The send gets a COPY carrying the fields. It must not be a mutated
+      // `message`: the send is deferred (it enqueues a thunk that serializes
+      // later), so stripping the fields after the await would strip them before
+      // they were ever written — silently draining the acks into nothing. The
+      // copy also keeps the returned object clean for the cache.
+      const piggybackedAcks = takePendingReceiptAcks(recipientAddress);
+
       // Send to all target device inboxes (multi-device support)
       await sendEncryptedMessageToAllDevices(
         conversationId,
         recipientAddress,
-        message,
+        withPiggybackedAcks(message, piggybackedAcks),
         allTargetDevices,
         enqueueOutbound,
         subscribe,
