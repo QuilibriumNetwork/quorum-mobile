@@ -21,6 +21,12 @@ const mockVerifyEd448 = jest.fn<Promise<boolean>, unknown[]>();
 jest.mock('../services/crypto/native-signing-provider', () => ({
   NativeSigningProvider: jest.fn(() => ({ verifyEd448: mockVerifyEd448 })),
 }));
+// spaceMessageAuth reaches the API client for owner-envelope checks; importing
+// it for real drags in react-native-mmkv (native module, absent under jest).
+// The owner-envelope path itself is covered in spaceControlOwnerAuth.test.ts.
+jest.mock('../services/api/quorumClient', () => ({
+  getQuorumClient: () => ({ getSpaceRegistration: jest.fn() }),
+}));
 const mockGetSpaceMembers = jest.fn();
 const mockGetSpaceMemberDevices = jest.fn(async () => []);
 jest.mock('../services/storage/mmkvAdapter', () => ({
