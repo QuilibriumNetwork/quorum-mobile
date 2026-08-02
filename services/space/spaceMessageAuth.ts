@@ -311,6 +311,35 @@ export interface OwnerSealedEnvelopeFields {
 }
 
 /**
+ * How long a space's owner-key list is reused without re-asking the server.
+ * A reconnect catch-up can carry many control messages for one space; without
+ * this each one costs its own round-trip before it can even be rejected.
+ */
+const REGISTRATION_CACHE_MS = 30_000;
+
+/**
+ * Floor between fetches for the same space. An unrecognised owner key forces a
+ * refetch (see below), so without a floor a flood of forged messages would
+ * become one request per message — the amplification the cache exists to stop.
+ */
+const REGISTRATION_REFETCH_FLOOR_MS = 5_000;
+
+const registrationCache = new Map<
+  string,
+  { ownerPublicKeys: string[]; fetchedAt: number }
+>();
+
+function readRegistrationCache(spaceId: string) {
+  const entry = registrationCache.get(spaceId);
+  if (!entry) return undefined;
+  if (Date.now() - entry.fetchedAt > REGISTRATION_CACHE_MS) {
+    registrationCache.delete(spaceId);
+    return undefined;
+  }
+  return entry;
+}
+
+/**
  * Verify the space owner's ed448 signature on the outer sync envelope.
  *
  * Two gates, both required, matching desktop MessageService (its kick and
@@ -322,8 +351,17 @@ export interface OwnerSealedEnvelopeFields {
  *   2. The signature must verify over `base64(utf8Bytes(envelope))`, which is
  *      byte-for-byte what the sender signed.
  *
- * Fails closed on malformed input; only an unreachable registration endpoint
- * yields `indeterminate`.
+ * Which verdict a failure earns matters more than it looks, because `invalid`
+ * lets the caller ack the message — and an acked-but-unapplied rekey locks a
+ * real member out of the space for good. So:
+ *
+ *   - Server says the space is gone (404/410) → `invalid`. Authoritative, and
+ *     retrying forever on a deleted space helps nobody.
+ *   - Server unreachable for any other reason → `indeterminate`. Keep it.
+ *   - Owner key missing from our CACHED copy → never rejected on that basis
+ *     alone. Refetch, or if rate-limited, return `indeterminate` so the message
+ *     survives to be judged against fresh data.
+ *   - Owner key missing from a FRESH copy → `invalid`. That is a forgery.
  */
 export async function verifyOwnerSealedEnvelope(
   sealed: OwnerSealedEnvelopeFields | null | undefined,
@@ -334,17 +372,42 @@ export async function verifyOwnerSealedEnvelope(
   const envelope = sealed?.envelope;
   if (!ownerPublicKey || !ownerSignature || !envelope) return 'invalid';
 
-  let registration: { owner_public_keys?: string[] } | undefined;
-  try {
-    registration = await getQuorumClient().getSpaceRegistration(spaceId);
-  } catch (err) {
-    logger.warn(
-      `[owner-envelope] space=${spaceId.slice(0, 12)}: registration fetch failed, cannot verify (${err instanceof Error ? err.message : String(err)})`
-    );
-    return 'indeterminate';
-  }
-  if (!registration?.owner_public_keys?.includes(ownerPublicKey)) {
-    return 'invalid';
+  const cached = readRegistrationCache(spaceId);
+
+  if (!cached?.ownerPublicKeys.includes(ownerPublicKey)) {
+    // Either nothing cached, or a key this copy doesn't know. A cached list can
+    // predate an owner-key rotation, and rejecting on it would delete a genuine
+    // message, so get authoritative data before deciding either way.
+    if (cached && Date.now() - cached.fetchedAt < REGISTRATION_REFETCH_FLOOR_MS) {
+      logger.warn(
+        `[owner-envelope] space=${spaceId.slice(0, 12)}: owner key not in cached registration and refetch is rate-limited; keeping the message for retry`
+      );
+      return 'indeterminate';
+    }
+
+    let ownerPublicKeys: string[];
+    try {
+      const registration = await getQuorumClient().getSpaceRegistration(spaceId);
+      ownerPublicKeys = registration?.owner_public_keys ?? [];
+      registrationCache.set(spaceId, { ownerPublicKeys, fetchedAt: Date.now() });
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      if (status === 404 || status === 410) {
+        // The space does not exist server-side. Nothing will ever verify against
+        // it, so let the caller drop and ack rather than retry forever.
+        registrationCache.delete(spaceId);
+        logger.warn(
+          `[owner-envelope] space=${spaceId.slice(0, 12)}: no such space server-side (HTTP ${status}); dropping`
+        );
+        return 'invalid';
+      }
+      logger.warn(
+        `[owner-envelope] space=${spaceId.slice(0, 12)}: registration unreachable, cannot verify (${err instanceof Error ? err.message : String(err)})`
+      );
+      return 'indeterminate';
+    }
+
+    if (!ownerPublicKeys.includes(ownerPublicKey)) return 'invalid';
   }
 
   try {
