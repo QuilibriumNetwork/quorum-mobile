@@ -478,7 +478,9 @@ function MessageMarkdownRendererBase({
           case 'blockquote':
             return (
               <View key={key} style={styles.blockquote}>
-                <Text style={baseTextStyle}>{renderInline(block.text, key)}</Text>
+                <Text style={[baseTextStyle, styles.blockquoteText]}>
+                  {renderInline(block.text, key)}
+                </Text>
               </View>
             );
           case 'list':
@@ -636,11 +638,19 @@ const createStyles = (theme: AppTheme) =>
       right: Skin.space(6),
       padding: Skin.space(4),
     },
+    // A quoted aside, not a callout: a muted rule and quieted text, matching
+    // desktop. The accent bar this used to carry read as emphasis, which is the
+    // opposite of what a quote is doing — it made every `>` line shout.
     blockquote: {
       borderLeftWidth: Skin.border(3),
-      borderLeftColor: theme.colors.primary,
+      borderLeftColor: theme.colors.borderDefault,
       paddingLeft: Skin.space(10),
       marginVertical: Skin.space(2),
+    },
+    // Set on the wrapping Text so it cascades to plain runs while links,
+    // mentions and inline code keep their own colours.
+    blockquoteText: {
+      color: theme.colors.textSubtle,
     },
     list: {
       marginVertical: Skin.space(2),
