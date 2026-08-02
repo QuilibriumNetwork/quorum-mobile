@@ -37,7 +37,12 @@ import {
   verifyOwnerSealedEnvelope,
 } from '../services/space/spaceMessageAuth';
 
-const SPACE = 'spaceAbc123456789';
+// The registration lookup is cached per space id, so every test gets its own
+// id rather than a shared constant — otherwise one test's cached owner keys
+// would silently satisfy the next test's lookup.
+let SPACE = '';
+let spaceSeq = 0;
+
 const OWNER_KEY = 'ab'.repeat(57); // ed448 public key, valid even-length hex
 const OTHER_KEY = 'cd'.repeat(57); // a key the registration does not list
 const OWNER_SIG = 'ff'.repeat(57);
@@ -64,10 +69,20 @@ function member(address: string, inbox: string, isKicked = false): SpaceMember {
 }
 
 beforeEach(() => {
+  SPACE = `spaceTest${++spaceSeq}`;
   mockVerifyEd448.mockReset();
   mockGetSpaceRegistration.mockReset();
   mockGetSpaceRegistration.mockResolvedValue({ owner_public_keys: [OWNER_KEY] });
 });
+
+afterEach(() => {
+  jest.restoreAllMocks(); // undoes any Date.now stub
+});
+
+/** Pin wall-clock time so the cache TTL and refetch floor are testable. */
+function freezeClock(at: number) {
+  jest.spyOn(Date, 'now').mockReturnValue(at);
+}
 
 describe('verifyOwnerSealedEnvelope — the kick / rekey / verify-kicked gate', () => {
   it('accepts an envelope signed by a registered owner key', async () => {
@@ -147,6 +162,107 @@ describe('verifyOwnerSealedEnvelope — the kick / rekey / verify-kicked gate', 
     });
     mockVerifyEd448.mockResolvedValue(true);
     expect(await verifyOwnerSealedEnvelope(sealed(), SPACE)).toBe('valid');
+  });
+
+  it('DROPS (not retries) when the server says the space does not exist', async () => {
+    // A deleted space can never verify, so `indeterminate` here would leave the
+    // message in the inbox to be reprocessed on every reconnect, forever.
+    for (const status of [404, 410]) {
+      SPACE = `spaceGone${status}`;
+      mockGetSpaceRegistration.mockRejectedValue(
+        Object.assign(new Error('not found'), { status })
+      );
+      expect(await verifyOwnerSealedEnvelope(sealed(), SPACE)).toBe('invalid');
+    }
+  });
+
+  it('still retries on a server error, which may be transient', async () => {
+    mockGetSpaceRegistration.mockRejectedValue(
+      Object.assign(new Error('bad gateway'), { status: 502 })
+    );
+    expect(await verifyOwnerSealedEnvelope(sealed(), SPACE)).toBe('indeterminate');
+  });
+});
+
+describe('verifyOwnerSealedEnvelope — registration caching', () => {
+  it('asks the server once for a burst of messages in the same space', async () => {
+    // A reconnect catch-up can carry many control messages for one space.
+    mockVerifyEd448.mockResolvedValue(true);
+    freezeClock(1_000_000);
+    for (let i = 0; i < 5; i++) {
+      expect(await verifyOwnerSealedEnvelope(sealed(), SPACE)).toBe('valid');
+    }
+    expect(mockGetSpaceRegistration).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not let one space\'s cached keys answer for another', async () => {
+    mockVerifyEd448.mockResolvedValue(true);
+    freezeClock(1_000_000);
+    await verifyOwnerSealedEnvelope(sealed(), SPACE);
+    await verifyOwnerSealedEnvelope(sealed(), `${SPACE}-other`);
+    expect(mockGetSpaceRegistration).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-asks the server once the cache has aged out', async () => {
+    mockVerifyEd448.mockResolvedValue(true);
+    freezeClock(1_000_000);
+    await verifyOwnerSealedEnvelope(sealed(), SPACE);
+    freezeClock(1_000_000 + 31_000); // past the 30s TTL
+    await verifyOwnerSealedEnvelope(sealed(), SPACE);
+    expect(mockGetSpaceRegistration).toHaveBeenCalledTimes(2);
+  });
+
+  it('KEEPS a message whose owner key the cached copy does not know, rather than rejecting it', async () => {
+    // Rejecting here would ack and delete the message. If the cache were merely
+    // stale (owner key rotated), that would discard a genuine rekey and lock
+    // this member out permanently. Undecided beats wrongly-decided.
+    mockVerifyEd448.mockResolvedValue(true);
+    freezeClock(1_000_000);
+    await verifyOwnerSealedEnvelope(sealed(), SPACE); // caches [OWNER_KEY]
+    expect(mockGetSpaceRegistration).toHaveBeenCalledTimes(1);
+
+    const unknownKey = await verifyOwnerSealedEnvelope(
+      sealed({ owner_public_key: OTHER_KEY }),
+      SPACE
+    );
+    expect(unknownKey).toBe('indeterminate');
+    expect(mockGetSpaceRegistration).toHaveBeenCalledTimes(1); // refetch floor held
+  });
+
+  it('picks up a genuinely rotated owner key once the refetch floor passes', async () => {
+    mockVerifyEd448.mockResolvedValue(true);
+    freezeClock(1_000_000);
+    await verifyOwnerSealedEnvelope(sealed(), SPACE); // caches [OWNER_KEY]
+
+    mockGetSpaceRegistration.mockResolvedValue({
+      owner_public_keys: [OWNER_KEY, OTHER_KEY],
+    });
+    freezeClock(1_000_000 + 6_000); // past the 5s floor, inside the 30s TTL
+
+    expect(
+      await verifyOwnerSealedEnvelope(sealed({ owner_public_key: OTHER_KEY }), SPACE)
+    ).toBe('valid');
+    expect(mockGetSpaceRegistration).toHaveBeenCalledTimes(2);
+  });
+
+  it('REJECTS an unknown owner key once fresh data confirms it is not registered', async () => {
+    // The forgery case: nothing cached, server asked, key genuinely absent.
+    mockVerifyEd448.mockResolvedValue(true);
+    freezeClock(1_000_000);
+    expect(
+      await verifyOwnerSealedEnvelope(sealed({ owner_public_key: OTHER_KEY }), SPACE)
+    ).toBe('invalid');
+    expect(mockGetSpaceRegistration).toHaveBeenCalledTimes(1);
+    expect(mockVerifyEd448).not.toHaveBeenCalled();
+  });
+
+  it('a flood of forged messages costs at most one request per floor window', async () => {
+    mockVerifyEd448.mockResolvedValue(true);
+    freezeClock(1_000_000);
+    for (let i = 0; i < 20; i++) {
+      await verifyOwnerSealedEnvelope(sealed({ owner_public_key: OTHER_KEY }), SPACE);
+    }
+    expect(mockGetSpaceRegistration).toHaveBeenCalledTimes(1);
   });
 });
 
