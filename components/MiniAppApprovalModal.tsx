@@ -302,6 +302,7 @@ export default function MiniAppApprovalModal({
           confirmLabel={request.type === 'transaction' ? 'Confirm' : 'Sign'}
           cancelLabel="Reject"
           variant="primary"
+          surface="sheet"
           onConfirm={handleApprove}
           onCancel={handleReject}
           cancelDisabled={isProcessing}

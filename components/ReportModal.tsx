@@ -177,6 +177,7 @@ export function ReportModal({ visible, onClose, target, onSubmitted }: ReportMod
             <ConfirmActions
               confirmLabel="Submit report"
               variant="primary"
+              surface="sheet"
               onConfirm={handleSubmit}
               onCancel={handleClose}
               cancelDisabled={submitting}

@@ -82,6 +82,7 @@ export function BlockUserModal({
         <ConfirmActions
           confirmLabel={isUnblocking ? 'Unblock' : 'Block'}
           variant={isUnblocking ? 'primary' : 'danger'}
+          surface="sheet"
           onConfirm={handleConfirm}
           onCancel={onClose}
         />
