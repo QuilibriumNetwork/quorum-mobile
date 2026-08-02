@@ -90,7 +90,9 @@ import {
   authorizeSpaceControlMessage,
   isReadOnlyPostAuthorized,
   isUpdateProfileAuthorized,
+  resolveVerifiedLeaver,
   shouldStripEveryoneMention,
+  verifyOwnerSealedEnvelope,
 } from '../services/space/spaceMessageAuth';
 import {
   hasMuteId,
@@ -531,6 +533,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const preUnsealedCacheRef = useRef<Map<string, string>>(new Map());
   const MAX_PRE_UNSEALED_CACHE_SIZE = 500;
 
+  // Control messages whose owner signature could not be checked (registration
+  // endpoint unreachable) and which must therefore NOT be deleted from the
+  // space inbox — a dropped-and-deleted rekey would lock a genuine member out
+  // of the space permanently. Same `${inboxAddress}:${timestamp}` key as the
+  // pre-unsealed cache. handleIncomingMessage writes; the batch path reads and
+  // clears it, because there the delete is issued by the batch loop instead.
+  const deferredInboxDeletesRef = useRef<Set<string>>(new Set());
+  const MAX_DEFERRED_INBOX_DELETES = 200;
+
   // Ratchet state deserialization cache - avoids re-parsing JSON on every message
   // Key: raw state string, Value: parsed object
   const ratchetStateCacheRef = useRef<Map<string, object>>(new Map());
@@ -908,6 +919,49 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
               const controlType = controlPayload.message?.type;
 
+              // Owner-signature gate for the privileged control types.
+              //
+              // kick and rekey are sealed with sealSyncEnvelope, which signs
+              // base64(utf8(envelope)) with the space OWNER key and attaches
+              // owner_public_key / owner_signature to the outer frame. Successful
+              // decryption proves nothing about the sender: unsealSyncEnvelope
+              // only needs the config key and the target inbox address, both of
+              // which every past member holds, so without this check anyone who
+              // has ever been in the space can forge a kick (a remote wipe of a
+              // real member's space across all their devices) or a rekey (which
+              // locks that member out). Worse, a forged kick permanently breaks
+              // the victim's signature verification — resolveVerifiedSender
+              // skips rows flagged isKicked or with a blanked inbox_address.
+              //
+              // `indeterminate` — the space registration could not be fetched —
+              // is deliberately NOT treated as forgery: the message is skipped
+              // for now and left in the inbox so the next reconnect redelivers
+              // it, rather than being dropped and acked on a network blip.
+              let deferInboxDelete = false;
+              const ownerSignatureAccepted = async (): Promise<boolean> => {
+                const verdict = await verifyOwnerSealedEnvelope(
+                  sealedMessage as unknown as SyncSealedMessage,
+                  spaceId
+                );
+                if (verdict === 'valid') {
+                  logger.debug(
+                    `[control-auth] ${controlType} accepted: owner signature valid (space=${spaceId.slice(0, 12)})`
+                  );
+                  return true;
+                }
+                if (verdict === 'indeterminate') {
+                  deferInboxDelete = true;
+                  logger.warn(
+                    `[control-auth] ${controlType} skipped: owner signature could not be checked (space=${spaceId.slice(0, 12)}); kept in inbox for retry`
+                  );
+                } else {
+                  logger.warn(
+                    `[control-auth] ${controlType} dropped: owner signature missing, invalid, or signed by a key that is not in the space registration (space=${spaceId.slice(0, 12)})`
+                  );
+                }
+                return false;
+              };
+
               switch (controlType) {
                 case 'join': {
                   // A new participant joined - update peer maps and member list
@@ -1130,45 +1184,70 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 }
 
                 case 'leave': {
-                  // A participant left the space - mark their inbox as empty
+                  // A participant left the space - mark their inbox as empty.
+                  //
+                  // A leave carries no owner signature: it is broadcast over the
+                  // hub by the DEPARTING member, so the proof of authorship is
+                  // the one they embed — an ed448 signature over
+                  // "delete" + hubPublicKey made with their inbox key. Verify it
+                  // and resolve the member from that signing key.
+                  //
+                  // The address is never taken from the payload. The previous
+                  // code read `participant.address` / `address` at face value,
+                  // so any holder of the hub key (i.e. every past member) could
+                  // blank an arbitrary member's inbox_address — which also
+                  // permanently breaks that member's signature verification,
+                  // since resolveVerifiedSender matches on inbox_address. Those
+                  // two fields are also not what a real client sends, so this
+                  // handler previously ignored every genuine leave as well.
                   try {
-                    const leavePayload = controlPayload.message as {
-                      type: 'leave';
-                      participant?: { address: string };
-                      address?: string;
-                    };
-
-                    const leavingAddress = leavePayload.participant?.address || leavePayload.address;
-                    if (!leavingAddress) {
+                    const adapter = getMMKVAdapter();
+                    const members = await adapter.getSpaceMembers(spaceId);
+                    const leaver = await resolveVerifiedLeaver(
+                      controlPayload.message,
+                      hubKey.publicKey,
+                      members
+                    );
+                    if (!leaver) {
+                      logger.warn(
+                        `[control-auth] leave dropped: no valid inbox-key proof, or its key matches no member (space=${spaceId.slice(0, 12)})`
+                      );
                       break;
                     }
 
+                    const leavingAddress = leaver.address || leaver.user_address;
+                    logger.debug(
+                      `[control-auth] leave accepted for member=${String(leavingAddress).slice(0, 12)} (space=${spaceId.slice(0, 12)})`
+                    );
+
                     // Update member in storage - set inbox_address to empty string to mark inactive
-                    const adapter = getMMKVAdapter();
-                    const existingMember = await adapter.getSpaceMember(spaceId, leavingAddress);
-                    if (existingMember) {
-                      await adapter.saveSpaceMember(spaceId, {
-                        ...existingMember,
-                        inbox_address: '', // Empty = left/inactive
-                      });
-                    }
+                    await adapter.saveSpaceMember(spaceId, {
+                      ...leaver,
+                      inbox_address: '', // Empty = left/inactive
+                    });
 
                     // Update space members cache directly (mark member as inactive)
                     queryClient.setQueryData(queryKeys.spaces.members(spaceId), (old: SpaceMember[] | undefined) => {
                       if (!old) return old;
                       return old.map((m: SpaceMember) =>
-                        m.address === leavingAddress
+                        (m.address || m.user_address) === leavingAddress
                           ? { ...m, inbox_address: '' }
                           : m
                       );
                     });
                   } catch (leaveError) {
+                    logger.warn(
+                      `[control-auth] leave dropped: threw while processing space=${spaceId.slice(0, 12)}: ${leaveError instanceof Error ? leaveError.message : String(leaveError)}`
+                    );
                   }
                   break;
                 }
 
                 case 'kick': {
-                  // A participant was kicked from the space
+                  // A participant was kicked from the space. Owner-signed on the
+                  // outer envelope; unauthenticated this is a remote wipe.
+                  if (!(await ownerSignatureAccepted())) break;
+
                   const kickedAddress = controlPayload.message.kick;
 
                   if (!kickedAddress) {
@@ -1303,7 +1382,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 // joined.
 
                 case 'verify-kicked': {
-                  // Verify kicked status for users
+                  // Bulk assertion that a set of members is kicked. Same blast
+                  // radius as a kick — it flags rows isKicked and blanks their
+                  // inbox_address, which permanently breaks those members'
+                  // signature verification — so it is held to the same proof.
+                  //
+                  // No sender produces an owner-signed verify-kicked today
+                  // (desktop broadcasts it over the hub, which carries a hub
+                  // signature every past member can forge), so in practice these
+                  // are all dropped with a logged reason. Nothing regresses:
+                  // desktop's field is `addresses` and this handler reads
+                  // `kickedAddresses`, so it has never applied a real one. That
+                  // divergence is left alone deliberately — "fixing" the field
+                  // name without a proof would open the forgery instead.
+                  if (!(await ownerSignatureAccepted())) break;
+
                   try {
                     const verifyPayload = controlPayload.message as {
                       type: 'verify-kicked';
@@ -1355,7 +1448,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 }
 
                 case 'rekey': {
-                  // Re-encryption after kick - update encryption state with new keys
+                  // Re-encryption after kick - update encryption state with new
+                  // keys. Owner-signed on the outer envelope; unauthenticated,
+                  // this replaces the config key and the ratchet state, i.e. it
+                  // locks the recipient out of their own space.
+                  if (!(await ownerSignatureAccepted())) break;
+
                   try {
                     const rekeyPayload = controlPayload.message as {
                       type: 'rekey';
@@ -1733,8 +1831,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 default:
               }
 
-              // Delete control message from inbox after successful processing
-              if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
+              // Delete control message from inbox after successful processing.
+              // Skipped when the owner signature could not be checked: deleting
+              // acks the message, and a rekey acked-but-not-applied would lock
+              // this member out of the space for good. Leaving it in the inbox
+              // makes the next reconnect redeliver it. The batch catch-up path
+              // issues its own delete, so the decision is published there too.
+              if (deferInboxDelete) {
+                if (deferredInboxDeletesRef.current.size >= MAX_DEFERRED_INBOX_DELETES) {
+                  // Best-effort hints only — the live path above already used its
+                  // local flag, so dropping stale entries costs nothing.
+                  deferredInboxDeletesRef.current.clear();
+                }
+                deferredInboxDeletesRef.current.add(cacheKey);
+              }
+              if (!deferInboxDelete && spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
                 deleteSpaceInboxMessages(
                   spaceInboxKey.address,
                   [message.timestamp],
@@ -4050,6 +4161,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               await handleIncomingMessage(originalMsg);
             } catch (err) {
               logger.warn(`[batch-control] handleIncomingMessage threw (ts=${msgResult.timestamp}): ${err instanceof Error ? err.message : String(err)}`);
+            }
+            // Keep the message in the inbox when its owner signature could not
+            // be checked, so a later reconnect redelivers it. The timestamp was
+            // queued for deletion at the top of this iteration; withdraw it.
+            if (deferredInboxDeletesRef.current.delete(cacheKey)) {
+              const queuedAt = deleteTimestamps.indexOf(msgResult.timestamp);
+              if (queuedAt !== -1) deleteTimestamps.splice(queuedAt, 1);
+              logger.warn(`[batch-control] kept in inbox for retry (ts=${msgResult.timestamp})`);
             }
             // Control messages (join/kick/…) may have written member rows.
             batchMembersCache = null;

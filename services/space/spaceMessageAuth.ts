@@ -43,6 +43,7 @@ import {
   type SpaceMember,
   type VerifiedSender,
 } from '@quilibrium/quorum-shared';
+import { getQuorumClient } from '../api/quorumClient';
 import { NativeSigningProvider } from '../crypto/native-signing-provider';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
 
@@ -274,4 +275,128 @@ export async function shouldStripEveryoneMention(
   // than the claimed sender. (VerifiedSender is a branded string, so the
   // runtime comparison is plain string equality.)
   return verifiedSender === null || verifiedSender !== senderId;
+}
+
+/* ------------------------------------------------------------------------ *
+ * Outer-envelope authentication for privileged control messages
+ *
+ * Everything above authenticates the INNER message via its own ed448
+ * signature. The two functions below authenticate the OUTER frame instead,
+ * for the control messages that carry no inner signature at all:
+ *
+ *   kick / rekey   → owner-signed on the sync envelope  (verifyOwnerSealedEnvelope)
+ *   leave          → self-signed by the leaver's inbox key (resolveVerifiedLeaver)
+ *
+ * Decrypting one of these proves nothing about who sent it: the config key,
+ * the hub keypair and every member's inbox address are all held by anyone who
+ * has ever been in the space, including members who were later kicked.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Outcome of checking the owner signature on a sync-sealed envelope.
+ *
+ * Three states rather than a boolean, because dropping a genuine rekey locks a
+ * real member out of the space for good: "the registration endpoint could not
+ * be reached" must never collapse into "this message is forged". Callers apply
+ * on `valid`, discard on `invalid`, and on `indeterminate` discard but leave
+ * the message in the inbox so a later reconnect redelivers it.
+ */
+export type OwnerEnvelopeVerdict = 'valid' | 'invalid' | 'indeterminate';
+
+/** The outer-frame fields sealSyncEnvelope attaches (SyncSealedMessage subset). */
+export interface OwnerSealedEnvelopeFields {
+  owner_public_key?: string;
+  owner_signature?: string;
+  envelope?: string;
+}
+
+/**
+ * Verify the space owner's ed448 signature on the outer sync envelope.
+ *
+ * Two gates, both required, matching desktop MessageService (its kick and
+ * rekey branches) and the SDK's `SealSyncEnvelope` send side:
+ *
+ *   1. `owner_public_key` must appear in the space registration's
+ *      `owner_public_keys` — a valid signature by a key nobody registered is
+ *      worthless.
+ *   2. The signature must verify over `base64(utf8Bytes(envelope))`, which is
+ *      byte-for-byte what the sender signed.
+ *
+ * Fails closed on malformed input; only an unreachable registration endpoint
+ * yields `indeterminate`.
+ */
+export async function verifyOwnerSealedEnvelope(
+  sealed: OwnerSealedEnvelopeFields | null | undefined,
+  spaceId: string
+): Promise<OwnerEnvelopeVerdict> {
+  const ownerPublicKey = sealed?.owner_public_key;
+  const ownerSignature = sealed?.owner_signature;
+  const envelope = sealed?.envelope;
+  if (!ownerPublicKey || !ownerSignature || !envelope) return 'invalid';
+
+  let registration: { owner_public_keys?: string[] } | undefined;
+  try {
+    registration = await getQuorumClient().getSpaceRegistration(spaceId);
+  } catch (err) {
+    logger.warn(
+      `[owner-envelope] space=${spaceId.slice(0, 12)}: registration fetch failed, cannot verify (${err instanceof Error ? err.message : String(err)})`
+    );
+    return 'indeterminate';
+  }
+  if (!registration?.owner_public_keys?.includes(ownerPublicKey)) {
+    return 'invalid';
+  }
+
+  try {
+    const signingProvider = new NativeSigningProvider();
+    const isValid = await signingProvider.verifyEd448(
+      bytesToBase64(Uint8Array.from(hexToBytes(ownerPublicKey))),
+      bytesToBase64(new TextEncoder().encode(envelope)),
+      bytesToBase64(Uint8Array.from(hexToBytes(ownerSignature)))
+    );
+    return isValid ? 'valid' : 'invalid';
+  } catch {
+    // Malformed hex, or the native verifier rejecting the input outright.
+    return 'invalid';
+  }
+}
+
+/**
+ * Resolve who a `leave` control message actually came from.
+ *
+ * A leave is broadcast over the hub by the departing member, so there is no
+ * owner signature to check. The proof the sender embeds is an ed448 signature
+ * over `"delete" + hubPublicKey` made with their inbox key (desktop
+ * SpaceService.deleteSpace builds it; desktop MessageService checks it).
+ *
+ * The member is resolved FROM the signing key, never from an address written
+ * into the payload — same reverse-lookup rule as `resolveVerifiedSender`, and
+ * for the same reason: an attacker must not be able to name their victim.
+ * Returns the matching member row, or null on any failure (fail closed).
+ */
+export async function resolveVerifiedLeaver(
+  payload: { inboxPublicKey?: string; inboxSignature?: string } | null | undefined,
+  hubPublicKeyHex: string,
+  members: SpaceMember[]
+): Promise<SpaceMember | null> {
+  const inboxPublicKey = payload?.inboxPublicKey;
+  const inboxSignature = payload?.inboxSignature;
+  if (!inboxPublicKey || !inboxSignature || !hubPublicKeyHex) return null;
+
+  try {
+    const signingProvider = new NativeSigningProvider();
+    const isValid = await signingProvider.verifyEd448(
+      bytesToBase64(Uint8Array.from(hexToBytes(inboxPublicKey))),
+      bytesToBase64(new TextEncoder().encode(`delete${hubPublicKeyHex}`)),
+      bytesToBase64(Uint8Array.from(hexToBytes(inboxSignature)))
+    );
+    if (!isValid) return null;
+
+    const inboxAddress = deriveInboxAddress(inboxPublicKey);
+    return (
+      members.find((m) => m.inbox_address && m.inbox_address === inboxAddress) ?? null
+    );
+  } catch {
+    return null;
+  }
 }
