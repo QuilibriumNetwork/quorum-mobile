@@ -27,6 +27,11 @@
 // delivery ONE send per identity is enough, and the cap should shrink toward 1
 // as the transport is proven. Do not build as if it were permanent.
 //
+// The rule itself (cap, expiry, legacy migration) lives in
+// services/identity/profileAnnounceGate.ts and is shared with the per-space
+// announce. What stays here is DM-specific: the constants and the exported
+// names the DM service calls.
+//
 // Desktop counterpart: quorum-desktop/src/utils/dmProfileGate.ts — same rule,
 // same constants, same migration semantics.
 //
@@ -35,82 +40,30 @@
 // (that repo's .agents/ is git-tracked; this one's is not, so the reasoning
 // lives there on purpose.)
 
+import {
+  createProfileAnnounceGate,
+  type ProfileGateRecord,
+} from '../identity/profileAnnounceGate';
+
 /** Minimum gap between two sends of the SAME identity to the same partner. */
 export const RESEND_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
 
 /** How many times an UNCHANGED identity is ever sent to one partner. */
 export const MAX_SENDS_PER_IDENTITY = 3;
 
-/**
- * Attempts credited to a record written before this cap existed.
- *
- * 2 leaves exactly ONE more try for pairs that are broken right now, then the
- * cap closes. On mobile EVERY existing record is a pre-cap one, so this is the
- * one-time heal for every partner announced under the old send-once rule.
- */
-const MIGRATED_ATTEMPTS = MAX_SENDS_PER_IDENTITY - 1;
+const gate = createProfileAnnounceGate({
+  intervalMs: RESEND_INTERVAL_MS,
+  maxSends: MAX_SENDS_PER_IDENTITY,
+});
 
-export interface DmProfileGateRecord {
-  sig: string;
-  at: number;
-  /** Sends of THIS signature to this partner so far. */
-  attempts: number;
-}
+export type DmProfileGateRecord = ProfileGateRecord;
 
-/**
- * Parse a stored gate value.
- *
- * `migrated` tells the caller to persist the upgrade. That write matters: if the
- * upgrade were recomputed on every read instead, `now - at` would always be ~0
- * and the record could never age out — which is how the pre-cap code left every
- * record permanently shut.
- *
- * ⚠️ A migrated record is anchored at NOW, never at any stored timestamp. The
- * pre-cap values carry no timestamp at all on mobile, and on desktop carry one
- * up to 24h old — either way, treating them as "due" would fire every partner
- * on the first connect after deploy.
- */
+/** See `profileAnnounceGate.readGateRecord`. */
 export function readGateRecord(
   raw: string | null | undefined,
   now: number
 ): { record: DmProfileGateRecord | null; migrated: boolean } {
-  if (!raw) return { record: null, migrated: false };
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (
-      parsed !== null &&
-      typeof parsed === 'object' &&
-      !Array.isArray(parsed) &&
-      typeof (parsed as DmProfileGateRecord).sig === 'string'
-    ) {
-      // Only `sig` is required to recognise the object form. The numbers are
-      // validated separately so a record with unusable ones still migrates with
-      // its REAL signature, rather than falling through and having the whole
-      // JSON blob mistaken for a bare signature.
-      const { sig, at, attempts } = parsed as DmProfileGateRecord;
-      // `Number.isFinite` / `Number.isInteger`, not `typeof === 'number'`: NaN
-      // and Infinity are both numbers, and either breaks the gate silently — a
-      // NaN `attempts` defeats the cap (`NaN >= 3` is false, so it sends
-      // forever) and a NaN `at` wedges the interval shut. Both serialise to
-      // `null` through JSON, so this covers stored ones too. Desktop applies the
-      // identical check.
-      if (Number.isFinite(at) && Number.isInteger(attempts) && attempts >= 0) {
-        return { record: { sig, at, attempts }, migrated: false };
-      }
-      return {
-        record: { sig, at: now, attempts: MIGRATED_ATTEMPTS },
-        migrated: true,
-      };
-    }
-  } catch {
-    // Not JSON — fall through. The legacy value is a bare signature, which is
-    // itself valid JSON (an object), so the SHAPE check above is what actually
-    // separates the two formats, not the try/catch.
-  }
-  return {
-    record: { sig: raw, at: now, attempts: MIGRATED_ATTEMPTS },
-    migrated: true,
-  };
+  return gate.readGateRecord(raw, now);
 }
 
 /**
@@ -125,10 +78,7 @@ export function shouldSendProfile(
   sig: string,
   now: number
 ): boolean {
-  if (!record) return true;
-  if (record.sig !== sig) return true;
-  if (record.attempts >= MAX_SENDS_PER_IDENTITY) return false;
-  return now - record.at >= RESEND_INTERVAL_MS;
+  return gate.shouldSend(record, sig, now);
 }
 
 /**
@@ -139,5 +89,5 @@ export function nextAttempts(
   record: DmProfileGateRecord | null,
   sig: string
 ): number {
-  return record && record.sig === sig ? record.attempts + 1 : 1;
+  return gate.nextAttempts(record, sig);
 }

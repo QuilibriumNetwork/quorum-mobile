@@ -902,8 +902,16 @@ export async function sendUpdateProfileMessage(
 // payload (the receive handler is upsert-aware), but every broadcast is a
 // message on the wire that generates a push notification for every member
 // of every space. This gate suppresses sends whose payload matches the
-// most recent successful broadcast for that destination.
+// most recent successful broadcast for that destination — but only a BOUNDED
+// number of times, and no longer forever: see spaceAnnounceGate.ts for why
+// "announced once, ever" made a member invisible to everyone who joined later.
 import { createMMKV, type MMKV } from 'react-native-mmkv';
+import {
+  readAnnounceRecord,
+  shouldAnnounce,
+  nextAnnounceAttempts,
+  type SpaceAnnounceRecord,
+} from './spaceAnnounceGate';
 let profileBroadcastStateStore: MMKV | null = null;
 function getProfileBroadcastStore(): MMKV {
   if (!profileBroadcastStateStore) {
@@ -952,16 +960,56 @@ export async function maybeSendUpdateProfileMessage(
 
   const store = getProfileBroadcastStore();
   const key = profileBroadcastKey(params.spaceId, params.senderAddress);
-  const last = store.getString(key);
-  if (last === sig) return null;
+  const now = Date.now();
+
+  // Storage failures fail OPEN. A redundant announce costs bandwidth; a
+  // suppressed one leaves the member rendering as a truncated address with no
+  // error anywhere and nothing to retry.
+  let record: SpaceAnnounceRecord | null = null;
+  try {
+    const parsed = readAnnounceRecord(store.getString(key), now);
+    record = parsed.record;
+    // Persist the upgrade of a legacy bare-signature record. Without this write
+    // the upgrade is recomputed on every read, `now - at` is always ~0, and the
+    // record can never age out — which is how the pre-expiry code left every
+    // record permanently shut.
+    if (parsed.migrated && record) {
+      try {
+        store.set(key, JSON.stringify(record));
+      } catch {
+        /* gate stays as-is; next launch retries the upgrade */
+      }
+    }
+  } catch {
+    record = null;
+  }
+
+  if (!shouldAnnounce(record, sig, now)) return null;
 
   const result = await sendUpdateProfileMessage(params);
-  store.set(key, sig);
+  // Recorded only AFTER a successful send, so a failure leaves the gate open
+  // and the next connect retries.
+  try {
+    store.set(
+      key,
+      JSON.stringify({ sig, at: now, attempts: nextAnnounceAttempts(record, sig) })
+    );
+  } catch {
+    /* gate stays open — a redundant re-announce next launch is the safe miss */
+  }
   return result;
 }
 
-/** Clear the gate for a (spaceId, senderAddress) — used when the user
- *  leaves a space or signs out so a fresh rejoin re-broadcasts. */
+/**
+ * Clear the gate for a (spaceId, senderAddress).
+ *
+ * ⚠️ Currently **not called from anywhere** (verified by repo-wide grep,
+ * 2026-08-01). Its previous comment claimed it ran on leave-space and sign-out;
+ * it does not, so the one escape hatch the gate appeared to have never fired.
+ * Left in place because a rejoin genuinely should re-announce — wiring it into
+ * the leave/sign-out flows is a separate change. The expiry added alongside this
+ * note is what actually reopens the gate today.
+ */
 export function clearProfileBroadcastState(spaceId: string, senderAddress: string): void {
   getProfileBroadcastStore().remove(profileBroadcastKey(spaceId, senderAddress));
 }
