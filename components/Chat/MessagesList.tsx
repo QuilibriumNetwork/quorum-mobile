@@ -26,6 +26,7 @@ import { UnsignedIndicator } from './UnsignedIndicator';
 import { EditHistoryModal } from './EditHistoryModal';
 import { ReactionDetailsModal } from './ReactionDetailsModal';
 import { SpaceCallBubble } from './SpaceCallBubble';
+import { StickerImage } from './StickerImage';
 import type { DisplayMessage, DisplayReaction } from './types';
 import { hasPermission, logger, shouldShowCompactHeader, type Emoji, type Sticker, type SpaceMember, type Channel, type Role, type Space } from '@quilibrium/quorum-shared';
 import * as Skin from '@/theme/skins/geometry';
@@ -1265,10 +1266,10 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               )}
               {sticker ? (
                 <View style={styles.stickerContainer}>
-                  <Image
-                    source={{ uri: sticker.imgUrl }}
+                  <StickerImage
+                    uri={sticker.imgUrl}
+                    maxWidth={MESSAGE_IMAGE_MAX_WIDTH}
                     style={styles.stickerImage}
-                    resizeMode="contain"
                   />
                 </View>
               ) : (
@@ -1286,7 +1287,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, stickerMap, renderAvatar, renderUnsignedWarning, renderCompactIndicators, handleMessageLongPress, highlightedMessageId, highlightAnimStyle, compactMessageIds]
+    [styles, renderReactions, stickerMap, renderAvatar, renderUnsignedWarning, renderCompactIndicators, handleMessageLongPress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, compactMessageIds]
   );
 
   // Helper to get reply preview from parent message
@@ -2043,9 +2044,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   stickerContainer: {
     marginTop: Skin.space(8),
   },
+  // Width/height come from StickerImage — the sticker's own aspect ratio,
+  // capped to the message column.
   stickerImage: {
-    width: 128,
-    height: 128,
     borderRadius: Skin.radius(8),
   },
   stickerPlaceholder: {

@@ -145,6 +145,7 @@ export function MuteUserModal({
         <ConfirmActions
           confirmLabel={isUnmuting ? 'Unmute' : 'Mute'}
           variant={isUnmuting ? 'primary' : 'danger'}
+          surface="sheet"
           onConfirm={handleConfirm}
           onCancel={onClose}
           cancelDisabled={isSaving}

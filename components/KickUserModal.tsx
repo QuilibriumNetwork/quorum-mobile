@@ -122,6 +122,7 @@ export function KickUserModal({
         {/* Buttons */}
         <ConfirmActions
           confirmLabel="Kick"
+          surface="sheet"
           onConfirm={handleKickWithOverlay}
           onCancel={onClose}
           cancelDisabled={isSaving}

@@ -156,6 +156,7 @@ export default function TransactionWarningModal({
       <ConfirmActions
         confirmLabel={warningConfig.severity === 'high' ? 'Proceed Anyway' : 'Continue'}
         variant={warningConfig.severity === 'high' ? 'danger' : 'primary'}
+        surface="sheet"
         onConfirm={onProceed}
         onCancel={onClose}
         style={styles.buttonContainer}
