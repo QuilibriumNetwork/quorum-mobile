@@ -56,7 +56,6 @@ interface InboxItem {
   subtitle?: string;
   /** IconSymbol name for a media/event preview (image, call, etc.). */
   subtitleIcon?: IconSymbolName;
-  subtitlePrefix?: string;
   placeholder?: boolean;
 }
 
@@ -118,9 +117,6 @@ const InboxRow = React.memo(function InboxRow({ item, styles, theme, onPress, on
             style={[styles.subtitle, item.placeholder && styles.subtitlePlaceholder]}
             numberOfLines={1}
           >
-            {item.subtitlePrefix ? (
-              <Text style={styles.subtitlePrefix}>{item.subtitlePrefix}: </Text>
-            ) : null}
             {item.subtitleIcon ? (
               <>
                 <IconSymbol name={item.subtitleIcon} size={13} color={theme.colors.textMuted} />
@@ -207,7 +203,6 @@ export default function MessagesInbox() {
 
     for (const conv of (conversations as Conversation[]) ?? []) {
       const hasUnread = conv.lastReadTimestamp ? conv.timestamp > conv.lastReadTimestamp : false;
-      const senderName = conv.lastMessageSenderName;
       // Coerce any preview shape (typed, legacy string, raw object) to
       // {kind,text}; an empty text with no icon means "no message yet".
       const preview =
@@ -228,7 +223,6 @@ export default function MessagesInbox() {
         isMuted: isMuted(conv.conversationId),
         subtitle: previewText,
         subtitleIcon: previewIcon,
-        subtitlePrefix: hasPreview && senderName ? senderName : undefined,
         placeholder: !hasPreview,
       });
     }
@@ -536,11 +530,6 @@ const createStyles = (theme: AppTheme, isDark: boolean, listPadding: number) =>
       flex: 1,
       ...theme.textStyles.subheadline,
       color: theme.colors.textSubtle,
-    },
-    subtitlePrefix: {
-      color: theme.colors.textMain,
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
     },
     subtitlePlaceholder: {
       fontStyle: 'italic',
