@@ -69,7 +69,7 @@ undecryptable leftovers as fresh losses.
 ## Why this exists
 
 The DM investigation
-(`.agents/bugs/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md`)
+(`.agents/issues/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md`)
 ends at a wall: frames are handed to `ws.send`, signed, socket open, and never
 arrive. Client visibility stops there, because below it is React Native's native
 WebSocket. §26 puts the drop at ~80% node-side with that exact residual
