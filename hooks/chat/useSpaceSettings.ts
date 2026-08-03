@@ -20,6 +20,7 @@ import {
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import { removeSpaceFromConfig } from '@/services/config/configService';
 import { broadcastSpaceUpdate } from '@/services/space/broadcastSpaceUpdate';
+import { announceLeave } from '@/services/space/announceLeave';
 import { useWebSocket } from '@/context/WebSocketContext';
 import { useAuth } from '@/context/AuthContext';
 import type { Space } from '@quilibrium/quorum-shared';
@@ -145,11 +146,12 @@ export function useDeleteSpace() {
 }
 
 /**
- * Leave a space (same as delete locally, but could send a leave message in future)
+ * Leave a space: tell the other members, deregister from the hub, then wipe locally.
  */
 export function useLeaveSpace() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { enqueueOutbound, flushOutbound } = useWebSocket();
 
   return useMutation({
     mutationFn: async (params: DeleteSpaceParams): Promise<void> => {
@@ -158,16 +160,31 @@ export function useLeaveSpace() {
         throw new Error('Space not found');
       }
 
-      // TODO: Send leave message to space before deleting
-      // This would notify other members that the user has left.
-      // Separate from the config write below: that removes the Space from THIS
-      // user's devices; the hub leave is what tells the other MEMBERS.
-
-      // Remove from the synced config first — see the note in useDeleteSpace,
-      // including why a missing address aborts instead of skipping
+      // A missing address aborts instead of skipping — see the note in
+      // useDeleteSpace for why silently falling through is the dangerous option.
       if (!user?.address) {
         throw new Error('Cannot leave Space: no authenticated user address');
       }
+
+      // Announce the departure BEFORE anything below destroys the keys that make
+      // announcing possible. This used to be a bare TODO, which is why leaving a
+      // Space on mobile was silent: the Space disappeared here and every other
+      // member went on listing the member, their roles and their hub inbox.
+      //
+      // Throws when the hub deregistration fails, and that is deliberate — the
+      // Space stays on this device, the modal surfaces the error, and the user
+      // can retry. Wiping through a failure would strand the inbox registered on
+      // the hub with the keys needed to remove it already gone. The broadcast leg
+      // never throws; announceLeave carries the reasoning for the split.
+      await announceLeave({
+        spaceId: params.spaceId,
+        enqueueOutbound,
+        flushOutbound,
+      });
+
+      // Removed from the synced config before the local wipe, for the same
+      // reason as useDeleteSpace: wiping first and failing here would leave the
+      // Space listed in config.spaceIds with its keys already gone.
       await removeSpaceFromConfig(user.address, params.spaceId);
 
       // Delete from spaceStorage (includes keys)

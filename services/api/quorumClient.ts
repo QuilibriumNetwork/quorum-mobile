@@ -701,16 +701,25 @@ export class QuorumMobileClient implements QuorumApiClient {
    *
    * @param params - Hub control message with signatures
    */
-  async postHubDelete(params: {
-    hub_address: string;
-    hub_public_key: string;
-    hub_signature: string;
-    inbox_public_key: string;
-    inbox_signature: string;
-  }): Promise<{ status: string }> {
+  async postHubDelete(
+    params: {
+      hub_address: string;
+      hub_public_key: string;
+      hub_signature: string;
+      inbox_public_key: string;
+      inbox_signature: string;
+    },
+    // Optional because this call sits in front of a user action that blocks on
+    // it: leaving a Space. The 30s default is fine for background work but reads
+    // as a hang when someone is watching a spinner, so callers can ask for an
+    // answer sooner. The AbortController really cancels, so a timeout here does
+    // not leave the request landing later behind the user's back.
+    options?: { timeout?: number }
+  ): Promise<{ status: string }> {
     return this.fetch<{ status: string }>('/hub/delete', {
       method: 'POST',
       body: params,
+      timeout: options?.timeout,
     });
   }
 
