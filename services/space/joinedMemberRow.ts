@@ -12,6 +12,8 @@ export interface JoinParticipant {
   inboxAddress: string;
   userIcon?: string;
   displayName?: string;
+  /** Present on the wire inside the signed blob; only ever used for a brand-new row. */
+  joinedAt?: number;
 }
 
 /**
@@ -48,19 +50,34 @@ export interface JoinParticipant {
  * Re-admitting a genuinely kicked member is a real flow, but it has to go through an
  * actual re-admission — not an unauthenticated frame that anyone can send.
  *
- * **One exception, and it is load-bearing: a row whose `inbox_address` is empty.**
- * `leave` does not delete the member row, it blanks the anchor to mark the member
- * inactive. Refusing to repoint an empty anchor would mean a member who leaves and is
- * later re-invited keeps an empty one forever, so their messages never resolve to a
- * known signer again — breaking an ordinary flow in the name of protecting nothing.
- * An empty anchor has no live identity to poison, so a join may set it.
+ * ## An existing row's anchor is NEVER repointed, empty or not
  *
- * That does leave a narrow hole: a forged join for someone who has genuinely left
- * could claim their address with the sender's inbox. It is strictly narrower than the
- * behaviour it replaces (which allowed exactly that for *every* member, departed or
- * not), and closing it properly needs the signature and DKG checks that later layers
- * add. `leave` itself is already verified, so an attacker cannot manufacture this
- * state — they can only exploit a departure that really happened.
+ * A first version of this function made an exception for a row whose `inbox_address`
+ * was empty, reasoning that only a verified `leave` blanks an anchor, so an empty one
+ * had no live identity to poison. **Both halves of that were wrong**, and independent
+ * review caught it after it shipped (#221, reverted here):
+ *
+ * - `kick` blanks the anchor too (`WebSocketContext.tsx` `case 'kick'`, and the
+ *   `verify-kicked` and `rekey` paths), so ordinary moderation leaves blank anchors
+ *   lying around indefinitely, not just rare departures.
+ * - Far worse, an attacker can **manufacture** a blank anchor at will. The
+ *   `update-profile` handler upserts a row for any claimed `senderId` it has never
+ *   seen, with `inbox_address: ''`, and `isUpdateProfileAuthorized` accepts a
+ *   signature from an unknown key outright (it treats it as a key-rotation
+ *   announcement). So: self-sign an `update-profile` claiming a victim's address to
+ *   mint a blank-anchored row, then send a forged `join` to bind your own key as that
+ *   victim's anchor. The victim's genuine `join` can then never correct it, because
+ *   the anchor is no longer empty. That is a full identity hijack, reachable with
+ *   exactly the hub + config keys this function's threat model already assumes.
+ *
+ * So there is no exception. An existing row keeps its anchor unconditionally.
+ *
+ * **Known limitation, accepted deliberately:** a member who leaves (or is kicked) and
+ * is later re-invited keeps an empty anchor, so their messages will not resolve to a
+ * known signer until something authorised repoints it. Repointing it safely needs the
+ * signature check from Layer 2 of the join fix — an authenticated join may move an
+ * anchor; an unauthenticated one may not. Being unresolvable is a broken flow; the
+ * alternative was a hijack primitive, and the spec's exception-free rule was right.
  */
 export function buildJoinedMemberRow(
   existing: SpaceMember | undefined,
@@ -76,14 +93,16 @@ export function buildJoinedMemberRow(
   };
 
   if (existing) {
-    // Empty anchor = the member had left. Restoring it is what makes re-invite work.
-    const reanchor = existing.inbox_address ? {} : { inbox_address: participant.inboxAddress };
-    return { ...existing, ...displayFields, ...reanchor };
+    return { ...existing, ...displayFields };
   }
 
   return {
     address: participant.address,
     inbox_address: participant.inboxAddress,
+    // The wire carries joinedAt inside the signed blob; it was being dropped at the
+    // parse boundary, so every new member row was stored without one. Ordering and the
+    // join-bound checks read it.
+    ...(participant.joinedAt !== undefined ? { joinedAt: participant.joinedAt } : {}),
     ...displayFields,
   };
 }

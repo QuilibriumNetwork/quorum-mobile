@@ -73,15 +73,29 @@ describe('buildJoinedMemberRow', () => {
       expect(row.profile_image).toBe('real-icon');
     });
 
-    it('DOES set inbox_address when the row has none, so leave-then-rejoin works', () => {
-      // `leave` blanks the anchor rather than deleting the row. Without this, a member
-      // who leaves and is re-invited would keep an empty anchor forever and never
-      // resolve to a known signer again — a real flow broken to protect nothing.
+    it('does not set inbox_address even when the row has none', () => {
+      // The state a `leave` leaves behind. An earlier version made an exception here,
+      // reasoning that an empty anchor has nothing to poison. It does: `update-profile`
+      // upserts a blank-anchored row for ANY claimed address on a signature from an
+      // unknown key, so an attacker can mint this state and then claim it with a forged
+      // join. The cost of closing that is the row below — accepted deliberately.
       const departed: SpaceMember = { ...existingMember, inbox_address: '' };
 
       const row = buildJoinedMemberRow(departed, participant);
 
-      expect(row.inbox_address).toBe('attacker-chosen-inbox');
+      expect(row.inbox_address).toBe('');
+    });
+
+    it('does not repoint the anchor on a kicked row, which is also blank', () => {
+      // The exact state `kick` produces. Tested as a pair rather than as two separate
+      // rows, because the combination is what an attacker actually finds in the wild
+      // and neither single-field test would have caught a regression here.
+      const kicked: SpaceMember = { ...existingMember, isKicked: true, inbox_address: '' };
+
+      const row = buildJoinedMemberRow(kicked, participant);
+
+      expect(row.isKicked).toBe(true);
+      expect(row.inbox_address).toBe('');
     });
 
     it('keeps fields the join knows nothing about', () => {
@@ -95,14 +109,24 @@ describe('buildJoinedMemberRow', () => {
 
   describe('a member who is not in the roster yet', () => {
     it('is taken at face value, because there is nothing to protect', () => {
-      const row = buildJoinedMemberRow(undefined, participant);
+      const row = buildJoinedMemberRow(undefined, { ...participant, joinedAt: 1_800_000_000_000 });
 
       expect(row).toEqual({
         address: 'member-address',
         inbox_address: 'attacker-chosen-inbox',
         display_name: 'New Name',
         profile_image: 'new-icon',
+        joinedAt: 1_800_000_000_000,
       });
+    });
+
+    it('keeps joinedAt from the wire, which used to be dropped at the parse boundary', () => {
+      // Both clients put joinedAt in the signed blob, but the receive-side type omitted
+      // it, so every new member row was stored without one. Ordering and the join-bound
+      // checks read it.
+      const row = buildJoinedMemberRow(undefined, { ...participant, joinedAt: 1_800_000_000_000 });
+
+      expect(row.joinedAt).toBe(1_800_000_000_000);
     });
 
     it('is not invented with a name or avatar the join did not send', () => {
