@@ -1326,7 +1326,15 @@ export default function SpaceSettingsModal({
       handleClose();
       onSpaceLeft?.();
     } catch (error) {
-      Alert.alert('Error', 'Failed to leave space');
+      // The Space is still here: useLeaveSpace throws before wiping anything when
+      // it can't deregister from the hub, so this is safe to retry. Log it — the
+      // failure now carries a real HTTP status, and the alert deliberately doesn't
+      // show it.
+      logger.warn('[leave] leaving Space failed', error);
+      Alert.alert(
+        'Could not leave Space',
+        'You are still a member. Check your connection and try again.'
+      );
     }
   }, [spaceId, leaveSpaceMutation, handleClose, onSpaceLeft, confirm]);
 
