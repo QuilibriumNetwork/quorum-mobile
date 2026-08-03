@@ -153,6 +153,22 @@ export function getSpaceKeys(spaceId: string): SpaceKey[] {
   return keys;
 }
 
+/**
+ * Does this device hold the owner key for a Space?
+ *
+ * This is the real ownership test: there is no ownership flag anywhere, only
+ * possession of the `owner` key slot. A device that never created the Space, or
+ * whose local Space storage has been wiped, is not an owner and must not be
+ * offered owner-only actions.
+ *
+ * Named rather than inlined because the answer gates destructive UI, and because
+ * `getSpaceKey(spaceId, 'owner')` scattered across components invites the string
+ * literal drifting. Desktop's equivalent is the `useSpaceOwner` query.
+ */
+export function holdsSpaceOwnerKey(spaceId: string): boolean {
+  return !!getSpaceKey(spaceId, 'owner');
+}
+
 export function saveSpaceKey(spaceKey: SpaceKey): void {
   const key = getSpaceKeyStorageKey(spaceKey.spaceId, spaceKey.keyId);
   spaceStorage.set(key, JSON.stringify(spaceKey));

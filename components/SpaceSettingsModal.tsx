@@ -17,7 +17,7 @@
 import { KickUserModal } from '@/components/KickUserModal';
 import SpaceChannelBindingPicker from '@/components/SpaceChannelBindingPicker';
 import ShareInviteSheet from '@/components/ShareInviteSheet';
-import { ActionRow, ActionRowGroup, BaseModal, TypeToConfirmModal } from '@/components/shared';
+import { ActionRow, ActionRowGroup, BaseModal } from '@/components/shared';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/SegmentedPills';
@@ -50,7 +50,7 @@ import { useSpaceApexConfig, useSetSpaceApexConfig } from '@/hooks/useApex';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
 import type { ApexToken } from '@/services/apex/config';
 import { getErrorMessage } from '@/utils/error';
-import { getSpace, getSpaceKey } from '@/services/config/spaceStorage';
+import { getSpace, getSpaceKey, holdsSpaceOwnerKey } from '@/services/config/spaceStorage';
 import { useChannelMute } from '@/hooks/chat/useChannelMute';
 import { useSpaceNotificationTypes } from '@/hooks/chat/useSpaceNotificationTypes';
 // NativeCryptoProvider and getApiConfig imported dynamically in handlePublishToDirectory
@@ -511,11 +511,9 @@ export default function SpaceSettingsModal({
   const { enqueueOutbound } = useWebSocket();
   const queryClient = useQueryClient();
 
-  // Determine if user is space owner
-  const isSpaceOwner = useMemo(() => {
-    const ownerKey = getSpaceKey(spaceId, 'owner');
-    return !!ownerKey;
-  }, [spaceId]);
+  // Determine if user is space owner — possession of the `owner` key slot is the
+  // only ownership signal that exists (see holdsSpaceOwnerKey).
+  const isSpaceOwner = useMemo(() => holdsSpaceOwnerKey(spaceId), [spaceId]);
 
   // Tapping a member avatar opens their profile (same as tapping an avatar on
   // a message). This is the members-list entry point for viewing a profile,
@@ -861,7 +859,6 @@ export default function SpaceSettingsModal({
   const [directorySubmitted, setDirectorySubmitted] = useState(false);
 
   // Delete/Leave confirmation
-  const [showDeleteSpaceConfirm, setShowDeleteSpaceConfirm] = useState(false);
   const { confirm, confirmDialog } = useConfirmDialog();
 
   // Kick modal state
@@ -916,7 +913,6 @@ export default function SpaceSettingsModal({
     setGeneratedInviteType(null);
     setInviteType('private');
     setHasLoadedExistingInvite(false);
-    setShowDeleteSpaceConfirm(false);
     setKickTarget(null);
     onClose();
   }, [onClose]);
@@ -1289,26 +1285,34 @@ export default function SpaceSettingsModal({
     [spaceId, reorderChannelsMutation],
   );
 
-  const handleDeleteSpace = useCallback(async () => {
-    setShowDeleteSpaceConfirm(false);
+  // Dev-only local removal of a Space from THIS device.
+  //
+  // This is the same mutation the old "Delete Space" button called. The behaviour was
+  // never the defect — useDeleteSpace only ever removed local data — the copy was,
+  // because it promised permanent deletion for everyone. Real deletion needs a
+  // server-side purge endpoint that does not exist yet, so release builds get a
+  // disabled button and dev builds get this, honestly labelled.
+  //
+  // A plain confirm, deliberately, not the type-to-confirm this used to have. Typing
+  // a keyword next to a channel and member count is the app's strongest "you are
+  // destroying something shared" signal, and attaching it to a device-local action is
+  // exactly what made the old dialog mislead.
+  const handleRemoveSpaceLocally = useCallback(async () => {
+    const ok = await confirm({
+      title: 'Remove from this device?',
+      message:
+        'This only affects this device. Other members keep the Space, and if you own it you will not be able to manage it again.',
+      confirmLabel: 'Remove',
+    });
+    if (!ok) return;
     try {
       await deleteSpaceMutation.mutateAsync({ spaceId });
       handleClose();
       onSpaceDeleted?.();
     } catch (error) {
-      Alert.alert('Error', 'Failed to delete space');
+      Alert.alert('Error', 'Failed to remove Space from this device');
     }
-  }, [spaceId, deleteSpaceMutation, handleClose, onSpaceDeleted]);
-
-  // Channel + member counts shown in the Delete-Space type-to-confirm modal
-  // (mirrors desktop's Danger.tsx stats).
-  const deleteSpaceStats = useMemo(
-    () => [
-      { label: 'Channels', value: (space?.groups ?? []).reduce((n, g) => n + (g.channels?.length ?? 0), 0) },
-      { label: 'Members', value: members.length },
-    ],
-    [space?.groups, members.length],
-  );
+  }, [spaceId, deleteSpaceMutation, handleClose, onSpaceDeleted, confirm]);
 
   const handleLeaveSpace = useCallback(async () => {
     const ok = await confirm({
@@ -2475,23 +2479,30 @@ export default function SpaceSettingsModal({
         </TouchableOpacity>
       </View>
 
+      {/* Deleting a Space for real needs a server-side purge that does not exist yet.
+          Until it does, a release build says so and disables the button; a dev build
+          keeps the working device-local removal under a label that describes it. Same
+          code path either way — see handleRemoveSpaceLocally. */}
       <View style={[styles.dangerSection, { marginTop: Skin.space(24) }]}>
         <Text style={[styles.dangerTitle, { color: theme.colors.danger }]}>
-          Delete this Space
+          {__DEV__ ? 'Remove this Space from this device' : 'Delete this Space'}
         </Text>
         <Text style={styles.dangerDescription}>
-          This action cannot be undone and will permanently remove all the Space settings.
-          To delete the Space, you must first delete all Channels.
+          {__DEV__
+            ? 'Dev builds only. Removes the Space from this device. Every other member keeps it, and if you own the Space you lose the ability to manage it for good. Nothing is deleted from the server.'
+            : 'Deleting a Space is not available yet. Today this would only remove it from this device: everyone else would keep the Space, and you would permanently lose the ability to manage it.'}
         </Text>
         <TouchableOpacity
-          style={styles.dangerButton}
-          onPress={() => setShowDeleteSpaceConfirm(true)}
-          disabled={deleteSpaceMutation.isPending}
+          style={[styles.dangerButton, !__DEV__ && styles.dangerButtonDisabled]}
+          onPress={handleRemoveSpaceLocally}
+          disabled={!__DEV__ || deleteSpaceMutation.isPending}
         >
           {deleteSpaceMutation.isPending ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text style={styles.dangerButtonText}>Delete Space</Text>
+            <Text style={styles.dangerButtonText}>
+              {__DEV__ ? 'Remove from this device' : 'Delete Space'}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
@@ -2599,17 +2610,11 @@ export default function SpaceSettingsModal({
         />
       )}
 
-      {/* Delete Space — type-to-confirm (T3, desktop parity: type "delete") */}
-      <TypeToConfirmModal
-        visible={showDeleteSpaceConfirm}
-        title="Delete Space"
-        body="This permanently removes the Space and all its settings. This cannot be undone."
-        keyword="delete"
-        confirmLabel="Delete Space"
-        stats={deleteSpaceStats}
-        onConfirm={handleDeleteSpace}
-        onCancel={() => setShowDeleteSpaceConfirm(false)}
-      />
+      {/* The Delete-Space type-to-confirm modal was removed here, not disabled: it
+          asked the user to type "delete" beside a channel and member count for an
+          action that only touched this device. When a real delete lands it needs a
+          new confirmation written against what that actually does, not this one
+          revived. TypeToConfirmModal itself is shared and still used elsewhere. */}
       {confirmDialog}
     </BaseModal>
   );
@@ -3202,6 +3207,9 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       backgroundColor: 'transparent',
       borderWidth: Skin.border(1),
       borderColor: theme.colors.danger,
+    },
+    dangerButtonDisabled: {
+      opacity: 0.5,
     },
     dangerButtonText: {
       fontSize: Skin.font(16),
