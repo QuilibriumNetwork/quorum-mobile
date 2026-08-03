@@ -26,6 +26,7 @@ import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { ChannelIconPickerSheet } from '@/components/ui/ChannelIconPickerSheet';
 import { ChannelManagerRolePickerSheet } from '@/components/Chat/ChannelManagerRolePickerSheet';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { groupDeletionBlocker } from '@/utils/groupDeletion';
 import { useTheme, type AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -128,6 +129,12 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
 
   const { space, channel } = resolved;
   const isChannel = target.kind === 'channel';
+
+  // Why Delete is refused for this group, or null. Same rule useDeleteGroup throws
+  // on: the hook is the boundary a caller cannot bypass, this is what keeps the user
+  // from forming the intent, and the row shows the reason instead of hiding it.
+  const deleteBlocker =
+    !isChannel && !isCreate && resolved.group ? groupDeletionBlocker(resolved.group) : null;
 
   const anyPending =
     updateChannel.isPending ||
@@ -251,12 +258,29 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
   const handleDelete = async () => {
     setIsConfirming(true);
     try {
+      // Backstop: the row is disabled while `deleteBlocker` is set, so arriving here
+      // means the gate was bypassed. Say why rather than failing silently.
+      if (deleteBlocker) {
+        await confirm({
+          title: 'Could not delete',
+          message: deleteBlocker,
+          confirmLabel: 'OK',
+          cancelLabel: 'Dismiss',
+          variant: 'primary',
+        });
+        return;
+      }
       const label = isChannel ? `#${channel?.channelName ?? ''}` : `the "${resolved.group?.groupName ?? ''}" group`;
       const ok = await confirm({
         title: isChannel ? 'Delete Channel' : 'Delete Group',
+        // Both sentences have to survive a reading by someone who then checks what
+        // actually happened. Deleting a channel does NOT delete its messages: they
+        // stay in the hub log and in every member's local database, and no per-channel
+        // purge exists to change that. A group is only ever deletable when empty, so
+        // there is nothing nested left to warn about.
         message: isChannel
-          ? `This permanently deletes ${label} and its messages for everyone.`
-          : `This permanently deletes ${label} for everyone. The group must be empty.`,
+          ? `This permanently deletes ${label} for everyone. Messages already sent stay on members' devices.`
+          : `This permanently deletes ${label} for everyone.`,
         confirmLabel: 'Delete',
       });
       if (!ok) return;
@@ -521,8 +545,9 @@ export function ChannelSettingsSheet({ visible, target, onClose, onChanged }: Ch
             <ActionRow
               icon="trash"
               label={isChannel ? 'Delete channel' : 'Delete group'}
+              sublabel={deleteBlocker ?? undefined}
               destructive
-              disabled={anyPending}
+              disabled={anyPending || !!deleteBlocker}
               onPress={handleDelete}
             />
           </ActionRowGroup>
