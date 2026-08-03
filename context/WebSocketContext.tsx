@@ -101,6 +101,7 @@ import {
   removeMute as removeModMute,
   setMute as setModMute,
 } from '../services/space/modMuteStorage';
+import { buildJoinedMemberRow } from '../services/space/joinedMemberRow';
 import { buildListenHubFrame, buildLogSinceFrame } from '../services/space/hubLogSync';
 import { getHubLastSeq, setHubLastSeq } from '../services/space/hubLogCursor';
 import {
@@ -1112,31 +1113,36 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                       }
                     }
 
-                    // Save member to storage
+                    // Save member to storage.
+                    //
+                    // MERGE, never replace — buildJoinedMemberRow carries the full
+                    // reasoning. Short version: a `join` is unauthenticated, and
+                    // saveSpaceMember overwrites the whole row, so handing it a fresh
+                    // object let any sender un-kick a member, repoint the
+                    // `inbox_address` that signature verification matches on, and drop
+                    // `joinedAt` — on every member's device.
                     const adapter = getMMKVAdapter();
-                    await adapter.saveSpaceMember(spaceId, {
-                      address: participant.address,
-                      display_name: participant.displayName,
-                      profile_image: participant.userIcon,
-                      inbox_address: participant.inboxAddress,
-                    });
+                    const existingMember = await adapter.getSpaceMember(
+                      spaceId,
+                      participant.address
+                    );
+                    const memberRow = buildJoinedMemberRow(existingMember, participant);
 
-                    // Update space members cache directly (member data available from join event)
+                    await adapter.saveSpaceMember(spaceId, memberRow);
+
+                    // Update space members cache directly (member data available from
+                    // join event). Same rule as the write above: the cached row is what
+                    // the UI and the sender-resolution path read until the next refetch,
+                    // so letting it diverge would reintroduce the bug for that window.
                     queryClient.setQueryData(queryKeys.spaces.members(spaceId), (old: SpaceMember[] | undefined) => {
                       if (!old) return old;
-                      if (old.some((m: SpaceMember) => m.address === participant.address)) {
-                        return old.map((m: SpaceMember) =>
-                          m.address === participant.address
-                            ? { ...m, display_name: participant.displayName, profile_image: participant.userIcon, inbox_address: participant.inboxAddress }
-                            : m
-                        );
+                      const idx = old.findIndex((m: SpaceMember) => m.address === participant.address);
+                      if (idx >= 0) {
+                        const next = [...old];
+                        next[idx] = buildJoinedMemberRow(next[idx], participant);
+                        return next;
                       }
-                      return [...old, {
-                        address: participant.address,
-                        display_name: participant.displayName,
-                        profile_image: participant.userIcon,
-                        inbox_address: participant.inboxAddress,
-                      }];
+                      return [...old, memberRow];
                     });
 
                     // Save join event as a message (matches desktop behavior)
@@ -3528,10 +3534,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // unknown type produces nothing instead of a ghost row / junk bubble.
         // Any future DM control feature (pin/thread/mute/bookmark) adds its own
         // handler ABOVE this line; new displayable content adds to PERSISTABLE_TYPES.
-        // Carve-out: DM_GUARD_PASSTHROUGH_TYPES (currently edit-message) are NOT
-        // dropped — mobile has no DM handler for them yet, so dropping+inbox-deleting
-        // would lose a real cross-device action. They fall through unchanged
-        // (saved-but-hidden today, not deleted) until the real handler lands.
+        // Carve-out: DM_GUARD_PASSTHROUGH_TYPES fall through unchanged rather than
+        // being dropped+inbox-deleted, for types that arrive before mobile has a DM
+        // handler for them (dropping one would lose a real cross-device action).
+        // The set is EMPTY today: edit-message was its only member and now has a
+        // real handler, so nothing is currently carved out.
         // Note: flat receipt objects (delivery-ack/read-ack) have no content.type,
         // so dmContentType is undefined and the guard doesn't fire — those are a
         // separate concern (DM receipts wiring), not handled here.
@@ -5125,10 +5132,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // delete-conversation*, which all continue earlier), before the save — so
         // an unknown type is dropped, not persisted as junk. Future DM control
         // features add their handler ABOVE this line.
-        // Carve-out: DM_GUARD_PASSTHROUGH_TYPES (currently edit-message) are NOT
-        // dropped — mobile has no DM handler for them yet, so dropping+inbox-deleting
-        // would lose a real cross-device action (they fall through to the save below,
-        // unchanged from today's behavior) until the real handler lands.
+        // Carve-out: DM_GUARD_PASSTHROUGH_TYPES fall through to the save below rather
+        // than being dropped, for types that arrive before mobile has a DM handler for
+        // them (dropping one would lose a real cross-device action). The set is EMPTY
+        // today: edit-message was its only member and now has a real handler.
         // Flat receipts (delivery-ack/read-ack) have no content.type, so
         // dmContentType is undefined and the guard doesn't fire — separate concern.
         if (
