@@ -72,12 +72,20 @@ export interface JoinParticipant {
  *
  * So there is no exception. An existing row keeps its anchor unconditionally.
  *
- * **Known limitation, accepted deliberately:** a member who leaves (or is kicked) and
- * is later re-invited keeps an empty anchor, so their messages will not resolve to a
- * known signer until something authorised repoints it. Repointing it safely needs the
+ * **Known limitation, accepted deliberately:** a member who leaves and is later
+ * re-invited keeps an empty anchor, so their messages will not resolve through the
+ * member row until something authorised repoints it. Repointing safely needs the
  * signature check from Layer 2 of the join fix — an authenticated join may move an
  * anchor; an unauthenticated one may not. Being unresolvable is a broken flow; the
  * alternative was a hijack primitive, and the spec's exception-free rule was right.
+ *
+ * **A kicked member is worse off than that, and not because of this function.**
+ * Nothing in the app ever sets `isKicked` back to `false` — no re-admission path
+ * exists. `resolveVerifiedSender` gates on `!isKicked` independently of the anchor, and
+ * the member list renders a permanent "Kicked" badge, so a legitimately re-invited
+ * member stays visibly kicked and unresolvable on every other device regardless of
+ * what happens here. Tracked separately; do not read this function's limitation as the
+ * whole story for that case.
  */
 export function buildJoinedMemberRow(
   existing: SpaceMember | undefined,
@@ -100,9 +108,23 @@ export function buildJoinedMemberRow(
     address: participant.address,
     inbox_address: participant.inboxAddress,
     // The wire carries joinedAt inside the signed blob; it was being dropped at the
-    // parse boundary, so every new member row was stored without one. Ordering and the
-    // join-bound checks read it.
-    ...(participant.joinedAt !== undefined ? { joinedAt: participant.joinedAt } : {}),
+    // parse boundary, so every new member row was stored without one.
+    //
+    // Nothing reads `member.joinedAt` yet — an earlier version of this comment claimed
+    // "ordering and the join-bound checks read it", which review found to be false. It
+    // is recorded now so the data exists when something does, not because anything
+    // depends on it today. Sanity-checked on the way in regardless: it arrives on an
+    // unauthenticated payload through a bare `as` cast with no runtime validation, so
+    // the first consumer would otherwise inherit whatever a forged join felt like
+    // sending — NaN, a negative, a string.
+    ...(isPlausibleTimestamp(participant.joinedAt)
+      ? { joinedAt: participant.joinedAt }
+      : {}),
     ...displayFields,
   };
+}
+
+/** Rejects the shapes a forged, unvalidated payload can put in a numeric field. */
+function isPlausibleTimestamp(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }

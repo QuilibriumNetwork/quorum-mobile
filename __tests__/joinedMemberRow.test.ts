@@ -56,6 +56,20 @@ describe('buildJoinedMemberRow', () => {
       expect(row.joinedAt).toBe(1_700_000_000_000);
     });
 
+    it('does not let a join overwrite an existing joinedAt', () => {
+      // The new-row branch takes joinedAt off the wire, so the obvious "also fix
+      // joinedAt drift" refactor is to extend that into this branch. It must not be:
+      // the value is unauthenticated, and moving a member's join date rewrites the
+      // ordering and any future join-bound check. Without this test that refactor
+      // passes everything else in this file.
+      const row = buildJoinedMemberRow(existingMember, {
+        ...participant,
+        joinedAt: 1_900_000_000_000,
+      });
+
+      expect(row.joinedAt).toBe(1_700_000_000_000);
+    });
+
     it('still applies the display fields a join legitimately carries', () => {
       const row = buildJoinedMemberRow(existingMember, participant);
 
@@ -122,11 +136,26 @@ describe('buildJoinedMemberRow', () => {
 
     it('keeps joinedAt from the wire, which used to be dropped at the parse boundary', () => {
       // Both clients put joinedAt in the signed blob, but the receive-side type omitted
-      // it, so every new member row was stored without one. Ordering and the join-bound
-      // checks read it.
+      // it, so every new member row was stored without one. Nothing reads it yet; it is
+      // recorded so it exists when something does.
       const row = buildJoinedMemberRow(undefined, { ...participant, joinedAt: 1_800_000_000_000 });
 
       expect(row.joinedAt).toBe(1_800_000_000_000);
+    });
+
+    it.each([
+      ['NaN', Number.NaN],
+      ['negative', -1],
+      ['zero', 0],
+      ['Infinity', Number.POSITIVE_INFINITY],
+      ['a string', '1800000000000' as unknown as number],
+    ])('rejects a %s joinedAt rather than storing it', (_label, joinedAt) => {
+      // The payload reaches this function through a bare `as` cast with no runtime
+      // validation, so whatever a forged join sends arrives verbatim. Better to drop it
+      // than hand the first future consumer a poisoned value.
+      const row = buildJoinedMemberRow(undefined, { ...participant, joinedAt });
+
+      expect(row.joinedAt).toBeUndefined();
     });
 
     it('is not invented with a name or avatar the join did not send', () => {
