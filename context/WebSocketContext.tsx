@@ -980,6 +980,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                         preKey: string;
                         userIcon?: string;
                         displayName?: string;
+                        // Sent inside the signed blob by both clients. It was missing
+                        // from this type, so it was dropped at the parse boundary and
+                        // no new member row ever got one.
+                        joinedAt?: number;
                       };
                       inboxPublicKey?: string;
                       inboxSignature?: string;

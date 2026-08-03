@@ -56,6 +56,20 @@ describe('buildJoinedMemberRow', () => {
       expect(row.joinedAt).toBe(1_700_000_000_000);
     });
 
+    it('does not let a join overwrite an existing joinedAt', () => {
+      // The new-row branch takes joinedAt off the wire, so the obvious "also fix
+      // joinedAt drift" refactor is to extend that into this branch. It must not be:
+      // the value is unauthenticated, and moving a member's join date rewrites the
+      // ordering and any future join-bound check. Without this test that refactor
+      // passes everything else in this file.
+      const row = buildJoinedMemberRow(existingMember, {
+        ...participant,
+        joinedAt: 1_900_000_000_000,
+      });
+
+      expect(row.joinedAt).toBe(1_700_000_000_000);
+    });
+
     it('still applies the display fields a join legitimately carries', () => {
       const row = buildJoinedMemberRow(existingMember, participant);
 
@@ -73,15 +87,29 @@ describe('buildJoinedMemberRow', () => {
       expect(row.profile_image).toBe('real-icon');
     });
 
-    it('DOES set inbox_address when the row has none, so leave-then-rejoin works', () => {
-      // `leave` blanks the anchor rather than deleting the row. Without this, a member
-      // who leaves and is re-invited would keep an empty anchor forever and never
-      // resolve to a known signer again — a real flow broken to protect nothing.
+    it('does not set inbox_address even when the row has none', () => {
+      // The state a `leave` leaves behind. An earlier version made an exception here,
+      // reasoning that an empty anchor has nothing to poison. It does: `update-profile`
+      // upserts a blank-anchored row for ANY claimed address on a signature from an
+      // unknown key, so an attacker can mint this state and then claim it with a forged
+      // join. The cost of closing that is the row below — accepted deliberately.
       const departed: SpaceMember = { ...existingMember, inbox_address: '' };
 
       const row = buildJoinedMemberRow(departed, participant);
 
-      expect(row.inbox_address).toBe('attacker-chosen-inbox');
+      expect(row.inbox_address).toBe('');
+    });
+
+    it('does not repoint the anchor on a kicked row, which is also blank', () => {
+      // The exact state `kick` produces. Tested as a pair rather than as two separate
+      // rows, because the combination is what an attacker actually finds in the wild
+      // and neither single-field test would have caught a regression here.
+      const kicked: SpaceMember = { ...existingMember, isKicked: true, inbox_address: '' };
+
+      const row = buildJoinedMemberRow(kicked, participant);
+
+      expect(row.isKicked).toBe(true);
+      expect(row.inbox_address).toBe('');
     });
 
     it('keeps fields the join knows nothing about', () => {
@@ -95,14 +123,39 @@ describe('buildJoinedMemberRow', () => {
 
   describe('a member who is not in the roster yet', () => {
     it('is taken at face value, because there is nothing to protect', () => {
-      const row = buildJoinedMemberRow(undefined, participant);
+      const row = buildJoinedMemberRow(undefined, { ...participant, joinedAt: 1_800_000_000_000 });
 
       expect(row).toEqual({
         address: 'member-address',
         inbox_address: 'attacker-chosen-inbox',
         display_name: 'New Name',
         profile_image: 'new-icon',
+        joinedAt: 1_800_000_000_000,
       });
+    });
+
+    it('keeps joinedAt from the wire, which used to be dropped at the parse boundary', () => {
+      // Both clients put joinedAt in the signed blob, but the receive-side type omitted
+      // it, so every new member row was stored without one. Nothing reads it yet; it is
+      // recorded so it exists when something does.
+      const row = buildJoinedMemberRow(undefined, { ...participant, joinedAt: 1_800_000_000_000 });
+
+      expect(row.joinedAt).toBe(1_800_000_000_000);
+    });
+
+    it.each([
+      ['NaN', Number.NaN],
+      ['negative', -1],
+      ['zero', 0],
+      ['Infinity', Number.POSITIVE_INFINITY],
+      ['a string', '1800000000000' as unknown as number],
+    ])('rejects a %s joinedAt rather than storing it', (_label, joinedAt) => {
+      // The payload reaches this function through a bare `as` cast with no runtime
+      // validation, so whatever a forged join sends arrives verbatim. Better to drop it
+      // than hand the first future consumer a poisoned value.
+      const row = buildJoinedMemberRow(undefined, { ...participant, joinedAt });
+
+      expect(row.joinedAt).toBeUndefined();
     });
 
     it('is not invented with a name or avatar the join did not send', () => {
