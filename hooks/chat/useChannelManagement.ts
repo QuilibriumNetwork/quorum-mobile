@@ -23,6 +23,7 @@ import { getSpace, saveSpace, saveSpaceKey } from '@/services/config/spaceStorag
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import { NativeCryptoProvider } from '@/services/crypto/native-provider';
 import { broadcastSpaceUpdate } from '@/services/space/broadcastSpaceUpdate';
+import { groupDeletionBlocker } from '@/utils/groupDeletion';
 import { useWebSocket } from '@/context/WebSocketContext';
 import { bytesToHex } from '@quilibrium/quorum-shared';
 import type { Space, Channel, Group } from '@quilibrium/quorum-shared';
@@ -345,8 +346,20 @@ export function useDeleteGroup() {
         throw new Error('Invalid group index');
       }
 
-      // Check if group contains the default channel
+      // A group owns its channels, so the filter below removes the group object and
+      // everything nested inside it, for every member, with no undo. The settings
+      // sheet has always told users "the group must be empty" — this is the guard
+      // that makes that sentence true, and it lives here rather than only in the UI
+      // so a future caller cannot destroy a populated group by skipping the sheet.
       const group = space.groups[params.groupIndex];
+      const blocker = groupDeletionBlocker(group);
+      if (blocker) {
+        throw new Error(blocker);
+      }
+
+      // Subsumed by the emptiness rule above: the default channel is a channel, so
+      // the group holding it is never empty. Kept as a backstop because it guards a
+      // different invariant — the Space must always keep a channel to land members in.
       if (group.channels.some(c => c.channelId === space.defaultChannelId)) {
         throw new Error('Cannot delete group containing the default channel');
       }
