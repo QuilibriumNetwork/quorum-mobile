@@ -1317,7 +1317,11 @@ export default function SpaceSettingsModal({
   const handleLeaveSpace = useCallback(async () => {
     const ok = await confirm({
       title: 'Leave Space',
-      message: "You won't be able to rejoin unless you are re-invited. Your existing messages will NOT be deleted.",
+      // Was "You won't be able to rejoin unless you are re-invited", which is
+      // false whenever the Space has a public invite link: the link is
+      // deterministic per Space and keeps working, so an old copy of it still
+      // gets you back in. Confirmed by rejoining with a previously-used link.
+      message: "You'll need an invite to rejoin. A public invite link will still work if this Space has one. Your existing messages will NOT be deleted.",
       confirmLabel: 'Leave Space',
     });
     if (!ok) return;

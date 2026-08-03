@@ -38,13 +38,17 @@ jest.mock('../services/config/spaceStorage', () => ({
 
 const mockPostHubDelete = jest.fn<
   Promise<{ status: string }>,
-  [Record<string, string>]
+  [Record<string, string>, { timeout?: number }?]
 >(async () => ({ status: 'ok' }));
 jest.mock('../services/api/quorumClient', () => ({
   getQuorumClient: () => ({ postHubDelete: mockPostHubDelete }),
 }));
 
-import { announceLeave, LEAVE_FLUSH_MS } from '../services/space/announceLeave';
+import {
+  announceLeave,
+  LEAVE_FLUSH_MS,
+  LEAVE_HUB_TIMEOUT_MS,
+} from '../services/space/announceLeave';
 import { hexToBase64, numberArrayToBase64 } from '../utils/encoding';
 
 const SPACE = 'space-leaving-abcdef123456';
@@ -259,6 +263,17 @@ describe('announceLeave', () => {
     it('waits on the socket rather than firing and forgetting', async () => {
       await run();
       expect(flushOutbound).toHaveBeenCalledWith(LEAVE_FLUSH_MS);
+    });
+
+    it('bounds the hub call well below the API default, so offline gives an answer', async () => {
+      // Device testing found the 30s default reads as a hang: tapping Leave with
+      // no connection left the button spinning instead of refusing.
+      await run();
+
+      expect(mockPostHubDelete).toHaveBeenCalledWith(expect.any(Object), {
+        timeout: LEAVE_HUB_TIMEOUT_MS,
+      });
+      expect(LEAVE_HUB_TIMEOUT_MS).toBeLessThan(30000);
     });
   });
 

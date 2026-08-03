@@ -98,6 +98,17 @@ export interface AnnounceLeaveDeps {
  */
 export const LEAVE_FLUSH_MS = 6000;
 
+/**
+ * Budget for the hub deregistration.
+ *
+ * Deliberately far below the API client's 30s default. A user who taps Leave with
+ * no connection sits on a spinner until this expires, and 30s does not read as a
+ * refusal, it reads as a hang — which is exactly what device testing found. Ten
+ * seconds is long enough for a slow-but-working connection and short enough to
+ * feel like an answer.
+ */
+export const LEAVE_HUB_TIMEOUT_MS = 10000;
+
 /** ed448 over `"delete" + <publicKeyHex>`, returned hex-encoded like the wire wants. */
 async function signDeleteStatement(
   crypto: NativeCryptoProvider,
@@ -211,13 +222,16 @@ export async function announceLeave({
 
   // Fatal by design. Throwing here keeps the Space on this device, which is what
   // makes the whole operation retryable; see the header.
-  await getQuorumClient().postHubDelete({
-    hub_address: hubKey.address,
-    hub_public_key: hubKey.publicKey,
-    hub_signature: hubSignature,
-    inbox_public_key: deviceInboxKey.publicKey,
-    inbox_signature: deviceInboxSignature,
-  });
+  await getQuorumClient().postHubDelete(
+    {
+      hub_address: hubKey.address,
+      hub_public_key: hubKey.publicKey,
+      hub_signature: hubSignature,
+      inbox_public_key: deviceInboxKey.publicKey,
+      inbox_signature: deviceInboxSignature,
+    },
+    { timeout: LEAVE_HUB_TIMEOUT_MS }
+  );
 
   logger.debug(
     `[leave] hub entry removed for space=${spaceId.slice(0, 12)} (broadcast=${broadcast})`
