@@ -154,20 +154,31 @@ describe('saveConfig — truncated Space lists are never published', () => {
     ]);
   });
 
-  it('narrows only the published payload, never local state', async () => {
+  it('does not publish a Space list truncated by incomplete storage', async () => {
     arrangePartialStorage();
 
     await saveConfig(partialConfig());
 
-    // Mobile still publishes a narrowed list (see the comment in saveConfig:
-    // it cannot yet distinguish mid-sync from a genuine leave), but the local
-    // copy must survive intact.
-    expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
+    // The whole point of the guard: this device's incomplete storage must not
+    // become every other device's empty sidebar. The local copy survives intact.
+    expect(mockPostUserSettings).not.toHaveBeenCalled();
     expect(getLocalUserConfig(ADDRESS)!.spaceIds).toEqual([
       'space-1',
       'space-2',
       'space-3',
     ]);
+  });
+
+  it('does not advance the stored timestamp when the publish is held', async () => {
+    arrangePartialStorage();
+
+    await saveConfig(partialConfig());
+
+    // getConfig resolves purely by timestamp and never merges the losing side.
+    // A device that advanced its own timestamp without the server agreeing
+    // would treat its config as newer than every remote one and quietly stop
+    // applying other devices' changes for as long as it kept holding.
+    expect(getLocalUserConfig(ADDRESS)!.timestamp).toBe(1000);
   });
 
   it('publishes, and advances the timestamp, once every Space is known', async () => {
@@ -287,9 +298,15 @@ describe('saveConfig — truncated Space lists are never published', () => {
     });
   });
 
-  it('keeps a Space absent from local storage in the local list', async () => {
-    // A Space the user left keeps its id here, because no mobile removal path
-    // prunes config.spaceIds. Local state must still not be rewritten.
+  it('holds, and keeps local state, for a Space absent from storage entirely', async () => {
+    // The accepted cost of the guard, pinned so it is a decision rather than a
+    // surprise: a Space that can never be keyed here — a bloated encryption
+    // state (desktop #108), or one never synced to this device — stops this
+    // device publishing ANY config change until it syncs or is removed.
+    //
+    // That fails safe (stale settings) rather than destructive (every device
+    // loses its Spaces), and removeSpaceFromConfig gives the user a way out
+    // that did not exist when this guard was first tried and reverted.
     const staleId = {
       address: ADDRESS,
       allowSync: true,
@@ -303,9 +320,27 @@ describe('saveConfig — truncated Space lists are never published', () => {
 
     await saveConfig(staleId);
 
+    expect(mockPostUserSettings).not.toHaveBeenCalled();
     expect(getLocalUserConfig(ADDRESS)!.spaceIds).toEqual(['space-gone']);
-    // Publishing still happens: refusing here would wedge sync permanently,
-    // since this id can never regain keys.
+    expect(getLocalUserConfig(ADDRESS)!.timestamp).toBe(500);
+  });
+
+  it('publishes a username change while every Space is keyed', async () => {
+    // The reported reproduction, in miniature: changing the username routes
+    // through saveConfig like any other setting, which is how an unrelated
+    // edit emptied every other device's sidebar. With storage complete there
+    // is nothing to drop, so this must still publish normally — the guard must
+    // not turn into "mobile never syncs settings".
+    mockGetAllSpaces.mockReturnValue([
+      keyedSpace('space-1'),
+      keyedSpace('space-2'),
+      keyedSpace('space-3'),
+    ]);
+    mockGetEncryptionStates.mockImplementation((id) => [encState(id)]);
+
+    await saveConfig({ ...partialConfig(), name: 'renamed' });
+
     expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
+    expect(getLocalUserConfig(ADDRESS)!.name).toBe('renamed');
   });
 });
