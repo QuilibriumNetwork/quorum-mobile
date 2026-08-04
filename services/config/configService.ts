@@ -619,7 +619,44 @@ export async function saveConfig(config: UserConfig): Promise<void> {
       // encryption (matches desktop behavior). The 'signing' entries ride
       // along in spaceKeys like any other key.
       await promoteSpaceSigningKeys(address);
-      const spaceKeys = collectSpaceKeysForSync();
+      const locallyCollected = collectSpaceKeysForSync();
+
+      // A Space this device cannot key from local storage is usually not lost:
+      // the config blob it last adopted carried that Space's key material, and
+      // getConfig stores the decrypted blob verbatim — spaceKeys included. Carry
+      // those entries forward instead of dropping the Space, so an incomplete
+      // local import cannot narrow the published list.
+      //
+      // Without this the refuse-to-publish guard below is all-or-nothing, and on
+      // a device that imported its Spaces from the blob rather than creating them
+      // it holds EVERY publish: measured at 0/3 Spaces keyable on a real device,
+      // which silently stopped that phone syncing any setting at all.
+      //
+      // Locally collected keys always win. They are current, and a key rotated
+      // here must never be overwritten by the older copy from the blob; this only
+      // fills gaps. A Space with no key material on either side still cannot be
+      // published, and still holds — that case is now genuinely rare.
+      // Prefer the caller's own spaceKeys, but fall back to the stored config
+      // per Space: not every caller builds its object from getLocalUserConfig,
+      // and one that does not would otherwise look like "this device has never
+      // known any keys" and wipe them on the line below.
+      const storedSpaceKeys = getLocalUserConfig(address)?.spaceKeys ?? [];
+      const knownSpaceKeys = new Map(storedSpaceKeys.map((sk) => [sk.spaceId, sk]));
+      for (const sk of config.spaceKeys ?? []) knownSpaceKeys.set(sk.spaceId, sk);
+      const previousSpaceKeys = Array.from(knownSpaceKeys.values());
+      const locallyKeyed = new Set(locallyCollected.map((sk) => sk.spaceId));
+      const wantedSpaceIds = new Set(config.spaceIds ?? []);
+      const carriedOver = previousSpaceKeys.filter(
+        (sk) => wantedSpaceIds.has(sk.spaceId) && !locallyKeyed.has(sk.spaceId)
+      );
+
+      if (carriedOver.length > 0) {
+        logger.log(
+          `[ConfigSync] carrying ${carriedOver.length} previously-synced Space key(s) this device cannot rebuild locally: ${carriedOver.map((sk) => sk.spaceId).join(', ')}`
+        );
+      }
+
+      const spaceKeys = [...locallyCollected, ...carriedOver];
       config.spaceKeys = spaceKeys;
 
       // Build the payload we POST. The server rejects a config whose spaceIds
@@ -688,7 +725,9 @@ export async function saveConfig(config: UserConfig): Promise<void> {
         // the end of this function, and the bookmark tombstones are deliberately
         // left uncleared, since nothing synced.
         logger.warn(
-          `[ConfigSync] NOT publishing — would upload ${uploadConfig.spaceIds.length}/${(config.spaceIds ?? []).length} Spaces; the change is local-only until these finish syncing: ${droppedSpaceIds.join(', ')}`
+          `[ConfigSync] NOT publishing — would upload ${uploadConfig.spaceIds.length}/${(config.spaceIds ?? []).length} Spaces ` +
+            `(keyed locally ${locallyCollected.length}, carried forward ${carriedOver.length} of ${previousSpaceKeys.length} previously-synced); ` +
+            `the change is local-only until these finish syncing: ${droppedSpaceIds.join(', ')}`
         );
 
         // Keep the timestamp we came in with. getConfig resolves purely by
