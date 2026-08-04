@@ -417,7 +417,7 @@ function runMmkvMigration(db: SQLite.SQLiteDatabase): void {
     const rest = key.slice(MMKV_MESSAGES_PREFIX.length);
     const sepIdx = rest.indexOf(':');
     if (sepIdx <= 0) {
-      logger.warn('[messagesDb] migration: bad key shape, skipping:', key);
+      logger.warn('[messagesDb] migration: bad key shape, skipping:', key.slice(0, 24));
       continue;
     }
     const spaceId = rest.slice(0, sepIdx);
@@ -430,7 +430,7 @@ function runMmkvMigration(db: SQLite.SQLiteDatabase): void {
     try {
       messages = JSON.parse(data) as Message[];
     } catch (e) {
-      logger.warn('[messagesDb] migration: malformed JSON, skipping:', key, e);
+      logger.warn('[messagesDb] migration: malformed JSON, skipping:', key.slice(0, 24), e);
       continue;
     }
 
