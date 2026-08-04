@@ -492,7 +492,6 @@ export interface JoinParticipantProof {
 export type JoinVerdict =
   | 'valid'
   | 'proof-missing'
-  | 'inbox-address-mismatch'
   | 'signature-invalid'
   | 'unverifiable';
 
@@ -529,13 +528,23 @@ function buildJoinSignedBlob(p: JoinParticipantProof): string {
  * own, and this returns `valid`. So this is NOT authentication of the joining
  * identity, and `join` is not "fixed" by it.
  *
- * What it is worth: unsigned and malformed joins stop being accepted, and a signer
- * can no longer claim an inbox address that is not theirs. The thing actually
- * protecting existing members is `buildJoinedMemberRow`, which refuses to repoint
- * an anchor or clear `isKicked` no matter what verifies here.
+ * What it is worth: unsigned and malformed joins stop being accepted. The thing
+ * actually protecting existing members is `buildJoinedMemberRow`, which refuses to
+ * repoint an anchor or clear `isKicked` no matter what verifies here.
  *
  * Binding the claimed address to the key needs the DKG proof (`verify_point`),
  * which mobile cannot currently call.
+ *
+ * ## Do NOT add `deriveInboxAddress(inboxPubKey) === inboxAddress` here
+ *
+ * It looks like an obvious hardening and it is wrong: the two fields are DIFFERENT
+ * KEYS on desktop, deliberately. Desktop derives `inboxAddress` from a freshly
+ * generated per-space ed448 keypair and announces `inboxPubKey` from the DEVICE
+ * keyset's inbox key (InvitationService, its join branch). Mobile happens to reuse
+ * one keypair for both, so the equality holds here and nowhere else. Adding the
+ * check rejected every genuine desktop join — no member row, no join event, the
+ * member rendered as a bare address — and it shipped past three code reviews and a
+ * WASM parity harness before a real device caught it.
  */
 export async function verifyJoinParticipant(
   participant: JoinParticipantProof | null | undefined
@@ -550,13 +559,6 @@ export async function verifyJoinParticipant(
   }
 
   try {
-    // Without this, the signer could announce an inbox address that is not
-    // theirs: the blob would still verify, and that address is the anchor
-    // `resolveVerifiedSender` matches members on.
-    if (deriveInboxAddress(inboxPubKey) !== inboxAddress) {
-      return 'inbox-address-mismatch';
-    }
-
     const signingProvider = new NativeSigningProvider();
     const isValid = await signingProvider.verifyEd448(
       bytesToBase64(Uint8Array.from(hexToBytes(inboxPubKey))),
@@ -566,9 +568,8 @@ export async function verifyJoinParticipant(
     return isValid ? 'valid' : 'signature-invalid';
   } catch {
     // The native verifier could not produce an answer — a device/native-module
-    // problem, not evidence of forgery. Note `hexToBytes` does NOT throw on bad
-    // hex (it coerces to 0), so garbage keys land in `inbox-address-mismatch`
-    // above rather than here.
+    // problem, not evidence of forgery, so the caller keeps the message for retry
+    // rather than acking it away.
     return 'unverifiable';
   }
 }

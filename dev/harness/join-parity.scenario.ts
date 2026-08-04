@@ -75,22 +75,36 @@ function desktopSignedBlob(p: Record<string, unknown>): string {
   );
 }
 
-/** A participant announcement signed with a real ed448 key, desktop-style. */
+/**
+ * A participant announcement signed with a real ed448 key, desktop-style.
+ *
+ * TWO SEPARATE KEYPAIRS, because that is what desktop actually sends and getting
+ * this wrong is not hypothetical — the first version of this fixture derived
+ * `inboxAddress` from `inboxPubKey`, which made the payload self-consistent in a
+ * way no real desktop payload ever is. It therefore could not catch a gate that
+ * required them to match, and one shipped that rejected every genuine desktop
+ * join. A fixture that is tidier than production is a fixture that tests nothing.
+ *
+ *   inboxAddress  <- a FRESH per-space ed448 keypair (InvitationService ~:625)
+ *   inboxPubKey   <- the DEVICE keyset's inbox key, which also signs (~:812, ~:855)
+ */
 function makeSignedJoin(over: Record<string, unknown> = {}) {
   const w = wasm();
-  const keypair = JSON.parse(w.js_generate_ed448()) as {
-    public_key: number[];
-    private_key: number[];
-  };
+  const gen = () =>
+    JSON.parse(w.js_generate_ed448()) as { public_key: number[]; private_key: number[] };
+
+  const deviceInboxKey = gen(); // announced as inboxPubKey, and signs the blob
+  const spaceInboxKey = gen(); // only its address is announced
+
   // Same encodings the wire uses: the key is hex, the signature base64.
-  const inboxPubKey = bytesToHex(keypair.public_key);
-  const inboxPrivateKeyB64 = bytesToB64(keypair.private_key);
+  const inboxPubKey = bytesToHex(deviceInboxKey.public_key);
+  const inboxPrivateKeyB64 = bytesToB64(deviceInboxKey.private_key);
 
   const participant = {
     address: 'QmJoinerAddressForHarnessRun',
     id: 2,
-    // Derived, never invented — this is the binding the gate re-checks.
-    inboxAddress: deriveInboxAddress(inboxPubKey),
+    // Deliberately NOT derived from inboxPubKey — see the note above.
+    inboxAddress: deriveInboxAddress(bytesToHex(spaceInboxKey.public_key)),
     inboxPubKey,
     pubKey: 'aa'.repeat(56),
     inboxKey: 'bb'.repeat(56),
@@ -150,11 +164,23 @@ describe('join gate vs a real desktop-shaped join (offline, real ed448)', () => 
     ).toBe('signature-invalid');
   });
 
-  it('REJECTS an announced inbox address that is not derived from the key', async () => {
+  it('ACCEPTS despite inboxAddress not deriving from inboxPubKey — desktop parity', async () => {
+    // The regression this pins. Desktop announces an inboxAddress from one
+    // keypair and an inboxPubKey from another; requiring them to match rejected
+    // every real desktop join. Desktop's own verify does not check this, and
+    // neither may mobile.
+    const { participant } = makeSignedJoin();
+    expect(deriveInboxAddress(participant.inboxPubKey)).not.toBe(participant.inboxAddress);
+    expect(await verifyJoinParticipant(participant)).toBe('valid');
+  });
+
+  it('still REJECTS if inboxAddress is altered after signing (it IS in the blob)', async () => {
+    // Not free-form: inboxAddress is one of the ten signed fields, so it cannot
+    // be swapped even though it is unrelated to the signing key.
     const { participant } = makeSignedJoin();
     expect(
       await verifyJoinParticipant({ ...participant, inboxAddress: deriveInboxAddress('ab'.repeat(57)) })
-    ).toBe('inbox-address-mismatch');
+    ).toBe('signature-invalid');
   });
 
   it('REJECTS an unsigned join', async () => {

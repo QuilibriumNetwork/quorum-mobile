@@ -425,14 +425,14 @@ describe('verifyJoinParticipant — the join gate', () => {
     );
   });
 
-  it('rejects an inboxAddress that does not derive from the announced key', async () => {
-    // Without this the signer could claim an inbox address that is not theirs —
-    // and inbox_address is the anchor resolveVerifiedSender matches members on.
+  it('does NOT require inboxAddress to derive from inboxPubKey', async () => {
+    // Desktop announces the two from DIFFERENT keypairs on purpose, so requiring
+    // them to match rejected every genuine desktop join. Covered end to end with
+    // real ed448 in dev/harness/join-parity.scenario.ts.
     mockVerifyEd448.mockResolvedValue(true);
     expect(
       await verifyJoinParticipant(participant({ inboxAddress: deriveInboxAddress(OTHER_KEY) }))
-    ).toBe('inbox-address-mismatch');
-    expect(mockVerifyEd448).not.toHaveBeenCalled();
+    ).toBe('valid');
   });
 
   it('rejects an invalid signature', async () => {
