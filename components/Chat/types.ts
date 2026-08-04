@@ -346,11 +346,7 @@ export function toDisplayReactions(
 /**
  * Convert shared Message to DisplayMessage
  */
-import { truncateAddress } from '@/utils/formatAddress';
-
-function formatAddressDisplay(address: string): string {
-  return truncateAddress(address, 'medium');
-}
+import { resolveMemberName, formatResolvedName } from '@/utils/resolveMemberName';
 
 /**
  * Build a short error description for a malformed message. Goal is
@@ -386,7 +382,9 @@ export function toDisplayMessage(
     ? content.senderId
     : (message as unknown as { publicKey?: string }).publicKey ?? 'unknown';
   const member = members[senderId];
-  const memberName = member?.display_name || member?.name || formatAddressDisplay(senderId);
+  const memberName = formatResolvedName(
+    resolveMemberName(member ?? { address: senderId }),
+  );
   const renderType = getMessageRenderType(message);
   const errorDetail = renderType === 'error'
     ? buildMessageErrorDetail(message)
@@ -505,9 +503,15 @@ export function toDisplayMessage(
     displayMessage.isReply = true;
     displayMessage.replyToMessageId = content.repliesToMessageId;
     if (message.replyMetadata?.parentAuthor) {
+      // The parent author is not necessarily among the senders the chat
+      // back-fill covered, so reading only the override slot showed an address
+      // in the reply preview for someone whose name is known everywhere else.
       const parentMember = members[message.replyMetadata.parentAuthor];
-      displayMessage.replyToAuthor =
-        parentMember?.display_name || parentMember?.name || formatAddressDisplay(message.replyMetadata.parentAuthor);
+      displayMessage.replyToAuthor = formatResolvedName(
+        resolveMemberName(
+          parentMember ?? { address: message.replyMetadata.parentAuthor },
+        ),
+      );
     }
   }
 

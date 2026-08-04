@@ -60,6 +60,11 @@ import { pickImage, compressAvatarImage } from '@/services/media/imageAttachment
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
+import {
+  resolveMemberName,
+  resolveMemberAvatar,
+  formatResolvedName,
+} from '@/utils/resolveMemberName';
 import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, queryKeys, IMAGE_CONFIGS, type Emoji, type Permission, type Role, type Space, type SpaceMember, type Sticker } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { resolveChannelIconColor } from '@/utils/channelIcon';
@@ -814,27 +819,31 @@ export default function SpaceSettingsModal({
   // The self arm is what makes that case correct without requiring a profile
   // re-save: for your own row the live profile is authoritative and already in
   // memory.
+  // The ladder itself lives in `utils/resolveMemberName` (over the shared rule),
+  // so this screen can no longer disagree with chat about who somebody is.
+  // `name` stays undefined when nothing resolved, because the avatar placeholder
+  // wants initials from a real name and not from an address.
+  const selfIdentity = useMemo(
+    () => ({
+      address: user?.address,
+      displayName: user?.displayName,
+      username: user?.username,
+      profileImage: user?.profileImage,
+    }),
+    [user?.address, user?.displayName, user?.username, user?.profileImage]
+  );
+
   const resolveMemberIdentity = useCallback(
     (member: SpaceMember) => {
-      const m = member as SpaceMember & {
-        global_display_name?: string;
-        global_profile_image?: string;
+      const resolved = resolveMemberName(member, { self: selfIdentity });
+      const label = formatResolvedName(resolved);
+      return {
+        name: resolved.isAddressFallback ? undefined : label,
+        avatar: resolveMemberAvatar(member, { self: selfIdentity }),
+        label,
       };
-      const isSelf = m.address === user?.address;
-      const name =
-        m.display_name ||
-        m.name ||
-        m.global_display_name ||
-        (isSelf ? user?.displayName || user?.username : undefined) ||
-        undefined;
-      const avatar =
-        m.profile_image ||
-        m.global_profile_image ||
-        (isSelf ? user?.profileImage : undefined) ||
-        undefined;
-      return { name, avatar, label: name || truncateAddress(m.address) };
     },
-    [user?.address, user?.displayName, user?.username, user?.profileImage]
+    [selfIdentity]
   );
 
   // Blocked addresses for this space, resolved to a display name/avatar via the
@@ -845,13 +854,16 @@ export default function SpaceSettingsModal({
   const blockedMembers = useMemo(() => {
     return [...blockedUsers].map((address) => {
       const m = members.find((mem) => mem.address === address);
+      // Same ladder as the member list. A blocked user who followed global used
+      // to render as an address here even when their name was known.
+      const row = m ?? { address };
       return {
         address,
-        name: m?.display_name || m?.name || truncateAddress(address),
-        avatar: m?.profile_image,
+        name: formatResolvedName(resolveMemberName(row, { self: selfIdentity })),
+        avatar: resolveMemberAvatar(row, { self: selfIdentity }),
       };
     });
-  }, [blockedUsers, members]);
+  }, [blockedUsers, members, selfIdentity]);
 
   // Invites
   const generateInviteMutation = useGenerateInvite();

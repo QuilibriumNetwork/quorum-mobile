@@ -28,7 +28,7 @@ import {
   shouldUseScrollContainer,
 } from '@quilibrium/quorum-shared';
 import { getEmojiByName } from '@/data/emojiNames';
-import { truncateAddress } from '@/utils/formatAddress';
+import { resolveMemberName, formatResolvedName } from '@/utils/resolveMemberName';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { haptics } from '@/utils/haptics';
 import * as Skin from '@/theme/skins/geometry';
@@ -359,7 +359,13 @@ function MessageMarkdownRendererBase({
             return <Spoiler key={key} content={node.content} styles={styles} />;
           case 'mention_user': {
             const member = memberByAddress[node.address];
-            const display = member?.display_name || member?.name || truncateAddress(node.address);
+            // Same resolver as the plain-text path in MentionableText. A message
+            // containing markdown routes here instead, so a private ladder here
+            // meant the same member rendered one way in a plain message and
+            // another in a formatted one.
+            const display = formatResolvedName(
+              resolveMemberName(member ?? { address: node.address }),
+            );
             if (onMentionPress) {
               return (
                 <Text
