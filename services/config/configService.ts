@@ -588,6 +588,9 @@ export async function saveConfig(config: UserConfig): Promise<void> {
   const privateKey = await getPrivateKey();
   const publicKey = await getPublicKey();
 
+  // Captured before `ts` overwrites it: the refuse-to-publish branch below puts
+  // it back, so a held save does not advance this device's timestamp.
+  const incomingTimestamp = config.timestamp ?? 0;
   const ts = Date.now();
   config.timestamp = ts;
 
@@ -648,33 +651,54 @@ export async function saveConfig(config: UserConfig): Promise<void> {
       const finalSpaceIds = new Set(uploadConfig.spaceIds);
       uploadConfig.spaceKeys = spaceKeys.filter((sk) => finalSpaceIds.has(sk.spaceId));
 
+      // A Space dropped here is one this device still wants but cannot prove a
+      // key for right now: incomplete local storage, not a removal. Deliberate
+      // removals never reach this branch, because leaving, deleting or being
+      // kicked takes the Space out of config.spaceIds through
+      // removeSpaceFromConfig (hooks/chat/useSpaceSettings.ts for delete and
+      // leave, context/WebSocketContext.tsx for kicked) BEFORE saveConfig runs.
+      // Nothing is dropped, the upload proceeds as before, and removals keep
+      // propagating to the user's other devices.
+      //
       // Publishing a truncated list is what turns this device's incomplete
       // storage into every device's problem: the config wins on timestamp, and
       // both clients apply a remote Space list verbatim, so every other device
-      // adopts the shorter list and Spaces vanish from their nav.
+      // adopts the shorter list and Spaces vanish from their nav. Desktop has
+      // refused to be that publisher since #282; this is the mobile half.
       //
-      // Desktop refuses to publish when that would happen. Mobile deliberately
-      // does NOT yet, because here it cannot tell a Space that is mid-sync from
-      // one the user genuinely left: no removal path on this platform takes a
-      // Space out of config.spaceIds. useDeleteSpace/useLeaveSpace
-      // (hooks/chat/useSpaceSettings.ts) only clear spaceStorage, and the kicked
-      // handler (context/WebSocketContext.tsx) writes its update through
-      // mmkvAdapter, which uses a different MMKV instance AND key prefix
-      // ('quorum-cache' / 'userConfig:') from this file's own store
-      // ('quorum-config' / 'user_config:'), so it never lands. A left Space
-      // therefore keeps its id in spaceIds with its keys gone, for good —
-      // refusing to publish on that would wedge this device's config sync
-      // permanently, which is worse than the bug being fixed.
+      // This guard was tried and reverted once (3a03b6f, 2026-07-31) because
+      // back then no removal path took a Space out of config.spaceIds, so a
+      // left Space stayed listed with its keys deleted — permanently unkeyable,
+      // and the guard would have wedged config sync forever. df6b198 added the
+      // write side, which is what makes the guard safe now. Do not restore the
+      // old comment: the premise it rests on is gone.
       //
-      // Fix the removal paths first, then adopt desktop's refusal here.
+      // Known cost, identical to desktop's: nothing retries a held save, so a
+      // Space that can NEVER be keyed here — a bloated encryption state
+      // (desktop #108), or one never synced to this device — stops this device
+      // publishing ANY config change until that Space syncs or is removed. It
+      // fails safe (stale settings) rather than destructive (every device loses
+      // its Spaces), and the warning below makes it visible instead of silent.
+      // deletedSpaceIds tombstones remove the dead end by making such a Space
+      // explicitly deletable.
       const droppedSpaceIds = (config.spaceIds ?? []).filter((id) => !finalSpaceIds.has(id));
-      if (droppedSpaceIds.length > 0) {
-        logger.warn(
-          `[ConfigSync] publishing a NARROWER Space list than this device holds (${uploadConfig.spaceIds.length}/${(config.spaceIds ?? []).length}); other devices will adopt the shorter list: ${droppedSpaceIds.join(', ')}`
-        );
-      }
 
-      {
+      if (droppedSpaceIds.length > 0) {
+        // Local-only: `config` is still persisted with its full Space list at
+        // the end of this function, and the bookmark tombstones are deliberately
+        // left uncleared, since nothing synced.
+        logger.warn(
+          `[ConfigSync] NOT publishing — would upload ${uploadConfig.spaceIds.length}/${(config.spaceIds ?? []).length} Spaces; the change is local-only until these finish syncing: ${droppedSpaceIds.join(', ')}`
+        );
+
+        // Keep the timestamp we came in with. getConfig resolves purely by
+        // timestamp and never merges the losing side, so a device that advanced
+        // its local timestamp without the server agreeing would treat its own
+        // config as newer than every remote one and quietly stop applying other
+        // devices' changes for as long as it kept holding. Publishing is what
+        // earns the right to a newer timestamp.
+        config.timestamp = incomingTimestamp;
+      } else {
         const key = deriveConfigKey(privateKey);
         const encryptedConfig = encryptConfig(uploadConfig, key);
         const signature = await signConfigData(encryptedConfig, ts, privateKey);
