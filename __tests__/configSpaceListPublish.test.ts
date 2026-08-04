@@ -429,6 +429,39 @@ describe('saveConfig — truncated Space lists are never published', () => {
       ).toEqual(['space-1', 'space-2']);
     });
 
+    it('never wipes the stored keys when local storage can key nothing', async () => {
+      // The defect that wedged a real device. saveConfig assigns
+      // config.spaceKeys = <what it could rebuild locally> and then persists
+      // that object, so the first save on a device keying nothing overwrote its
+      // stored key material with an empty list. Carry-forward then had nothing
+      // to carry, and the hold kept the local timestamp equal to the server's,
+      // so no pull ever re-stored them. Permanently stuck.
+      arrangeNothingKeyable();
+      saveLocalUserConfig(configWithBlobKeys());
+
+      await saveConfig(configWithBlobKeys());
+      await saveConfig(getLocalUserConfig(ADDRESS)!);
+
+      expect(
+        getLocalUserConfig(ADDRESS)!
+          .spaceKeys!.map((sk) => sk.spaceId)
+          .sort()
+      ).toEqual(['space-1', 'space-2', 'space-3']);
+    });
+
+    it('recovers the keys from storage when the caller omits them', async () => {
+      // A caller that does not build its object from getLocalUserConfig must
+      // not look like "this device has never known any keys".
+      arrangeNothingKeyable();
+      saveLocalUserConfig(configWithBlobKeys());
+
+      const withoutKeys = { ...configWithBlobKeys(), spaceKeys: undefined };
+      await saveConfig(withoutKeys as UserConfig);
+
+      expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
+      expect(getLocalUserConfig(ADDRESS)!.spaceKeys).toHaveLength(3);
+    });
+
     it('still holds when a Space has no key material anywhere', async () => {
       // The genuine dead end the guard is for: no local keys, and nothing in the
       // blob either. Rare now, but it must still refuse rather than truncate.
