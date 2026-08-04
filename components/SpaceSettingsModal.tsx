@@ -60,7 +60,7 @@ import { pickImage, compressAvatarImage } from '@/services/media/imageAttachment
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
-import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, queryKeys, IMAGE_CONFIGS, type Emoji, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
+import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, queryKeys, IMAGE_CONFIGS, type Emoji, type Permission, type Role, type Space, type SpaceMember, type Sticker } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { resolveChannelIconColor } from '@/utils/channelIcon';
 import * as Clipboard from 'expo-clipboard';
@@ -801,6 +801,40 @@ export default function SpaceSettingsModal({
   const activeMembers = useMemo(
     () => members.filter((m) => m.inbox_address && !m.isKicked),
     [members]
+  );
+
+  // Identity resolution: per-space override → global → (your own live profile) →
+  // address. The roster used to read only the override slot, which is why the
+  // Space CREATOR showed as a bare address: their row is written blank on
+  // purpose at creation ("empty = follow global", spaceService.ts, same comment
+  // and same fields on desktop), and only a later profile save back-fills the
+  // global slot into every space. A Space created after your last profile edit
+  // therefore had nothing in either slot.
+  //
+  // The self arm is what makes that case correct without requiring a profile
+  // re-save: for your own row the live profile is authoritative and already in
+  // memory.
+  const resolveMemberIdentity = useCallback(
+    (member: SpaceMember) => {
+      const m = member as SpaceMember & {
+        global_display_name?: string;
+        global_profile_image?: string;
+      };
+      const isSelf = m.address === user?.address;
+      const name =
+        m.display_name ||
+        m.name ||
+        m.global_display_name ||
+        (isSelf ? user?.displayName || user?.username : undefined) ||
+        undefined;
+      const avatar =
+        m.profile_image ||
+        m.global_profile_image ||
+        (isSelf ? user?.profileImage : undefined) ||
+        undefined;
+      return { name, avatar, label: name || truncateAddress(m.address) };
+    },
+    [user?.address, user?.displayName, user?.username, user?.profileImage]
   );
 
   // Blocked addresses for this space, resolved to a display name/avatar via the
@@ -1808,7 +1842,7 @@ export default function SpaceSettingsModal({
       contentContainerStyle={styles.tabContentContainer}
     >
         <Text style={styles.sectionDescription}>
-          {members.length} member{members.length !== 1 ? 's' : ''} in this space
+          {activeMembers.length} member{activeMembers.length !== 1 ? 's' : ''} in this space
         </Text>
 
         {/* Blocked members — a collapsible accordion at the TOP, shown only when
@@ -1869,6 +1903,7 @@ export default function SpaceSettingsModal({
 
         {activeMembers.map((member) => {
           const memberRoles = getMemberRoles(member.address);
+          const identity = resolveMemberIdentity(member);
           return (
             <View key={member.address} style={styles.memberItem}>
               <TouchableOpacity
@@ -1883,28 +1918,26 @@ export default function SpaceSettingsModal({
                   };
                   setSelectedUserProfile({
                     userId: member.address,
-                    userName: member.display_name || member.name || truncateAddress(member.address),
-                    userAvatar: member.profile_image,
+                    userName: identity.label,
+                    userAvatar: identity.avatar,
                     bio: member.bio,
                     farcasterFid: m.farcasterFid,
                     farcasterUsername: m.farcasterUsername,
                   });
                 }}
               >
-                {member.profile_image ? (
-                  <Image source={{ uri: member.profile_image }} style={styles.memberAvatarImage} />
+                {identity.avatar ? (
+                  <Image source={{ uri: identity.avatar }} style={styles.memberAvatarImage} />
                 ) : (
                   <DefaultAvatar
-                    displayName={member.display_name || member.name}
+                    displayName={identity.name}
                     address={member.address}
                     size={44}
                   />
                 )}
               </TouchableOpacity>
               <View style={styles.memberInfo}>
-                <Text style={styles.memberName}>
-                  {member.display_name || member.name || truncateAddress(member.address)}
-                </Text>
+                <Text style={styles.memberName}>{identity.label}</Text>
                 <Text style={styles.memberAddress}>{truncateAddress(member.address)}</Text>
                 {memberRoles.length > 0 && (
                   <View style={styles.memberRolesRow}>
@@ -1926,8 +1959,8 @@ export default function SpaceSettingsModal({
                     style={styles.kickButton}
                     onPress={() => setKickTarget({
                       address: member.address,
-                      displayName: member.display_name || member.name || truncateAddress(member.address),
-                      userIcon: member.profile_image,
+                      displayName: identity.label,
+                      userIcon: identity.avatar,
                     })}
                   >
                     <Text style={styles.kickButtonText}>Kick</Text>
