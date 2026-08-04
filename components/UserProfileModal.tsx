@@ -184,30 +184,38 @@ export default function UserProfileModal({
   // make sense on yourself.
   const isSelf = !!(user && authUser?.address && user.userId === authUser.address);
 
-  // Someone who left is no longer a member, so kicking them is meaningless. A
-  // verified `leave` blanks the anchor and keeps the row, which is what makes
-  // this detectable at all.
+  // Someone who is no longer in the Space cannot meaningfully be kicked or
+  // muted. Both `leave` and `kick` blank the member's anchor and keep the row,
+  // so one check covers departed AND already-kicked members.
   //
-  // Requires a POSITIVE signal that they left — a row that says so. An absent
-  // row must not hide the action: a member whose join broadcast never arrived
-  // has no row locally (a known, common case) and the owner still needs to be
-  // able to remove them.
+  // Requires a POSITIVE signal — a row that says so. An absent row must not
+  // hide these actions: a member whose join broadcast never arrived has no row
+  // locally (a known, common case) and the owner still needs to act on them.
   const { data: spaceMembers = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
-  const targetHasLeft = !!(
+  const targetIsFormerMember = !!(
     user &&
     spaceMembers.some(
-      (m) => (m.address || m.user_address) === user.userId && !m.inbox_address
+      (m) =>
+        (m.address || m.user_address) === user.userId &&
+        (!m.inbox_address || m.isKicked)
     )
   );
 
   // Space owners can kick any member other than themselves
-  const canKick = !!(isSpaceOwner && spaceId && !isSelf && !targetHasLeft);
+  const canKick = !!(isSpaceOwner && spaceId && !isSelf && !targetIsFormerMember);
 
   // Moderation mute: gated on the VIEWER holding the `user:mute` role permission
   // (NOT isSpaceOwner — receivers can't verify ownership, so owners need a role
   // too; matches the receive-side check). Requires a channel to broadcast on.
   const viewerCanMute = useHasPermission(spaceId, authUser?.address, 'user:mute');
-  const canModMute = !!(viewerCanMute && spaceId && channelId && !isSelf && user);
+  const canModMute = !!(
+    viewerCanMute &&
+    spaceId &&
+    channelId &&
+    !isSelf &&
+    user &&
+    !targetIsFormerMember
+  );
   const { isUserMuted: isModMuted } = useIsUserMuted(spaceId);
   const targetIsModMuted = !!user && isModMuted(user.userId);
 

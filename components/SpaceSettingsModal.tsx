@@ -789,17 +789,17 @@ export default function SpaceSettingsModal({
   // Members
   const { data: members = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
 
-  // The roster shows who is IN the Space. A verified `leave` blanks the member's
-  // inbox_address and keeps the row, so without this a departed member stayed
-  // listed — indistinguishable from an active one, still offering a Kick button.
-  // Same rule desktop applies (`left: curr.inbox_address === ''` in
-  // useChannelData, filtered out of every roster section).
+  // The roster shows who is IN the Space. Both `leave` and `kick` blank the
+  // member's inbox_address and KEEP the row, so without this a departed or
+  // removed member stayed listed, indistinguishable from an active one.
+  // Same rule desktop applies (`left: curr.inbox_address === ''` plus an
+  // isKicked filter, in useChannelData).
   //
   // Deliberately NOT applied to `members` itself: the blocked-users list below
   // resolves display names through it, and a blocked user who left should still
   // resolve to a name rather than a bare address.
   const activeMembers = useMemo(
-    () => members.filter((m) => m.inbox_address),
+    () => members.filter((m) => m.inbox_address && !m.isKicked),
     [members]
   );
 
@@ -1917,11 +1917,7 @@ export default function SpaceSettingsModal({
                   </View>
                 )}
               </View>
-              {member.isKicked ? (
-                <View style={styles.kickedBadge}>
-                  <Text style={styles.kickedBadgeText}>Kicked</Text>
-                </View>
-              ) : member.address !== user?.address && isSpaceOwner ? (
+              {member.address !== user?.address && isSpaceOwner ? (
                 <View style={styles.memberActions}>
                   {/* Block/unblock lives in the user profile modal, not here —
                       tapping a member opens their profile for all per-user
@@ -3304,18 +3300,6 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontSize: Skin.font(11),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-    },
-    kickedBadge: {
-      backgroundColor: theme.colors.danger + '20',
-      paddingHorizontal: Skin.space(8),
-      paddingVertical: Skin.space(4),
-      borderRadius: Skin.radius(6),
-    },
-    kickedBadgeText: {
-      fontSize: Skin.font(11),
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.danger,
     },
     memberActions: {
       flexDirection: 'row' as const,
