@@ -789,6 +789,20 @@ export default function SpaceSettingsModal({
   // Members
   const { data: members = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
 
+  // The roster shows who is IN the Space. A verified `leave` blanks the member's
+  // inbox_address and keeps the row, so without this a departed member stayed
+  // listed — indistinguishable from an active one, still offering a Kick button.
+  // Same rule desktop applies (`left: curr.inbox_address === ''` in
+  // useChannelData, filtered out of every roster section).
+  //
+  // Deliberately NOT applied to `members` itself: the blocked-users list below
+  // resolves display names through it, and a blocked user who left should still
+  // resolve to a name rather than a bare address.
+  const activeMembers = useMemo(
+    () => members.filter((m) => m.inbox_address),
+    [members]
+  );
+
   // Blocked addresses for this space, resolved to a display name/avatar via the
   // member list when available (falls back to the truncated address — a blocked
   // user may no longer be in the member list). Reads straight from the synced
@@ -1853,7 +1867,7 @@ export default function SpaceSettingsModal({
           </View>
         )}
 
-        {members.map((member) => {
+        {activeMembers.map((member) => {
           const memberRoles = getMemberRoles(member.address);
           return (
             <View key={member.address} style={styles.memberItem}>
@@ -1928,7 +1942,7 @@ export default function SpaceSettingsModal({
           );
         })}
 
-        {members.length === 0 && (
+        {activeMembers.length === 0 && (
           <View style={styles.emptyState}>
             <IconSymbol name="person.2" size={48} color={theme.colors.textMuted} />
             <Text style={styles.emptyStateText}>No members yet</Text>

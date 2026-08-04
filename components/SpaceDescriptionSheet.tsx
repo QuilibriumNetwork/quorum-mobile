@@ -25,7 +25,10 @@ export function SpaceDescriptionSheet({
   space,
 }: SpaceDescriptionSheetProps) {
   const { theme } = useTheme();
-  const { data: members = [] } = useSpaceMembers(space.spaceId, { enabled: visible });
+  const { data: allMembers = [] } = useSpaceMembers(space.spaceId, { enabled: visible });
+  // A verified `leave` blanks inbox_address and keeps the row, so counting every
+  // row would keep departed members in the total. Same rule as the roster.
+  const members = allMembers.filter((m) => m.inbox_address);
 
   return (
     <BaseModal visible={visible} onClose={onClose} height={0.5} showHandle>
