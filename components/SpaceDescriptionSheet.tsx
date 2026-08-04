@@ -25,7 +25,11 @@ export function SpaceDescriptionSheet({
   space,
 }: SpaceDescriptionSheetProps) {
   const { theme } = useTheme();
-  const { data: members = [] } = useSpaceMembers(space.spaceId, { enabled: visible });
+  const { data: allMembers = [] } = useSpaceMembers(space.spaceId, { enabled: visible });
+  // `leave` and `kick` both blank inbox_address and keep the row, so counting
+  // every row would keep departed and removed members in the total. Same rule
+  // as the roster in SpaceSettingsModal.
+  const members = allMembers.filter((m) => m.inbox_address && !m.isKicked);
 
   return (
     <BaseModal visible={visible} onClose={onClose} height={0.5} showHandle>

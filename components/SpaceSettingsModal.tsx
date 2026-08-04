@@ -60,7 +60,7 @@ import { pickImage, compressAvatarImage } from '@/services/media/imageAttachment
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
-import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, queryKeys, IMAGE_CONFIGS, type Emoji, type Permission, type Role, type Space, type Sticker } from '@quilibrium/quorum-shared';
+import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, queryKeys, IMAGE_CONFIGS, type Emoji, type Permission, type Role, type Space, type SpaceMember, type Sticker } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { resolveChannelIconColor } from '@/utils/channelIcon';
 import * as Clipboard from 'expo-clipboard';
@@ -788,6 +788,54 @@ export default function SpaceSettingsModal({
 
   // Members
   const { data: members = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
+
+  // The roster shows who is IN the Space. Both `leave` and `kick` blank the
+  // member's inbox_address and KEEP the row, so without this a departed or
+  // removed member stayed listed, indistinguishable from an active one.
+  // Same rule desktop applies (`left: curr.inbox_address === ''` plus an
+  // isKicked filter, in useChannelData).
+  //
+  // Deliberately NOT applied to `members` itself: the blocked-users list below
+  // resolves display names through it, and a blocked user who left should still
+  // resolve to a name rather than a bare address.
+  const activeMembers = useMemo(
+    () => members.filter((m) => m.inbox_address && !m.isKicked),
+    [members]
+  );
+
+  // Identity resolution: per-space override → global → (your own live profile) →
+  // address. The roster used to read only the override slot, which is why the
+  // Space CREATOR showed as a bare address: their row is written blank on
+  // purpose at creation ("empty = follow global", spaceService.ts, same comment
+  // and same fields on desktop), and only a later profile save back-fills the
+  // global slot into every space. A Space created after your last profile edit
+  // therefore had nothing in either slot.
+  //
+  // The self arm is what makes that case correct without requiring a profile
+  // re-save: for your own row the live profile is authoritative and already in
+  // memory.
+  const resolveMemberIdentity = useCallback(
+    (member: SpaceMember) => {
+      const m = member as SpaceMember & {
+        global_display_name?: string;
+        global_profile_image?: string;
+      };
+      const isSelf = m.address === user?.address;
+      const name =
+        m.display_name ||
+        m.name ||
+        m.global_display_name ||
+        (isSelf ? user?.displayName || user?.username : undefined) ||
+        undefined;
+      const avatar =
+        m.profile_image ||
+        m.global_profile_image ||
+        (isSelf ? user?.profileImage : undefined) ||
+        undefined;
+      return { name, avatar, label: name || truncateAddress(m.address) };
+    },
+    [user?.address, user?.displayName, user?.username, user?.profileImage]
+  );
 
   // Blocked addresses for this space, resolved to a display name/avatar via the
   // member list when available (falls back to the truncated address — a blocked
@@ -1794,7 +1842,7 @@ export default function SpaceSettingsModal({
       contentContainerStyle={styles.tabContentContainer}
     >
         <Text style={styles.sectionDescription}>
-          {members.length} member{members.length !== 1 ? 's' : ''} in this space
+          {activeMembers.length} member{activeMembers.length !== 1 ? 's' : ''} in this space
         </Text>
 
         {/* Blocked members — a collapsible accordion at the TOP, shown only when
@@ -1853,8 +1901,9 @@ export default function SpaceSettingsModal({
           </View>
         )}
 
-        {members.map((member) => {
+        {activeMembers.map((member) => {
           const memberRoles = getMemberRoles(member.address);
+          const identity = resolveMemberIdentity(member);
           return (
             <View key={member.address} style={styles.memberItem}>
               <TouchableOpacity
@@ -1869,28 +1918,26 @@ export default function SpaceSettingsModal({
                   };
                   setSelectedUserProfile({
                     userId: member.address,
-                    userName: member.display_name || member.name || truncateAddress(member.address),
-                    userAvatar: member.profile_image,
+                    userName: identity.label,
+                    userAvatar: identity.avatar,
                     bio: member.bio,
                     farcasterFid: m.farcasterFid,
                     farcasterUsername: m.farcasterUsername,
                   });
                 }}
               >
-                {member.profile_image ? (
-                  <Image source={{ uri: member.profile_image }} style={styles.memberAvatarImage} />
+                {identity.avatar ? (
+                  <Image source={{ uri: identity.avatar }} style={styles.memberAvatarImage} />
                 ) : (
                   <DefaultAvatar
-                    displayName={member.display_name || member.name}
+                    displayName={identity.name}
                     address={member.address}
                     size={44}
                   />
                 )}
               </TouchableOpacity>
               <View style={styles.memberInfo}>
-                <Text style={styles.memberName}>
-                  {member.display_name || member.name || truncateAddress(member.address)}
-                </Text>
+                <Text style={styles.memberName}>{identity.label}</Text>
                 <Text style={styles.memberAddress}>{truncateAddress(member.address)}</Text>
                 {memberRoles.length > 0 && (
                   <View style={styles.memberRolesRow}>
@@ -1903,11 +1950,7 @@ export default function SpaceSettingsModal({
                   </View>
                 )}
               </View>
-              {member.isKicked ? (
-                <View style={styles.kickedBadge}>
-                  <Text style={styles.kickedBadgeText}>Kicked</Text>
-                </View>
-              ) : member.address !== user?.address && isSpaceOwner ? (
+              {member.address !== user?.address && isSpaceOwner ? (
                 <View style={styles.memberActions}>
                   {/* Block/unblock lives in the user profile modal, not here —
                       tapping a member opens their profile for all per-user
@@ -1916,8 +1959,8 @@ export default function SpaceSettingsModal({
                     style={styles.kickButton}
                     onPress={() => setKickTarget({
                       address: member.address,
-                      displayName: member.display_name || member.name || truncateAddress(member.address),
-                      userIcon: member.profile_image,
+                      displayName: identity.label,
+                      userIcon: identity.avatar,
                     })}
                   >
                     <Text style={styles.kickButtonText}>Kick</Text>
@@ -1928,7 +1971,7 @@ export default function SpaceSettingsModal({
           );
         })}
 
-        {members.length === 0 && (
+        {activeMembers.length === 0 && (
           <View style={styles.emptyState}>
             <IconSymbol name="person.2" size={48} color={theme.colors.textMuted} />
             <Text style={styles.emptyStateText}>No members yet</Text>
@@ -3290,18 +3333,6 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontSize: Skin.font(11),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-    },
-    kickedBadge: {
-      backgroundColor: theme.colors.danger + '20',
-      paddingHorizontal: Skin.space(8),
-      paddingVertical: Skin.space(4),
-      borderRadius: Skin.radius(6),
-    },
-    kickedBadgeText: {
-      fontSize: Skin.font(11),
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      color: theme.colors.danger,
     },
     memberActions: {
       flexDirection: 'row' as const,

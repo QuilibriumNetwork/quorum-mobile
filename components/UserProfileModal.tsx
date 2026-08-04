@@ -10,7 +10,7 @@ import { useToast } from '@/context/ToastContext';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
-import { useAssignRole, useRemoveFromRole, useSpaces, useHasPermission } from '@/hooks/chat';
+import { useAssignRole, useRemoveFromRole, useSpaces, useHasPermission, useSpaceMembers } from '@/hooks/chat';
 import { useIsUserMuted } from '@/hooks/chat/useIsUserMuted';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -178,20 +178,58 @@ export default function UserProfileModal({
   // Check if avatar is a valid data URI
   const hasValidAvatar = user?.userAvatar?.startsWith('data:');
 
-  const showRolesSection = roles && roles.length > 0 && (userRoles.length > 0 || isSpaceOwner);
-
   // Whether this profile is the current user's own. Message/Mute/Kick don't
   // make sense on yourself.
   const isSelf = !!(user && authUser?.address && user.userId === authUser.address);
 
+  // Someone who is no longer in the Space cannot meaningfully be kicked or
+  // muted. Both `leave` and `kick` blank the member's anchor and keep the row,
+  // so one check covers departed AND already-kicked members.
+  //
+  // Requires a POSITIVE signal — a row that says so. An absent row must not
+  // hide these actions: a member whose join broadcast never arrived has no row
+  // locally (a known, common case) and the owner still needs to act on them.
+  const { data: spaceMembers = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
+  const targetIsFormerMember = !!(
+    user &&
+    spaceMembers.some(
+      (m) =>
+        (m.address || m.user_address) === user.userId &&
+        (!m.inbox_address || m.isKicked)
+    )
+  );
+
+  // Roles are meaningless for someone no longer in the Space: nothing to grant
+  // them, and any role still listed is one they cannot exercise.
+  //
+  // The listed roles are not merely redundant, they can be WRONG. A `leave`
+  // strips roles locally on receipt, but a `kick` does not — mobile's kick
+  // handler only sets isKicked and blanks the anchor, so on any device other
+  // than the kicker's the member keeps roles that no longer work. Hiding the
+  // section is correct regardless of which of the two paths ran, and regardless
+  // of whether the durable manifest strip has happened yet (it has not — that
+  // is Slice B of the leave issue).
+  const showRolesSection =
+    !targetIsFormerMember &&
+    roles &&
+    roles.length > 0 &&
+    (userRoles.length > 0 || isSpaceOwner);
+
   // Space owners can kick any member other than themselves
-  const canKick = !!(isSpaceOwner && spaceId && !isSelf);
+  const canKick = !!(isSpaceOwner && spaceId && !isSelf && !targetIsFormerMember);
 
   // Moderation mute: gated on the VIEWER holding the `user:mute` role permission
   // (NOT isSpaceOwner — receivers can't verify ownership, so owners need a role
   // too; matches the receive-side check). Requires a channel to broadcast on.
   const viewerCanMute = useHasPermission(spaceId, authUser?.address, 'user:mute');
-  const canModMute = !!(viewerCanMute && spaceId && channelId && !isSelf && user);
+  const canModMute = !!(
+    viewerCanMute &&
+    spaceId &&
+    channelId &&
+    !isSelf &&
+    user &&
+    !targetIsFormerMember
+  );
   const { isUserMuted: isModMuted } = useIsUserMuted(spaceId);
   const targetIsModMuted = !!user && isModMuted(user.userId);
 

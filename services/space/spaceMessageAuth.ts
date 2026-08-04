@@ -286,6 +286,7 @@ export async function shouldStripEveryoneMention(
  *
  *   kick / rekey   → owner-signed on the sync envelope  (verifyOwnerSealedEnvelope)
  *   leave          → self-signed by the leaver's inbox key (resolveVerifiedLeaver)
+ *   join           → self-signed over the participant blob (verifyJoinParticipant)
  *
  * Decrypting one of these proves nothing about who sent it: the config key,
  * the hub keypair and every member's inbox address are all held by anyone who
@@ -461,5 +462,114 @@ export async function resolveVerifiedLeaver(
     );
   } catch {
     return null;
+  }
+}
+
+/** The participant fields a `join` signs over, plus the signature itself. */
+export interface JoinParticipantProof {
+  address?: string;
+  id?: number;
+  inboxAddress?: string;
+  inboxPubKey?: string;
+  pubKey?: string;
+  inboxKey?: string;
+  identityKey?: string;
+  preKey?: string;
+  userIcon?: string;
+  displayName?: string;
+  joinedAt?: number;
+  /** base64 — signEd448 returns base64 and it travels unchanged (unlike leave's hex). */
+  signature?: string;
+}
+
+/**
+ * Same three-way shape as OwnerEnvelopeVerdict, for the same reason: `unverifiable`
+ * means "could not check", NOT "forged". Dropping a join acks it out of the inbox
+ * permanently, so collapsing the two would silently lose a genuine member forever.
+ * Only `unverifiable` is worth a retry — the other rejections were checked and are
+ * not going to check differently next time.
+ */
+export type JoinVerdict =
+  | 'valid'
+  | 'proof-missing'
+  | 'signature-invalid'
+  | 'unverifiable';
+
+/**
+ * Desktop signs the 10 participant fields joined by bare `+`, so a field that is
+ * absent contributes the literal "undefined". Reproducing that coercion is what
+ * makes the check byte-compatible rather than merely plausible.
+ */
+function buildJoinSignedBlob(p: JoinParticipantProof): string {
+  return (
+    String(p.address) +
+    String(p.id) +
+    String(p.inboxAddress) +
+    String(p.pubKey) +
+    String(p.inboxKey) +
+    String(p.identityKey) +
+    String(p.preKey) +
+    String(p.userIcon) +
+    String(p.displayName) +
+    String(p.joinedAt)
+  );
+}
+
+/**
+ * Verify the ed448 signature a `join` carries, and that the announced inbox
+ * address really derives from the announced key. Mirrors desktop's second join
+ * gate; see `buildJoinSignedBlob` for the exact bytes signed.
+ *
+ * ## What this does NOT prove — read before trusting it
+ *
+ * The signature is checked against a public key the SENDER chose, so it proves
+ * possession of *that* key. It does **not** bind `participant.address` to it. An
+ * attacker can put a victim's address in the blob, sign with a fresh key of their
+ * own, and this returns `valid`. So this is NOT authentication of the joining
+ * identity, and `join` is not "fixed" by it.
+ *
+ * What it is worth: unsigned and malformed joins stop being accepted. The thing
+ * actually protecting existing members is `buildJoinedMemberRow`, which refuses to
+ * repoint an anchor or clear `isKicked` no matter what verifies here.
+ *
+ * Binding the claimed address to the key needs the DKG proof (`verify_point`),
+ * which mobile cannot currently call.
+ *
+ * ## Do NOT add `deriveInboxAddress(inboxPubKey) === inboxAddress` here
+ *
+ * It looks like an obvious hardening and it is wrong: the two fields are DIFFERENT
+ * KEYS on desktop, deliberately. Desktop derives `inboxAddress` from a freshly
+ * generated per-space ed448 keypair and announces `inboxPubKey` from the DEVICE
+ * keyset's inbox key (InvitationService, its join branch). Mobile happens to reuse
+ * one keypair for both, so the equality holds here and nowhere else. Adding the
+ * check rejected every genuine desktop join — no member row, no join event, the
+ * member rendered as a bare address — and it shipped past three code reviews and a
+ * WASM parity harness before a real device caught it.
+ */
+export async function verifyJoinParticipant(
+  participant: JoinParticipantProof | null | undefined
+): Promise<JoinVerdict> {
+  const inboxPubKey = participant?.inboxPubKey;
+  const signature = participant?.signature;
+  const inboxAddress = participant?.inboxAddress;
+  // Absent rather than wrong: retrying cannot make an unsigned join grow a
+  // signature, so this is a real verdict, not an `unverifiable`.
+  if (!participant || !inboxPubKey || !signature || !inboxAddress) {
+    return 'proof-missing';
+  }
+
+  try {
+    const signingProvider = new NativeSigningProvider();
+    const isValid = await signingProvider.verifyEd448(
+      bytesToBase64(Uint8Array.from(hexToBytes(inboxPubKey))),
+      bytesToBase64(new TextEncoder().encode(buildJoinSignedBlob(participant))),
+      signature
+    );
+    return isValid ? 'valid' : 'signature-invalid';
+  } catch {
+    // The native verifier could not produce an answer — a device/native-module
+    // problem, not evidence of forgery, so the caller keeps the message for retry
+    // rather than acking it away.
+    return 'unverifiable';
   }
 }

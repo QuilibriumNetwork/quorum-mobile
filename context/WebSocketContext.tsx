@@ -92,6 +92,7 @@ import {
   isUpdateProfileAuthorized,
   resolveVerifiedLeaver,
   shouldStripEveryoneMention,
+  verifyJoinParticipant,
   verifyOwnerSealedEnvelope,
 } from '../services/space/spaceMessageAuth';
 import {
@@ -984,6 +985,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                         // from this type, so it was dropped at the parse boundary and
                         // no new member row ever got one.
                         joinedAt?: number;
+                        // base64. Was absent from this type, so the signature both
+                        // clients already send was invisible to the handler.
+                        signature?: string;
                       };
                       inboxPublicKey?: string;
                       inboxSignature?: string;
@@ -998,6 +1002,30 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     if (participant.address === user?.address) {
                       break;
                     }
+
+                    // Authenticate before ANY write. The ratchet peer maps below are
+                    // written from sender-chosen values too, so verifying later would
+                    // leave them exposed. Desktop gates its whole join branch the same
+                    // way. Note this proves key possession, not identity — see
+                    // verifyJoinParticipant.
+                    const joinVerdict = await verifyJoinParticipant(participant);
+                    if (joinVerdict !== 'valid') {
+                      // Same rule as an indeterminate owner signature above: a
+                      // check that could not RUN must not be acked away as a
+                      // forgery. Deleting the inbox copy is permanent, and join
+                      // is the happy path for every new member, so collapsing
+                      // the two would silently lose a real member for good.
+                      if (joinVerdict === 'unverifiable') {
+                        deferInboxDelete = true;
+                      }
+                      logger.warn(
+                        `[control-auth] join dropped: ${joinVerdict} (space=${spaceId.slice(0, 12)} claimed=${String(participant.address).slice(0, 12)})${joinVerdict === 'unverifiable' ? '; kept in inbox for retry' : ''}`
+                      );
+                      break;
+                    }
+                    logger.debug(
+                      `[control-auth] join accepted: signature valid (space=${spaceId.slice(0, 12)} member=${String(participant.address).slice(0, 12)})`
+                    );
 
                     // Update the Triple Ratchet state with new peer
                     const spaceConversationId = `${spaceId}/${spaceId}`;
@@ -1189,6 +1217,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                       };
                     });
                   } catch (joinError) {
+                    // Everything downstream of the gate runs on an ALREADY
+                    // VERIFIED join, so a throw here is a storage/cache failure,
+                    // not a rejected sender. Swallowing it silently could leave a
+                    // real member half-written (ratchet slot but no member row,
+                    // or the reverse) with no way to ever find out.
+                    logger.error(
+                      `[control-auth] join: threw while applying a verified join (space=${spaceId?.slice(0, 12)}): ${joinError instanceof Error ? joinError.message : String(joinError)}`
+                    );
                   }
                   break;
                 }
@@ -1244,6 +1280,76 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                           ? { ...m, inbox_address: '' }
                           : m
                       );
+                    });
+
+                    // A member row with neither address form cannot be named in a
+                    // role list or a system message. The anchor above is already
+                    // blanked, which is the part that matters for auth.
+                    if (!leavingAddress) {
+                      logger.warn(
+                        `[control-auth] leave: member has no address, skipping roles and event (space=${spaceId.slice(0, 12)})`
+                      );
+                      break;
+                    }
+
+                    const leaveSpace = getSpace(spaceId);
+
+                    // Drop them from every role. Blanking the anchor alone left a
+                    // departed member holding whatever role they had, on every
+                    // device, forever — desktop's leave branch has always done this.
+                    if (leaveSpace?.roles?.some((role) => role.members.includes(leavingAddress))) {
+                      await adapter.saveSpace({
+                        ...leaveSpace,
+                        roles: leaveSpace.roles.map((role) => ({
+                          ...role,
+                          members: role.members.filter((m) => m !== leavingAddress),
+                        })),
+                        modifiedDate: Date.now(),
+                      });
+                      queryClient.invalidateQueries({ queryKey: queryKeys.spaces.detail(spaceId) });
+                    }
+
+                    // Post the "X left" event. The renderer for it already existed
+                    // (components/Chat/types.ts maps content.type 'leave' to a
+                    // system event) — nothing ever created the message.
+                    //
+                    // The id is derived from the anchor the member had BEFORE it was
+                    // blanked above, matching desktop, so both clients mint the same
+                    // messageId and a replayed leave dedupes instead of doubling.
+                    const leaveChannelId = leaveSpace?.defaultChannelId || spaceId;
+                    const leaveMessageId = bytesToHex(
+                      sha256(new TextEncoder().encode('leave' + leaver.inbox_address))
+                    );
+                    const leftAt = Date.now();
+                    const leaveMessage: Message = {
+                      channelId: leaveChannelId,
+                      spaceId,
+                      messageId: leaveMessageId,
+                      digestAlgorithm: 'SHA-256',
+                      nonce: leaveMessageId,
+                      createdDate: leftAt,
+                      modifiedDate: leftAt,
+                      lastModifiedHash: '',
+                      reactions: [],
+                      mentions: { memberIds: [], roleIds: [], channelIds: [] },
+                      content: {
+                        senderId: leavingAddress,
+                        type: 'leave',
+                      },
+                    };
+
+                    await adapter.saveMessage(leaveMessage, leftAt, '', '', '', '');
+                    const leaveMessagesKey = queryKeys.messages.infinite(spaceId, leaveChannelId);
+                    queryClient.setQueryData<{ pages: { messages: Message[] }[]; pageParams: unknown[] }>(leaveMessagesKey, (old) => {
+                      if (!old) return old;
+                      return {
+                        ...old,
+                        pages: old.pages.map((page, index) =>
+                          index === 0
+                            ? { ...page, messages: [...page.messages, leaveMessage] }
+                            : page
+                        ),
+                      };
                     });
                   } catch (leaveError) {
                     logger.warn(
