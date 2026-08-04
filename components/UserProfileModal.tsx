@@ -178,8 +178,6 @@ export default function UserProfileModal({
   // Check if avatar is a valid data URI
   const hasValidAvatar = user?.userAvatar?.startsWith('data:');
 
-  const showRolesSection = roles && roles.length > 0 && (userRoles.length > 0 || isSpaceOwner);
-
   // Whether this profile is the current user's own. Message/Mute/Kick don't
   // make sense on yourself.
   const isSelf = !!(user && authUser?.address && user.userId === authUser.address);
@@ -200,6 +198,22 @@ export default function UserProfileModal({
         (!m.inbox_address || m.isKicked)
     )
   );
+
+  // Roles are meaningless for someone no longer in the Space: nothing to grant
+  // them, and any role still listed is one they cannot exercise.
+  //
+  // The listed roles are not merely redundant, they can be WRONG. A `leave`
+  // strips roles locally on receipt, but a `kick` does not — mobile's kick
+  // handler only sets isKicked and blanks the anchor, so on any device other
+  // than the kicker's the member keeps roles that no longer work. Hiding the
+  // section is correct regardless of which of the two paths ran, and regardless
+  // of whether the durable manifest strip has happened yet (it has not — that
+  // is Slice B of the leave issue).
+  const showRolesSection =
+    !targetIsFormerMember &&
+    roles &&
+    roles.length > 0 &&
+    (userRoles.length > 0 || isSpaceOwner);
 
   // Space owners can kick any member other than themselves
   const canKick = !!(isSpaceOwner && spaceId && !isSelf && !targetIsFormerMember);
