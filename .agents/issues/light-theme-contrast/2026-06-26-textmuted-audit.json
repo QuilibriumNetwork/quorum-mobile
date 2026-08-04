@@ -1,0 +1,3228 @@
+{
+  "summary": "Classify every textMuted color usage in quorum-mobile as correct vs misused for the light-theme contrast fix",
+  "agentCount": 19,
+  "logs": [
+    "Auditing 129 files in 19 batches",
+    "Total usages classified: 777 | misused: 375 | correct: 402 | files with fixes: 106"
+  ],
+  "result": {
+    "totalClassified": 777,
+    "misusedCount": 375,
+    "correctCount": 402,
+    "filesWithFixes": 106,
+    "fixesByFile": {
+      "components/BoundChannelFeedPanel.tsx": [
+        {
+          "file": "components/BoundChannelFeedPanel.tsx",
+          "styleKeyOrLocation": "inline style on errorText Text (line 163)",
+          "visibleText": "error message string (e.g. network error)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "error/status text the user must read — too pale at #b6b6b6 in light mode"
+        },
+        {
+          "file": "components/BoundChannelFeedPanel.tsx",
+          "styleKeyOrLocation": "inline style on emptyText Text (line 165)",
+          "visibleText": "No recent casts.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state message the user is meant to read"
+        },
+        {
+          "file": "components/BoundChannelFeedPanel.tsx",
+          "styleKeyOrLocation": "castRowStyles.meta color (line 304)",
+          "visibleText": "relative timestamp (e.g. \"2h\", \"now\")",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "timestamp metadata the user reads to gauge recency"
+        },
+        {
+          "file": "components/BoundChannelFeedPanel.tsx",
+          "styleKeyOrLocation": "castRowStyles.stat color — reply count Text (line 314)",
+          "visibleText": "e.g. \"3 replies\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "engagement count label that carries meaning for the user"
+        },
+        {
+          "file": "components/BoundChannelFeedPanel.tsx",
+          "styleKeyOrLocation": "castRowStyles.stat color — reaction count Text (line 319)",
+          "visibleText": "e.g. \"♥ 5\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "engagement count label that carries meaning for the user"
+        }
+      ],
+      "app/browser.tsx": [
+        {
+          "file": "app/browser.tsx",
+          "styleKeyOrLocation": "pageTitle style — color (line 727)",
+          "visibleText": "page title / domain sub-line shown under primary domain when title differs",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "secondary descriptive label the user reads to identify the current page"
+        },
+        {
+          "file": "app/browser.tsx",
+          "styleKeyOrLocation": "splashText style — color (line 772)",
+          "visibleText": "\"Preparing wallet...\" / \"Loading <name>...\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "loading status text the user reads to understand app state"
+        }
+      ],
+      "components/BlockUserModal.tsx": [
+        {
+          "file": "components/BlockUserModal.tsx",
+          "styleKeyOrLocation": "userAddress style — color (line 146)",
+          "visibleText": "truncated wallet address (e.g. \"0x1234…abcd\")",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "identifying label the user reads to confirm they are blocking the right person"
+        }
+      ],
+      "components/AudioSpaceOverlay.tsx": [
+        {
+          "file": "components/AudioSpaceOverlay.tsx",
+          "styleKeyOrLocation": "sectionLabel Text color — \"Speakers\" (line 366)",
+          "visibleText": "Speakers",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "section header label the user reads to navigate the participant list"
+        },
+        {
+          "file": "components/AudioSpaceOverlay.tsx",
+          "styleKeyOrLocation": "sectionLabel Text color — \"Listeners · N\" (line 395)",
+          "visibleText": "Listeners · {count}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "section header with count that carries navigation/informational meaning"
+        },
+        {
+          "file": "components/AudioSpaceOverlay.tsx",
+          "styleKeyOrLocation": "inline Text color in ScheduledPreview — scheduledLabel (line 672)",
+          "visibleText": "e.g. \"Today at 3:00 PM\" / \"Tomorrow at 10:00 AM\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "scheduled time label the user must read to know when the space starts"
+        },
+        {
+          "file": "components/AudioSpaceOverlay.tsx",
+          "styleKeyOrLocation": "inline Text color in ScheduledPreview — \"This space goes live at the scheduled time.\" (line 726)",
+          "visibleText": "This space goes live at the scheduled time.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "explanatory helper text the user reads to understand the UI state"
+        },
+        {
+          "file": "components/AudioSpaceOverlay.tsx",
+          "styleKeyOrLocation": "ChatPanel — empty state Text color (line 867)",
+          "visibleText": "No messages yet.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state text the user reads"
+        },
+        {
+          "file": "components/AudioSpaceOverlay.tsx",
+          "styleKeyOrLocation": "ChatPanel — reply-preview Text color (line 915)",
+          "visibleText": "preview of the replied-to message (e.g. \"username: message text\")",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "quoted message preview text the user reads to understand the reply context"
+        },
+        {
+          "file": "components/AudioSpaceOverlay.tsx",
+          "styleKeyOrLocation": "ChatPanel — like count Text color (line 936)",
+          "visibleText": "like count number",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "engagement count the user reads; carries meaning alongside the icon"
+        },
+        {
+          "file": "components/AudioSpaceOverlay.tsx",
+          "styleKeyOrLocation": "ChatPanel — reply count Text color (line 947)",
+          "visibleText": "reply count number",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "engagement count the user reads; carries meaning alongside the icon"
+        },
+        {
+          "file": "components/AudioSpaceOverlay.tsx",
+          "styleKeyOrLocation": "ChatPanel — recast count Text color — non-recasted branch (line 958)",
+          "visibleText": "recast count number",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "engagement count the user reads; carries meaning alongside the icon"
+        },
+        {
+          "file": "components/AudioSpaceOverlay.tsx",
+          "styleKeyOrLocation": "ChatPanel — reply-target banner Text color (line 981)",
+          "visibleText": "\"Replying to {username}\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "status label identifying who is being replied to — user must read it to confirm or cancel"
+        },
+        {
+          "file": "components/AudioSpaceOverlay.tsx",
+          "styleKeyOrLocation": "roleLabel Text color in ParticipantTile (line 1303)",
+          "visibleText": "\"host\" / \"cohost\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "role label identifying a participant's role — user reads it to understand who is hosting"
+        },
+        {
+          "file": "components/AudioSpaceOverlay.tsx",
+          "styleKeyOrLocation": "ControlButton label Text color (line 1353)",
+          "visibleText": "button labels: \"Mute\", \"Camera\", \"Raise\", \"Speaker\", \"React\", \"Chat\", \"Leave\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "control bar action labels the user reads to identify each button's function"
+        }
+      ],
+      "app/(onboarding)/privacy-setup.tsx": [
+        {
+          "file": "app/(onboarding)/privacy-setup.tsx",
+          "styleKeyOrLocation": "featureText color (line 311)",
+          "visibleText": "feature bullet lines e.g. \"Traffic routed through Q network\", \"Link previews enabled\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "feature description text the user reads to choose a privacy level"
+        }
+      ],
+      "app/(onboarding)/farcaster-setup.tsx": [
+        {
+          "file": "app/(onboarding)/farcaster-setup.tsx",
+          "styleKeyOrLocation": "wordCountText color (line 350)",
+          "visibleText": "\"Paste phrase\" / \"Word by word\" — inactive tab label",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "inactive segment tab labels the user reads to choose input mode — navigation targets that must remain legible"
+        },
+        {
+          "file": "app/(onboarding)/farcaster-setup.tsx",
+          "styleKeyOrLocation": "wordNumber color (line 372)",
+          "visibleText": "word index numbers 1–24",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "numeric labels helping the user track their position in the word grid — carry functional meaning"
+        },
+        {
+          "file": "app/(onboarding)/farcaster-setup.tsx",
+          "styleKeyOrLocation": "wordCountTextSmall color (line 440)",
+          "visibleText": "\"12\" / \"24\" — inactive word-count selector labels",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "inactive selector tab labels for 12/24 word count — navigation targets that must remain legible"
+        }
+      ],
+      "components/apex/ApexSubscribeModal.tsx": [
+        {
+          "file": "components/apex/ApexSubscribeModal.tsx",
+          "styleKeyOrLocation": "pitchText",
+          "visibleText": "$5/month — support 4 communities of your choice and get a gold ring on your profile.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "body description text the user must read to understand the product"
+        },
+        {
+          "file": "components/apex/ApexSubscribeModal.tsx",
+          "styleKeyOrLocation": "debugHint",
+          "visibleText": "Walk the Apex flow without paying. Empty slot picks are padded with debug spaces; state is local-only.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "readable hint text (dev-only but still a real text label)"
+        },
+        {
+          "file": "components/apex/ApexSubscribeModal.tsx",
+          "styleKeyOrLocation": "inputLabel",
+          "visibleText": "Pay with / Assign your 4 slots / Wallet",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "section/field labels the user reads to navigate the form"
+        },
+        {
+          "file": "components/apex/ApexSubscribeModal.tsx",
+          "styleKeyOrLocation": "quoteMuted",
+          "visibleText": "each space owner receives {amount} {token}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "secondary price breakdown the user reads to understand the payment"
+        },
+        {
+          "file": "components/apex/ApexSubscribeModal.tsx",
+          "styleKeyOrLocation": "selectionCount",
+          "visibleText": "{n}/4 assigned",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "progress counter the user reads to know how many slots remain"
+        },
+        {
+          "file": "components/apex/ApexSubscribeModal.tsx",
+          "styleKeyOrLocation": "emptySpacesText",
+          "visibleText": "No spaces accept {token} yet — space owners can enable Apex in their space settings.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state explanatory text the user must read"
+        },
+        {
+          "file": "components/apex/ApexSubscribeModal.tsx",
+          "styleKeyOrLocation": "spacePayout",
+          "visibleText": "{subscriberCount} subscribers · Payout: {address}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "metadata label under each space row that carries meaningful information"
+        },
+        {
+          "file": "components/apex/ApexSubscribeModal.tsx",
+          "styleKeyOrLocation": "slotsHint",
+          "visibleText": "Tap a space to give it a slot — the same space can hold more than one, even all four.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "instructional hint text the user needs to read to use the feature"
+        },
+        {
+          "file": "components/apex/ApexSubscribeModal.tsx",
+          "styleKeyOrLocation": "chainHint",
+          "visibleText": "Payment is on Ethereum mainnet.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "informational caption the user should read before paying"
+        }
+      ],
+      "app/(onboarding)/complete.tsx": [
+        {
+          "file": "app/(onboarding)/complete.tsx",
+          "styleKeyOrLocation": "summaryLabel",
+          "visibleText": "Quorum Account / Farcaster / Profile / Privacy Level",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "field labels on summary cards the user reads to identify each row"
+        },
+        {
+          "file": "app/(onboarding)/complete.tsx",
+          "styleKeyOrLocation": "footerNote",
+          "visibleText": "You can change these settings anytime in the app.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "readable footer note the user should be able to see"
+        }
+      ],
+      "app/(onboarding)/account-setup.tsx": [
+        {
+          "file": "app/(onboarding)/account-setup.tsx",
+          "styleKeyOrLocation": "dividerText",
+          "visibleText": "or import existing",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "readable navigation label between two action areas"
+        },
+        {
+          "file": "app/(onboarding)/account-setup.tsx",
+          "styleKeyOrLocation": "securityNote",
+          "visibleText": "Your private key never leaves your device and is stored securely using device encryption.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "important security notice the user should be able to read"
+        }
+      ],
+      "components/CreateSpaceSheet.tsx": [
+        {
+          "file": "components/CreateSpaceSheet.tsx",
+          "styleKeyOrLocation": "inline fieldLabel color — 'Title' (line 282)",
+          "visibleText": "Title",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "form field label the user reads to identify the input"
+        },
+        {
+          "file": "components/CreateSpaceSheet.tsx",
+          "styleKeyOrLocation": "inline fieldLabel color — 'Description (optional)' (lines 304-306)",
+          "visibleText": "Description (optional)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "form field label the user reads to identify the input"
+        },
+        {
+          "file": "components/CreateSpaceSheet.tsx",
+          "styleKeyOrLocation": "inline fieldLabel color — 'Start' (lines 329-332)",
+          "visibleText": "Start",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "form section label the user reads to identify the schedule picker"
+        },
+        {
+          "file": "components/CreateSpaceSheet.tsx",
+          "styleKeyOrLocation": "inline fieldLabel color — 'Date' (line 370)",
+          "visibleText": "Date",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "form field label in the custom date picker"
+        },
+        {
+          "file": "components/CreateSpaceSheet.tsx",
+          "styleKeyOrLocation": "inline fieldLabel color — 'Time' (line 391)",
+          "visibleText": "Time",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "form field label in the custom date picker"
+        },
+        {
+          "file": "components/CreateSpaceSheet.tsx",
+          "styleKeyOrLocation": "inline Text color — 'Going live {date}' confirmation (line 457)",
+          "visibleText": "Going live {formatRelative(...)}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "confirmation text the user reads to verify the scheduled time is correct"
+        }
+      ],
+      "components/ComposeChannelPickerModal.tsx": [
+        {
+          "file": "components/ComposeChannelPickerModal.tsx",
+          "styleKeyOrLocation": "sectionLabel",
+          "visibleText": "Results / Your channels",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "section header labels the user reads to understand the list below"
+        },
+        {
+          "file": "components/ComposeChannelPickerModal.tsx",
+          "styleKeyOrLocation": "rowKey",
+          "visibleText": "/{channelKey} and \"Default visibility — your followers\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "secondary metadata/description under each channel row that the user reads to identify the target"
+        },
+        {
+          "file": "components/ComposeChannelPickerModal.tsx",
+          "styleKeyOrLocation": "emptyText",
+          "visibleText": "No channels match your search. / You don't follow any channels yet.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state message the user must read to understand why the list is empty"
+        }
+      ],
+      "app/(tabs)/feed/index.tsx": [
+        {
+          "file": "app/(tabs)/feed/index.tsx",
+          "styleKeyOrLocation": "inline Text color — body error explanation (line 153)",
+          "visibleText": "Your Farcaster account info is in your profile but the keys that authenticate you to Farcaster aren't on this device anymore… / Your account is imported but the auth token isn't reachable right now…",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "multi-sentence explanation text the user must read to understand the error and take action"
+        },
+        {
+          "file": "app/(tabs)/feed/index.tsx",
+          "styleKeyOrLocation": "inline Text color — detail error text (line 155)",
+          "visibleText": "{fcState.detail}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "additional technical detail text the user reads for context on the error"
+        }
+      ],
+      "components/BrowserModal.tsx": [
+        {
+          "file": "components/BrowserModal.tsx",
+          "styleKeyOrLocation": "pageTitle (StyleSheet, line 1478)",
+          "visibleText": "page title shown below domain in browser URL bar",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Caption text the user reads to identify the page"
+        },
+        {
+          "file": "components/BrowserModal.tsx",
+          "styleKeyOrLocation": "errorDescription (StyleSheet, line 1529)",
+          "visibleText": "error description text e.g. 'Error 404'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Readable body/description text shown in the error state"
+        },
+        {
+          "file": "components/BrowserModal.tsx",
+          "styleKeyOrLocation": "splashText (StyleSheet, line 1559)",
+          "visibleText": "Loading app...",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Readable status text shown to the user while loading"
+        },
+        {
+          "file": "components/BrowserModal.tsx",
+          "styleKeyOrLocation": "farcasterModalMessage (StyleSheet, line 1623)",
+          "visibleText": "This app requires a Farcaster account to function properly. You can import your Farcaster account in Settings, or continue with limited functionality.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Multi-sentence modal body text the user must read to make a decision"
+        },
+        {
+          "file": "components/BrowserModal.tsx",
+          "styleKeyOrLocation": "continueAnywayText (StyleSheet, line 1642)",
+          "visibleText": "Continue Anyway",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Tappable link/button text that the user must read and act on"
+        },
+        {
+          "file": "components/BrowserModal.tsx",
+          "styleKeyOrLocation": "composeCancel (StyleSheet, line 1670)",
+          "visibleText": "Cancel",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Button label text in the compose header"
+        },
+        {
+          "file": "components/BrowserModal.tsx",
+          "styleKeyOrLocation": "embedText (StyleSheet, line 1724)",
+          "visibleText": "embed URL string shown in compose embed chips",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Readable URL label/caption in embed preview chips"
+        },
+        {
+          "file": "components/BrowserModal.tsx",
+          "styleKeyOrLocation": "composeCharCount (StyleSheet, line 1749)",
+          "visibleText": "0/320",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Meaningful character counter the user watches to stay within the limit"
+        },
+        {
+          "file": "components/BrowserModal.tsx",
+          "styleKeyOrLocation": "walletSelectorSubtitle (StyleSheet, line 1821)",
+          "visibleText": "Choose which wallet to use with this app",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Description/subtitle text the user reads to understand the wallet selector"
+        },
+        {
+          "file": "components/BrowserModal.tsx",
+          "styleKeyOrLocation": "walletOptionAddress (StyleSheet, line 1855)",
+          "visibleText": "0xabc123...def456 (shortened wallet address)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Metadata the user reads to identify and distinguish their wallets"
+        }
+      ],
+      "components/Call/InCallScreen.tsx": [
+        {
+          "file": "components/Call/InCallScreen.tsx",
+          "styleKeyOrLocation": "inline { color: theme.colors.textMuted } on duration Text in video remote placeholder (line 116)",
+          "visibleText": "Connecting... / MM:SS timer",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Status/timer text the user reads to track call state and duration"
+        },
+        {
+          "file": "components/Call/InCallScreen.tsx",
+          "styleKeyOrLocation": "inline { color: theme.colors.textMuted } on duration Text in audio layout (line 192)",
+          "visibleText": "Connecting... / MM:SS timer",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Status/timer text the user reads to track call state and duration"
+        },
+        {
+          "file": "components/Call/InCallScreen.tsx",
+          "styleKeyOrLocation": "inline { color: theme.colors.textMuted } on controlLabel Text 'Unmute'/'Mute' (line 212)",
+          "visibleText": "Unmute / Mute",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Button label text the user reads to identify a call control"
+        },
+        {
+          "file": "components/Call/InCallScreen.tsx",
+          "styleKeyOrLocation": "inline { color: theme.colors.textMuted } on controlLabel Text 'Speaker' (line 229)",
+          "visibleText": "Speaker",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Button label text the user reads to identify a call control"
+        }
+      ],
+      "components/Call/IncomingCallScreen.tsx": [
+        {
+          "file": "components/Call/IncomingCallScreen.tsx",
+          "styleKeyOrLocation": "inline { color: theme.colors.textMuted } on callType Text (line 41)",
+          "visibleText": "Incoming video call / Incoming audio call",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Descriptive subtitle text identifying the call type that the user reads"
+        }
+      ],
+      "components/Call/OutgoingCallScreen.tsx": [
+        {
+          "file": "components/Call/OutgoingCallScreen.tsx",
+          "styleKeyOrLocation": "inline { color: theme.colors.textMuted } on statusText Animated.Text (line 46)",
+          "visibleText": "Connecting... / Ringing...",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Status text the user reads to understand the outgoing call state"
+        }
+      ],
+      "components/Call/SpaceCallScreen.tsx": [
+        {
+          "file": "components/Call/SpaceCallScreen.tsx",
+          "styleKeyOrLocation": "inline { color: theme.colors.textMuted } on audioTopBarParticipants Text (line 267)",
+          "visibleText": "participant count e.g. '3'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Meaningful count the user reads to see how many people are in the call"
+        },
+        {
+          "file": "components/Call/SpaceCallScreen.tsx",
+          "styleKeyOrLocation": "inline { color: theme.colors.textMuted } on avatarLabel Text (line 289)",
+          "visibleText": "Waiting...",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state status text the user reads when no participants have joined"
+        },
+        {
+          "file": "components/Call/SpaceCallScreen.tsx",
+          "styleKeyOrLocation": "inline { color: theme.colors.textMuted } on controlLabel Text 'Unmute'/'Mute' (line 339)",
+          "visibleText": "Unmute / Mute",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Button label text the user reads to identify a call control"
+        },
+        {
+          "file": "components/Call/SpaceCallScreen.tsx",
+          "styleKeyOrLocation": "inline { color: theme.colors.textMuted } on controlLabel Text 'Video' (line 356)",
+          "visibleText": "Video",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Button label text the user reads to identify a call control"
+        },
+        {
+          "file": "components/Call/SpaceCallScreen.tsx",
+          "styleKeyOrLocation": "inline { color: theme.colors.textMuted } on controlLabel Text 'Speaker' (line 373)",
+          "visibleText": "Speaker",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Button label text the user reads to identify a call control"
+        }
+      ],
+      "components/Chat/MessageInput.tsx": [
+        {
+          "file": "components/Chat/MessageInput.tsx",
+          "styleKeyOrLocation": "emojiSectionTitle (StyleSheet key, line ~1503-1508)",
+          "visibleText": "Custom / Stickers / Emoji / Recent / Smileys …",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "section header labels the user reads to navigate emoji categories"
+        },
+        {
+          "file": "components/Chat/MessageInput.tsx",
+          "styleKeyOrLocation": "emptyText (StyleSheet key, line ~1542-1547)",
+          "visibleText": "No results found / No custom emoji / No stickers / No recent emojis",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state message the user must read"
+        }
+      ],
+      "app/(tabs)/spaces/index.tsx": [
+        {
+          "file": "app/(tabs)/spaces/index.tsx",
+          "styleKeyOrLocation": "emptySubtitle (StyleSheet key, line ~314)",
+          "visibleText": "Try a different search / Join or create a space to get started",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state description text the user must read"
+        },
+        {
+          "file": "app/(tabs)/spaces/index.tsx",
+          "styleKeyOrLocation": "rowTime (StyleSheet key, line ~345)",
+          "visibleText": "e.g. '2:34 PM', 'Yesterday', 'Mon'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "timestamp metadata label carrying meaningful information on each space row"
+        },
+        {
+          "file": "app/(tabs)/spaces/index.tsx",
+          "styleKeyOrLocation": "rowSubtitle (StyleSheet key, line ~347)",
+          "visibleText": "e.g. '3 channels'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "secondary descriptor text the user reads to understand the space"
+        }
+      ],
+      "components/WarpcastWalletImportModal.tsx": [
+        {
+          "file": "components/WarpcastWalletImportModal.tsx",
+          "styleKeyOrLocation": "infoText (StyleSheet key, line ~476-480)",
+          "visibleText": "Copy your recovery phrase below, then tap \"Paste & Import\".",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "instructional body text the user must read to complete the import flow"
+        },
+        {
+          "file": "components/WarpcastWalletImportModal.tsx",
+          "styleKeyOrLocation": "statusText (StyleSheet key, line ~503-507)",
+          "visibleText": "Checking wallet status... / Your Warpcast wallet is ready to import to Quorum. / Importing wallet...",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "status/description text the user reads to understand the current operation state"
+        },
+        {
+          "file": "components/WarpcastWalletImportModal.tsx",
+          "styleKeyOrLocation": "addressLabel (StyleSheet key, line ~529-531)",
+          "visibleText": "Wallet Address",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "field label identifying the wallet address the user reads before taking action"
+        },
+        {
+          "file": "components/WarpcastWalletImportModal.tsx",
+          "styleKeyOrLocation": "skipButtonText (StyleSheet key, line ~557-559)",
+          "visibleText": "Maybe Later",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "button/link text the user taps to dismiss — needs to be readable"
+        }
+      ],
+      "components/Chat/ReactionDetailsModal.tsx": [
+        {
+          "file": "components/Chat/ReactionDetailsModal.tsx",
+          "styleKeyOrLocation": "empty (StyleSheet key, line ~240-244)",
+          "visibleText": "No reactions yet",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state message the user reads"
+        }
+      ],
+      "components/Chat/ChannelSettingsSheet.tsx": [
+        {
+          "file": "components/Chat/ChannelSettingsSheet.tsx",
+          "styleKeyOrLocation": "createSectionLabel (StyleSheet key, line ~597-602)",
+          "visibleText": "Group",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "section label the user reads to understand the group-selector field in create mode"
+        },
+        {
+          "file": "components/Chat/ChannelSettingsSheet.tsx",
+          "styleKeyOrLocation": "groupChipText (StyleSheet key, line ~618-621)",
+          "visibleText": "group name chips (e.g. 'General', 'Announcements')",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "inactive chip labels are still readable navigation targets the user taps to select a group"
+        }
+      ],
+      "app/(tabs)/spaces/discover.tsx": [
+        {
+          "file": "app/(tabs)/spaces/discover.tsx",
+          "styleKeyOrLocation": "emptySubtitle (StyleSheet)",
+          "visibleText": "No public spaces in this category yet / Try a different search",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state subtitle text the user reads; too pale in light mode"
+        },
+        {
+          "file": "app/(tabs)/spaces/discover.tsx",
+          "styleKeyOrLocation": "cardCategory (StyleSheet)",
+          "visibleText": "community · 42 members",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Category and member-count metadata label the user reads on each card"
+        },
+        {
+          "file": "app/(tabs)/spaces/discover.tsx",
+          "styleKeyOrLocation": "cardDescription (StyleSheet)",
+          "visibleText": "space description text",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Body description text the user reads to decide whether to join"
+        },
+        {
+          "file": "app/(tabs)/spaces/discover.tsx",
+          "styleKeyOrLocation": "joinedButtonText (StyleSheet)",
+          "visibleText": "Open",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Button label text on the joined-space action button"
+        }
+      ],
+      "components/Chat/SpaceChatArea.tsx": [
+        {
+          "file": "components/Chat/SpaceChatArea.tsx",
+          "styleKeyOrLocation": "inline style color on Text (lines 716-719, Farcaster-required banner)",
+          "visibleText": "Linked to /{channel}. Connect Farcaster in your profile to see casts here.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Informational banner text the user must read to understand why casts are missing"
+        },
+        {
+          "file": "components/Chat/SpaceChatArea.tsx",
+          "styleKeyOrLocation": "readOnlyBannerText (StyleSheet)",
+          "visibleText": "You cannot post in this channel / mute-remaining text",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Status/info text the user must read to understand why the composer is disabled"
+        }
+      ],
+      "components/WalletModal.tsx": [
+        {
+          "file": "components/WalletModal.tsx",
+          "styleKeyOrLocation": "infoText (StyleSheet)",
+          "visibleText": "These addresses are derived from your Quorum seed phrase. You can use them to receive tokens on any supported chain.",
+          "classification": "misused",
+          "replacement": "textMain",
+          "reason": "Multi-sentence instructional text in a primary-tinted info callout box; textSubtle #818181 on a colored background is still marginal so textMain is the safer choice"
+        }
+      ],
+      "components/Chat/MessagesList.tsx": [
+        {
+          "file": "components/Chat/MessagesList.tsx",
+          "styleKeyOrLocation": "messageTime (StyleSheet)",
+          "visibleText": "12:34 PM",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Timestamp metadata that users read; should be secondary but still legible in light mode"
+        },
+        {
+          "file": "components/Chat/MessagesList.tsx",
+          "styleKeyOrLocation": "loadingText (StyleSheet)",
+          "visibleText": "Loading messages...",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Status text the user reads while waiting"
+        },
+        {
+          "file": "components/Chat/MessagesList.tsx",
+          "styleKeyOrLocation": "errorDetail (StyleSheet)",
+          "visibleText": "error detail message",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Error detail body text the user reads to diagnose the issue"
+        },
+        {
+          "file": "components/Chat/MessagesList.tsx",
+          "styleKeyOrLocation": "emptySubtext (StyleSheet)",
+          "visibleText": "Be the first to say something!",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state helper text the user reads"
+        },
+        {
+          "file": "components/Chat/MessagesList.tsx",
+          "styleKeyOrLocation": "systemMessageText (StyleSheet)",
+          "visibleText": "User joined / User left / User was kicked",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "System event description text users read in the message stream"
+        },
+        {
+          "file": "components/Chat/MessagesList.tsx",
+          "styleKeyOrLocation": "systemMessageTime (StyleSheet)",
+          "visibleText": "12:34 PM (system event timestamp)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Timestamp on system events; readable metadata"
+        },
+        {
+          "file": "components/Chat/MessagesList.tsx",
+          "styleKeyOrLocation": "deletedMessageText (StyleSheet)",
+          "visibleText": "[deleted message placeholder]",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Placeholder text in the message stream that users read to understand a message was deleted"
+        },
+        {
+          "file": "components/Chat/MessagesList.tsx",
+          "styleKeyOrLocation": "editedIndicator (StyleSheet)",
+          "visibleText": "(edited)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Inline indicator users read to know a message was edited"
+        },
+        {
+          "file": "components/Chat/MessagesList.tsx",
+          "styleKeyOrLocation": "replyIndicatorText (StyleSheet)",
+          "visibleText": "AuthorName: reply preview text",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Reply-thread preview showing author and content, readable navigation context"
+        },
+        {
+          "file": "components/Chat/MessagesList.tsx",
+          "styleKeyOrLocation": "reactionCount (StyleSheet)",
+          "visibleText": "3",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Reaction count number users read to gauge engagement"
+        },
+        {
+          "file": "components/Chat/MessagesList.tsx",
+          "styleKeyOrLocation": "stickerPlaceholderText (StyleSheet)",
+          "visibleText": "[Sticker]",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Placeholder text shown when a sticker cannot be rendered; user reads it to understand missing content"
+        }
+      ],
+      "components/Chat/PinnedMessagesPanel.tsx": [
+        {
+          "file": "components/Chat/PinnedMessagesPanel.tsx",
+          "styleKeyOrLocation": "emptySubtext (StyleSheet)",
+          "visibleText": "Pin important messages so they're easy to find",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state helper description text the user reads"
+        },
+        {
+          "file": "components/Chat/PinnedMessagesPanel.tsx",
+          "styleKeyOrLocation": "messageTime (StyleSheet)",
+          "visibleText": "12:34 PM (timestamp on pinned message row)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Timestamp metadata users read on pinned message rows"
+        },
+        {
+          "file": "components/Chat/PinnedMessagesPanel.tsx",
+          "styleKeyOrLocation": "unpinText (StyleSheet)",
+          "visibleText": "Unpin",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Button/action label text the user taps and reads"
+        }
+      ],
+      "components/Chat/ChannelManagerRolePickerSheet.tsx": [
+        {
+          "file": "components/Chat/ChannelManagerRolePickerSheet.tsx",
+          "styleKeyOrLocation": "subtitle (StyleSheet)",
+          "visibleText": "Members of selected roles can post, delete, and pin messages in this read-only channel.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Multi-sentence description text the user must read to understand the sheet's purpose"
+        }
+      ],
+      "components/Chat/SpaceCallBubble.tsx": [
+        {
+          "file": "components/Chat/SpaceCallBubble.tsx",
+          "styleKeyOrLocation": "participantCount (StyleSheet key)",
+          "visibleText": "3 participants",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "participant count metadata the user reads in the active call bubble"
+        },
+        {
+          "file": "components/Chat/SpaceCallBubble.tsx",
+          "styleKeyOrLocation": "endedText (StyleSheet key)",
+          "visibleText": "Voice call · 2:34",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "ended-call summary text the user reads"
+        }
+      ],
+      "components/Chat/SearchBar.tsx": [
+        {
+          "file": "components/Chat/SearchBar.tsx",
+          "styleKeyOrLocation": "resultCount (StyleSheet key)",
+          "visibleText": "3 results",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "search result count label the user reads to understand search state"
+        }
+      ],
+      "components/Chat/DirectMessagesList.tsx": [
+        {
+          "file": "components/Chat/DirectMessagesList.tsx",
+          "styleKeyOrLocation": "timestamp (StyleSheet key)",
+          "visibleText": "Yesterday at 3:45 PM",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "timestamp metadata label the user reads in each conversation row"
+        },
+        {
+          "file": "components/Chat/DirectMessagesList.tsx",
+          "styleKeyOrLocation": "messagePreview (StyleSheet key)",
+          "visibleText": "Alice: Hey there…",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "message preview snippet — secondary body text the user reads to identify conversations"
+        },
+        {
+          "file": "components/Chat/DirectMessagesList.tsx",
+          "styleKeyOrLocation": "loadingText (StyleSheet key — dead, no JSX reference found)",
+          "visibleText": "",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "status helper text; would be readable user-facing text if rendered"
+        },
+        {
+          "file": "components/Chat/DirectMessagesList.tsx",
+          "styleKeyOrLocation": "errorDetail (StyleSheet key)",
+          "visibleText": "error.message string",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "error detail description text the user reads in the error state"
+        },
+        {
+          "file": "components/Chat/DirectMessagesList.tsx",
+          "styleKeyOrLocation": "emptySubtext (StyleSheet key)",
+          "visibleText": "Start a conversation to connect with others",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state body text the user reads"
+        }
+      ],
+      "components/MiniAppsModal.tsx": [
+        {
+          "file": "components/MiniAppsModal.tsx",
+          "styleKeyOrLocation": "loadingText (StyleSheet key)",
+          "visibleText": "Loading apps...",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "loading status text the user reads"
+        },
+        {
+          "file": "components/MiniAppsModal.tsx",
+          "styleKeyOrLocation": "errorText (StyleSheet key)",
+          "visibleText": "Failed to fetch apps (API error string)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "error message body text the user reads"
+        },
+        {
+          "file": "components/MiniAppsModal.tsx",
+          "styleKeyOrLocation": "appDescription (StyleSheet key)",
+          "visibleText": "by John Doe / domain name",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "app description/subtitle text below app name that the user reads to identify apps"
+        },
+        {
+          "file": "components/MiniAppsModal.tsx",
+          "styleKeyOrLocation": "smallStatText (StyleSheet key — dead, no JSX reference found)",
+          "visibleText": "",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "stat metadata text; would be readable user-facing text if rendered"
+        },
+        {
+          "file": "components/MiniAppsModal.tsx",
+          "styleKeyOrLocation": "emptyStateText (StyleSheet key)",
+          "visibleText": "Try adjusting your search or filters / Apps you favorite on Farcaster or add here will show up. / Mini apps you open will appear here.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state descriptive body text the user reads"
+        }
+      ],
+      "components/InviteModal.tsx": [
+        {
+          "file": "components/InviteModal.tsx",
+          "styleKeyOrLocation": "subtitle (StyleSheet key)",
+          "visibleText": "Generate a link to invite others to this space",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "modal subtitle/description text the user reads"
+        },
+        {
+          "file": "components/InviteModal.tsx",
+          "styleKeyOrLocation": "infoText (StyleSheet key)",
+          "visibleText": "Generate a one-time use invite link. Each link can only be used by one person. / Generate a reusable public invite link. Anyone with this link can join.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "instructional body text the user must read to understand invite type behavior"
+        },
+        {
+          "file": "components/InviteModal.tsx",
+          "styleKeyOrLocation": "inviteTypeButtonText (StyleSheet key)",
+          "visibleText": "One-Time / Public Link",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "inactive toggle-pill labels that remain readable navigation targets"
+        }
+      ],
+      "components/Chat/BookmarksPanel.tsx": [
+        {
+          "file": "components/Chat/BookmarksPanel.tsx",
+          "styleKeyOrLocation": "emptySubtext (StyleSheet, line 186)",
+          "visibleText": "Long press a message and tap Bookmark to save it here",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Helper/hint text the user is meant to read in the empty state"
+        },
+        {
+          "file": "components/Chat/BookmarksPanel.tsx",
+          "styleKeyOrLocation": "bookmarkSource (StyleSheet, line 232)",
+          "visibleText": "bookmark.cachedPreview?.sourceName (source channel/space name)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Metadata label identifying where a bookmark came from — a readable navigation cue"
+        },
+        {
+          "file": "components/Chat/BookmarksPanel.tsx",
+          "styleKeyOrLocation": "bookmarkDate (StyleSheet, line 243)",
+          "visibleText": "formatted message date/time string",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Timestamp metadata the user reads to orient a bookmark in time"
+        }
+      ],
+      "components/MiniAppApprovalModal.tsx": [
+        {
+          "file": "components/MiniAppApprovalModal.tsx",
+          "styleKeyOrLocation": "appName (StyleSheet, line 357)",
+          "visibleText": "request.appName (e.g. app name string)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Label identifying the requesting app — information the user must read to make a trust decision"
+        },
+        {
+          "file": "components/MiniAppApprovalModal.tsx",
+          "styleKeyOrLocation": "simCheckingText (StyleSheet, line 383)",
+          "visibleText": "Checking transaction…",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Status text the user reads while waiting for the simulation result"
+        },
+        {
+          "file": "components/MiniAppApprovalModal.tsx",
+          "styleKeyOrLocation": "detailLabel (StyleSheet, line 420)",
+          "visibleText": "Network / To / Value / Data / Gas Limit / Account / Message / Domain / Type / Data",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Field labels in a transaction/signing detail panel — the user must read these to understand what they are approving"
+        }
+      ],
+      "components/HypersnapSignerPromptModal.tsx": [
+        {
+          "file": "components/HypersnapSignerPromptModal.tsx",
+          "styleKeyOrLocation": "subtitle (StyleSheet, line 101–104)",
+          "visibleText": "Create a Hypersnap signer to post and react through Quilibrium's hub. Eligible activity earns $SNAP rewards. You can revoke the signer at any time.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Multi-sentence body/description text the user is meant to read before making a decision"
+        },
+        {
+          "file": "components/HypersnapSignerPromptModal.tsx",
+          "styleKeyOrLocation": "optionDesc (StyleSheet, line 152–154)",
+          "visibleText": "We'll register an Ed25519 signer keyed to your Farcaster account. Posts, reactions, and profile edits flow through Hypersnap and earn $SNAP. Falls back automatically if Hypersnap is unavailable. / Keep using farcaster.xyz for posts and reactions. No signer is created. You can opt in any time from Settings.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Option description text in a choice modal — multi-sentence body text users must read to make an informed selection"
+        },
+        {
+          "file": "components/HypersnapSignerPromptModal.tsx",
+          "styleKeyOrLocation": "footer (StyleSheet, line 156–160)",
+          "visibleText": "You can change this in Settings.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Informational footer hint the user is meant to read"
+        }
+      ],
+      "app/(tabs)/profile/index.tsx": [
+        {
+          "file": "app/(tabs)/profile/index.tsx",
+          "styleKeyOrLocation": "emptySubtitle (StyleSheet, line 436)",
+          "visibleText": "New mentions, replies, and chat messages will show up here. / Sign in with Farcaster in your profile to see mentions and replies here too.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state description text — multi-sentence helper text users read in an empty notifications screen"
+        },
+        {
+          "file": "app/(tabs)/profile/index.tsx",
+          "styleKeyOrLocation": "locationChannel (StyleSheet, line 495)",
+          "visibleText": "#channel-name (breadcrumb appended to space name in Quorum notification rows)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Readable navigation breadcrumb (channel name) the user needs to identify where a mention occurred; an inactive-but-readable label"
+        },
+        {
+          "file": "app/(tabs)/profile/index.tsx",
+          "styleKeyOrLocation": "sectionHeaderLabel (StyleSheet, line 521)",
+          "visibleText": "Mentions & replies / Farcaster",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Section header label the user reads to distinguish notification categories"
+        },
+        {
+          "file": "app/(tabs)/profile/index.tsx",
+          "styleKeyOrLocation": "subtitle (StyleSheet, line 524)",
+          "visibleText": "item.body — notification body preview text",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Notification body preview text — secondary readable content in each notification row"
+        },
+        {
+          "file": "app/(tabs)/profile/index.tsx",
+          "styleKeyOrLocation": "time (StyleSheet, line 529)",
+          "visibleText": "formatted timestamp (e.g. '2h ago')",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Timestamp metadata that carries meaning — users read it to assess notification recency"
+        }
+      ],
+      "components/CastComposeModal.tsx": [
+        {
+          "file": "components/CastComposeModal.tsx",
+          "styleKeyOrLocation": "cancelText (StyleSheet, line 213)",
+          "visibleText": "Cancel",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Button/link text — 'Cancel' is a tappable navigation action that the user must be able to read clearly"
+        },
+        {
+          "file": "components/CastComposeModal.tsx",
+          "styleKeyOrLocation": "charCount (StyleSheet, line 280)",
+          "visibleText": "{text.length}/{MAX_LENGTH} (e.g. '42/320')",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Character counter that carries meaning — users read it to stay within the limit"
+        }
+      ],
+      "components/ListNameModal.tsx": [
+        {
+          "file": "components/ListNameModal.tsx",
+          "styleKeyOrLocation": "tokenButtonText (StyleSheet, line 422)",
+          "visibleText": "wQUIL / USDC (inactive token pill labels)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Inactive segment/pill labels that remain readable navigation targets — the user reads them to choose a token"
+        },
+        {
+          "file": "components/ListNameModal.tsx",
+          "styleKeyOrLocation": "sectionDescription (StyleSheet, line 386)",
+          "visibleText": "Enter the Ethereum address where you want to receive payment when your name sells.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Helper/instruction text the user must read to complete the form correctly"
+        },
+        {
+          "file": "components/ListNameModal.tsx",
+          "styleKeyOrLocation": "feeLabel (StyleSheet, line 441)",
+          "visibleText": "You receive (99%) / Marketplace fee (1%)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Fee breakdown labels — financial metadata the user reads to understand what they will receive"
+        },
+        {
+          "file": "components/ListNameModal.tsx",
+          "styleKeyOrLocation": "feeValueMuted (StyleSheet, line 451)",
+          "visibleText": "{feeAmount} {priceToken} (e.g. '0.05 wQUIL')",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Marketplace fee value — a numeric figure the user reads to understand the cost breakdown"
+        },
+        {
+          "file": "components/ListNameModal.tsx",
+          "styleKeyOrLocation": "infoText (StyleSheet, line 484)",
+          "visibleText": "Your name will be listed on the QNS marketplace. When purchased, ownership will automatically transfer to the buyer and payment will be sent to your specified address.",
+          "classification": "misused",
+          "replacement": "textMain",
+          "reason": "Multi-sentence info-box body text on a tinted (primary+15) background — textSubtle (#818181) would be marginal contrast on the blue-tinted surface; textMain is safer"
+        }
+      ],
+      "components/ProfileSplitModeModal.tsx": [
+        {
+          "file": "components/ProfileSplitModeModal.tsx",
+          "styleKeyOrLocation": "subtitle (StyleSheet key, line 88)",
+          "visibleText": "You can manage your Quorum and Farcaster profiles independently, or treat them as one. Fname and QNS usernames always stay in their own system.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Introductory description text the user must read to make a choice"
+        },
+        {
+          "file": "components/ProfileSplitModeModal.tsx",
+          "styleKeyOrLocation": "optionDesc (StyleSheet key, line 122)",
+          "visibleText": "Keep a different name, avatar, and bio for each. You pick which one you're editing each time. / Your name, avatar, and bio are made the same on both…",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Option description body text the user reads to decide between choices"
+        },
+        {
+          "file": "components/ProfileSplitModeModal.tsx",
+          "styleKeyOrLocation": "footer (StyleSheet key, line 127)",
+          "visibleText": "You can change this any time from the Farcaster section of your profile.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Instructional helper text the user should be able to read"
+        }
+      ],
+      "components/KickUserModal.tsx": [
+        {
+          "file": "components/KickUserModal.tsx",
+          "styleKeyOrLocation": "userAddress (StyleSheet key, line 202)",
+          "visibleText": "{truncateAddress(userAddress)}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Truncated address identifying the target user — carries meaningful identity information"
+        }
+      ],
+      "components/Chat/EmojiPicker.tsx": [
+        {
+          "file": "components/Chat/EmojiPicker.tsx",
+          "styleKeyOrLocation": "emptyText (StyleSheet key, line 650)",
+          "visibleText": "No recent emojis / No custom emojis / No emojis found",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state text the user reads to understand there are no results"
+        }
+      ],
+      "components/wallet/WalletSelector.tsx": [
+        {
+          "file": "components/wallet/WalletSelector.tsx",
+          "styleKeyOrLocation": "walletAddress (StyleSheet key, line 104)",
+          "visibleText": "{truncateAddress(activeWallet?.address || '')}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Truncated wallet address displayed as metadata label the user reads to identify the active wallet"
+        }
+      ],
+      "components/ProfileModal.tsx": [
+        {
+          "file": "components/ProfileModal.tsx",
+          "styleKeyOrLocation": "inline Text at line 181 (CallScreeningSection)",
+          "visibleText": "Only ring for people you have a conversation with",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Setting description text the user reads to understand the toggle"
+        },
+        {
+          "file": "components/ProfileModal.tsx",
+          "styleKeyOrLocation": "inline Text at line 213 (DevModeSection)",
+          "visibleText": "{isLocal ? config.baseUrl : 'Connects to production'}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Setting description/status text the user reads to understand the current API mode"
+        },
+        {
+          "file": "components/ProfileModal.tsx",
+          "styleKeyOrLocation": "inline Text at line 276 (OtaUpdateSection)",
+          "visibleText": "Current",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Row label identifying the current-version field — the user reads it to understand the adjacent value"
+        },
+        {
+          "file": "components/ProfileModal.tsx",
+          "styleKeyOrLocation": "inline Text at line 283 (OtaUpdateSection)",
+          "visibleText": "Latest",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Row label identifying the latest-version field — the user reads it to understand the adjacent value"
+        },
+        {
+          "file": "components/ProfileModal.tsx",
+          "styleKeyOrLocation": "inline Text at line 2437 (Farcaster section)",
+          "visibleText": "Post and react through Quilibrium's hub to earn $SNAP",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Setting description text the user reads to understand the Hypersnap Signer toggle"
+        },
+        {
+          "file": "components/ProfileModal.tsx",
+          "styleKeyOrLocation": "userId (StyleSheet key, line 3019)",
+          "visibleText": "{truncateAddress(user.address)}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Truncated user address shown under the username in the profile header — identifying metadata the user reads"
+        },
+        {
+          "file": "components/ProfileModal.tsx",
+          "styleKeyOrLocation": "apexLockNote (StyleSheet key, line 3202)",
+          "visibleText": "Supported spaces are locked until your next renewal.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Informational note about Apex subscription state that the user needs to read"
+        },
+        {
+          "file": "components/ProfileModal.tsx",
+          "styleKeyOrLocation": "countdownDate (StyleSheet key, line 3271)",
+          "visibleText": "January 7, 2026 at 14:00 UTC",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Informational date text the user reads to know when QNS launches"
+        },
+        {
+          "file": "components/ProfileModal.tsx",
+          "styleKeyOrLocation": "farcasterFid (StyleSheet key, line 3598)",
+          "visibleText": "FID: {user.farcaster.fid} / wallet address preview",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Secondary identity metadata (Farcaster FID, wallet address) the user reads to confirm which account is connected"
+        },
+        {
+          "file": "components/ProfileModal.tsx",
+          "styleKeyOrLocation": "deviceLoadingText (StyleSheet key, line 3706)",
+          "visibleText": "Loading devices...",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Loading state text the user reads to understand the UI is fetching device data"
+        }
+      ],
+      "components/MuteUserModal.tsx": [
+        {
+          "file": "components/MuteUserModal.tsx",
+          "styleKeyOrLocation": "userAddress (StyleSheet key, line 224)",
+          "visibleText": "{truncateAddress(userAddress)}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Truncated address identifying the target user — meaningful identity metadata the user reads"
+        }
+      ],
+      "app/(tabs)/messages/index.tsx": [
+        {
+          "file": "app/(tabs)/messages/index.tsx",
+          "styleKeyOrLocation": "subtitle",
+          "visibleText": "last message preview text (e.g. 'Hey, are you around?')",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "last-message preview is readable secondary text the user scans to choose a conversation"
+        },
+        {
+          "file": "app/(tabs)/messages/index.tsx",
+          "styleKeyOrLocation": "subtitlePlaceholder",
+          "visibleText": "No messages yet",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "readable empty-state label inside a conversation row"
+        },
+        {
+          "file": "app/(tabs)/messages/index.tsx",
+          "styleKeyOrLocation": "time",
+          "visibleText": "relative timestamp (e.g. 'Yesterday', '3:42 PM')",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "timestamp metadata the user reads to gauge recency"
+        },
+        {
+          "file": "app/(tabs)/messages/index.tsx",
+          "styleKeyOrLocation": "emptySubtitle",
+          "visibleText": "Start a conversation to see it here / Try a different search",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state helper sentence the user must read"
+        },
+        {
+          "file": "app/(tabs)/messages/index.tsx",
+          "styleKeyOrLocation": "spacesRailTitle",
+          "visibleText": "spaces rail section title (uppercase label)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "section header label (dead style but still misclassified)"
+        },
+        {
+          "file": "app/(tabs)/messages/index.tsx",
+          "styleKeyOrLocation": "spacesRailCount",
+          "visibleText": "spaces count label",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "count label the user reads (dead style but still misclassified)"
+        },
+        {
+          "file": "app/(tabs)/messages/index.tsx",
+          "styleKeyOrLocation": "spaceTileName",
+          "visibleText": "space name under tile avatar",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "readable space name label (dead style but still misclassified)"
+        }
+      ],
+      "components/Chat/EditHistoryModal.tsx": [
+        {
+          "file": "components/Chat/EditHistoryModal.tsx",
+          "styleKeyOrLocation": "editTimestamp",
+          "visibleText": "edit timestamp (e.g. '3:42 PM')",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "timestamp on each edit card is metadata the user reads to understand the edit history timeline"
+        }
+      ],
+      "components/wallet/TipModal.tsx": [
+        {
+          "file": "components/wallet/TipModal.tsx",
+          "styleKeyOrLocation": "inputLabel",
+          "visibleText": "Recipient / Token / Amount",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "form field labels the user reads to understand each section"
+        },
+        {
+          "file": "components/wallet/TipModal.tsx",
+          "styleKeyOrLocation": "recipientAddress",
+          "visibleText": "@username • 0x1234…abcd",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "readable recipient address/username metadata shown under the recipient name"
+        },
+        {
+          "file": "components/wallet/TipModal.tsx",
+          "styleKeyOrLocation": "assetBalance",
+          "visibleText": "0.5 on Base",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "readable token balance and chain metadata in the token picker rows"
+        },
+        {
+          "file": "components/wallet/TipModal.tsx",
+          "styleKeyOrLocation": "placeholderText",
+          "visibleText": "Select a token",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "readable prompt text inside the token selector button (not a native TextInput placeholder)"
+        },
+        {
+          "file": "components/wallet/TipModal.tsx",
+          "styleKeyOrLocation": "emptyAssetsText",
+          "visibleText": "No EVM tokens in this wallet",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state message the user reads"
+        },
+        {
+          "file": "components/wallet/TipModal.tsx",
+          "styleKeyOrLocation": "amountSymbol",
+          "visibleText": "ETH (or selected token symbol)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "token symbol label to the right of the amount input is readable UI state"
+        },
+        {
+          "file": "components/wallet/TipModal.tsx",
+          "styleKeyOrLocation": "balanceHint",
+          "visibleText": "Available: 0.5 ETH",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "helper text showing available balance that the user reads before entering an amount"
+        }
+      ],
+      "components/shared/ActionSheet.tsx": [
+        {
+          "file": "components/shared/ActionSheet.tsx",
+          "styleKeyOrLocation": "message",
+          "visibleText": "secondary message under title (e.g. '0.5 ETH')",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "readable subtitle/description text in the sheet header"
+        },
+        {
+          "file": "components/shared/ActionSheet.tsx",
+          "styleKeyOrLocation": "sectionTitle",
+          "visibleText": "Spaces / Direct messages (uppercase section headers)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "section header labels the user reads to navigate grouped actions"
+        }
+      ],
+      "components/Chat/DMSettingsSheet.tsx": [
+        {
+          "file": "components/Chat/DMSettingsSheet.tsx",
+          "styleKeyOrLocation": "headerAddress",
+          "visibleText": "truncated address (e.g. '0x1234…abcd')",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "readable identification metadata shown under the recipient name"
+        }
+      ],
+      "components/wallet/SwapModal.tsx": [
+        {
+          "file": "components/wallet/SwapModal.tsx",
+          "styleKeyOrLocation": "swapLabel",
+          "visibleText": "You pay / You receive",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "section labels the user reads to understand which side of the swap they are configuring"
+        },
+        {
+          "file": "components/wallet/SwapModal.tsx",
+          "styleKeyOrLocation": "swapAmountPlaceholder",
+          "visibleText": "0",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "read-only output Text element showing '0' when no quote exists — not a native placeholder, it is rendered text the user reads"
+        },
+        {
+          "file": "components/wallet/SwapModal.tsx",
+          "styleKeyOrLocation": "balanceText",
+          "visibleText": "Balance: 0.5 ETH",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "readable balance metadata below the sell input"
+        },
+        {
+          "file": "components/wallet/SwapModal.tsx",
+          "styleKeyOrLocation": "assetBalance",
+          "visibleText": "0.5 on Base",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "readable token balance and chain info in asset picker rows"
+        },
+        {
+          "file": "components/wallet/SwapModal.tsx",
+          "styleKeyOrLocation": "contractAddress",
+          "visibleText": "truncated contract address (e.g. '0x1234…abcd')",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "informational contract address shown so the user can verify the token"
+        },
+        {
+          "file": "components/wallet/SwapModal.tsx",
+          "styleKeyOrLocation": "noAssetsText",
+          "visibleText": "No verified tokens found / No swappable assets available",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state message the user reads"
+        },
+        {
+          "file": "components/wallet/SwapModal.tsx",
+          "styleKeyOrLocation": "quoteLabel",
+          "visibleText": "Rate / Network / Gas Fee / Route / Est. Time / Fee / Price Impact",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "quote detail labels the user reads to evaluate the swap before confirming"
+        },
+        {
+          "file": "components/wallet/SwapModal.tsx",
+          "styleKeyOrLocation": "manualEntryLabel",
+          "visibleText": "Chain / Contract Address / Symbol / Decimals",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "form field labels the user reads when entering a custom token"
+        }
+      ],
+      "components/NewConversationModal.tsx": [
+        {
+          "file": "components/NewConversationModal.tsx",
+          "styleKeyOrLocation": "resolvingText (line 400)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Status feedback text the user reads while a username lookup is in progress",
+          "visibleText": "Looking up @{usernameToResolve}..."
+        }
+      ],
+      "components/Chat/FarcasterCastCard.tsx": [
+        {
+          "file": "components/Chat/FarcasterCastCard.tsx",
+          "styleKeyOrLocation": "errorText (line 343)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Renders the raw URL string which the user reads to identify the failed link",
+          "visibleText": "{url}"
+        },
+        {
+          "file": "components/Chat/FarcasterCastCard.tsx",
+          "styleKeyOrLocation": "username (line 290)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Cast author @username is readable identifying metadata the user scans",
+          "visibleText": "@{cast.author.username}"
+        },
+        {
+          "file": "components/Chat/FarcasterCastCard.tsx",
+          "styleKeyOrLocation": "timestamp (line 294)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Relative timestamp (e.g. '2d') is readable metadata the user reads",
+          "visibleText": "{formatRelativeTime(cast.timestamp)}"
+        },
+        {
+          "file": "components/Chat/FarcasterCastCard.tsx",
+          "styleKeyOrLocation": "statText (line 327)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Engagement counts (replies, recasts, likes) are numeric metadata the user reads",
+          "visibleText": "reply/recast/like counts"
+        }
+      ],
+      "components/onboarding/MnemonicDisplayView.tsx": [
+        {
+          "file": "components/onboarding/MnemonicDisplayView.tsx",
+          "styleKeyOrLocation": "addressLabel (line 153)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Field label 'Your Address' that the user reads to identify the section",
+          "visibleText": "Your Address"
+        },
+        {
+          "file": "components/onboarding/MnemonicDisplayView.tsx",
+          "styleKeyOrLocation": "wordNumber (line 194)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Positional index numbers (1–24) inside each word chip that the user reads to verify word order",
+          "visibleText": "{index + 1}"
+        }
+      ],
+      "components/ReportModal.tsx": [
+        {
+          "file": "components/ReportModal.tsx",
+          "styleKeyOrLocation": "subtitle (line 233)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Multi-sentence instructional body text describing how to use the report form",
+          "visibleText": "Pick a reason and add detail if you'd like. Reports go to the Quorum moderation team."
+        }
+      ],
+      "components/wallet/ReceiveModal.tsx": [
+        {
+          "file": "components/wallet/ReceiveModal.tsx",
+          "styleKeyOrLocation": "qrPlaceholderText (line 235)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Label text 'QR Code' shown when the QR package is unavailable — readable fallback label",
+          "visibleText": "QR Code"
+        },
+        {
+          "file": "components/wallet/ReceiveModal.tsx",
+          "styleKeyOrLocation": "addressLabel (line 244)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Field label identifying the chain address type (e.g. 'EVM Address', 'Bitcoin Address') that the user reads",
+          "visibleText": "EVM Address / Bitcoin Address / etc."
+        },
+        {
+          "file": "components/wallet/ReceiveModal.tsx",
+          "styleKeyOrLocation": "infoText (line 274)",
+          "classification": "misused",
+          "replacement": "textMain",
+          "reason": "Multi-sentence informational body text sitting inside a primary-tinted callout box; textSubtle (#818181) would be marginal contrast on the tinted background",
+          "visibleText": "This address (Quorum Wallet) works for Ethereum, Base, Arbitrum, Optimism, Polygon, and all EVM-compatible chains."
+        }
+      ],
+      "components/onboarding/HexInputView.tsx": [
+        {
+          "file": "components/onboarding/HexInputView.tsx",
+          "styleKeyOrLocation": "charCount (line 258)",
+          "visibleText": "114 / 114 characters",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Character count metadata the user reads to know if their key is the right length — secondary label text, not a placeholder"
+        }
+      ],
+      "components/wallet/NFTDetailModal.tsx": [
+        {
+          "file": "components/wallet/NFTDetailModal.tsx",
+          "styleKeyOrLocation": "collectionLabel (line 224)",
+          "visibleText": "Collection",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Field label above the collection name that the user reads to understand the layout — secondary label text"
+        },
+        {
+          "file": "components/wallet/NFTDetailModal.tsx",
+          "styleKeyOrLocation": "sectionTitle (line 261)",
+          "visibleText": "Description / Details",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Section header labels the user reads to navigate the detail view — secondary label text"
+        },
+        {
+          "file": "components/wallet/NFTDetailModal.tsx",
+          "styleKeyOrLocation": "detailLabel (line 286)",
+          "visibleText": "Contract / Token ID / Standard",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Row labels identifying what the adjacent value means — secondary label text the user must read"
+        }
+      ],
+      "components/wallet/HistoryTab.tsx": [
+        {
+          "file": "components/wallet/HistoryTab.tsx",
+          "styleKeyOrLocation": "loadingText (line 409)",
+          "visibleText": "Updating...",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Status label the user reads to know the list is refreshing — informational text, not a placeholder"
+        },
+        {
+          "file": "components/wallet/HistoryTab.tsx",
+          "styleKeyOrLocation": "emptySubtitle (line 429)",
+          "visibleText": "Your transaction history will appear here / Fetching your transaction history",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state descriptive subtitle the user reads — body/hint text"
+        },
+        {
+          "file": "components/wallet/HistoryTab.tsx",
+          "styleKeyOrLocation": "transactionChain (line 482)",
+          "visibleText": "Ethereum / Base / etc.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Chain name badge label the user reads to identify which network a transaction occurred on — meaningful metadata"
+        },
+        {
+          "file": "components/wallet/HistoryTab.tsx",
+          "styleKeyOrLocation": "transactionTo (line 496)",
+          "visibleText": "To: 0x1234...abcd",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Recipient address text the user reads to verify a transaction destination — meaningful metadata"
+        },
+        {
+          "file": "components/wallet/HistoryTab.tsx",
+          "styleKeyOrLocation": "transactionTime (line 501)",
+          "visibleText": "2h ago / 3d ago / etc.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Timestamp metadata the user reads to understand when a transaction happened — meaningful secondary text"
+        }
+      ],
+      "components/qns/AuctionDetailModal.tsx": [
+        {
+          "file": "components/qns/AuctionDetailModal.tsx",
+          "styleKeyOrLocation": "countdownText (line 473)",
+          "visibleText": "2h 30m 15s / 1d 4h 12m / etc.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Countdown timer text the user reads to know how much time remains — meaningful time-sensitive information"
+        },
+        {
+          "file": "components/qns/AuctionDetailModal.tsx",
+          "styleKeyOrLocation": "sectionTitle (line 484)",
+          "visibleText": "Payment Network / Place Bid / Bid History",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Section header labels the user reads to navigate the auction detail modal — secondary label text"
+        },
+        {
+          "file": "components/qns/AuctionDetailModal.tsx",
+          "styleKeyOrLocation": "bidInfoLabel (line 502)",
+          "visibleText": "Current Bid / Starting Price / Bids / Instant Buy",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Row labels identifying bid data the user must read to understand the auction — secondary label text"
+        },
+        {
+          "file": "components/qns/AuctionDetailModal.tsx",
+          "styleKeyOrLocation": "balanceText (line 515)",
+          "visibleText": "Balance: 0 USDC",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Wallet balance hint the user reads before deciding how much to bid — informational helper text"
+        },
+        {
+          "file": "components/qns/AuctionDetailModal.tsx",
+          "styleKeyOrLocation": "bidInputToken (line 534)",
+          "visibleText": "USDC / ETH / etc.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Token symbol label inside the bid input row — secondary label text the user reads to know what denomination they are bidding in"
+        },
+        {
+          "file": "components/qns/AuctionDetailModal.tsx",
+          "styleKeyOrLocation": "bidHistoryAddress (line 571)",
+          "visibleText": "0x1234...5678",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Bidder address text the user reads in bid history to identify who placed each bid — meaningful metadata"
+        },
+        {
+          "file": "components/qns/AuctionDetailModal.tsx",
+          "styleKeyOrLocation": "noBidsText (line 588)",
+          "visibleText": "No bids yet",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state label the user reads to know there are no bids — informational text"
+        },
+        {
+          "file": "components/qns/AuctionDetailModal.tsx",
+          "styleKeyOrLocation": "resultSubtitle (line 619)",
+          "visibleText": "Payment failed error message",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Error description the user reads when payment fails — informational/helper text"
+        }
+      ],
+      "components/qns/AuctionsModal.tsx": [
+        {
+          "file": "components/qns/AuctionsModal.tsx",
+          "styleKeyOrLocation": "AuctionCountdown inline style — color prop (line 67, non-urgent branch)",
+          "visibleText": "2h 30m / 1d 4h / etc.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Countdown timer text the user reads to know auction time remaining — meaningful time-sensitive information"
+        },
+        {
+          "file": "components/qns/AuctionsModal.tsx",
+          "styleKeyOrLocation": "bidLabel (line 289)",
+          "visibleText": "Current bid / Starting price",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Field label the user reads to understand what the displayed price represents — secondary label text"
+        },
+        {
+          "file": "components/qns/AuctionsModal.tsx",
+          "styleKeyOrLocation": "bidToken (line 306)",
+          "visibleText": "USDC / ETH / etc.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Token symbol label alongside the bid amount — secondary metadata the user reads to know the denomination"
+        },
+        {
+          "file": "components/qns/AuctionsModal.tsx",
+          "styleKeyOrLocation": "bidCount (line 313)",
+          "visibleText": "3 bids / 1 bid",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Bid count the user reads to gauge interest in an auction — meaningful metadata"
+        },
+        {
+          "file": "components/qns/AuctionsModal.tsx",
+          "styleKeyOrLocation": "emptySubtitle (line 334)",
+          "visibleText": "No auctions match \"…\" / Check back later for new auctions",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state descriptive subtitle the user reads — body/hint text"
+        }
+      ],
+      "components/wallet/AssetDetailModal.tsx": [
+        {
+          "file": "components/wallet/AssetDetailModal.tsx",
+          "styleKeyOrLocation": "inline <Text> in PriceChart chartPlaceholder (line 148)",
+          "visibleText": "No chart data available",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state message the user must read"
+        },
+        {
+          "file": "components/wallet/AssetDetailModal.tsx",
+          "styleKeyOrLocation": "inline <Text> price tooltip timestamp in PriceChart (line 333)",
+          "visibleText": "timestamp string e.g. '2:30 PM'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "timestamp label in tooltip that the user reads to understand the selected price"
+        },
+        {
+          "file": "components/wallet/AssetDetailModal.tsx",
+          "styleKeyOrLocation": "inline <Text> in CandleChart chartPlaceholder (line 395)",
+          "visibleText": "No candle data available",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state message the user must read"
+        },
+        {
+          "file": "components/wallet/AssetDetailModal.tsx",
+          "styleKeyOrLocation": "inline <Text> OHLC tooltip timestamp in CandleChart (line 577)",
+          "visibleText": "timestamp string e.g. 'Jan 5'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "timestamp in the OHLC tooltip the user reads to identify the selected candle"
+        },
+        {
+          "file": "components/wallet/AssetDetailModal.tsx",
+          "styleKeyOrLocation": "inline <Text> error state in chartContainer (line 887)",
+          "visibleText": "e.g. 'Price data unavailable'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "error/status message the user must read"
+        },
+        {
+          "file": "components/wallet/AssetDetailModal.tsx",
+          "styleKeyOrLocation": "inline <Text> fallback empty state in chartContainer (line 906)",
+          "visibleText": "No chart data",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state message the user must read"
+        }
+      ],
+      "components/qns/CreateAuctionModal.tsx": [
+        {
+          "file": "components/qns/CreateAuctionModal.tsx",
+          "styleKeyOrLocation": "sectionTitle style (line 303)",
+          "visibleText": "Token / Starting Price / Instant Buy Price / Duration",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "form section header labels the user reads to understand fields"
+        },
+        {
+          "file": "components/qns/CreateAuctionModal.tsx",
+          "styleKeyOrLocation": "tokenOptionText style (line 326)",
+          "visibleText": "USDC / wQUIL",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "inactive token-selector pill labels that remain readable navigation targets"
+        },
+        {
+          "file": "components/qns/CreateAuctionModal.tsx",
+          "styleKeyOrLocation": "inputToken style (line 344)",
+          "visibleText": "USDC / wQUIL",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "currency unit label in the input row that the user reads to know which token they are pricing in"
+        },
+        {
+          "file": "components/qns/CreateAuctionModal.tsx",
+          "styleKeyOrLocation": "durationText style (line 364)",
+          "visibleText": "1 day / 2 days / 3 days / 7 days",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "inactive duration-selector pill labels that remain readable navigation targets"
+        },
+        {
+          "file": "components/qns/CreateAuctionModal.tsx",
+          "styleKeyOrLocation": "feeInfoText style (line 380)",
+          "visibleText": "Platform fee: X% of sale price",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "informational disclosure text the user must read before submitting"
+        }
+      ],
+      "components/qns/MakeOfferModal.tsx": [
+        {
+          "file": "components/qns/MakeOfferModal.tsx",
+          "styleKeyOrLocation": "sectionTitle style (line 265)",
+          "visibleText": "Token / Offer Amount / Expires In",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "form section header labels the user reads to understand fields"
+        },
+        {
+          "file": "components/qns/MakeOfferModal.tsx",
+          "styleKeyOrLocation": "tokenOptionText style (line 288)",
+          "visibleText": "USDC / wQUIL",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "inactive token-selector pill labels that remain readable navigation targets"
+        },
+        {
+          "file": "components/qns/MakeOfferModal.tsx",
+          "styleKeyOrLocation": "inputToken style (line 308)",
+          "visibleText": "USDC / wQUIL",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "currency unit label in the input row the user reads to confirm the token"
+        },
+        {
+          "file": "components/qns/MakeOfferModal.tsx",
+          "styleKeyOrLocation": "expiryText style (line 325)",
+          "visibleText": "1 day / 2 days / 3 days / 7 days",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "inactive expiry-selector pill labels that remain readable navigation targets"
+        },
+        {
+          "file": "components/qns/MakeOfferModal.tsx",
+          "styleKeyOrLocation": "feeInfoText style (line 337)",
+          "visibleText": "1% platform fee will be applied if the offer is accepted",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "informational disclosure text the user must read before submitting"
+        }
+      ],
+      "components/UserProfileModal.tsx": [
+        {
+          "file": "components/UserProfileModal.tsx",
+          "styleKeyOrLocation": "userId style (line 468)",
+          "visibleText": "truncated address e.g. '0x1234...abcd'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "truncated address label the user reads and taps to copy — carries identity meaning"
+        },
+        {
+          "file": "components/UserProfileModal.tsx",
+          "styleKeyOrLocation": "addRoleBadgeText style (line 556)",
+          "visibleText": "role tag name e.g. 'mod'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "role tag labels on assignable-role pills that the owner reads to pick a role"
+        }
+      ],
+      "components/qns/BuyNameModal.tsx": [
+        {
+          "file": "components/qns/BuyNameModal.tsx",
+          "styleKeyOrLocation": "sectionTitle style (line 397)",
+          "visibleText": "Payment Network / Payment Details",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "section header labels the user reads to understand form sections"
+        },
+        {
+          "file": "components/qns/BuyNameModal.tsx",
+          "styleKeyOrLocation": "priceLabel style (line 415)",
+          "visibleText": "Seller receives / Platform fee (X%) / Your balance",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "data labels in price breakdown that the user reads to understand costs"
+        },
+        {
+          "file": "components/qns/BuyNameModal.tsx",
+          "styleKeyOrLocation": "priceValueMuted style (line 438)",
+          "visibleText": "fee amount value e.g. '0.01 USDC'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "fee amount value in price breakdown the user reads to understand total cost"
+        },
+        {
+          "file": "components/qns/BuyNameModal.tsx",
+          "styleKeyOrLocation": "infoText style (line 469)",
+          "visibleText": "This name will be registered to your Quilibrium identity with stealth privacy",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "informational callout text the user reads before confirming purchase"
+        },
+        {
+          "file": "components/qns/BuyNameModal.tsx",
+          "styleKeyOrLocation": "stepCount style (line 504)",
+          "visibleText": "Step X of 5",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "progress status text the user reads during transaction processing"
+        },
+        {
+          "file": "components/qns/BuyNameModal.tsx",
+          "styleKeyOrLocation": "resultSubtitle style (line 518)",
+          "visibleText": "@name has been transferred to your Quilibrium identity / error description",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "success/failure result description text the user reads after purchase"
+        },
+        {
+          "file": "components/qns/BuyNameModal.tsx",
+          "styleKeyOrLocation": "txHashText style (line 524)",
+          "visibleText": "Tx: 0x1234...abcd",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "transaction hash metadata text the user reads to verify or copy the transaction"
+        }
+      ],
+      "components/qns/MarketplaceModal.tsx": [
+        {
+          "file": "components/qns/MarketplaceModal.tsx",
+          "styleKeyOrLocation": "feeInfo style (lines 298-300)",
+          "visibleText": "X% fee",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "fee percentage metadata label the user reads alongside sort controls"
+        },
+        {
+          "file": "components/qns/MarketplaceModal.tsx",
+          "styleKeyOrLocation": "priceToken style (line 358)",
+          "visibleText": "USDC / wQUIL",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "token symbol label in listing card the user reads to understand the price currency"
+        },
+        {
+          "file": "components/qns/MarketplaceModal.tsx",
+          "styleKeyOrLocation": "sellerText style (line 365)",
+          "visibleText": "0x1234...abcd",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "seller address metadata in listing card the user reads to assess the listing"
+        },
+        {
+          "file": "components/qns/MarketplaceModal.tsx",
+          "styleKeyOrLocation": "dateText style (line 370)",
+          "visibleText": "listing date e.g. 'Jan 5'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "listing date metadata the user reads to assess recency of listings"
+        },
+        {
+          "file": "components/qns/MarketplaceModal.tsx",
+          "styleKeyOrLocation": "emptySubtitle style (line 388)",
+          "visibleText": "No listings match \"...\" / The marketplace is empty",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state body text the user must read to understand the result"
+        }
+      ],
+      "components/qns/NameDetailModal.tsx": [
+        {
+          "file": "components/qns/NameDetailModal.tsx",
+          "styleKeyOrLocation": "sectionTitle style (line 610)",
+          "visibleText": "Marketplace Listing / Actions",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "section header labels the user reads to navigate the modal"
+        },
+        {
+          "file": "components/qns/NameDetailModal.tsx",
+          "styleKeyOrLocation": "infoLabel style (line 628)",
+          "visibleText": "Price / Seller receives / Status",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "data labels in listing info card the user reads to understand the listing details"
+        },
+        {
+          "file": "components/qns/NameDetailModal.tsx",
+          "styleKeyOrLocation": "actionSubtext style (line 669)",
+          "visibleText": "Use this as your main username / Allow others to find your address by name / Sell this name to another user / etc.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "helper/description text beneath action labels that the user reads to understand each action"
+        }
+      ],
+      "components/Chat/InviteLinkCard.tsx": [
+        {
+          "file": "components/Chat/InviteLinkCard.tsx",
+          "styleKeyOrLocation": "description",
+          "visibleText": "space description text (e.g. 'A community for…')",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "User reads the space description to decide whether to join; secondary but meaningful readable text"
+        }
+      ],
+      "components/qns/OffersModal.tsx": [
+        {
+          "file": "components/qns/OffersModal.tsx",
+          "styleKeyOrLocation": "offerDate",
+          "visibleText": "From 0x1234…5678 / Expires Jun 25, 12:00 PM",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Meaningful metadata (sender address / expiry date) the user reads to evaluate an offer"
+        },
+        {
+          "file": "components/qns/OffersModal.tsx",
+          "styleKeyOrLocation": "emptySubtitle",
+          "visibleText": "You have no incoming offers / You have no outgoing offers",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state body text the user reads to understand the list is empty"
+        }
+      ],
+      "components/qns/RegisterPaymentModal.tsx": [
+        {
+          "file": "components/qns/RegisterPaymentModal.tsx",
+          "styleKeyOrLocation": "namePrice",
+          "visibleText": "{priceQuil} QUIL",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Price the user reads before committing to payment; secondary label but carries real meaning"
+        },
+        {
+          "file": "components/qns/RegisterPaymentModal.tsx",
+          "styleKeyOrLocation": "sectionTitle",
+          "visibleText": "PAYMENT TOKEN / NETWORK / PAYMENT DETAILS",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Section header labels the user reads to understand the form structure"
+        },
+        {
+          "file": "components/qns/RegisterPaymentModal.tsx",
+          "styleKeyOrLocation": "priceLabel",
+          "visibleText": "Price / USD Value / Your Balance",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Row labels identifying data fields the user reads in the payment breakdown"
+        },
+        {
+          "file": "components/qns/RegisterPaymentModal.tsx",
+          "styleKeyOrLocation": "priceValueMuted",
+          "visibleText": "~$X.XX",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Secondary but readable USD value the user references to sanity-check the price"
+        },
+        {
+          "file": "components/qns/RegisterPaymentModal.tsx",
+          "styleKeyOrLocation": "infoText",
+          "visibleText": "This name will be registered to your Quilibrium identity with stealth privacy",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Informational description text the user reads to understand what they are agreeing to"
+        },
+        {
+          "file": "components/qns/RegisterPaymentModal.tsx",
+          "styleKeyOrLocation": "stepCount",
+          "visibleText": "Step X of 5",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Progress indicator text the user reads to track registration progress"
+        },
+        {
+          "file": "components/qns/RegisterPaymentModal.tsx",
+          "styleKeyOrLocation": "successSubtitle",
+          "visibleText": "@{name} has been registered to your Quilibrium identity",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Success confirmation body text the user reads to verify the outcome"
+        },
+        {
+          "file": "components/qns/RegisterPaymentModal.tsx",
+          "styleKeyOrLocation": "txHashText",
+          "visibleText": "Tx: 0x1234567890…12345678",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Transaction hash the user may need to read or copy to verify on-chain confirmation"
+        },
+        {
+          "file": "components/qns/RegisterPaymentModal.tsx",
+          "styleKeyOrLocation": "errorText",
+          "visibleText": "{error message string}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Error description text the user must read to understand what went wrong"
+        }
+      ],
+      "components/TransactionWarningModal.tsx": [
+        {
+          "file": "components/TransactionWarningModal.tsx",
+          "styleKeyOrLocation": "warningMessage",
+          "visibleText": "This transaction could not be simulated, proceed with caution / This mini app does not use entitlements… / This transaction is not declared in the mini app's entitlements…",
+          "classification": "misused",
+          "replacement": "textMain",
+          "reason": "Critical warning text the user must read to make an informed decision about proceeding with a financial transaction; primary readable body text in a warning context"
+        },
+        {
+          "file": "components/TransactionWarningModal.tsx",
+          "styleKeyOrLocation": "transactionLabel",
+          "visibleText": "To / Value / Gas / Function",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Field labels identifying transaction details the user reads to review before confirming"
+        }
+      ],
+      "components/UnifiedProfileEditModal.tsx": [
+        {
+          "file": "components/UnifiedProfileEditModal.tsx",
+          "styleKeyOrLocation": "subtitle",
+          "visibleText": "Changes apply to both Quorum and Farcaster. / Changes apply to Farcaster only. / Changes apply to Quorum only.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Scope hint text the user reads to understand which profiles will be updated"
+        },
+        {
+          "file": "components/UnifiedProfileEditModal.tsx",
+          "styleKeyOrLocation": "fieldLabel",
+          "visibleText": "Display Name / Bio",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Form field labels the user reads to identify input fields"
+        }
+      ],
+      "components/SpaceSettingsModal.tsx": [
+        {
+          "file": "components/SpaceSettingsModal.tsx",
+          "styleKeyOrLocation": "StyleSheet key \"subtitle\" (color: theme.colors.textMuted)",
+          "visibleText": "Space Settings subtitle showing the space name, e.g. \"My Space\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "subtitle label the user reads to identify which space is being configured"
+        },
+        {
+          "file": "components/SpaceSettingsModal.tsx",
+          "styleKeyOrLocation": "StyleSheet key \"inviteHint\" (color: theme.colors.textMuted)",
+          "visibleText": "\"This public link can be shared freely. Regenerate to invalidate the old link.\" / \"This link can only be used once. Generate a new link for each person.\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "instructional hint text that users must read to understand invite-link behavior"
+        }
+      ],
+      "components/UnifiedProfileHeader.tsx": [
+        {
+          "file": "components/UnifiedProfileHeader.tsx",
+          "styleKeyOrLocation": "StyleSheet key \"handleText\" (color: theme.colors.textMuted)",
+          "visibleText": "\"@username\", \"FID: 1234\", Farcaster handle lines",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "identifying handle/FID labels that the user reads to recognize their identity"
+        },
+        {
+          "file": "components/UnifiedProfileHeader.tsx",
+          "styleKeyOrLocation": "StyleSheet key \"addressText\" (color: theme.colors.textMuted)",
+          "visibleText": "truncated on-chain address, e.g. \"0x1a2b...9f0e\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "identifying metadata the user reads and may copy to verify their address"
+        }
+      ],
+      "components/SocialFeedModal.tsx": [
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "shareToChatStyles.sectionHeader (color: theme.colors.textMuted)",
+          "visibleText": "\"SPACES\", \"DIRECT MESSAGES\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "uppercase section headers labeling groups of navigation targets the user reads"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on \"Sending...\" (~line 666)",
+          "visibleText": "\"Sending...\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "status text the user needs to see to understand that a send is in progress"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on \"No conversations yet...\" (~line 739)",
+          "visibleText": "\"No conversations yet.\\nStart a chat to share to it.\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state text the user reads"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on \"No channels in this space\" (~line 762)",
+          "visibleText": "\"No channels in this space\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state text the user reads"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on OG preview description (large card, ~line 1184)",
+          "visibleText": "OG description text of a linked article/page",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "content description in a link preview that the user reads to decide whether to open the link"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on OG domain (large card, ~line 1195)",
+          "visibleText": "domain name, e.g. \"nytimes.com\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "domain label the user reads to verify link origin"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on OG preview description (small card, ~line 1242)",
+          "visibleText": "OG description text",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "content description in a compact link preview"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on OG domain (small card, ~line 1253)",
+          "visibleText": "domain name",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "domain label the user reads"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on \"replying to\" label in reply compose row (~line 1463)",
+          "visibleText": "\"replying to @handle\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "contextual label the user reads to see who they are replying to"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on \"replying to [url]\" label (~line 1496)",
+          "visibleText": "\"replying to [url domain]\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "contextual reply-target label the user reads"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on \"replying to [handle]\" label (~line 1510)",
+          "visibleText": "\"replying to @handle\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "contextual reply-target label the user reads"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "ActivityIndicator color + Text color:textMuted on \"Loading quoted cast…\" (~lines 1804-1805)",
+          "visibleText": "\"Loading quoted cast…\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "loading status text the user reads while waiting"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "ActivityIndicator color + Text color:textMuted on second \"Loading quoted cast…\" instance (~lines 1945-1946)",
+          "visibleText": "\"Loading quoted cast…\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "loading status text the user reads while waiting"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on @username in quoted-cast author line (~line 1843)",
+          "visibleText": "\"@username\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "author handle label the user reads to identify the original poster"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on fallbackDescription in quoted-cast fallback card (~line 1974)",
+          "visibleText": "cast description / fallback text",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "content description the user reads to understand the quoted cast"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on handle in pending-cast status row (~line 2432)",
+          "visibleText": "\"@handle • \"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "author handle the user reads to identify who posted"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on statusText in pending-cast status row (~line 2433)",
+          "visibleText": "e.g. \"Pending\", \"Queued\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "status label the user reads to understand cast delivery state"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on \"Discard\" action text (~line 2457)",
+          "visibleText": "\"Discard\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "tappable action/link text; user must be able to read it to act on it"
+        },
+        {
+          "file": "components/SocialFeedModal.tsx",
+          "styleKeyOrLocation": "inline Text style color:textMuted on attribution line in quoted-cast preview (~line 2666)",
+          "visibleText": "\"@cast.author.username • timestamp\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "attribution metadata the user reads to identify the quoted post author and time"
+        }
+      ],
+      "components/ui/AppTabBar.tsx": [
+        {
+          "file": "components/ui/AppTabBar.tsx",
+          "styleKeyOrLocation": "inline style on secondaryLabel Text inside SecondaryItem (~line 163): color: theme.colors.textMuted (when not primary color)",
+          "visibleText": "\"Wallet\", \"Bookmarks\", \"Discover\", \"MiniApps\", \"QNS\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "inactive navigation tab labels that users must read to navigate; they are readable targets, not disabled controls"
+        }
+      ],
+      "components/SpaceModal.tsx": [
+        {
+          "file": "components/SpaceModal.tsx",
+          "styleKeyOrLocation": "StyleSheet key \"spaceDescription\" (color: theme.colors.textMuted)",
+          "visibleText": "space description text shown in the join-tab preview, e.g. \"A community for…\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "content the user reads before deciding to join a space"
+        },
+        {
+          "file": "components/SpaceModal.tsx",
+          "styleKeyOrLocation": "StyleSheet key \"placeholderText\" (color: theme.colors.textMuted)",
+          "visibleText": "\"Enter an invite link to preview the space\" / \"Validating invite...\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "instructional and status text the user reads"
+        }
+      ],
+      "components/SpaceChannelBindingPicker.tsx": [
+        {
+          "file": "components/SpaceChannelBindingPicker.tsx",
+          "styleKeyOrLocation": "StyleSheet key \"subtitle\" (color: theme.colors.textMuted)",
+          "visibleText": "\"When this space is open, casts from linked channels appear alongside the chat.\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "description text the user reads to understand how the feature works"
+        },
+        {
+          "file": "components/SpaceChannelBindingPicker.tsx",
+          "styleKeyOrLocation": "StyleSheet key \"sectionLabel\" (color: theme.colors.textMuted)",
+          "visibleText": "\"Linked\", \"Results\", \"Following\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "section labels that orient the user within the picker"
+        },
+        {
+          "file": "components/SpaceChannelBindingPicker.tsx",
+          "styleKeyOrLocation": "StyleSheet key \"rowKey\" (color: theme.colors.textMuted)",
+          "visibleText": "\"/channel-name\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "identifying channel-key metadata the user reads to distinguish channels with similar names"
+        },
+        {
+          "file": "components/SpaceChannelBindingPicker.tsx",
+          "styleKeyOrLocation": "StyleSheet key \"emptyText\" (color: theme.colors.textMuted)",
+          "visibleText": "\"No channels match your search.\" / \"You don't follow any channels yet.\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "empty-state text the user reads"
+        }
+      ],
+      "components/skins/SkinEditor.tsx": [
+        {
+          "file": "components/skins/SkinEditor.tsx",
+          "styleKeyOrLocation": "Field component inline Text style (line 366): `color: theme.colors.textMuted`",
+          "visibleText": "Name, Base, Corners, Wallpaper, Backgrounds (field label text)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Field labels the user reads to identify each editor section — secondary label text, not placeholder or disabled"
+        },
+        {
+          "file": "components/skins/SkinEditor.tsx",
+          "styleKeyOrLocation": "makeStyles `section` key (line 437): `color: theme.colors.textMuted`",
+          "visibleText": "Colors, Shape, Wallpaper, Backgrounds (section headers)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Uppercase section-header labels the user reads to navigate the editor — secondary label text, not placeholder or disabled"
+        }
+      ],
+      "components/translation/TranslateLanguageModal.tsx": [
+        {
+          "file": "components/translation/TranslateLanguageModal.tsx",
+          "styleKeyOrLocation": "styles `subtitle` key (line 87): `color: theme.colors.textMuted`",
+          "visibleText": "Posts not in this language show a \"See translation\" option. Translation runs entirely on your device.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Multi-sentence description body text the user must read to understand the feature — not a placeholder or disabled state"
+        },
+        {
+          "file": "components/translation/TranslateLanguageModal.tsx",
+          "styleKeyOrLocation": "styles `rowDescription` key (line 110): `color: theme.colors.textMuted`",
+          "visibleText": "e.g. \"English\" (the device language name shown under \"Device default\")",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Informational secondary text identifying the device language — readable metadata the user needs to make a selection decision"
+        }
+      ],
+      "components/translation/TranslateToggle.tsx": [
+        {
+          "file": "components/translation/TranslateToggle.tsx",
+          "styleKeyOrLocation": "inline color variable `color` assigned when `isError` is true (line 32): `const color = isError ? theme.colors.textMuted : theme.colors.accent`",
+          "visibleText": "error text string (e.g. \"Translation failed — tap to retry\")",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Error/retry link text the user must read and act on — this is readable actionable text, not a placeholder; textMuted (#b6b6b6) makes the error near-invisible in light mode"
+        }
+      ],
+      "components/SpaceDescriptionSheet.tsx": [
+        {
+          "file": "components/SpaceDescriptionSheet.tsx",
+          "styleKeyOrLocation": "inline style on memberCount Text (line 63): `color: theme.colors.textMuted`",
+          "visibleText": "e.g. \"42 members\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Member count is meaningful metadata the user reads to understand the space — secondary label text, not placeholder or disabled"
+        },
+        {
+          "file": "components/SpaceDescriptionSheet.tsx",
+          "styleKeyOrLocation": "inline style on description Text (line 70): `color: theme.colors.textMuted`",
+          "visibleText": "the space description body text",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Space description is readable body text the user opens this sheet specifically to read — should not be near-invisible in light mode"
+        }
+      ],
+      "components/skins/SkinsModal.tsx": [
+        {
+          "file": "components/skins/SkinsModal.tsx",
+          "styleKeyOrLocation": "inline Text style in tabs map (line 273): `color: tab === t ? theme.colors.textMain : theme.colors.textMuted`",
+          "visibleText": "\"My Skins\" / \"Gallery\" (inactive tab label)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Inactive tab label is a readable navigation target the user taps to switch views — not a disabled/decorative element"
+        },
+        {
+          "file": "components/skins/SkinsModal.tsx",
+          "styleKeyOrLocation": "inline Text style in SkinRow component (line 414): `color: theme.colors.textMuted`",
+          "visibleText": "skin description text, e.g. \"The built-in Quorum theme\", \"Dark skin\", author/installs metadata",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Skin description/subtitle is secondary metadata the user reads to choose a skin — not a placeholder or disabled state"
+        },
+        {
+          "file": "components/skins/SkinsModal.tsx",
+          "styleKeyOrLocation": "AppearanceSegments inline Text style for inactive segment (line 471): `color: active ? theme.colors.textMain : theme.colors.textMuted`",
+          "visibleText": "\"System\" / \"Light\" / \"Dark\" (inactive segment labels)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Inactive appearance segment labels are readable navigation targets the user taps to switch modes — not disabled/decorative"
+        },
+        {
+          "file": "components/skins/SkinsModal.tsx",
+          "styleKeyOrLocation": "styles `subtitle` key (line 528): `color: theme.colors.textMuted`",
+          "visibleText": "\"Loading…\", \"No skins published yet. Be the first!\" (status/empty-state text)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Status and empty-state messages the user must read to understand the current state of the gallery"
+        }
+      ],
+      "components/ui/ChannelIconPickerSheet.tsx": [
+        {
+          "file": "components/ui/ChannelIconPickerSheet.tsx",
+          "styleKeyOrLocation": "styles `variantChipText` key (line 257): `color: theme.colors.textMuted`",
+          "visibleText": "\"Outline\" / \"Filled\" (inactive variant chip label)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Variant chip labels are readable toggle targets the user taps to switch between outline/filled icon sets — not disabled or decorative"
+        },
+        {
+          "file": "components/ui/ChannelIconPickerSheet.tsx",
+          "styleKeyOrLocation": "styles `sectionLabel` key (line 260): `color: theme.colors.textMuted`",
+          "visibleText": "\"Icon\" / \"Color\" (section header labels)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Section header labels the user reads to navigate the picker — secondary label text, not placeholder or disabled"
+        }
+      ],
+      "components/ui/EmptyState.tsx": [
+        {
+          "file": "components/ui/EmptyState.tsx",
+          "styleKeyOrLocation": "StyleSheet key: message",
+          "visibleText": "e.g. \"Upload your first document to get started\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Description/helper text the user is meant to read"
+        }
+      ],
+      "components/SocialFeed/MentionAutocomplete.tsx": [
+        {
+          "file": "components/SocialFeed/MentionAutocomplete.tsx",
+          "styleKeyOrLocation": "StyleSheet key: emptyText",
+          "visibleText": "No users found / No channels found",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state feedback text the user reads"
+        },
+        {
+          "file": "components/SocialFeed/MentionAutocomplete.tsx",
+          "styleKeyOrLocation": "StyleSheet key: itemUsername",
+          "visibleText": "@username / /channel-key",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Secondary identifier label the user reads to distinguish autocomplete results"
+        }
+      ],
+      "components/ui/LoadingState.tsx": [
+        {
+          "file": "components/ui/LoadingState.tsx",
+          "styleKeyOrLocation": "StyleSheet key: message",
+          "visibleText": "e.g. \"Loading data...\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Status message text the user reads while waiting"
+        }
+      ],
+      "components/ui/SegmentedPills.tsx": [
+        {
+          "file": "components/ui/SegmentedPills.tsx",
+          "styleKeyOrLocation": "Variable initializer: let subtitleColor: string = theme.colors.textMuted (line 154)",
+          "visibleText": "e.g. \"KAS only\" subtitle line under a pill label",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Readable subtitle text on pill navigation items; the sibling inactive-label logic already uses textSubtle per inline comments"
+        },
+        {
+          "file": "components/ui/SegmentedPills.tsx",
+          "styleKeyOrLocation": "Inline expression: fg = ... isActive ? itemAccent : theme.colors.textMuted (tinted variant, no per-item color, line 168)",
+          "visibleText": "inactive pill label text",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Inactive navigation tab/pill labels that users must read to navigate"
+        }
+      ],
+      "components/SocialFeed/content/AudioSpaceEmbed.tsx": [
+        {
+          "file": "components/SocialFeed/content/AudioSpaceEmbed.tsx",
+          "styleKeyOrLocation": "JSX inline: <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12) }}>{room.listenerCount}</Text>",
+          "visibleText": "listener count number (e.g. \"42\")",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Live listener count the user reads to decide whether to join"
+        },
+        {
+          "file": "components/SocialFeed/content/AudioSpaceEmbed.tsx",
+          "styleKeyOrLocation": "JSX inline: <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(12), marginTop: ... }}>by @{host.username}{scheduledLabel}</Text>",
+          "visibleText": "by @hostname · Today at HH:MM",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Host attribution and schedule text the user reads to identify the space"
+        }
+      ],
+      "components/SocialFeed/content/CastActions.tsx": [
+        {
+          "file": "components/SocialFeed/content/CastActions.tsx",
+          "styleKeyOrLocation": "JSX inline: <Text style={[styles.countText, { color: theme.colors.textMuted }]}>{count}</Text> (like count)",
+          "visibleText": "like count number",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Readable action-count metadata next to the like button"
+        },
+        {
+          "file": "components/SocialFeed/content/CastActions.tsx",
+          "styleKeyOrLocation": "JSX inline: <Text style={[styles.countText, { color: theme.colors.textMuted }]}>{replyCount}</Text>",
+          "visibleText": "reply count number",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Readable action-count metadata next to the reply button"
+        },
+        {
+          "file": "components/SocialFeed/content/CastActions.tsx",
+          "styleKeyOrLocation": "JSX inline: <Text style={[styles.countText, { color: theme.colors.textMuted }]}>{recastCount}</Text>",
+          "visibleText": "recast count number",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Readable action-count metadata next to the recast button"
+        }
+      ],
+      "components/ui/TabBar.tsx": [
+        {
+          "file": "components/ui/TabBar.tsx",
+          "styleKeyOrLocation": "tabText (StyleSheet key, line 176)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Inactive tab labels are readable navigation targets the user must read to select a tab",
+          "visibleText": "tab.label (dynamic, e.g. \"Profile\", \"Settings\")"
+        }
+      ],
+      "components/SocialFeed/content/FarcasterTokenEmbed.tsx": [
+        {
+          "file": "components/SocialFeed/content/FarcasterTokenEmbed.tsx",
+          "styleKeyOrLocation": "inline Text style color (line 128), \"Loading token…\"",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Transient loading state message the user reads",
+          "visibleText": "Loading token…"
+        },
+        {
+          "file": "components/SocialFeed/content/FarcasterTokenEmbed.tsx",
+          "styleKeyOrLocation": "inline Text style color on token symbol (line 198)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Token symbol ticker (e.g. ETH, BTC) is a secondary label the user reads to identify the token",
+          "visibleText": "data.symbol (e.g. \"ETH\")"
+        }
+      ],
+      "components/SocialFeed/views/CreateProposalSheet.tsx": [
+        {
+          "file": "components/SocialFeed/views/CreateProposalSheet.tsx",
+          "styleKeyOrLocation": "inline Text style on \"Category\" label (line 133)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Form field label the user reads",
+          "visibleText": "Category"
+        },
+        {
+          "file": "components/SocialFeed/views/CreateProposalSheet.tsx",
+          "styleKeyOrLocation": "inline Text style on \"Title\" label — protocol scope (line 144)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Form field label the user reads",
+          "visibleText": "Title"
+        },
+        {
+          "file": "components/SocialFeed/views/CreateProposalSheet.tsx",
+          "styleKeyOrLocation": "inline Text style on \"Abstract\" label (line 153)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Form field label the user reads",
+          "visibleText": "Abstract"
+        },
+        {
+          "file": "components/SocialFeed/views/CreateProposalSheet.tsx",
+          "styleKeyOrLocation": "inline Text style on \"Problem Statement\" label (line 165)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Form field label the user reads",
+          "visibleText": "Problem Statement"
+        },
+        {
+          "file": "components/SocialFeed/views/CreateProposalSheet.tsx",
+          "styleKeyOrLocation": "inline Text style on \"Proposed Solution\" label (line 177)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Form field label the user reads",
+          "visibleText": "Proposed Solution"
+        },
+        {
+          "file": "components/SocialFeed/views/CreateProposalSheet.tsx",
+          "styleKeyOrLocation": "inline Text style on \"Client Area\" label (line 191)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Form field label the user reads",
+          "visibleText": "Client Area"
+        },
+        {
+          "file": "components/SocialFeed/views/CreateProposalSheet.tsx",
+          "styleKeyOrLocation": "inline Text style on \"Title\" label — client scope (line 202)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Form field label the user reads",
+          "visibleText": "Title"
+        },
+        {
+          "file": "components/SocialFeed/views/CreateProposalSheet.tsx",
+          "styleKeyOrLocation": "inline Text style on \"Description\" label (line 211)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Form field label the user reads",
+          "visibleText": "Description"
+        },
+        {
+          "file": "components/SocialFeed/views/CreateProposalSheet.tsx",
+          "styleKeyOrLocation": "inline Text style on \"Rationale\" label (line 223)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Form field label the user reads",
+          "visibleText": "Rationale"
+        }
+      ],
+      "components/SocialFeed/media/YouTubeEmbed.tsx": [
+        {
+          "file": "components/SocialFeed/media/YouTubeEmbed.tsx",
+          "styleKeyOrLocation": "fallbackSub StyleSheet key (line 71 / staticStyles.fallbackSub)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Fallback error message the user must read to understand the action required",
+          "visibleText": "This video can't play here. Tap to open on YouTube."
+        }
+      ],
+      "components/SocialFeed/content/LinkPreview.tsx": [
+        {
+          "file": "components/SocialFeed/content/LinkPreview.tsx",
+          "styleKeyOrLocation": "descriptionLarge (StyleSheet key, line 150)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Link preview description text the user reads",
+          "visibleText": "description (dynamic)"
+        },
+        {
+          "file": "components/SocialFeed/content/LinkPreview.tsx",
+          "styleKeyOrLocation": "domainLarge (StyleSheet key, line 156)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Domain label (e.g. nytimes.com) is readable metadata the user uses to evaluate a link",
+          "visibleText": "domain (dynamic, e.g. \"nytimes.com\")"
+        },
+        {
+          "file": "components/SocialFeed/content/LinkPreview.tsx",
+          "styleKeyOrLocation": "descriptionSmall (StyleSheet key, line 180)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Link preview description text the user reads",
+          "visibleText": "description (dynamic)"
+        },
+        {
+          "file": "components/SocialFeed/content/LinkPreview.tsx",
+          "styleKeyOrLocation": "domainSmall (StyleSheet key, line 184)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Domain label is readable metadata the user uses to evaluate a link",
+          "visibleText": "domain (dynamic, e.g. \"nytimes.com\")"
+        }
+      ],
+      "components/ui/Toast.tsx": [
+        {
+          "file": "components/ui/Toast.tsx",
+          "styleKeyOrLocation": "message (StyleSheet key, line 211)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Toast message body text the user reads for transaction feedback details",
+          "visibleText": "message (dynamic, e.g. transaction status details)"
+        },
+        {
+          "file": "components/ui/Toast.tsx",
+          "styleKeyOrLocation": "txLabel (StyleSheet key, line 230)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "\"Tx:\" label identifying the transaction hash field — readable UI label",
+          "visibleText": "Tx:"
+        }
+      ],
+      "components/SocialFeed/content/LiveSpacesStrip.tsx": [
+        {
+          "file": "components/SocialFeed/content/LiveSpacesStrip.tsx",
+          "styleKeyOrLocation": "inline style on <Text> wrapping 'Live spaces' / 'Upcoming spaces' / 'Spaces' section label (line 83)",
+          "visibleText": "Live spaces / Upcoming spaces / Spaces",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Section label the user reads to understand the strip content — secondary label text, not placeholder/disabled"
+        },
+        {
+          "file": "components/SocialFeed/content/LiveSpacesStrip.tsx",
+          "styleKeyOrLocation": "inline style on <Text> 'Now or schedule' inside CreateTile (line 163)",
+          "visibleText": "Now or schedule",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Subtitle/hint text beneath a call-to-action button that the user reads to understand what tapping does"
+        }
+      ],
+      "components/SocialFeed/views/ChannelView.tsx": [
+        {
+          "file": "components/SocialFeed/views/ChannelView.tsx",
+          "styleKeyOrLocation": "createStyles — statLabel (line 545–547)",
+          "visibleText": "Followers / Members",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Labels identifying numeric stats the user reads (Followers, Members) — secondary label text, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/ChannelView.tsx",
+          "styleKeyOrLocation": "createStyles — castAuthorMeta (line 584–587)",
+          "visibleText": "@username • timestamp",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Author metadata (username and timestamp) the user reads to identify who posted and when"
+        }
+      ],
+      "components/SocialFeed/views/ProfileView.tsx": [
+        {
+          "file": "components/SocialFeed/views/ProfileView.tsx",
+          "styleKeyOrLocation": "createStyles — username (line 549–552)",
+          "visibleText": "@username",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "The @username handle beneath the display name is a readable identifier the user needs to distinguish people — secondary label, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/ProfileView.tsx",
+          "styleKeyOrLocation": "createStyles — locationText (line 561–563)",
+          "visibleText": "location description string",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Profile location text the user reads — secondary metadata, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/ProfileView.tsx",
+          "styleKeyOrLocation": "createStyles — statLabel (line 570–572)",
+          "visibleText": "Following / Followers",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Labels identifying numeric stats the user reads — secondary label text, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/ProfileView.tsx",
+          "styleKeyOrLocation": "createStyles — castMeta (line 603–606)",
+          "visibleText": "@username • timestamp",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Cast author metadata (handle and timestamp) the user reads to identify authorship"
+        }
+      ],
+      "components/SocialFeed/views/ThreadDetailView.tsx": [
+        {
+          "file": "components/SocialFeed/views/ThreadDetailView.tsx",
+          "styleKeyOrLocation": "createStyles — usernameTimestamp (line 665–669)",
+          "visibleText": "@username • timestamp",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Author handle and timestamp the user reads to identify who posted and when — secondary metadata, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/ThreadDetailView.tsx",
+          "styleKeyOrLocation": "createStyles — mutedText13 (line 670–673)",
+          "visibleText": "replying to @username / replying to hostname / blocked or muted message / like count / reply count",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Used for readable context text ('replying to @x', blocked-user notice, action counts as text) — secondary readable text, not placeholder"
+        }
+      ],
+      "components/SocialFeed/views/GovernanceView.tsx": [
+        {
+          "file": "components/SocialFeed/views/GovernanceView.tsx",
+          "styleKeyOrLocation": "inline tabText color for inactive tab (line 168)",
+          "visibleText": "Protocol / Client (inactive tab label)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Inactive tab navigation labels the user still needs to read and tap — not disabled/unavailable, just unselected"
+        },
+        {
+          "file": "components/SocialFeed/views/GovernanceView.tsx",
+          "styleKeyOrLocation": "inline timeText color on ProposalCard (line 79)",
+          "visibleText": "e.g. '2h ago'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Timestamp metadata the user reads to gauge how recent a proposal is — secondary readable metadata, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/GovernanceView.tsx",
+          "styleKeyOrLocation": "inline cardBody color on ProposalCard (line 88)",
+          "visibleText": "proposal abstract / description (up to 2 lines)",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Proposal body/description text the user reads to understand the proposal — secondary body text, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/GovernanceView.tsx",
+          "styleKeyOrLocation": "inline authorText color on ProposalCard (line 127–129)",
+          "visibleText": "by {proposal.authorName}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Author attribution text the user reads to know who created the proposal — secondary readable label, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/GovernanceView.tsx",
+          "styleKeyOrLocation": "inline emptyText color in empty state (line 192–194)",
+          "visibleText": "No {activeTab} proposals yet.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state message the user reads — empty-state text is explicitly listed as misused"
+        }
+      ],
+      "components/SocialFeed/views/HegemonyGovernanceView.tsx": [
+        {
+          "file": "components/SocialFeed/views/HegemonyGovernanceView.tsx",
+          "styleKeyOrLocation": "inline Text color for tier label in ReplyThread (line 87)",
+          "visibleText": "getTier(r.points) — e.g. 'Bronze', 'Silver'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Tier label text the user reads to understand the voter's reputation level — secondary metadata label, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/HegemonyGovernanceView.tsx",
+          "styleKeyOrLocation": "inline Text color for error state 'Couldn't load governance.' (line 153)",
+          "visibleText": "Couldn't load governance.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Error/empty-state message the user must read to understand the failure — readable body text, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/HegemonyGovernanceView.tsx",
+          "styleKeyOrLocation": "inline Text color for empty state 'No proposals yet.' (line 163)",
+          "visibleText": "No proposals yet.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state text the user reads — explicitly listed as misused"
+        }
+      ],
+      "components/SocialFeed/views/ProposalDetailView.tsx": [
+        {
+          "file": "components/SocialFeed/views/ProposalDetailView.tsx",
+          "styleKeyOrLocation": "inline commentTime color in CommentRow (line 50–52)",
+          "visibleText": "comment timestamp e.g. '3h ago'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Comment timestamp the user reads to gauge when it was posted — secondary readable metadata, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/ProposalDetailView.tsx",
+          "styleKeyOrLocation": "inline emptyText color for 'Proposal not found.' (line 94)",
+          "visibleText": "Proposal not found.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty/error state message the user reads — explicitly listed as misused"
+        },
+        {
+          "file": "components/SocialFeed/views/ProposalDetailView.tsx",
+          "styleKeyOrLocation": "inline timeText color in proposal header (line 127–129)",
+          "visibleText": "timestamp e.g. '2h ago'",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Proposal creation timestamp the user reads — secondary metadata, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/ProposalDetailView.tsx",
+          "styleKeyOrLocation": "inline author color (line 137–139)",
+          "visibleText": "by @{proposal.authorName}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Author attribution text the user reads — secondary readable label, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/ProposalDetailView.tsx",
+          "styleKeyOrLocation": "inline sectionBody color for Abstract (line 146)",
+          "visibleText": "abstract body text",
+          "classification": "misused",
+          "replacement": "textMain",
+          "reason": "Multi-paragraph proposal body section the user must read carefully — full readable prose warrants textMain over textSubtle"
+        },
+        {
+          "file": "components/SocialFeed/views/ProposalDetailView.tsx",
+          "styleKeyOrLocation": "inline sectionBody color for Problem Statement (line 151)",
+          "visibleText": "problem statement body text",
+          "classification": "misused",
+          "replacement": "textMain",
+          "reason": "Multi-paragraph proposal body section the user must read carefully — full readable prose warrants textMain"
+        },
+        {
+          "file": "components/SocialFeed/views/ProposalDetailView.tsx",
+          "styleKeyOrLocation": "inline sectionBody color for Proposed Solution (line 155)",
+          "visibleText": "proposed solution body text",
+          "classification": "misused",
+          "replacement": "textMain",
+          "reason": "Multi-paragraph proposal body section the user must read carefully — full readable prose warrants textMain"
+        },
+        {
+          "file": "components/SocialFeed/views/ProposalDetailView.tsx",
+          "styleKeyOrLocation": "inline sectionBody color for Description (line 163)",
+          "visibleText": "description body text",
+          "classification": "misused",
+          "replacement": "textMain",
+          "reason": "Multi-paragraph proposal body section the user must read carefully — full readable prose warrants textMain"
+        },
+        {
+          "file": "components/SocialFeed/views/ProposalDetailView.tsx",
+          "styleKeyOrLocation": "inline sectionBody color for Rationale (line 168)",
+          "visibleText": "rationale body text",
+          "classification": "misused",
+          "replacement": "textMain",
+          "reason": "Multi-paragraph proposal body section the user must read carefully — full readable prose warrants textMain"
+        },
+        {
+          "file": "components/SocialFeed/views/ProposalDetailView.tsx",
+          "styleKeyOrLocation": "inline dividerText color (line 210–212)",
+          "visibleText": "Comments ({comments.length})",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Section divider label 'Comments (N)' the user reads to navigate the page — secondary readable label, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/views/ProposalDetailView.tsx",
+          "styleKeyOrLocation": "inline noComments color (line 218–220)",
+          "visibleText": "No comments yet. Be the first to share your thoughts.",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Empty-state message the user reads — explicitly listed as misused"
+        }
+      ],
+      "components/SocialFeed/content/QuoteCast.tsx": [
+        {
+          "file": "components/SocialFeed/content/QuoteCast.tsx",
+          "styleKeyOrLocation": "username (StyleSheet key, line 101)",
+          "visibleText": "@{cast.author.username}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Username label in the quote-cast author row is readable identification text, not a placeholder or icon"
+        }
+      ],
+      "components/SocialFeed/content/SnapEmbed.tsx": [
+        {
+          "file": "components/SocialFeed/content/SnapEmbed.tsx",
+          "styleKeyOrLocation": "SnapInput label Text inline style (line 535)",
+          "visibleText": "{String(p.label)}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Field label above a TextInput that the user reads to understand the input — secondary label text, not placeholder"
+        },
+        {
+          "file": "components/SocialFeed/content/SnapEmbed.tsx",
+          "styleKeyOrLocation": "SnapSliderElement label Text inline style (line 575)",
+          "visibleText": "{String(p.label)}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Slider control label that the user reads to understand the slider — secondary label text"
+        },
+        {
+          "file": "components/SocialFeed/content/SnapEmbed.tsx",
+          "styleKeyOrLocation": "SnapProgress label Text inline style (line 634)",
+          "visibleText": "{String(p.label)}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Progress bar label the user reads to understand what is being tracked — secondary label text"
+        },
+        {
+          "file": "components/SocialFeed/content/SnapEmbed.tsx",
+          "styleKeyOrLocation": "SnapItem description Text inline style (line 700)",
+          "visibleText": "{String(p.description)}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Description/subtitle text beneath a list item title — body text the user is meant to read"
+        },
+        {
+          "file": "components/SocialFeed/content/SnapEmbed.tsx",
+          "styleKeyOrLocation": "SnapBarChart bar value Text inline style (line 763)",
+          "visibleText": "{bar.value}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Numeric data value label alongside each bar in a chart — carries meaning and must be readable"
+        },
+        {
+          "file": "components/SocialFeed/content/SnapEmbed.tsx",
+          "styleKeyOrLocation": "SnapToggleGroup label Text inline style (line 808)",
+          "visibleText": "{String(p.label)}",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Toggle group label the user reads to understand the option group — secondary label text"
+        },
+        {
+          "file": "components/SocialFeed/content/SnapEmbed.tsx",
+          "styleKeyOrLocation": "errorText (inline style object key, line 1330)",
+          "visibleText": "",
+          "classification": "misused",
+          "replacement": "textSubtle",
+          "reason": "Error/status message text displayed in the error container that the user must read"
+        }
+      ]
+    }
+  }
+}

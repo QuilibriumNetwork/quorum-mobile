@@ -41,6 +41,7 @@ import {
   type MemberDigest,
   type PeerEntry,
   chunkMessages,
+  logger,
 } from '@quilibrium/quorum-shared';
 import { getSpaceKey, getSpaceSigningKey } from '../config/spaceStorage';
 import { encryptionStateStorage } from '../crypto/encryption-state-storage';
@@ -956,7 +957,12 @@ export async function maybeSendUpdateProfileMessage(
 ): Promise<SendGenericMessageResult | null> {
   const sig = profileBroadcastSignature(params);
   // Nothing to broadcast — empty payload would no-op on receivers anyway.
-  if (sig === '{}') return null;
+  if (sig === '{}') {
+    logger.debug(
+      `[ProfileSync] nothing to broadcast space=${params.spaceId.slice(0, 12)} — empty payload`
+    );
+    return null;
+  }
 
   const store = getProfileBroadcastStore();
   const key = profileBroadcastKey(params.spaceId, params.senderAddress);
@@ -984,9 +990,33 @@ export async function maybeSendUpdateProfileMessage(
     record = null;
   }
 
-  if (!shouldAnnounce(record, sig, now)) return null;
+  const space = params.spaceId.slice(0, 12);
 
-  const result = await sendUpdateProfileMessage(params);
+  if (!shouldAnnounce(record, sig, now)) {
+    logger.debug(`[ProfileSync] gate SKIPPED space=${space} — this payload was already broadcast`);
+    return null;
+  }
+
+  // Every caller of this function wraps it in a bare `catch {}` (the space loops
+  // in UnifiedProfileEditModal, ProfileModal and SpaceSettingsModal), so a throw
+  // here vanishes without a trace: the user's name changes locally, other members
+  // keep rendering the old one, and nothing anywhere says why. Sending needs the
+  // Space's keys, which is exactly what a device that failed its import does not
+  // have — so this is the likeliest place for a name to stop propagating.
+  //
+  // Log it and rethrow: the callers' skip-and-continue behaviour is correct (one
+  // bad Space must not stop the others), it just must not be silent.
+  let result: SendGenericMessageResult;
+  try {
+    result = await sendUpdateProfileMessage(params);
+  } catch (error) {
+    logger.warn(
+      `[ProfileSync] broadcast FAILED space=${space} — other members keep the old profile: ${error instanceof Error ? error.message : String(error)}`
+    );
+    throw error;
+  }
+  logger.log(`[ProfileSync] broadcast sent space=${space}`);
+
   // Recorded only AFTER a successful send, so a failure leaves the gate open
   // and the next connect retries.
   try {

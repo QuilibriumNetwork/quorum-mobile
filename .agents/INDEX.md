@@ -1,0 +1,258 @@
+# Documentation Index
+
+This is the main index for all documentation, bug reports, and task management.
+
+## 📖 Documentation
+
+- [Floating Tab Bar + Edge-to-Edge Chrome Redesign](docs/2026-06-18-floating-tab-bar-and-edge-to-edge-redesign.md)
+- [Notification system: mobile vs desktop — deep dive + alignment plan](docs/2026-06-23-notification-system-mobile-vs-desktop.md)
+- [Inbox envelope lifecycle & the poison guard](docs/inbox-envelope-lifecycle-and-poison-guard.md)
+- [iOS UI pitfalls when you can only test on Android](docs/ios-ui-pitfalls-android-only-testing.md)
+- [iOS verification checklist](docs/ios-verification-checklist.md)
+- [Message composer ↔ keyboard ↔ emoji panel choreography](docs/composer-keyboard-emoji-panel.md)
+- [Message Transport Architecture — DMs and Spaces](docs/message-transport-architecture.md)
+- [Quorum Ecosystem Architecture](docs/quorum-shared-architecture.md)
+- [Testing mobile against a local quorum-shared build (pre-publish)](docs/local-shared-dev-workflow.md)
+- [Transport & DM reliability — cross-repo index (pointer)](docs/transport-reliability-index.md)
+
+### Features
+- [DM "delete your own message" (delete for everyone) — mobile](docs/features/dm-delete-own-message.md)
+- [DM mute: what we show, what we don't, and how it's built](docs/features/dm-mute-behavior-and-pattern.md)
+- [Mobile Notification System (in-app unified panel)](docs/features/notification-system.md)
+
+## 🐛📋 Issues
+
+🐛 bug &nbsp;&nbsp; 📋 task
+
+### In Progress
+
+- 🐛 [The safety logs we keep adding do not exist where they are needed](issues/2026-08-04-logger-is-a-no-op-in-production-and-debug-is-dead-in-dev.md)
+
+#### Light Theme Contrast
+
+- 📋 [Handoff — light-theme contrast (DONE) + nav-bar fix (built, unverified) + dual-device preview setup (the real open problem)](issues/light-theme-contrast/2026-06-26-HANDOFF-navbar-and-dual-device-preview.md)
+
+#### Quorum Shared Migration
+
+- 📋 [Mobile rewire: invite helpers → shared exports](issues/quorum-shared-migration/2026-05-29-mobile-rewire-invite-helpers-to-shared.md)
+- 📋 [Dedupe `deriveAddress` to a single import from `keyService`](issues/quorum-shared-migration/2026-05-30-mobile-dedup-deriveAddress.md)
+- 📋 [Cleanup: drop the dead `isSpaceOwner` param (cosmetic) + optional mobile hook dedup](issues/quorum-shared-migration/2026-06-14-cleanup-dead-isspaceowner-param.md)
+- 📋 [Mobile: adopt typed global-identity fields (retire the two-slot casts)](issues/quorum-shared-migration/2026-07-16-mobile-adopt-typed-global-identity-fields.md)
+- 📋 [Quorum Shared Migration — Mobile-side tracker](issues/quorum-shared-migration/README.md)
+- 📋 [Quorum-shared migration — mobile-side STATUS](issues/quorum-shared-migration/STATUS.md)
+
+#### Quorum Shared Migration / Archived
+
+- 📋 [Mobile adoption: shared permission helpers (hasPermission, getUserPermissions, getUserRoles)](issues/quorum-shared-migration/.archived/2026-05-29-mobile-adopt-shared-permission-helpers.md)
+
+#### Quorum Shared Migration / Done
+
+- 📋 [Adopt shared field validators (drop local `validateSpaceName`)](issues/quorum-shared-migration/.done/2026-05-28-adopt-shared-validators.md)
+- 📋 [Mobile adoption: useTwoStepConfirm in useUserKicking](issues/quorum-shared-migration/.done/2026-05-29-mobile-adopt-useTwoStepConfirm-in-useUserKicking.md)
+- 📋 [Adopt shared role-mutation helpers in mobile `useRoleManagement`](issues/quorum-shared-migration/.done/2026-05-30-mobile-adopt-shared-role-mutation-helpers.md)
+- 📋 [Converge mobile bio + display-name validation to shared byte validators](issues/quorum-shared-migration/.done/2026-06-10-mobile-converge-profile-validation-to-shared.md)
+- 📋 [Mobile: honor empty displayName as a per-space-name clear](issues/quorum-shared-migration/.done/2026-06-11-mobile-honor-displayname-clear.md)
+- 📋 [Adopt shared message-preprocessing pipeline](issues/quorum-shared-migration/.done/2026-06-18-adopt-shared-message-preprocessing.md)
+- 📋 [Unify date/time formatting across the app (shared-first)](issues/quorum-shared-migration/.done/2026-07-15-unify-date-formats.md)
+
+### Open
+
+- 🐛 [`isProfilePublic` toggle not syncing mobile → desktop (same account)](issues/.open/2026-06-10-isprofilepublic-not-syncing-mobile-to-desktop.md)
+- 🐛 [`primaryUsername` is never synced to config and may not reach the published public profile](issues/.open/2026-06-10-primary-username-not-synced-or-published.md)
+- 🐛 [Desktop ↔ mobile messaging broken: two independent failures](issues/.open/2026-06-13-desktop-to-mobile-messages-fail-decryption-invalid-signature.md)
+- 🐛 [Onboarding QR import is very slow (~2 min) and freezes the UI](issues/.open/2026-06-13-onboarding-qr-import-slow-and-ui-freeze.md)
+- 🐛 [GIFs render as a frozen static image in mobile chat](issues/.open/2026-06-14-mobile-chat-gifs-render-static-not-animated.md)
+- 🐛 [Remaining TypeScript errors needing lead-dev review](issues/.open/2026-06-15-noble-v2-api-mismatch.md)
+- 🐛 [Stale Hypersnap signer / opt-in when connecting a different Farcaster account](issues/.open/2026-06-20-stale-hypersnap-signer-on-account-switch.md)
+- 🐛 [UserConfig cross-device sync is restart-gated, not live (master tracking report)](issues/.open/2026-06-22-userconfig-blob-not-live-synced-cross-device-master.md)
+- 🐛 [Messages DB refuses to open when the file's identity key no longer matches](issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md)
+- 🐛 [DM self-echo: phantom self-address row + partner row wears MY identity](issues/.open/2026-06-26-dm-self-profile-overwrites-partner-row.md)
+- 🐛 [Duplicate DM conversation rows for the same partner (partner surfaces under two addresses, no dedup)](issues/.open/2026-06-26-duplicate-dm-conversations-no-canonical-address.md)
+- 🐛 [Custom emoji/sticker lose transparency (black background) on import](issues/.open/2026-07-16-emoji-sticker-transparency-lost-black-background.md)
+- 🐛 [Config sync never removes deleted spaces (add-only)](issues/.open/2026-07-19-config-sync-add-only-deleted-spaces-linger.md)
+- 🐛 [New synced space is invisible until the next app launch](issues/.open/2026-07-19-new-desktop-space-appears-one-launch-late-on-mobile.md)
+- 🐛 [Mobile ↔ desktop message delivery (master report)](issues/.open/2026-07-20-mobile-desktop-message-transport-delay-loss-master.md)
+- 🐛 [DM send aborts with "WebSocket not connected" + weak failed-state UX](issues/.open/2026-07-23-dm-send-websocket-not-connected-abort-and-failed-ux.md)
+- 🐛 [DM messages silently fail to deliver (mobile ↔ desktop)](issues/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md)
+- 🐛 [DM send takes ~10-11s (production, not dev-only)](issues/.open/2026-07-24-dm-send-latency-10s-production.md)
+- 🐛 [Reset App Data leaves a stale SQLCipher key cached, so the next re-onboard bricks every chat](issues/.open/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md)
+- 🐛 [Spaces: the hub-log write ack is received and discarded](issues/.open/2026-07-26-spaces-log-append-ack-ignored-silent-write-loss.md)
+- 🐛 [quorum-shared WS transport: uncaught reconnect rejection floods dev LogBox](issues/.open/2026-07-28-quorum-shared-ws-uncaught-rejection-logbox-flood.md)
+- 🐛 [Composer sits under the tab bar on chat entry, then snaps up](issues/.open/2026-08-01-composer-sits-under-tab-bar-on-chat-entry.md)
+- 🐛 [Messages jitter when swapping between the keyboard and the emoji panel](issues/.open/2026-08-01-keyboard-panel-swap-flickers-message-list.md)
+- 🐛 [Messages queued while offline are silently lost if the app process dies](issues/.open/2026-08-01-outbound-queue-lost-on-app-restart.md)
+- 🐛 [Two icons left in the registry gap](issues/.open/2026-08-03-icon-registry-residual-gaps-mood-happy-and-headphones-filled.md)
+- 🐛 [One member's row is carrying another member's Farcaster identity](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md)
+- 🐛 [Mobile publishes a narrowed Space list, emptying every desktop sidebar](issues/.open/2026-08-04-mobile-publishes-a-narrowed-space-list-and-empties-every-desktop-sidebar.md)
+- 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
+- 📋 [Message composer — further improvements](issues/.open/2026-06-16-message-composer-further-improvements.md)
+- 📋 [Split profile header has no visible "edit" cue](issues/.open/2026-06-16-split-profile-edit-affordance-not-discoverable.md)
+- 📋 [Space folders — Telegram-style pill bar](issues/.open/2026-06-17-space-folders-pill-bar.md)
+- 📋 [Channel unread dot — real "any unread" signal](issues/.open/2026-06-18-channel-unread-dot-lastread-timestamp.md)
+- 📋 [Feed reply: pin the Post button above the keyboard (definitive fix)](issues/.open/2026-06-19-feed-reply-pin-post-button-above-keyboard.md)
+- 📋 [Modal close-affordance consistency](issues/.open/2026-06-19-modal-close-affordance-consistency.md)
+- 📋 [Share the emoji-picker data layer across desktop + mobile](issues/.open/2026-06-19-share-emoji-picker-data-layer.md)
+- 📋 [Profile screen — single pill-row navigation](issues/.open/2026-06-20-profile-pill-navigation.md)
+- 📋 [DM favorites: sync + wire](issues/.open/2026-06-21-dm-favorites-sync-and-wire.md)
+- 📋 [Add DMs to the global Notifications panel](issues/.open/2026-06-23-dms-in-global-notification-panel.md)
+- 📋 [Mention-aware native push](issues/.open/2026-06-23-mention-aware-native-push.md)
+- 📋 [Channel icon picker polish](issues/.open/2026-06-26-channel-icon-picker-polish.md)
+- 📋 [Coalesce replayed space-manifest during catch-up (stop space/channel flicker)](issues/.open/2026-06-28-coalesce-replay-space-manifest-flicker.md)
+- 📋 [Coalesce replayed update-profile during catch-up (stop display-name flicker)](issues/.open/2026-06-28-coalesce-replay-state-updates-stop-flicker.md)
+- 📋 [UI consistency audit + sweep](issues/.open/2026-06-28-ui-button-consistency-audit-and-sweep.md)
+- 📋 [QNS as a Standalone, Skin-Independent Screen](issues/.open/2026-07-16-qns-standalone-screen-design.md)
+- 📋 [QNS Standalone Screen — Implementation Plan](issues/.open/2026-07-16-qns-standalone-screen-plan.md)
+- 📋 [Recovery Key Export — surface both phrase and private key, honestly](issues/.open/2026-07-16-recovery-key-export-both-options.md)
+- 📋 [Mobile test environment + test audit](issues/.open/2026-07-19-mobile-test-environment-and-test-audit.md)
+- 📋 [Fix space send-side loss (H-B): resend `log-append` on missing ack](issues/.open/2026-07-21-fix-space-append-send-loss-ack-resend.md)
+- 📋 [Audit space sends for the DM latency bugs](issues/.open/2026-07-24-check-space-send-latency-same-bugs.md)
+- 📋 [Ghost-session prune (desktop parity), done safely](issues/.open/2026-07-24-ghost-session-prune-with-registration-sourced-list.md)
+- 📋 [Typing indicators + global typing toggles — desktop → mobile port](issues/.open/2026-07-24-typing-indicators-and-toggles-port.md)
+- 📋 [Deliver quorum-shared to mobile without an npm publish, for everyone](issues/.open/2026-08-01-deliver-quorum-shared-to-mobile-without-npm-publish.md)
+- 📋 [Non-destructive feedback: move the remaining `Alert.alert` sites off native alerts](issues/.open/2026-08-01-non-destructive-alert-alert-to-toasts.md)
+- 📋 [Three pieces the resolver adoption deliberately left](issues/.open/2026-08-04-qns-names-and-the-identity-coverage-instrument.md)
+
+### Deferred
+
+- 📋 [Migrate mobile `IconSymbol` to shared `Icon` primitive](issues/.deferred/2026-06-09-migrate-iconsymbol-to-shared-icon-primitive.md)
+- 📋 [Space-manifest sync: move off whole-object last-write-wins](issues/.deferred/2026-06-13-space-manifest-sync-architecture-improvement.md)
+- 📋 [Skin gallery: real-color swatches (DEFERRED — needs lead-dev decision)](issues/.deferred/2026-06-15-skin-gallery-real-color-swatches.md)
+
+## ✅ Completed Issues
+
+- 🐛 [IconSymbol throws on Tabler icon names received from desktop manifests](issues/.done/2026-06-09-iconsymbol-throws-on-tabler-icon-names-from-desktop.md)
+- 🐛 [Mobile saves pin / mute / thread control messages as junk timeline bubbles](issues/.done/2026-06-12-mobile-saves-pin-mute-thread-control-msgs-as-junk-bubbles.md)
+- 🐛 [Desktop space changes don't sync to mobile (Android timestamp overflow)](issues/.done/2026-06-12-space-manifest-changes-not-syncing-to-mobile-silent-failure.md)
+- 🐛 [Physical Android device: "Unable to load script" — full session report](issues/.done/2026-06-12-unable-to-load-script-physical-device.md)
+- 🐛 [Channel icons don't render cross-platform (vocabulary mismatch)](issues/.done/2026-06-13-channel-icons-dont-render-cross-platform-vocabulary-mismatch.md)
+- 🐛 [Mobile applies stale space manifests (no staleness guard)](issues/.done/2026-06-13-mobile-applies-stale-space-manifests-no-staleness-guard.md)
+- 🐛 [Mobile channel/group edits don't reach desktop (no broadcast)](issues/.done/2026-06-13-mobile-channel-group-edits-dont-reach-desktop-no-broadcast.md)
+- 🐛 [Clearing a space description can't be saved](issues/.done/2026-06-14-cleared-space-description-not-saved-falsy-coercion.md)
+- 🐛 [Mobile strips an empty displayName on send → per-space name clears don't propagate](issues/.done/2026-06-16-mobile-send-strips-empty-displayname-clear-not-propagated.md)
+- 🐛 [Tab bar visible above the emoji panel — channels only](issues/.done/2026-06-19-tab-bar-visible-above-emoji-panel-channels.md)
+- 🐛 [Composer pill drops behind the tab bar during slow chat load](issues/.done/2026-06-20-composer-drops-behind-tab-bar-during-slow-chat-load.md)
+- 🐛 [Chat message list jumps to the top (first message) when a modal opens/closes over it](issues/.done/2026-06-21-chat-list-jumps-to-top-on-modal-open.md)
+- 🐛 [CenterModal keyboard overlap](issues/.done/2026-06-28-centermodal-keyboard-covers-input-and-buttons.md)
+- 🐛 [Clearing a per-space avatar on mobile doesn't propagate to desktop](issues/.done/2026-07-15-avatar-clear-not-propagating-userIcon-empty-vs-sentinel.md)
+- 🐛 [sendStickerMessage sealHubEnvelope argument swap](issues/.done/2026-07-19-sticker-sealhubenvelope-args-swapped.md)
+- 🐛 [DM receipt ticks show delivered/read for a message that never landed](issues/.done/2026-07-24-dm-false-receipt-ticks-on-undelivered-message.md)
+- 🐛 [DM sessions never confirm — the permanent re-init loop](issues/.done/2026-07-24-dm-session-confirm-row-mismatch-x3dh-every-send.md)
+- 🐛 [Chat message list jumps back to the first message again — regression of the 2026-06-22 modal-jump fix](issues/.done/2026-07-27-chat-list-jumps-to-top-regression-translucent-modals.md)
+- 🐛 [Emoji panel cold open no longer lifts the message list](issues/.done/2026-07-28-emoji-panel-cold-open-no-list-lift.md)
+- 🐛 [iOS-only Space header: dead back button, "Loading…" back label, Liquid Glass capsules](issues/.done/2026-08-01-ios-space-header-back-button-dead-and-loading-label.md)
+- 🐛 [A disconnected composer queued exactly one message, then went quiet](issues/.done/2026-08-01-offline-composer-queues-only-one-message.md)
+- 🐛 [Newest message hides under the composer in a short chat, and the list won't scroll](issues/.done/2026-08-01-short-chat-last-message-hidden-behind-composer.md)
+- 🐛 [Deleting a non-empty group takes all its channels with it](issues/.done/2026-08-03-group-delete-destroys-its-channels-and-dialogs-promise-unenforced-rules.md)
+- 📋 [Channel reorder mutations should broadcast (not local-only)](issues/.done/2026-05-29-channel-reorder-mutations-should-broadcast.md)
+- 📋 [Port DM update-profile (identity sync over DM sessions) from desktop](issues/.done/2026-06-09-port-dm-update-profile-from-desktop.md)
+- 📋 [Task: make `primaryUsername` (and `isProfilePublic`) survive a device switch and reliably reach the published public profile](issues/.done/2026-06-10-primary-username-sync-and-publish.md)
+- 📋 [Channel & group icons + per-item settings drawer](issues/.done/2026-06-12-channel-group-icon-and-settings.md)
+- 📋 [Cross-repo fix: remove the space-owner permission bypass](issues/.done/2026-06-12-owner-permission-bypass-cross-repo-fix.md)
+- 📋 [Wave 0 — Permission enforcement on mobile (consume shared helpers)](issues/.done/2026-06-12-permission-enforcement-wave-0.md)
+- 📋 [✅ THIS FIX IS DONE — merged as PR #79 (1f5a5f5), runtime-verified 2026-06-13.](issues/.done/2026-06-12-RESUME-space-manifest-sync-fix.md)
+- 📋 [Converge image+caption onto `post` + `embeddedMedia`](issues/.done/2026-06-13-converge-image-caption-to-post-embeddedmedia.md)
+- 📋 [Destructive operations: tiered confirmation standard for mobile](issues/.done/2026-06-13-destructive-operations-confirmation-standard.md)
+- 📋 [Extend default-deny to the DM receive path](issues/.done/2026-06-13-dm-receive-path-default-deny.md)
+- 📋 [Harden unsupported message-type handling](issues/.done/2026-06-13-harden-unsupported-message-type-handling.md)
+- 📋 [messagePreview missing call / space-call types](issues/.done/2026-06-13-messagepreview-missing-call-types.md)
+- 📋 [Add `joinedAt` to mobile's space-join signature](issues/.done/2026-06-14-add-joinedat-to-mobile-join-signature.md)
+- 📋 [Avatar initials — display-name-based + shared gradient logic](issues/.done/2026-06-14-avatar-initials-display-name-from-shared.md)
+- 📋 [Drag-and-drop channel reordering](issues/.done/2026-06-14-channel-drag-and-drop-reorder.md)
+- 📋 [Per-item settings drawer for channels & groups — design](issues/.done/2026-06-14-channel-group-settings-drawer-design.md)
+- 📋 [Link quorum-shared locally for faster iteration](issues/.done/2026-06-14-link-quorum-shared-locally-for-faster-iteration.md)
+- 📋 [Role-assignment UI is built but unreachable on mobile](issues/.done/2026-06-14-role-assignment-ui-unreachable-missing-roles-prop.md)
+- 📋 [Roles adopt the shared icon-color vocabulary](issues/.done/2026-06-14-role-color-cross-platform-format-fix.md)
+- 📋 [Appearance Light/Dark/System Control — Implementation Plan](issues/.done/2026-06-15-appearance-light-dark-system-control-plan.md)
+- 📋 [Appearance control: Light / Dark / System for the Default theme](issues/.done/2026-06-15-appearance-light-dark-system-control.md)
+- 📋 [Composer smooth growth (deferred polish)](issues/.done/2026-06-16-composer-smooth-growth.md)
+- 📋 [Emoji panel open lag — virtualize the grid](issues/.done/2026-06-16-emoji-panel-open-lag.md)
+- 📋 [Inbox message previews should use app icons, not emoji](issues/.done/2026-06-16-inbox-message-previews-use-icons-not-emoji.md)
+- 📋 [Unified message composer](issues/.done/2026-06-16-unified-message-composer.md)
+- 📋 [Channel Drag-and-Drop Reorder Implementation Plan](issues/.done/2026-06-17-channel-drag-reorder-plan.md)
+- 📋 [Channel & Group Settings Drawer Implementation Plan](issues/.done/2026-06-17-channel-group-settings-drawer-plan.md)
+- 📋 [DM delete-own-message: make it match desktop (delete for everyone)](issues/.done/2026-06-17-delete-own-message-in-dm.md)
+- 📋 [DM conversation settings parity](issues/.done/2026-06-17-dm-conversation-settings-parity.md)
+- 📋 [Shared pill/segmented menu primitive + UX fixes](issues/.done/2026-06-17-horizontal-pill-menu-ux-improvements.md)
+- 📋 [Modal semantic color tokens + contrast regression fix](issues/.done/2026-06-17-modal-semantic-color-tokens.md)
+- 📋 [Wave 1 — Mentions + Markdown renderer](issues/.done/2026-06-18-mentions-and-markdown-renderer.md)
+- 📋 [Nav bar redesign](issues/.done/2026-06-18-nav-bar-redesign.md)
+- 📋 [Space channels screen banner header](issues/.done/2026-06-18-space-banner-header.md)
+- 📋 [Composer one-conductor refactor — single position owner for the keyboard↔panel swap](issues/.done/2026-06-19-composer-one-conductor-refactor.md)
+- 📋 [Keyboard-synced chat list scroll (KeyboardChatScrollView)](issues/.done/2026-06-19-keyboard-synced-chat-list-scroll.md)
+- 📋 [Composer ↔ keyboard ↔ emoji-panel: transition robustness pass](issues/.done/2026-06-20-composer-emoji-panel-transitions.md)
+- 📋 [Sync-on-merge for unified profiles (proposal — needs lead-dev sign-off)](issues/.done/2026-06-20-merge-profiles-sync-on-merge.md)
+- 📋 [Plan: production-variant build (side-by-side) to verify the composer-drop glitch in prod](issues/.done/2026-06-20-production-variant-build-for-composer-verification.md)
+- 📋 [Suppress native notifications for muted DMs (background / killed app)](issues/.done/2026-06-21-dm-mute-suppress-native-notifications.md)
+- 📋 [Make `saveEditHistory` actually work on mobile](issues/.done/2026-06-21-dm-save-edit-history-honor-flag.md)
+- 📋 [Profile-screen-rework — deferred cleanup (non-blocking)](issues/.done/2026-06-21-profile-rework-deferred-cleanup.md)
+- 📋 [Saved/Recent mini-apps: full metadata for apps not in discovery](issues/.done/2026-06-21-saved-recent-miniapp-metadata.md)
+- 📋 [Quorum mentions/replies inbox on mobile](issues/.done/2026-06-23-quorum-mentions-replies-inbox.md)
+- 📋 [Adopt shared `formatAddress`, drop device-width `scaleFactor`](issues/.done/2026-06-24-adopt-shared-formatAddress.md)
+- 📋 [Adopt shared image-compression CONFIG on mobile (config-only)](issues/.done/2026-06-24-plug-mobile-into-shared-image-config.md)
+- 📋 [IMPLEMENTED — Part 2 mobile (2026-07-19) — DONE + RUNTIME-VERIFIED end-to-end](issues/.done/2026-06-25-dm-delete-conversation-signal-and-self-sync.md)
+- 📋 [DM per-conversation receipt toggles](issues/.done/2026-06-25-dm-receipt-toggles.md)
+- 📋 [Make message-signing controls real on mobile](issues/.done/2026-06-25-port-message-signing-controls.md)
+- 📋 [Translate action → IconLanguage](issues/.done/2026-06-25-translate-icon-iconlanguage.md)
+- 📋 [Task: reliable two-device preview setup (test on 2 phones at once)](issues/.done/2026-06-26-dual-device-preview-setup.md)
+- 📋 [Design: per-message indicators on grouped (continuation) messages](issues/.done/2026-06-28-grouped-message-indicators-design.md)
+- 📋 [Grouped/continuation messages drop per-message indicators (desktop + mobile)](issues/.done/2026-06-28-grouped-message-indicators-missing.md)
+- 📋 [Avatar clear/absent/value — one shared three-state design (desktop + mobile)](issues/.done/2026-07-15-avatar-empty-vs-absent-three-state-design.md)
+- 📋 [Implementation plan: per-message indicators on grouped (continuation) rows — MOBILE](issues/.done/2026-07-15-grouped-message-indicators-mobile-plan.md)
+- 📋 [Per-space profile: "empty = follow global" — one model, both apps](issues/.done/2026-07-15-per-space-profile-empty-follows-global-design.md)
+- 📋 [Implementation plan — per-space profile "follow global vs override" (two-state)](issues/.done/2026-07-15-per-space-profile-follow-global-PLAN.md)
+- 📋 [DM edit-message sync (desktop↔mobile parity)](issues/.done/2026-07-16-dm-edit-message-sync-desktop-parity.md)
+- 📋 [Profile identity sync — analysis + corrected target design](issues/.done/2026-07-16-profile-identity-sync-ARCHITECTURE.md)
+- 📋 [Promote edit logic to quorum-shared](issues/.done/2026-07-17-promote-edit-logic-to-quorum-shared.md)
+- 📋 [Serialize DM ratchet state operations (mobile)](issues/.done/2026-07-17-serialize-dm-ratchet-state-keyedmutex.md)
+- 📋 [DM delivery + read receipts — mobile wiring (#9)](issues/.done/2026-07-19-dm-receipt-pipeline-and-global-toggles.md)
+- 📋 [Mobile: adopt shared `applyEdit` + fix EditHistoryModal](issues/.done/2026-07-20-mobile-adopt-shared-applyedit-fix-edit-history.md)
+- 📋 [Pre-ship test plan — space control-message auth + signing-key split](issues/.done/2026-07-20-pre-ship-test-plan-space-control-auth-signing.md)
+- 📋 [Sync per-conversation DM settings across devices (mobile half)](issues/.done/2026-07-20-sync-all-conversation-settings.md)
+- 📋 [Dev env receive-deafness — diagnose, then self-heal](issues/.done/2026-07-21-dev-env-receive-deaf-investigation.md)
+- 📋 [Investigate: bug, or intentional design? — mobile space-receive cursor-wedge](issues/.done/2026-07-21-investigate-receive-cursor-wedge-bug-or-intentional.md)
+- 📋 [Option C — bounded-retry + skip-list for undecryptable inbox envelopes](issues/.done/2026-07-23-bounded-retry-inbox-poison-skiplist.md)
+- 📋 [Inline DM read/delivery receipts (mobile)](issues/.done/2026-07-23-inline-dm-receipts-mobile.md)
+- 📋 [Port ConfirmDoubleRatchetSenderSession to mobile](issues/.done/2026-07-23-port-confirm-sender-session-to-mobile.md)
+- 📋 [Port the init-envelope staleness guard to mobile](issues/.done/2026-07-23-port-init-envelope-staleness-guard-to-mobile.md)
+- 📋 [Layer 1 — durable send (remove the pre-flight throw)](issues/.done/2026-07-24-layer1-durable-send-remove-preflight-throw.md)
+- 📋 [Mobile DM delivery receipts broken — outgoing messageId mismatch](issues/.done/2026-07-24-mobile-dm-delivery-receipt-messageid-mismatch.md)
+- 📋 [Mobile: per-device conversation inbox (PART 1) + the missing accept (PART 2)](issues/.done/2026-07-25-mobile-per-device-conversation-inbox.md)
+- 📋 [mobile↔mobile DM round on two physical devices](issues/.done/2026-07-26-mobile-to-mobile-two-device-round.md)
+- 📋 [Receipt truthfulness — a read ack must never invent a delivery](issues/.done/2026-07-26-receipt-truthfulness-delivery-gated-reads.md)
+- 📋 [Mobile never piggybacks receipt acks on outgoing DMs](issues/.done/2026-07-27-mobile-piggyback-receipt-acks-on-outgoing-dms.md)
+- 📋 [Adopt iOS 26 Liquid Glass before Xcode 27 removes the opt-out](issues/.done/2026-08-01-adopt-ios26-liquid-glass.md)
+- 📋 [The same member renders differently depending on which screen you are on](issues/.done/2026-08-04-one-identity-resolver-so-names-and-avatars-match-everywhere.md)
+
+### 2026 06 21 Mute And Block Overhaul
+
+- 📋 [Mute & Block overhaul — overview](issues/.done/2026-06-21-mute-and-block-overhaul/README.md)
+- 📋 [Task A — Channel/Space notif-mute cross-device sync](issues/.done/2026-06-21-mute-and-block-overhaul/task-A-channel-mute-sync.md)
+- 📋 [Task B — Channel/Space mute per-row visual treatment](issues/.done/2026-06-21-mute-and-block-overhaul/task-B-channel-mute-ux.md)
+- 📋 [Task C — Moderation mute-user (mobile)](issues/.done/2026-06-21-mute-and-block-overhaul/task-C-moderation-mute-user.md)
+- 📋 [Task D — Personal "Block" user](issues/.done/2026-06-21-mute-and-block-overhaul/task-D-personal-block-user.md)
+- 📋 [Task DESKTOP — personal Block-user on desktop](issues/.done/2026-06-21-mute-and-block-overhaul/task-DESKTOP-personal-block.md)
+
+## 🗃️ Archived Issues
+
+- 📋 [Transport reliability — START HERE](issues/.archived/2026-07-24-transport-reliability-START-HERE.md)
+
+## 📊 Reports
+
+### Active Reports
+
+- [Session findings index — permission & message-handling parity](reports/2026-06-12-permission-and-message-parity-findings-index.md)
+- [Modal link-row audit + unified component proposal](reports/2026-06-15-modal-link-row-audit-and-unified-component.md)
+- [Recap: Cassie's fork roll-up (06-19) — UI/UX context](reports/2026-06-20-cassie-fork-rollup-ui-recap.md)
+- [DM delete semantics: desktop vs mobile](reports/2026-06-21-dm-delete-semantics-desktop-vs-mobile.md)
+- [Report: Android device heat — CPU profile of the live app](reports/2026-06-25-android-thermal-cpu-burst-defaultdispatcher.md)
+- [Should mobile adopt quorum-shared UI primitives?](reports/2026-06-28-shared-primitives-on-mobile-analysis.md)
+- [UI touchable audit findings](reports/2026-06-28-ui-touchable-audit-findings.md)
+- [TypeScript error inventory](reports/2026-07-31-typescript-error-inventory.md)
+
+## 📊 Completed Reports
+
+- [Space signing & multi-device auth — master tracker](reports/.done/2026-07-19-signing-key-multidevice-hunt-tracker.md)
+
+---
+
+**Last Updated**: 2026-08-04 15:59:48
