@@ -1281,6 +1281,76 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                           : m
                       );
                     });
+
+                    // A member row with neither address form cannot be named in a
+                    // role list or a system message. The anchor above is already
+                    // blanked, which is the part that matters for auth.
+                    if (!leavingAddress) {
+                      logger.warn(
+                        `[control-auth] leave: member has no address, skipping roles and event (space=${spaceId.slice(0, 12)})`
+                      );
+                      break;
+                    }
+
+                    const leaveSpace = getSpace(spaceId);
+
+                    // Drop them from every role. Blanking the anchor alone left a
+                    // departed member holding whatever role they had, on every
+                    // device, forever — desktop's leave branch has always done this.
+                    if (leaveSpace?.roles?.some((role) => role.members.includes(leavingAddress))) {
+                      await adapter.saveSpace({
+                        ...leaveSpace,
+                        roles: leaveSpace.roles.map((role) => ({
+                          ...role,
+                          members: role.members.filter((m) => m !== leavingAddress),
+                        })),
+                        modifiedDate: Date.now(),
+                      });
+                      queryClient.invalidateQueries({ queryKey: queryKeys.spaces.detail(spaceId) });
+                    }
+
+                    // Post the "X left" event. The renderer for it already existed
+                    // (components/Chat/types.ts maps content.type 'leave' to a
+                    // system event) — nothing ever created the message.
+                    //
+                    // The id is derived from the anchor the member had BEFORE it was
+                    // blanked above, matching desktop, so both clients mint the same
+                    // messageId and a replayed leave dedupes instead of doubling.
+                    const leaveChannelId = leaveSpace?.defaultChannelId || spaceId;
+                    const leaveMessageId = bytesToHex(
+                      sha256(new TextEncoder().encode('leave' + leaver.inbox_address))
+                    );
+                    const leftAt = Date.now();
+                    const leaveMessage: Message = {
+                      channelId: leaveChannelId,
+                      spaceId,
+                      messageId: leaveMessageId,
+                      digestAlgorithm: 'SHA-256',
+                      nonce: leaveMessageId,
+                      createdDate: leftAt,
+                      modifiedDate: leftAt,
+                      lastModifiedHash: '',
+                      reactions: [],
+                      mentions: { memberIds: [], roleIds: [], channelIds: [] },
+                      content: {
+                        senderId: leavingAddress,
+                        type: 'leave',
+                      },
+                    };
+
+                    await adapter.saveMessage(leaveMessage, leftAt, '', '', '', '');
+                    const leaveMessagesKey = queryKeys.messages.infinite(spaceId, leaveChannelId);
+                    queryClient.setQueryData<{ pages: { messages: Message[] }[]; pageParams: unknown[] }>(leaveMessagesKey, (old) => {
+                      if (!old) return old;
+                      return {
+                        ...old,
+                        pages: old.pages.map((page, index) =>
+                          index === 0
+                            ? { ...page, messages: [...page.messages, leaveMessage] }
+                            : page
+                        ),
+                      };
+                    });
                   } catch (leaveError) {
                     logger.warn(
                       `[control-auth] leave dropped: threw while processing space=${spaceId.slice(0, 12)}: ${leaveError instanceof Error ? leaveError.message : String(leaveError)}`
