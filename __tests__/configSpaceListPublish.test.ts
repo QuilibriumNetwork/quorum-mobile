@@ -325,6 +325,125 @@ describe('saveConfig — truncated Space lists are never published', () => {
     expect(getLocalUserConfig(ADDRESS)!.timestamp).toBe(500);
   });
 
+  describe('carrying previously-synced Space keys', () => {
+    /** A spaceKeys entry as it arrives in the config blob from another device. */
+    const blobKey = (spaceId: string) => ({
+      spaceId,
+      encryptionState: {
+        conversationId: `${spaceId}/${spaceId}`,
+        inboxId: 'inbox-from-blob',
+        state: '{}',
+        timestamp: 1,
+      },
+      keys: [
+        {
+          keyId: 'config',
+          address: 'addr',
+          publicKey: 'pub-from-blob',
+          privateKey: 'priv-from-blob',
+          spaceId,
+        },
+      ],
+    });
+
+    /** Nothing is keyable from local storage — the 0/3 case measured on device. */
+    const arrangeNothingKeyable = () => {
+      mockGetAllSpaces.mockReturnValue([]);
+      mockGetEncryptionStates.mockReturnValue([]);
+    };
+
+    const configWithBlobKeys = (): UserConfig =>
+      ({
+        address: ADDRESS,
+        allowSync: true,
+        timestamp: 1000,
+        spaceIds: ['space-1', 'space-2', 'space-3'],
+        items: [
+          { type: 'space', id: 'space-1' },
+          { type: 'space', id: 'space-2' },
+          { type: 'space', id: 'space-3' },
+        ],
+        spaceKeys: [blobKey('space-1'), blobKey('space-2'), blobKey('space-3')],
+      }) as unknown as UserConfig;
+
+    it('publishes the full list when local storage can key nothing at all', async () => {
+      // The regression this exists to prevent: a device that imported its Spaces
+      // from the blob rather than creating them keys 0 of them, so the guard
+      // held every publish and the phone silently stopped syncing any setting.
+      arrangeNothingKeyable();
+
+      await saveConfig({ ...configWithBlobKeys(), name: 'renamed' });
+
+      expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
+      expect(getLocalUserConfig(ADDRESS)!.spaceIds).toEqual([
+        'space-1',
+        'space-2',
+        'space-3',
+      ]);
+      expect(getLocalUserConfig(ADDRESS)!.name).toBe('renamed');
+    });
+
+    it('prefers the locally collected key over the carried-over copy', async () => {
+      // A key rotated on this device must not be overwritten by the older copy
+      // the blob happens to carry.
+      mockGetAllSpaces.mockReturnValue([keyedSpace('space-1')]);
+      mockGetEncryptionStates.mockImplementation((id) => [encState(id)]);
+      mockGetSpaceKeys.mockReturnValue([
+        { keyId: 'config', publicKey: 'pub-local', privateKey: 'priv-local' },
+      ] as never);
+
+      await saveConfig(configWithBlobKeys());
+
+      const effective = getLocalUserConfig(ADDRESS)!.spaceKeys!;
+      const space1 = effective.find((sk) => sk.spaceId === 'space-1')!;
+      expect(space1.keys[0].privateKey).toBe('priv-local');
+      // The two it cannot key are still carried, so the list is not narrowed
+      expect(effective.map((sk) => sk.spaceId).sort()).toEqual([
+        'space-1',
+        'space-2',
+        'space-3',
+      ]);
+    });
+
+    it('does not carry a Space the user removed from the config', async () => {
+      // removeSpaceFromConfig takes the Space out of spaceIds before saveConfig
+      // runs. Carrying its stale blob key would resurrect it on every device.
+      arrangeNothingKeyable();
+
+      const afterLeaving = {
+        ...configWithBlobKeys(),
+        spaceIds: ['space-1', 'space-2'],
+        items: [
+          { type: 'space', id: 'space-1' },
+          { type: 'space', id: 'space-2' },
+        ],
+      } as unknown as UserConfig;
+
+      await saveConfig(afterLeaving);
+
+      expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
+      expect(
+        getLocalUserConfig(ADDRESS)!
+          .spaceKeys!.map((sk) => sk.spaceId)
+          .sort()
+      ).toEqual(['space-1', 'space-2']);
+    });
+
+    it('still holds when a Space has no key material anywhere', async () => {
+      // The genuine dead end the guard is for: no local keys, and nothing in the
+      // blob either. Rare now, but it must still refuse rather than truncate.
+      arrangeNothingKeyable();
+
+      await saveConfig({
+        ...configWithBlobKeys(),
+        spaceKeys: [blobKey('space-1')],
+      } as UserConfig);
+
+      expect(mockPostUserSettings).not.toHaveBeenCalled();
+      expect(getLocalUserConfig(ADDRESS)!.timestamp).toBe(1000);
+    });
+  });
+
   it('publishes a username change while every Space is keyed', async () => {
     // The reported reproduction, in miniature: changing the username routes
     // through saveConfig like any other setting, which is how an unrelated
