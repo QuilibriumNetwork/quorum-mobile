@@ -1009,12 +1009,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     // way. Note this proves key possession, not identity — see
                     // verifyJoinParticipant.
                     const joinVerdict = await verifyJoinParticipant(participant);
-                    if (!joinVerdict.ok) {
+                    if (joinVerdict !== 'valid') {
+                      // Same rule as an indeterminate owner signature above: a
+                      // check that could not RUN must not be acked away as a
+                      // forgery. Deleting the inbox copy is permanent, and join
+                      // is the happy path for every new member, so collapsing
+                      // the two would silently lose a real member for good.
+                      if (joinVerdict === 'unverifiable') {
+                        deferInboxDelete = true;
+                      }
                       logger.warn(
-                        `[control-auth] join dropped: ${joinVerdict.reason} (space=${spaceId.slice(0, 12)} claimed=${String(participant.address).slice(0, 12)})`
+                        `[control-auth] join dropped: ${joinVerdict} (space=${spaceId.slice(0, 12)} claimed=${String(participant.address).slice(0, 12)})${joinVerdict === 'unverifiable' ? '; kept in inbox for retry' : ''}`
                       );
                       break;
                     }
+                    logger.debug(
+                      `[control-auth] join accepted: signature valid (space=${spaceId.slice(0, 12)} member=${String(participant.address).slice(0, 12)})`
+                    );
 
                     // Update the Triple Ratchet state with new peer
                     const spaceConversationId = `${spaceId}/${spaceId}`;
@@ -1206,6 +1217,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                       };
                     });
                   } catch (joinError) {
+                    // Everything downstream of the gate runs on an ALREADY
+                    // VERIFIED join, so a throw here is a storage/cache failure,
+                    // not a rejected sender. Swallowing it silently could leave a
+                    // real member half-written (ratchet slot but no member row,
+                    // or the reverse) with no way to ever find out.
+                    logger.error(
+                      `[control-auth] join: threw while applying a verified join (space=${spaceId?.slice(0, 12)}): ${joinError instanceof Error ? joinError.message : String(joinError)}`
+                    );
                   }
                   break;
                 }

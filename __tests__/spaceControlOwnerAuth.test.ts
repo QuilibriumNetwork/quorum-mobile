@@ -3,7 +3,10 @@
  *
  * kick / rekey / verify-kicked are gated on the space OWNER's ed448 signature
  * over the outer sync envelope; leave is gated on the departing member's own
- * inbox-key proof. Neither is implied by successful decryption — the config
+ * inbox-key proof; join is gated on the joining participant's own inbox-key
+ * proof over the participant blob (which cannot bind the claimed address to
+ * that key — see verifyJoinParticipant). None is implied by successful
+ * decryption — the config
  * key, the hub keypair and every member's inbox address are held by anyone who
  * has ever been in the space, including members who were later kicked. These
  * tests are the only lane that can exercise the forgery itself.
@@ -369,7 +372,7 @@ describe('verifyJoinParticipant — the join gate', () => {
 
   it('accepts a well-formed, correctly signed join', async () => {
     mockVerifyEd448.mockResolvedValue(true);
-    expect(await verifyJoinParticipant(participant())).toEqual({ ok: true });
+    expect(await verifyJoinParticipant(participant())).toBe('valid');
   });
 
   it('signs over the 10-field blob desktop builds, in desktop order', async () => {
@@ -428,41 +431,46 @@ describe('verifyJoinParticipant — the join gate', () => {
     mockVerifyEd448.mockResolvedValue(true);
     expect(
       await verifyJoinParticipant(participant({ inboxAddress: deriveInboxAddress(OTHER_KEY) }))
-    ).toEqual({ ok: false, reason: 'inbox-address-mismatch' });
+    ).toBe('inbox-address-mismatch');
     expect(mockVerifyEd448).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid signature', async () => {
     mockVerifyEd448.mockResolvedValue(false);
-    expect(await verifyJoinParticipant(participant())).toEqual({
-      ok: false,
-      reason: 'signature-invalid',
-    });
+    expect(await verifyJoinParticipant(participant())).toBe('signature-invalid');
   });
 
   it('rejects an unsigned join without touching the verifier', async () => {
-    expect(await verifyJoinParticipant(participant({ signature: undefined }))).toEqual({
-      ok: false,
-      reason: 'proof-missing',
-    });
-    expect(await verifyJoinParticipant(participant({ inboxPubKey: undefined }))).toEqual({
-      ok: false,
-      reason: 'proof-missing',
-    });
-    expect(await verifyJoinParticipant(participant({ inboxAddress: undefined }))).toEqual({
-      ok: false,
-      reason: 'proof-missing',
-    });
-    expect(await verifyJoinParticipant(null)).toEqual({ ok: false, reason: 'proof-missing' });
+    expect(await verifyJoinParticipant(participant({ signature: undefined }))).toBe('proof-missing');
+    expect(await verifyJoinParticipant(participant({ inboxPubKey: undefined }))).toBe('proof-missing');
+    expect(await verifyJoinParticipant(participant({ inboxAddress: undefined }))).toBe('proof-missing');
+    expect(await verifyJoinParticipant(null)).toBe('proof-missing');
     expect(mockVerifyEd448).not.toHaveBeenCalled();
   });
 
   it('fails closed when the native verifier throws', async () => {
     mockVerifyEd448.mockRejectedValue(new Error('bad key'));
-    expect(await verifyJoinParticipant(participant())).toEqual({
-      ok: false,
-      reason: 'malformed',
-    });
+    expect(await verifyJoinParticipant(participant())).toBe('unverifiable');
+  });
+
+  it('separates "could not check" from "checked and bad" — the retry contract', async () => {
+    // The handler keeps a join in the inbox for retry ONLY on `unverifiable`.
+    // If a verifier throw were classified as a rejection, a device-side native
+    // failure would ack away a genuine member permanently. If a genuine
+    // rejection were classified as unverifiable, a forged join would be
+    // reprocessed on every reconnect forever. The split has to hold both ways.
+    mockVerifyEd448.mockRejectedValue(new Error('native module unavailable'));
+    expect(await verifyJoinParticipant(participant())).toBe('unverifiable');
+
+    mockVerifyEd448.mockReset();
+    mockVerifyEd448.mockResolvedValue(false);
+    expect(await verifyJoinParticipant(participant())).toBe('signature-invalid');
+
+    // An unsigned join is a verdict, not an unknown: no retry can add a
+    // signature that was never sent.
+    expect(await verifyJoinParticipant(participant({ signature: undefined }))).toBe(
+      'proof-missing'
+    );
   });
 
   it('does NOT bind the claimed address to the key — documented, not a bug', async () => {
@@ -472,6 +480,6 @@ describe('verifyJoinParticipant — the join gate', () => {
     // stops that from rewriting the victim; full authentication needs Layer 3.
     mockVerifyEd448.mockResolvedValue(true);
     const impersonation = participant({ address: 'victimAddress' });
-    expect(await verifyJoinParticipant(impersonation)).toEqual({ ok: true });
+    expect(await verifyJoinParticipant(impersonation)).toBe('valid');
   });
 });

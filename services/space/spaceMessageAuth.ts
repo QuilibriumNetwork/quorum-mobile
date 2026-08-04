@@ -482,12 +482,19 @@ export interface JoinParticipantProof {
   signature?: string;
 }
 
+/**
+ * Same three-way shape as OwnerEnvelopeVerdict, for the same reason: `unverifiable`
+ * means "could not check", NOT "forged". Dropping a join acks it out of the inbox
+ * permanently, so collapsing the two would silently lose a genuine member forever.
+ * Only `unverifiable` is worth a retry — the other rejections were checked and are
+ * not going to check differently next time.
+ */
 export type JoinVerdict =
-  | { ok: true }
-  | {
-      ok: false;
-      reason: 'proof-missing' | 'inbox-address-mismatch' | 'signature-invalid' | 'malformed';
-    };
+  | 'valid'
+  | 'proof-missing'
+  | 'inbox-address-mismatch'
+  | 'signature-invalid'
+  | 'unverifiable';
 
 /**
  * Desktop signs the 10 participant fields joined by bare `+`, so a field that is
@@ -511,30 +518,24 @@ function buildJoinSignedBlob(p: JoinParticipantProof): string {
 
 /**
  * Verify the ed448 signature a `join` carries, and that the announced inbox
- * address really derives from the announced key.
- *
- * Mirrors desktop's second join gate (MessageService, its `join` branch): rebuild
- * `base64(utf8(address + id + inboxAddress + pubKey + inboxKey + identityKey +
- * preKey + userIcon + displayName + joinedAt))` and verify it against
- * `participant.inboxPubKey`. Mobile's send side already produces exactly these
- * bytes; only the receive side ignored them.
+ * address really derives from the announced key. Mirrors desktop's second join
+ * gate; see `buildJoinSignedBlob` for the exact bytes signed.
  *
  * ## What this does NOT prove — read before trusting it
  *
  * The signature is checked against a public key the SENDER chose, so it proves
  * possession of *that* key. It does **not** bind `participant.address` to it. An
  * attacker can put a victim's address in the blob, sign with a fresh key of their
- * own, and this returns ok. So this is NOT authentication of the joining identity,
- * and `join` is not "fixed" by it.
+ * own, and this returns `valid`. So this is NOT authentication of the joining
+ * identity, and `join` is not "fixed" by it.
  *
- * What it is worth: unsigned and malformed joins stop being accepted, and the
- * signer is now accountable for a key — a precondition for anything that later
- * wants to reason about which key admitted whom. The thing actually protecting
- * existing members is `buildJoinedMemberRow`, which refuses to repoint an anchor
- * or clear `isKicked` no matter what verifies here.
+ * What it is worth: unsigned and malformed joins stop being accepted, and a signer
+ * can no longer claim an inbox address that is not theirs. The thing actually
+ * protecting existing members is `buildJoinedMemberRow`, which refuses to repoint
+ * an anchor or clear `isKicked` no matter what verifies here.
  *
  * Binding the claimed address to the key needs the DKG proof (`verify_point`),
- * which mobile cannot currently call — see the join issue's Layer 3.
+ * which mobile cannot currently call.
  */
 export async function verifyJoinParticipant(
   participant: JoinParticipantProof | null | undefined
@@ -542,8 +543,10 @@ export async function verifyJoinParticipant(
   const inboxPubKey = participant?.inboxPubKey;
   const signature = participant?.signature;
   const inboxAddress = participant?.inboxAddress;
+  // Absent rather than wrong: retrying cannot make an unsigned join grow a
+  // signature, so this is a real verdict, not an `unverifiable`.
   if (!participant || !inboxPubKey || !signature || !inboxAddress) {
-    return { ok: false, reason: 'proof-missing' };
+    return 'proof-missing';
   }
 
   try {
@@ -551,7 +554,7 @@ export async function verifyJoinParticipant(
     // theirs: the blob would still verify, and that address is the anchor
     // `resolveVerifiedSender` matches members on.
     if (deriveInboxAddress(inboxPubKey) !== inboxAddress) {
-      return { ok: false, reason: 'inbox-address-mismatch' };
+      return 'inbox-address-mismatch';
     }
 
     const signingProvider = new NativeSigningProvider();
@@ -560,9 +563,12 @@ export async function verifyJoinParticipant(
       bytesToBase64(new TextEncoder().encode(buildJoinSignedBlob(participant))),
       signature
     );
-    return isValid ? { ok: true } : { ok: false, reason: 'signature-invalid' };
+    return isValid ? 'valid' : 'signature-invalid';
   } catch {
-    // Malformed hex, or the native verifier rejecting the input outright.
-    return { ok: false, reason: 'malformed' };
+    // The native verifier could not produce an answer — a device/native-module
+    // problem, not evidence of forgery. Note `hexToBytes` does NOT throw on bad
+    // hex (it coerces to 0), so garbage keys land in `inbox-address-mismatch`
+    // above rather than here.
+    return 'unverifiable';
   }
 }
