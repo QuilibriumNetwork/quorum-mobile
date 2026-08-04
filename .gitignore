@@ -53,7 +53,24 @@ dev/harness/logs/
 app-example
 
 # Local agent tooling (not synced with upstream)
-.agents/
 .claude/
-AGENTS.md
 .superpowers/
+
+# --- must stay ignored even once .agents/ is published -----------------------
+
+# Issue write-ups describing an attack that works against shipped code.
+# See .agents/AGENTS.md -> "Security-sensitive issues".
+.agents/issues/.secret/
+
+# Logs and captures. Regenerated every run; carry account/machine names and,
+# in transport traces, real key material.
+.agents/**/*.log
+.agents/**/*-log.txt
+.agents/**/logs/
+.agents/**/captures/
+
+# Written by dev-start-mobile-wifi.ps1 each run.
+.agents/reports/adb-wifi-endpoint.txt
+
+# Machine-local script settings (see .agents/scripts/.env.local.example).
+.agents/scripts/.env.local
