@@ -16,6 +16,14 @@ require('./services/polyfills/buffer');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('react-native-get-random-values');
 
+// Logging policy, before anything that logs. The shared logger disables
+// itself in release builds and defaults above `debug` in dev, so until this
+// runs, every call is discarded in production and every logger.debug is
+// discarded everywhere. It sits after the polyfills on purpose: importing
+// quorum-shared evaluates its crypto modules, which touch global.Buffer.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+require('./services/observability/loggingPolicy').installLoggingPolicy();
+
 // Register background-task handlers BEFORE the route tree loads. expo-task-manager
 // looks up handlers immediately on bridge init when iOS BGTaskScheduler or
 // Android WorkManager fires a registered task. If `defineTask` runs later

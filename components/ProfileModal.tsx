@@ -1114,7 +1114,7 @@ export default function ProfileModal({
               }
             } catch (e) {
               // Profile broadcast to this space failed — skip and continue with others
-              logger.warn('[profile] avatar broadcast to space failed', space.spaceId, e);
+              logger.warn('[profile] avatar broadcast to space failed', space.spaceId.slice(0, 12), e);
             }
           }
 
@@ -1223,7 +1223,7 @@ export default function ProfileModal({
               }
             } catch (e) {
               // Profile broadcast to this space failed — skip and continue with others
-              logger.warn('[profile] profile broadcast to space failed', space.spaceId, e);
+              logger.warn('[profile] profile broadcast to space failed', space.spaceId.slice(0, 12), e);
             }
           }
 

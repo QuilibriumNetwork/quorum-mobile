@@ -600,7 +600,11 @@ export async function saveConfig(config: UserConfig): Promise<void> {
   // the value saves locally, the UI looks right, and nothing ever leaves the
   // device. Say so out loud, matching the POST-failure warning below.
   if (!config.allowSync) {
-    logger.warn('[ConfigSync] NOT publishing — allowSync is off; the change is local-only');
+    // The user turned sync off; not publishing is the setting working, not a
+    // fault. Debug keeps it visible while developing without warning about it
+    // on every save in a release build. The no-keypair branch below IS a
+    // fault, and stays a warning.
+    logger.debug('[ConfigSync] NOT publishing — allowSync is off; the change is local-only');
   } else if (!privateKey || !publicKey) {
     logger.warn('[ConfigSync] NOT publishing — no keypair available; the change is local-only');
   }

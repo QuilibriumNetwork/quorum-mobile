@@ -37,6 +37,7 @@ import { Alert, AppState, AppStateStatus, InteractionManager } from 'react-nativ
 import type { Conversation } from '@/hooks/chat/useConversations';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { logMentionOrReply } from '@/services/notifications/logMentionOrReply';
+import { summarizeInbound } from '@/services/observability/redactInbound';
 import { shouldNotifyForContext } from '@/services/notifications/notificationPrefs';
 import { messagePreview as getSpaceMessagePreview, messageSenderName } from '@/utils/messagePreview';
 import { applyEdit, MESSAGE_EDIT_WINDOW_MS } from '@quilibrium/quorum-shared';
@@ -1443,7 +1444,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                           await removeSpaceFromConfig(ownAddress, spaceId);
                         } catch (configError) {
                           logger.warn(
-                            `[Kicked] could not publish Space removal for ${spaceId}: ${configError instanceof Error ? configError.message : String(configError)}`
+                            `[Kicked] could not publish Space removal for ${spaceId.slice(0, 12)}: ${configError instanceof Error ? configError.message : String(configError)}`
                           );
                         }
 
@@ -1460,7 +1461,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                         // completely: no toast, no log, and the user still in a
                         // Space they were kicked from.
                         logger.warn(
-                          `[Kicked] local cleanup failed for ${spaceId}: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`
+                          `[Kicked] local cleanup failed for ${spaceId.slice(0, 12)}: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`
                         );
                       }
                     } else {
@@ -3225,7 +3226,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     unsealed
                   );
                   if (confirmResult) {
-                    logger.warn('[session-confirm] sender session CONFIRMED', JSON.stringify({
+                    logger.debug('[session-confirm] sender session CONFIRMED', JSON.stringify({
                       conv: conversationId?.slice(0, 10),
                       inbox: message.inboxAddress?.slice(0, 10),
                     }));
@@ -5655,10 +5656,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     // The server's only channel for telling us a write was refused. It was
     // logged at debug and dropped, which made a rejected inbox write
     // indistinguishable from a delivered one: frames left the socket, never
-    // reached the peer, and nothing anywhere said why. Warn, and keep the
-    // whole payload — the reason is the point.
+    // reached the peer, and nothing anywhere said why. Warn — the reason is
+    // the point, and `error` is one of the fields the summary keeps verbatim.
+    // The whole frame used to be printed here, which was safe only while the
+    // logger was dead in release builds; it no longer is.
     if ('error' in message && message.error) {
-      logger.warn(`[WS-in ${me}] SERVER REJECTED`, JSON.stringify(message));
+      logger.warn(`[WS-in ${me}] SERVER REJECTED`, summarizeInbound(message));
       return;
     }
 
@@ -5670,7 +5673,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       !(message as { encryptedContent?: unknown }).encryptedContent &&
       !(message as { type?: unknown }).type
     ) {
-      logger.warn(`[WS-in ${me}] UNHANDLED inbound payload`, JSON.stringify(message).slice(0, 400));
+      logger.warn(`[WS-in ${me}] UNHANDLED inbound payload`, summarizeInbound(message));
       return;
     }
 

@@ -299,7 +299,7 @@ export function useDMConversationSettings() {
         // rollback: the in-memory value is what the user just chose, and the
         // next cold read reconciles from storage.
         logger.warn(
-          `[DMConversationSettings] failed to persist override for ${conversationId}: ${error instanceof Error ? error.message : String(error)}`
+          `[DMConversationSettings] failed to persist override for ${conversationId.slice(0, 12)}: ${error instanceof Error ? error.message : String(error)}`
         );
       });
     },
