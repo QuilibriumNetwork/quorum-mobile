@@ -8,6 +8,11 @@ import type { ProcessedAttachment } from '@/services/media/imageAttachment';
 import type { Channel, Emoji, SpaceMember, Sticker, Role, Space } from '@quilibrium/quorum-shared';
 import { hasPermission, getRoleColorHex } from '@quilibrium/quorum-shared';
 import { searchEmojis } from '@/data/emojiData';
+import {
+  resolveMemberName,
+  resolveMemberAvatar,
+  formatResolvedName,
+} from '@/utils/resolveMemberName';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, useWindowDimensions, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputSubmitEditingEventData, TouchableOpacity as RNTouchableOpacity, View } from 'react-native';
 import Reanimated, { useAnimatedStyle, useDerivedValue, withTiming, interpolate, interpolateColor, Easing } from 'react-native-reanimated';
@@ -375,19 +380,30 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   // Can send if we have text OR an attachment
   const canSend = (value.trim().length > 0 || !!pendingAttachment) && !isSending && !disabled;
 
+  // Sending must close any open autocomplete. The list is driven by state set
+  // in the text-change handler, and the parent clears the composer through its
+  // own state — so that handler does not necessarily re-run on send, and the
+  // menu was left hanging over an already-sent message.
+  const dismissAutocomplete = useCallback(() => {
+    setAutocompleteType(null);
+    setAutocompleteQuery('');
+  }, []);
+
   const handleSend = useCallback(() => {
     if (canSend) {
+      dismissAutocomplete();
       onSend();
     }
-  }, [canSend, onSend]);
+  }, [canSend, onSend, dismissAutocomplete]);
 
   const handleSubmitEditing = useCallback(
     (e: NativeSyntheticEvent<TextInputSubmitEditingEventData>) => {
       if (canSend) {
+        dismissAutocomplete();
         onSend();
       }
     },
-    [canSend, onSend]
+    [canSend, onSend, dismissAutocomplete]
   );
 
   const handleToggleEmojiPicker = useCallback(() => {
@@ -492,12 +508,21 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
       }
     }
 
-    // Members — match by display name, name, or address.
+    // Members — match by the name actually rendered on screen, plus the raw
+    // slots and the address. Matching only the per-space override slot meant a
+    // member on the follow-global default (the default) could not be found by
+    // typing the name everyone sees them under.
     for (const m of members) {
+      const rendered = formatResolvedName(resolveMemberName(m)).toLowerCase();
       const displayName = (m.display_name || '').toLowerCase();
       const name = (m.name || '').toLowerCase();
       const address = (m.address || '').toLowerCase();
-      if (displayName.includes(q) || name.includes(q) || address.includes(q)) {
+      if (
+        rendered.includes(q) ||
+        displayName.includes(q) ||
+        name.includes(q) ||
+        address.includes(q)
+      ) {
         out.push({ kind: 'member', member: m });
       }
     }
@@ -1094,7 +1119,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
                 );
               }
               const member = s.member;
-              const avatarUri = member.profile_image || member.user_icon;
+              const memberLabel = formatResolvedName(resolveMemberName(member));
+              const avatarUri =
+                resolveMemberAvatar(member) || member.user_icon;
               return (
                 <TouchableOpacity
                   key={`member-${member.address}`}
@@ -1104,11 +1131,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
                   <CachedAvatar
                     source={avatarUri ? { uri: avatarUri } : null}
                     style={styles.autocompleteAvatar}
-                    fallbackName={member.display_name || member.name || member.address}
+                    fallbackName={memberLabel}
                   />
-                  <Text style={styles.autocompleteText}>
-                    {member.display_name || member.name || member.address}
-                  </Text>
+                  <Text style={styles.autocompleteText}>{memberLabel}</Text>
                 </TouchableOpacity>
               );
             })}

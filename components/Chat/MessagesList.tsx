@@ -8,6 +8,11 @@ import { ChatKeyboardScrollView } from './ChatKeyboardScrollView';
 import { composerBottomBusySV } from '@/services/ui/composerPanelVisible';
 import BrowserLink from '@/components/BrowserLink';
 import { haptics } from '@/utils/haptics';
+import {
+  resolveMemberName,
+  resolveMemberAvatar,
+  formatResolvedName,
+} from '@/utils/resolveMemberName';
 import { useToast } from '@/context/ToastContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
@@ -682,8 +687,8 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     if (member) {
       onUserPress({
         userId,
-        userName: member.display_name || member.name || userId,
-        userAvatar: member.profile_image,
+        userName: formatResolvedName(resolveMemberName(member)),
+        userAvatar: resolveMemberAvatar(member),
         bio: member.bio,
         farcasterFid: member.farcasterFid,
         farcasterUsername: member.farcasterUsername,
@@ -1706,8 +1711,8 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               if (member) {
                 onUserPress({
                   userId: address,
-                  userName: member.display_name || member.name || address,
-                  userAvatar: member.profile_image,
+                  userName: formatResolvedName(resolveMemberName(member)),
+                  userAvatar: resolveMemberAvatar(member),
                   bio: member.bio,
                   farcasterFid: member.farcasterFid,
                   farcasterUsername: member.farcasterUsername,

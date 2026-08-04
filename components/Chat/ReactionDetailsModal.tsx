@@ -21,7 +21,11 @@ import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/Segmente
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
-import { truncateAddress } from '@/utils/formatAddress';
+import {
+  resolveMemberName,
+  resolveMemberAvatar,
+  formatResolvedName,
+} from '@/utils/resolveMemberName';
 import type { Emoji, SpaceMember } from '@quilibrium/quorum-shared';
 
 import type { DisplayReaction } from './types';
@@ -91,11 +95,16 @@ export function ReactionDetailsModal({
     for (const r of reactions) {
       for (const addr of r.memberIds) {
         const m = memberByAddress.get(addr);
+        // Reactors are not necessarily senders, so their row may never have been
+        // through the chat back-fill. Reading only the override slot rendered
+        // anyone on the follow-global default as an address, right next to the
+        // messages where they showed a name.
+        const row = m ?? { address: addr };
         out.push({
           address: addr,
           emoji: r.emoji,
-          displayName: m?.display_name || m?.name || truncateAddress(addr),
-          avatar: m?.profile_image,
+          displayName: formatResolvedName(resolveMemberName(row)),
+          avatar: resolveMemberAvatar(row),
         });
       }
     }

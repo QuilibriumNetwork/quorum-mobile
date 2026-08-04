@@ -77,10 +77,29 @@ function MessageRendererBase({
   // Preprocess only when we're taking the markdown path (and only when the
   // inputs change). Mentions are tokenized here so the markdown renderer can't
   // mangle an `@<address>` into emphasis/code.
+  // `members` is deliberately NOT passed. Shared's `processMentions` uses it for
+  // one thing only — a legacy branch that turns a bare `@Name` into a user pill
+  // when the text happens to match somebody's name — and it is gated on
+  // `members.length > 0`, so omitting it is the supported way to switch that
+  // branch off rather than a fork of shared.
+  //
+  // That branch produces a pill the notification path does not honour:
+  // `extractMentionsFromText` only ever extracts `@<address>`, so a hand-typed
+  // `@Name` looks exactly like a real mention, is tappable, and notifies nobody.
+  // The same file already applies this rule to `@everyone` (unauthorized ones
+  // render as plain text "matching how the notification path already refuses to
+  // honor it"); names were simply never brought in line.
+  //
+  // Display names are not unique either, so a name cannot identify a person:
+  // shared's key map is a plain object, and on a collision the later member
+  // silently wins and the pill opens the wrong profile.
+  //
+  // Roles are unaffected and must stay — bare `@roleTag` IS honoured by the
+  // notifier, so role pills are truthful. Same for channels and @everyone.
   const prepared = useMemo(() => {
     if (!isMarkdown) return '';
-    return prepareMessageContent(text, { members, roles, channels, everyoneAuthorized });
-  }, [isMarkdown, text, members, roles, channels, everyoneAuthorized]);
+    return prepareMessageContent(text, { roles, channels, everyoneAuthorized });
+  }, [isMarkdown, text, roles, channels, everyoneAuthorized]);
 
   if (!isMarkdown) {
     return (

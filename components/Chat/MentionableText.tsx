@@ -14,6 +14,7 @@ import React, { useMemo } from 'react';
 import { Text, Image, StyleSheet, TextStyle, View } from 'react-native';
 import type { Emoji, SpaceMember, Channel, Role } from '@quilibrium/quorum-shared';
 import { getEmojiByName } from '@/data/emojiNames';
+import { resolveMemberName, formatResolvedName } from '@/utils/resolveMemberName';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 import { useTranslatable } from '@/services/translation/useTranslatable';
@@ -180,10 +181,24 @@ function MentionableTextBase({
 
   const memberMap = useMemo(() => {
     const map: Record<string, SpaceMember> = {};
+    // ADDRESS ONLY. A user mention is `@<address>` — that is what the composer
+    // writes, and it is the only form the notification path honours
+    // (`extractMentionsFromText` in shared extracts `@<address>` and nothing
+    // else). Keying on names too used to turn a hand-typed `@Name` into a pill
+    // that is styled, tappable, and notifies nobody.
+    //
+    // Names cannot identify a person anyway: they are not unique, and a plain
+    // object map means the later member silently wins a collision and the pill
+    // opens the wrong profile.
+    //
+    // The markdown path is switched off the same legacy branch in
+    // `MessageRenderer` (by not passing `members` to `prepareMessageContent`),
+    // so both render paths agree. Change them together or the same `@Name` is a
+    // pill in a formatted message and plain text in a plain one.
+    //
+    // Roles are unaffected — bare `@roleTag` IS honoured by the notifier, and
+    // `roleMap` below still resolves them.
     members.forEach((m) => {
-      // Map by display_name, name, and address for flexible matching
-      if (m.display_name) map[m.display_name.toLowerCase()] = m;
-      if (m.name) map[m.name.toLowerCase()] = m;
       if (m.address) map[m.address.toLowerCase()] = m;
     });
     return map;
@@ -261,7 +276,7 @@ function MentionableTextBase({
           content: match[0],
           data: {
             userId: member.address,
-            displayName: member.display_name || member.name || member.address,
+            displayName: formatResolvedName(resolveMemberName(member)),
             isSelf: member.address === currentUserId,
           },
         });
