@@ -286,6 +286,7 @@ export async function shouldStripEveryoneMention(
  *
  *   kick / rekey   → owner-signed on the sync envelope  (verifyOwnerSealedEnvelope)
  *   leave          → self-signed by the leaver's inbox key (resolveVerifiedLeaver)
+ *   join           → self-signed over the participant blob (verifyJoinParticipant)
  *
  * Decrypting one of these proves nothing about who sent it: the config key,
  * the hub keypair and every member's inbox address are all held by anyone who
@@ -461,5 +462,107 @@ export async function resolveVerifiedLeaver(
     );
   } catch {
     return null;
+  }
+}
+
+/** The participant fields a `join` signs over, plus the signature itself. */
+export interface JoinParticipantProof {
+  address?: string;
+  id?: number;
+  inboxAddress?: string;
+  inboxPubKey?: string;
+  pubKey?: string;
+  inboxKey?: string;
+  identityKey?: string;
+  preKey?: string;
+  userIcon?: string;
+  displayName?: string;
+  joinedAt?: number;
+  /** base64 — signEd448 returns base64 and it travels unchanged (unlike leave's hex). */
+  signature?: string;
+}
+
+export type JoinVerdict =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: 'proof-missing' | 'inbox-address-mismatch' | 'signature-invalid' | 'malformed';
+    };
+
+/**
+ * Desktop signs the 10 participant fields joined by bare `+`, so a field that is
+ * absent contributes the literal "undefined". Reproducing that coercion is what
+ * makes the check byte-compatible rather than merely plausible.
+ */
+function buildJoinSignedBlob(p: JoinParticipantProof): string {
+  return (
+    String(p.address) +
+    String(p.id) +
+    String(p.inboxAddress) +
+    String(p.pubKey) +
+    String(p.inboxKey) +
+    String(p.identityKey) +
+    String(p.preKey) +
+    String(p.userIcon) +
+    String(p.displayName) +
+    String(p.joinedAt)
+  );
+}
+
+/**
+ * Verify the ed448 signature a `join` carries, and that the announced inbox
+ * address really derives from the announced key.
+ *
+ * Mirrors desktop's second join gate (MessageService, its `join` branch): rebuild
+ * `base64(utf8(address + id + inboxAddress + pubKey + inboxKey + identityKey +
+ * preKey + userIcon + displayName + joinedAt))` and verify it against
+ * `participant.inboxPubKey`. Mobile's send side already produces exactly these
+ * bytes; only the receive side ignored them.
+ *
+ * ## What this does NOT prove — read before trusting it
+ *
+ * The signature is checked against a public key the SENDER chose, so it proves
+ * possession of *that* key. It does **not** bind `participant.address` to it. An
+ * attacker can put a victim's address in the blob, sign with a fresh key of their
+ * own, and this returns ok. So this is NOT authentication of the joining identity,
+ * and `join` is not "fixed" by it.
+ *
+ * What it is worth: unsigned and malformed joins stop being accepted, and the
+ * signer is now accountable for a key — a precondition for anything that later
+ * wants to reason about which key admitted whom. The thing actually protecting
+ * existing members is `buildJoinedMemberRow`, which refuses to repoint an anchor
+ * or clear `isKicked` no matter what verifies here.
+ *
+ * Binding the claimed address to the key needs the DKG proof (`verify_point`),
+ * which mobile cannot currently call — see the join issue's Layer 3.
+ */
+export async function verifyJoinParticipant(
+  participant: JoinParticipantProof | null | undefined
+): Promise<JoinVerdict> {
+  const inboxPubKey = participant?.inboxPubKey;
+  const signature = participant?.signature;
+  const inboxAddress = participant?.inboxAddress;
+  if (!participant || !inboxPubKey || !signature || !inboxAddress) {
+    return { ok: false, reason: 'proof-missing' };
+  }
+
+  try {
+    // Without this, the signer could announce an inbox address that is not
+    // theirs: the blob would still verify, and that address is the anchor
+    // `resolveVerifiedSender` matches members on.
+    if (deriveInboxAddress(inboxPubKey) !== inboxAddress) {
+      return { ok: false, reason: 'inbox-address-mismatch' };
+    }
+
+    const signingProvider = new NativeSigningProvider();
+    const isValid = await signingProvider.verifyEd448(
+      bytesToBase64(Uint8Array.from(hexToBytes(inboxPubKey))),
+      bytesToBase64(new TextEncoder().encode(buildJoinSignedBlob(participant))),
+      signature
+    );
+    return isValid ? { ok: true } : { ok: false, reason: 'signature-invalid' };
+  } catch {
+    // Malformed hex, or the native verifier rejecting the input outright.
+    return { ok: false, reason: 'malformed' };
   }
 }

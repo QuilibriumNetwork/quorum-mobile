@@ -92,6 +92,7 @@ import {
   isUpdateProfileAuthorized,
   resolveVerifiedLeaver,
   shouldStripEveryoneMention,
+  verifyJoinParticipant,
   verifyOwnerSealedEnvelope,
 } from '../services/space/spaceMessageAuth';
 import {
@@ -984,6 +985,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                         // from this type, so it was dropped at the parse boundary and
                         // no new member row ever got one.
                         joinedAt?: number;
+                        // base64. Was absent from this type, so the signature both
+                        // clients already send was invisible to the handler.
+                        signature?: string;
                       };
                       inboxPublicKey?: string;
                       inboxSignature?: string;
@@ -996,6 +1000,19 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
                     // Skip if this is our own join message echoed back
                     if (participant.address === user?.address) {
+                      break;
+                    }
+
+                    // Authenticate before ANY write. The ratchet peer maps below are
+                    // written from sender-chosen values too, so verifying later would
+                    // leave them exposed. Desktop gates its whole join branch the same
+                    // way. Note this proves key possession, not identity — see
+                    // verifyJoinParticipant.
+                    const joinVerdict = await verifyJoinParticipant(participant);
+                    if (!joinVerdict.ok) {
+                      logger.warn(
+                        `[control-auth] join dropped: ${joinVerdict.reason} (space=${spaceId.slice(0, 12)} claimed=${String(participant.address).slice(0, 12)})`
+                      );
                       break;
                     }
 
