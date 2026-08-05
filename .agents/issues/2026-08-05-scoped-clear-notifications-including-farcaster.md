@@ -29,20 +29,36 @@ into a pure `partitionNotifications()`. 404 tests pass (26 new, each verified to
 go red when its guard is reverted); typecheck at baseline (11 pre-existing
 errors, none in changed files).
 
-**Still open — this is why the file has NOT moved to `.done/`:**
+**Verified on device:** sectioning (Slice B) — the two section headers, and the
+background pings landing in the right one.
 
-- **§8 on-device verification has not been run.** In particular the one test
-  that actually proves the watermark: clear Farcaster, wait out a full 60s poll
-  cycle, confirm the rows do not return. Everything verified so far proves the
-  filter renders, not that dismissal survives a refetch.
+**NOT verified, and blocked for a real reason — this is why the file has NOT
+moved to `.done/`:**
+
+- **The watermark itself.** The test that proves it is: clear Farcaster, wait out
+  a full 60s poll cycle, confirm the rows do not return. Everything verified so
+  far proves the filter *renders*, not that dismissal survives a refetch.
 - The control arm (a never-cleared account sees no change in contents, ordering,
-  badge or scroll depth) is likewise unverified on device.
+  badge or scroll depth).
 - No independent code review was run on this branch.
 
-Partial evidence: the sectioning change (Slice B) WAS confirmed on device from a
-screenshot — the header reads "Mentions & messages" and the background pings
-moved out of the Farcaster section. That screenshot is also what exposed the
-`origin` bug corrected below.
+**Why it is blocked:** the operator has one test account, and its accumulated
+notifications are the fixture needed for the follow-up work on precise/tappable
+rows. Spending them to test clearing would destroy the input for the next task.
+This is a fixture-scarcity problem, not an oversight — do not close this out by
+asking him to just run it.
+
+**The unblock, which should be built before asking for any manual run:** the
+Farcaster clear is *fully reversible* — the rows are a remote feed that cannot be
+deleted, so clearing only moves a local watermark, and `resetFarcasterDismissal()`
+(already exported from `farcasterDismissal.ts`) restores everything on the next
+poll. A dev-gated reset affordance, or the user-facing "Undo" noted in §9, makes
+this test non-destructive and repeatable. Follow the existing dev-tool pattern
+(`components/dev/DmBurstSheet.tsx`, surfaced under `__DEV__` in `ProfileModal`).
+
+Note the asymmetry: the novel, risky mechanism (the watermark) is the reversible
+one. The destructive half is the Quorum clear, which is a plain local-log delete
+whose behaviour predates this PR.
 
 **Correction to §4.1 during implementation (2026-08-05).** The background-ping
 log is NOT all Quorum. It is written from two call sites for two different
