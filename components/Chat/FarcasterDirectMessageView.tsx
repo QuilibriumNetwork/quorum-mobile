@@ -12,7 +12,6 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
-import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { MessagesList } from './MessagesList';
 import { MessageInput, type MessageInputHandle, type ReplyToMessage } from './MessageInput';
 import { ChatBottomChrome, useChatListBottomInset } from './ChatBottomChrome';
@@ -265,7 +264,6 @@ export function FarcasterDirectMessageView({
     <View style={styles.container}>
       {/* Security warning banner */}
       <View style={styles.warningBanner}>
-        <FarcasterLogoIcon size={14} color="#855DCD" />
         <Text style={styles.warningText}>
           Farcaster messages are not end-to-end encrypted
         </Text>
@@ -327,7 +325,6 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: '#8B5CF6' + '20', // Farcaster purple with opacity
       paddingVertical: Skin.space(6),
       paddingHorizontal: Skin.space(12),
-      gap: Skin.space(8),
       width: SCREEN_WIDTH,
     },
     warningText: {
