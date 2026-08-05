@@ -18,10 +18,31 @@ related:
 
 ## Status
 
-In progress on `feat/scoped-clear-notifications`. Slices A–D implemented; 404
-tests pass (26 new), typecheck at baseline (11 pre-existing errors, none in
-changed files). Not yet runtime-verified against §8, and not yet independently
-code-reviewed.
+**2026-08-05 — shipped in PR #232** (`feat: clearing notifications follows the
+filter, and Farcaster rows clear too`), squash `aaa433f` on master; branch
+deleted.
+
+What landed: Slices A–D. Clear is scoped to the active filter, Farcaster rows
+are cleared via a local dismissal watermark, background pings are filed by
+`origin` instead of all landing under "Farcaster", and the panel's logic moved
+into a pure `partitionNotifications()`. 404 tests pass (26 new, each verified to
+go red when its guard is reverted); typecheck at baseline (11 pre-existing
+errors, none in changed files).
+
+**Still open — this is why the file has NOT moved to `.done/`:**
+
+- **§8 on-device verification has not been run.** In particular the one test
+  that actually proves the watermark: clear Farcaster, wait out a full 60s poll
+  cycle, confirm the rows do not return. Everything verified so far proves the
+  filter renders, not that dismissal survives a refetch.
+- The control arm (a never-cleared account sees no change in contents, ordering,
+  badge or scroll depth) is likewise unverified on device.
+- No independent code review was run on this branch.
+
+Partial evidence: the sectioning change (Slice B) WAS confirmed on device from a
+screenshot — the header reads "Mentions & messages" and the background pings
+moved out of the Farcaster section. That screenshot is also what exposed the
+`origin` bug corrected below.
 
 **Correction to §4.1 during implementation (2026-08-05).** The background-ping
 log is NOT all Quorum. It is written from two call sites for two different
