@@ -219,8 +219,11 @@ export default function NotificationsScreen() {
               <IconSymbol name={quorumRowIcon(item)} color={theme.colors.primary} size={18} />
             </View>
           ) : (
+            // Background message pings. An envelope, not a bell: the row is
+            // about a message that arrived, not about the notification itself,
+            // and every other row in the panel already uses an outline glyph.
             <View style={styles.iconWrap}>
-              <IconSymbol name="bell.fill" color={theme.colors.primary} size={18} />
+              <IconSymbol name="envelope" color={theme.colors.primary} size={18} />
             </View>
           )}
           {item.source === 'quorum' ? (
