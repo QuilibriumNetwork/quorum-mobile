@@ -1,7 +1,7 @@
 ---
 type: task
 title: "Scoped 'Clear' in the Notifications tab, including Farcaster rows (which today survive 'Clear all')"
-status: in-progress
+status: done
 created: 2026-08-05
 updated: 2026-08-05
 priority: medium
@@ -39,22 +39,18 @@ errors, none in changed files).
   validates the instrument itself, so the clear path is now repeatable and
   non-destructive to test.
 
-**NOT verified — why this file has NOT moved to `.done/`:**
+**2026-08-05 — operator confirmed testing complete on device**, after the dev
+instrument landed (PR #233) made the clear paths repeatable: the
+clear → snapshot → Restore → Reset loop works, and the scoped clear behaves.
+Closing on that confirmation.
 
-- **That dismissal survives a refetch.** Clearing and reset were both confirmed,
-  but not that the rows stay hidden once a *fresh* fetch replaces the query
-  cache. Reading the code says the filter re-runs over whatever the cache holds
-  and the watermark lives in MMKV, so nothing about a refetch could bypass it —
-  but that is INFERRED, not observed. Now cheap to check: clear, pull to
-  refresh (forces an immediate refetch, no need to wait out the 60s timer),
-  confirm the rows stay gone and the panel's "hiding N" still reads N, then
-  Reset. ~30 seconds, non-destructive.
-- The control arm (a never-cleared account sees no change in contents, ordering,
-  badge or scroll depth).
-- **Clear Quorum / Clear all** — untested. Those delete local logs outright and
-  the dev panel cannot restore them. Testing costs the operator's real mention
-  history, a scarce fixture on a one-test-account setup.
-- No independent code review was run on this branch.
+Two caveats recorded rather than hidden, for whoever picks this up next:
+
+- Coverage came from the operator's own run, not from a written-in-advance
+  matrix, so which sub-cases were exercised is not itemised here. The
+  automated side is precise: 414 tests, each guard mutation-checked.
+- No independent code review was run on either branch. Worth a `/code-review`
+  pass over #232 + #233 if this area is touched again.
 
 **⚠️ Correction (2026-08-05) — "Clear Farcaster" is NOT fully reversible, and
 the operator lost data to this claim.** Every clear scope deletes something the
@@ -73,8 +69,9 @@ watermark hid, nothing more.
 
 The earlier decision to skip a log snapshot as over-engineering was made on that
 bad information — the Farcaster path was believed safe, so the snapshot looked
-like it only served the Quorum path. Revisit knowing that NO clear scope is
-currently loss-free.
+like it only served the Quorum path. **Resolved in PR #233**: dev builds now
+copy both logs and the watermark aside before any clear, and the dev panel
+offers Restore. All three scopes are repeatably testable.
 
 Note the asymmetry that made the watermark tractable: the novel mechanism is the
 reversible one, because feed rows are remote and cannot be deleted. Every local

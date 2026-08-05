@@ -26,8 +26,6 @@ This is the main index for all documentation, bug reports, and task management.
 
 ### In Progress
 
-- 📋 [Scoped "Clear" in the Notifications tab, including Farcaster](issues/2026-08-05-scoped-clear-notifications-including-farcaster.md)
-
 #### Light Theme Contrast
 
 - 📋 [Handoff — light-theme contrast (DONE) + nav-bar fix (built, unverified) + dual-device preview setup (the real open problem)](issues/light-theme-contrast/2026-06-26-HANDOFF-navbar-and-dual-device-preview.md)
@@ -225,6 +223,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Mobile never piggybacks receipt acks on outgoing DMs](issues/.done/2026-07-27-mobile-piggyback-receipt-acks-on-outgoing-dms.md)
 - 📋 [Adopt iOS 26 Liquid Glass before Xcode 27 removes the opt-out](issues/.done/2026-08-01-adopt-ios26-liquid-glass.md)
 - 📋 [The same member renders differently depending on which screen you are on](issues/.done/2026-08-04-one-identity-resolver-so-names-and-avatars-match-everywhere.md)
+- 📋 [Scoped "Clear" in the Notifications tab, including Farcaster](issues/.done/2026-08-05-scoped-clear-notifications-including-farcaster.md)
 
 ### 2026 06 21 Mute And Block Overhaul
 
@@ -258,4 +257,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-05 11:43:24
+**Last Updated**: 2026-08-05 12:01:56
