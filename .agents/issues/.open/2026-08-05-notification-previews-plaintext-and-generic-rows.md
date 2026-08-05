@@ -149,6 +149,13 @@ Sequenced so the privacy decision gates the content work.
   on every notification-log read/write path. Then either encrypt the stores or
   fall back to structural-only rows. Nothing in B/C should ship before this
   lands, because each one increases the amount of message text at rest.
+  - **Do not miss `quorum-dev-notification-snapshot`** (`services/dev/notificationSnapshot.ts`).
+    It holds a full second copy of both logs, preview text included, in its own
+    unencrypted MMKV store. Encrypting the two primary logs while leaving it
+    alone puts a plaintext copy of exactly the protected data right beside them.
+    It is `__DEV__`-only so it never reaches users, but a dev device is still a
+    device — either encrypt it with the same key or have it store structural
+    fields only.
 - **B. Make the pings tappable.** Add `conversationId` at both call sites. Small
   and independent of the content question — a row that does nothing on tap is a
   bug regardless.
