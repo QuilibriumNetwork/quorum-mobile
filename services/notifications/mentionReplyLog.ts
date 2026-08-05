@@ -12,10 +12,20 @@
  * storage. Deduped by a stable `id` keyed on the message id, so the same
  * message arriving via both the live and catch-up paths produces ONE row.
  *
+ * Also holds Quorum DM rows (`kind: 'dm'`), written from the same two receive
+ * paths. They live here rather than in the background-ping log because that is
+ * the path that keeps enough detail to render a real row.
+ *
  * Read-state is intentionally NOT stored here — it follows the two-level model
  * (Phase 3): per-channel `lastReadTimestamp` decides "read", and a single
  * `quorumLastSeenAt` decides the tab-badge (Level 1). This file is the event
  * log only.
+ *
+ * DM rows take Level 1 (they count toward the tab badge like everything else)
+ * but deliberately have no Level 2: the conversation's own `lastReadTimestamp`
+ * in the Messages tab already answers "is this DM unread", and a second
+ * watermark here would be a second source of truth for one fact — read the DM
+ * in Messages and the panel row would still look unread, or the reverse.
  */
 
 import { createMMKV, type MMKV } from 'react-native-mmkv';
@@ -43,18 +53,11 @@ export type MentionReplyKind =
   | 'mention-you'
   | 'mention-everyone'
   | 'mention-roles'
-  | 'reply';
+  | 'reply'
+  | 'dm';
 
-export interface MentionReplyEntry {
-  /** Stable + dedup key: `${spaceId}:${channelId}:${messageId}`. */
+interface MentionReplyEntryBase {
   id: string;
-  kind: MentionReplyKind;
-  spaceId: string;
-  spaceName?: string;
-  channelId: string;
-  channelName?: string;
-  /** Set when the mention/reply happened inside a thread, for the breadcrumb. */
-  threadId?: string;
   senderId: string;
   senderName?: string;
   /** Resolved display name only (no address fallback). Drives the author prefix
@@ -63,6 +66,47 @@ export interface MentionReplyEntry {
   preview: MessagePreview;
   /** ms epoch — sort order + read-state comparison. */
   createdAt: number;
+}
+
+/** A mention or reply inside a space channel. */
+export interface SpaceMentionEntry extends MentionReplyEntryBase {
+  kind: 'mention-you' | 'mention-everyone' | 'mention-roles' | 'reply';
+  /** Stable + dedup key: `${spaceId}:${channelId}:${messageId}`. */
+  id: string;
+  spaceId: string;
+  spaceName?: string;
+  channelId: string;
+  channelName?: string;
+  /** Set when the mention/reply happened inside a thread, for the breadcrumb. */
+  threadId?: string;
+}
+
+/**
+ * A Quorum direct message.
+ *
+ * Keyed per CONVERSATION, not per message (`dm:${conversationId}`), so an
+ * active chat refreshes one row instead of appending a row per message. That
+ * matches how the panel treats a Farcaster conversation and how the Messages
+ * tab thinks about a DM: the conversation is the unit, the latest message is
+ * its state.
+ *
+ * Carries no spaceId/channelId — a DM has neither, which is why this is a
+ * discriminated union rather than an interface with optional fields. The
+ * per-channel read-state machinery below has to skip these, and the compiler
+ * should be the thing that says so.
+ */
+export interface DmEntry extends MentionReplyEntryBase {
+  kind: 'dm';
+  /** Stable + dedup key: `dm:${conversationId}`. */
+  id: string;
+  conversationId: string;
+}
+
+export type MentionReplyEntry = SpaceMentionEntry | DmEntry;
+
+/** True for the space-scoped entries — the ones with a channel to belong to. */
+export function isSpaceMention(e: MentionReplyEntry): e is SpaceMentionEntry {
+  return e.kind !== 'dm';
 }
 
 type Listener = () => void;
@@ -164,7 +208,10 @@ export function getUnreadCountForChannel(spaceId: string, channelId: string): nu
   const key = channelKey(spaceId, channelId);
   const readAt = loadChannelReadMap()[key] ?? 0;
   return getMentionReplyLog().reduce(
-    (n, e) => (channelKey(e.spaceId, e.channelId) === key && e.createdAt > readAt ? n + 1 : n),
+    (n, e) =>
+      isSpaceMention(e) && channelKey(e.spaceId, e.channelId) === key && e.createdAt > readAt
+        ? n + 1
+        : n,
     0
   );
 }
@@ -178,15 +225,16 @@ export function markQuorumTabSeen(): void {
   emit();
 }
 
-function getQuorumTabSeenAt(): number {
+/**
+ * Level 1 watermark — when the Notifications tab was last opened. The count of
+ * entries newer than this is the badge's Quorum contribution, computed in
+ * `partitionNotifications` so it can apply the same mute filter the panel does
+ * (otherwise a DM muted after it was logged bumps a badge for a row that is
+ * not on screen).
+ */
+export function getQuorumTabSeenAt(): number {
   const v = storage.getString(KEY_TAB_SEEN);
   return v ? parseInt(v, 10) : 0;
-}
-
-/** Level 1 — number of Quorum entries newer than the last tab-seen mark. */
-export function getQuorumTabUnreadCount(): number {
-  const seenAt = getQuorumTabSeenAt();
-  return getMentionReplyLog().reduce((n, e) => (e.createdAt > seenAt ? n + 1 : n), 0);
 }
 
 /**
@@ -230,6 +278,10 @@ export function useChannelMentionUnread(): {
     const readMap = loadChannelReadMap();
     const out: Record<string, number> = {};
     for (const e of getMentionReplyLog()) {
+      // DM entries have no channel to bubble against — they are read via the
+      // conversation's own lastReadTimestamp in the Messages tab, so there is
+      // deliberately no second watermark for them here.
+      if (!isSpaceMention(e)) continue;
       const key = channelKey(e.spaceId, e.channelId);
       if (e.createdAt > (readMap[key] ?? 0)) out[key] = (out[key] ?? 0) + 1;
     }

@@ -41,7 +41,10 @@ import {
 } from '../services/notifications/farcasterDismissal';
 import type { FarcasterNotification } from '../services/farcasterClient';
 import type { NotificationLogEntry } from '../services/notifications/notificationLog';
-import type { MentionReplyEntry } from '../services/notifications/mentionReplyLog';
+import type {
+  DmEntry,
+  MentionReplyEntry,
+} from '../services/notifications/mentionReplyLog';
 
 const T = {
   old: 1_000,
@@ -101,6 +104,19 @@ function mention(over: Partial<MentionReplyEntry> = {}): MentionReplyEntry {
   } as MentionReplyEntry;
 }
 
+function dm(over: Partial<DmEntry> = {}): DmEntry {
+  return {
+    id: 'dm:dm-conv',
+    kind: 'dm',
+    conversationId: 'dm-conv',
+    senderId: 'sender',
+    senderName: 'Dana',
+    preview: { kind: 'text', text: 'lunch?' },
+    createdAt: T.fresh,
+    ...over,
+  };
+}
+
 function input(over: Partial<PartitionInput> = {}): PartitionInput {
   return {
     quorumEntries: [],
@@ -110,7 +126,7 @@ function input(over: Partial<PartitionInput> = {}): PartitionInput {
     clearedBefore: 0,
     mutedConversations: new Set<string>(),
     lastSeen: 0,
-    quorumTabUnread: 0,
+    quorumTabSeenAt: 0,
     ...over,
   };
 }
@@ -390,6 +406,59 @@ describe('partitionNotifications — sectioning', () => {
   });
 });
 
+describe('partitionNotifications — Quorum DM rows', () => {
+  it('files a DM under Quorum, alongside the mentions', () => {
+    // The decision the plan settled: sections are named for the PRODUCT, so a
+    // Quorum DM belongs under "Quorum". No fourth section, no fourth pill.
+    const result = partitionNotifications(
+      input({ quorumEntries: [dm(), mention()], officialFarcaster: [farcasterLike()] }),
+    );
+    expect(result.quorumItems.map((i) => i.id)).toEqual(['quorum:dm:dm-conv', 'quorum:space:chan:msg']);
+    expect(result.farcasterFeedItems.map((i) => i.source)).toEqual(['farcaster']);
+  });
+
+  it('says who sent it and what they said', () => {
+    const result = partitionNotifications(input({ quorumEntries: [dm()] }));
+    expect(result.quorumItems[0]).toMatchObject({ title: 'Dana', body: 'lunch?' });
+  });
+
+  it('links to the conversation, not to a space channel', () => {
+    const result = partitionNotifications(input({ quorumEntries: [dm()] }));
+    expect(result.quorumItems[0].link).toEqual({
+      type: 'message',
+      conversationId: 'dm-conv',
+    });
+  });
+
+  it('keeps the space breadcrumb on mention rows', () => {
+    // The control arm: adding the DM branch must not change how a mention
+    // renders, and a mention link must not acquire a conversationId.
+    const result = partitionNotifications(input({ quorumEntries: [mention()] }));
+    expect(result.quorumItems[0]).toMatchObject({
+      title: 'Carol mentioned you',
+      body: '#general · ping',
+      link: { type: 'message', spaceId: 'space', channelId: 'chan' },
+    });
+  });
+
+  it('excludes a muted DM from the panel', () => {
+    const result = partitionNotifications(
+      input({
+        quorumEntries: [dm({ id: 'dm:muted', conversationId: 'muted' }), dm()],
+        mutedConversations: new Set(['muted']),
+      }),
+    );
+    expect(result.quorumItems.map((i) => i.id)).toEqual(['quorum:dm:dm-conv']);
+  });
+
+  it('falls back to "Someone" rather than showing nothing', () => {
+    const result = partitionNotifications(
+      input({ quorumEntries: [dm({ senderName: undefined })] }),
+    );
+    expect(result.quorumItems[0].title).toBe('Someone');
+  });
+});
+
 describe('partitionNotifications — render-time conversation enrichment', () => {
   const detail = (over: Partial<ConversationDetail> = {}) =>
     new Map<string, ConversationDetail>([
@@ -556,12 +625,42 @@ describe('partitionNotifications — badge count', () => {
   it('sums the three sources', () => {
     const result = partitionNotifications(
       input({
+        quorumEntries: [
+          mention({ id: 'm1', createdAt: T.fresh }),
+          mention({ id: 'm2', createdAt: T.fresh }),
+          mention({ id: 'm3', createdAt: T.fresh }),
+        ],
         chatEntries: [chatEntry({ createdAt: T.fresh })],
         officialFarcaster: [farcasterLike({ timestamp: T.fresh, isUnread: true })],
         lastSeen: T.clear,
-        quorumTabUnread: 3,
+        quorumTabSeenAt: T.clear,
       }),
     );
     expect(result.unreadCount).toBe(5);
+  });
+
+  it('does not count mentions already seen', () => {
+    const result = partitionNotifications(
+      input({
+        quorumEntries: [mention({ createdAt: T.old })],
+        quorumTabSeenAt: T.clear,
+      }),
+    );
+    expect(result.unreadCount).toBe(0);
+  });
+
+  it('does not count a muted DM it is not showing', () => {
+    // The badge and the panel have to agree on what exists. Muting a
+    // conversation after its row was logged hides the row; a badge that keeps
+    // counting it is a number the user cannot resolve by opening the tab.
+    const result = partitionNotifications(
+      input({
+        quorumEntries: [dm({ createdAt: T.fresh })],
+        mutedConversations: new Set(['dm-conv']),
+        quorumTabSeenAt: T.clear,
+      }),
+    );
+    expect(result.quorumItems).toEqual([]);
+    expect(result.unreadCount).toBe(0);
   });
 });

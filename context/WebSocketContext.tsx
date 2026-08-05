@@ -36,7 +36,7 @@ import { Alert, AppState, AppStateStatus, InteractionManager } from 'react-nativ
 
 import type { Conversation } from '@/hooks/chat/useConversations';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
-import { logMentionOrReply } from '@/services/notifications/logMentionOrReply';
+import { logDirectMessage, logMentionOrReply } from '@/services/notifications/logMentionOrReply';
 import { summarizeInbound } from '@/services/observability/redactInbound';
 import { shouldNotifyForContext } from '@/services/notifications/notificationPrefs';
 import { messagePreview as getSpaceMessagePreview, messageSenderName } from '@/utils/messagePreview';
@@ -3728,6 +3728,23 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           senderAddress.substring(0, 8) // Display name
         );
 
+        // Persist the DM into the notifications inbox log — the counterpart to
+        // the logMentionOrReply call the space path makes at its receive point.
+        // Sender and plaintext are both in hand here; this is the same data
+        // that just filled lastMessagePreview above.
+        // authenticatedDmSender, NOT senderAddress: on a message we sent from
+        // another device, the self-sync rewrite above has already repointed
+        // conversationId (and therefore senderAddress) at the RECIPIENT, so
+        // senderAddress would pass the self-check and file our own message as
+        // an incoming one from the person we sent it to.
+        logDirectMessage({
+          conversationId,
+          senderId: authenticatedDmSender || senderAddress,
+          senderName: senderDisplayName,
+          userAddress: fullUserAddrRef.current,
+          message: decryptedMessage,
+        });
+
         // Key shape must match useSendDirectMessage:
         // queryKeys.messages.infinite(otherPartyAddress, otherPartyAddress).
         const messagesKey = queryKeys.messages.infinite(senderAddress, senderAddress);
@@ -5322,6 +5339,24 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           decryptedMessage.createdDate || Date.now(),
           resolvedSenderAddress, 'direct', senderIcon, senderDisplayName
         );
+
+        // Catch-up half of the DM inbox row — the app was closed when this
+        // arrived, so this is where a precise row finally becomes possible.
+        // Same call as the live path; the log dedups per conversation.
+        // Guarded on isSelfSyncEcho rather than left to the self-check inside:
+        // for our own message echoed from another device, the rewrite above has
+        // already repointed conversationId (and so resolvedSenderAddress) at
+        // the RECIPIENT, so the address here no longer identifies the sender
+        // and the check would pass.
+        if (!isSelfSyncEcho) {
+          logDirectMessage({
+            conversationId,
+            senderId: resolvedSenderAddress,
+            senderName: senderDisplayName,
+            userAddress: fullUserAddrRef.current,
+            message: decryptedMessage,
+          });
+        }
 
         // Update React Query cache
         queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {

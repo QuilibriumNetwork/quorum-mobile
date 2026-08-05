@@ -308,6 +308,10 @@ function quorumTitle(e: MentionReplyEntry): string {
       return `${who} mentioned a role you have`;
     case 'reply':
       return `${who} replied to you`;
+    case 'dm':
+      // No verb: a DM row's "who" IS the whole event. The renderer leads with
+      // this line the same way the Farcaster ping rows lead with a name.
+      return who;
     default:
       return who;
   }
@@ -315,6 +319,7 @@ function quorumTitle(e: MentionReplyEntry): string {
 
 /** Channel breadcrumb + message preview text, e.g. "#general · hey there". */
 function quorumBody(e: MentionReplyEntry): string {
+  if (e.kind === 'dm') return e.preview?.text?.trim() ?? '';
   const channel = e.channelName ? `#${e.channelName}` : '#channel';
   const crumb = e.threadId ? `${channel} › Thread` : channel;
   const text = e.preview?.text?.trim();
@@ -328,7 +333,10 @@ export function quorumToUnified(e: MentionReplyEntry): UnifiedNotification {
     timestamp: e.createdAt,
     title: quorumTitle(e),
     body: quorumBody(e),
-    link: { type: 'message', spaceId: e.spaceId, channelId: e.channelId },
+    link:
+      e.kind === 'dm'
+        ? { type: 'message', conversationId: e.conversationId }
+        : { type: 'message', spaceId: e.spaceId, channelId: e.channelId },
     raw: { quorum: e },
   };
 }
@@ -356,8 +364,8 @@ export interface PartitionInput {
   mutedConversations: ReadonlySet<string>;
   /** Chat-log "seen" watermark, for the badge. */
   lastSeen: number;
-  /** Quorum mention-log unread count (its own watermark), for the badge. */
-  quorumTabUnread: number;
+  /** Mention-log "tab seen" watermark (Level 1) — its own, for the badge. */
+  quorumTabSeenAt: number;
 }
 
 export interface PartitionResult {
@@ -389,7 +397,7 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
     clearedBefore,
     mutedConversations,
     lastSeen,
-    quorumTabUnread,
+    quorumTabSeenAt,
   } = input;
 
   const official = officialFarcaster.filter(isNotScam);
@@ -412,8 +420,9 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
 
   // Muted DMs are excluded from the panel entirely, consistent with the badge
   // and push suppression. The conversation stays reachable via the Messages
-  // tab. Chat rows are the only rows that carry a conversationId, so this is
-  // a no-op for the rest — but it MUST travel with the chat rows.
+  // tab. Applied to every row that carries a conversationId — background pings
+  // AND Quorum DM rows. The write paths already gate on mute, but a mute
+  // toggled AFTER a row was logged only takes effect here.
   const notMutedDM = (e: UnifiedNotification): boolean => {
     const convId = e.link?.type === 'message' ? e.link.conversationId : undefined;
     return !(convId && mutedConversations.has(convId));
@@ -432,10 +441,13 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
     (e) => e.raw?.chat && notificationLogOrigin(e.raw.chat) === 'farcaster',
   );
 
-  // Section 1 — Quorum: space mentions/replies + Quorum background pings.
+  // Section 1 — Quorum: space mentions/replies, Quorum DMs, and Quorum
+  // background pings. Named for the product, so a DM belongs here by
+  // definition — no fourth section, no fourth filter pill.
   // Space channel mute is already enforced upstream at log-write time via
   // shouldNotifyForContext.
-  const quorumItems = [...quorumEntries.map(quorumToUnified), ...quorumChat];
+  const quorumMentionItems = quorumEntries.map(quorumToUnified).filter(notMutedDM);
+  const quorumItems = [...quorumMentionItems, ...quorumChat];
   quorumItems.sort((a, b) => b.timestamp - a.timestamp);
 
   // Section 2 — Farcaster activity + Farcaster direct-cast pings.
@@ -447,8 +459,10 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
   items.sort((a, b) => b.timestamp - a.timestamp);
 
   // Tab badge (Level 1). Three sources, each with its own "seen" model:
-  //  - Quorum mentions: entries newer than the last tab-open, counted by the
-  //    mention log itself (decoupled from per-channel read state).
+  //  - Quorum mentions + DMs: rows newer than the last tab-open, against the
+  //    mention log's own watermark (decoupled from per-channel read state).
+  //    Counted over the MUTE-FILTERED rows, so a DM muted after it was logged
+  //    can't bump a badge for a row the panel isn't showing.
   //  - background pings: the chat log's lastSeen. These are NOT covered by the
   //    mention log's watermark, so they must be counted separately — folding
   //    them in silently stops the badge from reflecting them.
@@ -458,6 +472,10 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
   // notifications) rather than the two SECTION arrays — the Farcaster section
   // also holds Farcaster direct-cast pings, which are chat rows, so summing the
   // sections would count those twice.
+  const quorumUnread = quorumMentionItems.reduce(
+    (n, e) => (e.timestamp > quorumTabSeenAt ? n + 1 : n),
+    0,
+  );
   const chatUnread = chatItems.reduce((n, e) => (e.timestamp > lastSeen ? n + 1 : n), 0);
   const farcasterUnread = farcasterOnly.reduce((n, e) => {
     const isUnread = e.raw?.farcaster?.isUnread;
@@ -469,7 +487,7 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
     quorumItems,
     farcasterFeedItems,
     items,
-    unreadCount: quorumTabUnread + chatUnread + farcasterUnread,
+    unreadCount: quorumUnread + chatUnread + farcasterUnread,
     reachedWatermark: reached,
     dismissedCount: blended.length - visibleFarcaster.length,
   };

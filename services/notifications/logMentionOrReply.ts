@@ -23,9 +23,10 @@ import {
 import {
   appendMentionReplyLog,
   markChannelMentionsRead,
-  type MentionReplyEntry,
-  type MentionReplyKind,
+  type DmEntry,
+  type SpaceMentionEntry,
 } from './mentionReplyLog';
+import { isConversationMutedForCurrentUser } from '@/services/config';
 import { getActiveChannelKey } from '@/hooks/chat/useReplyTracking';
 import { getLocalNotificationTypes } from '@/services/config';
 import { messagePreview, messageSenderName } from '@/utils/messagePreview';
@@ -69,7 +70,7 @@ function senderIdOf(message: Message): string | undefined {
 function classify(
   message: Message,
   ctx: LogMentionOrReplyCtx
-): MentionReplyKind | null {
+): SpaceMentionEntry['kind'] | null {
   const me = ctx.userAddress;
   if (!me) return null;
   const sender = senderIdOf(message);
@@ -131,7 +132,7 @@ export async function logMentionOrReply(
   // address, so we read the member fields directly here instead.
   const senderDisplayName = senderMember?.display_name || senderMember?.name || undefined;
 
-  const entry: MentionReplyEntry = {
+  const entry: SpaceMentionEntry = {
     id: `${ctx.spaceId}:${ctx.channelId}:${message.messageId}`,
     kind,
     spaceId: ctx.spaceId,
@@ -154,4 +155,60 @@ export async function logMentionOrReply(
   if (getActiveChannelKey() === `${ctx.spaceId}:${ctx.channelId}`) {
     markChannelMentionsRead(ctx.spaceId, ctx.channelId, entry.createdAt);
   }
+}
+
+export interface LogDirectMessageCtx {
+  /** Unified conversation id — the same one the DM route takes. */
+  conversationId: string;
+  /** Sender's full address. */
+  senderId: string;
+  /**
+   * What to title the row with — the conversation's display name exactly as
+   * the Messages tab shows it, resolved profile or truncated address. Unlike
+   * a space mention (where an unresolved sender falls back to no prefix rather
+   * than showing a raw hash), a DM row has nothing else to say, so it shows
+   * whatever the inbox row for the same conversation shows.
+   */
+  senderName?: string;
+  /** Current user's full address; nothing is logged without it. */
+  userAddress: string | null | undefined;
+  message: Message;
+}
+
+/**
+ * Persist an incoming Quorum DM into the notifications inbox log.
+ *
+ * The counterpart to `logMentionOrReply` for the DM receive paths, which had no
+ * equivalent — space messages logged themselves at their receive point and DMs
+ * simply did not, which is why they never appeared in the panel at all.
+ *
+ * Written through the mention log rather than the background-ping log because
+ * that is the path with the detail to render a real row. Keyed per CONVERSATION
+ * (see `DmEntry`), so an active chat refreshes one row instead of appending one
+ * per message.
+ *
+ * Returns void; appends 0 or 1 entry.
+ */
+export function logDirectMessage(ctx: LogDirectMessageCtx): void {
+  const me = ctx.userAddress;
+  if (!me) return;
+  if (ctx.senderId === me) return; // never self-notify (self-sync echoes)
+  // Same gate the push path uses. A muted conversation produces no row and no
+  // banner — the conversation stays reachable from the Messages tab.
+  if (isConversationMutedForCurrentUser(ctx.conversationId)) return;
+
+  const preview = messagePreview(ctx.message);
+  // An event with nothing to say (a receipt, a profile update) is not a row.
+  if (!preview.text.trim()) return;
+
+  const entry: DmEntry = {
+    id: `dm:${ctx.conversationId}`,
+    kind: 'dm',
+    conversationId: ctx.conversationId,
+    senderId: ctx.senderId,
+    senderName: ctx.senderName,
+    preview,
+    createdAt: ctx.message.createdDate || Date.now(),
+  };
+  appendMentionReplyLog(entry);
 }

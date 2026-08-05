@@ -27,7 +27,7 @@ import {
   useNotificationLog,
 } from '@/services/notifications/notificationLog';
 import {
-  getQuorumTabUnreadCount,
+  getQuorumTabSeenAt,
   useMentionReplyLog,
 } from '@/services/notifications/mentionReplyLog';
 import { useFarcasterClearedBefore } from '@/services/notifications/farcasterDismissal';
@@ -131,7 +131,7 @@ export function useUnifiedNotifications(
         clearedBefore,
         mutedConversations,
         lastSeen: getLastSeenTimestamp(),
-        quorumTabUnread: getQuorumTabUnreadCount(),
+        quorumTabSeenAt: getQuorumTabSeenAt(),
       }),
     [
       quorumEntries,

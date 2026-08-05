@@ -95,18 +95,30 @@ function quorumRowIcon(entry: UnifiedNotification): IconSymbolName {
       return 'bullhorn';
     case 'mention-roles':
       return 'shield';
+    case 'dm':
+      // Same envelope the background message pings wear — both rows are
+      // "a message arrived", just at different levels of detail.
+      return 'envelope';
     case 'mention-you':
     default:
       return 'at';
   }
 }
 
-/** Location parts for a Quorum row — space (loud) + channel breadcrumb (muted). */
+/** A Quorum DM row renders like a message ping (name, then text), not like a
+ *  space mention (which leads with its Space › #channel breadcrumb). */
+function isQuorumDM(entry: UnifiedNotification): boolean {
+  return entry.raw?.quorum?.kind === 'dm';
+}
+
+/** Location parts for a space mention row — space (loud) + channel breadcrumb
+ *  (muted). Never called for a DM row: a DM has no space or channel. */
 function quorumLocation(entry: UnifiedNotification): { space: string; channel: string } {
   const q = entry.raw?.quorum;
-  const space = q?.spaceName?.trim() || 'Space';
-  const channel = q?.channelName ? `#${q.channelName}` : '#channel';
-  return { space, channel: q?.threadId ? `${channel} › Thread` : channel };
+  if (!q || q.kind === 'dm') return { space: 'Space', channel: '#channel' };
+  const space = q.spaceName?.trim() || 'Space';
+  const channel = q.channelName ? `#${q.channelName}` : '#channel';
+  return { space, channel: q.threadId ? `${channel} › Thread` : channel };
 }
 
 function formatTime(ts: number): string {
@@ -255,7 +267,7 @@ export default function NotificationsScreen() {
               <IconSymbol name="envelope" color={theme.colors.primary} size={18} />
             </View>
           )}
-          {item.source === 'quorum' ? (
+          {item.source === 'quorum' && !isQuorumDM(item) ? (
             // Location-first layout: lead with "Space › #channel" (loud), then
             // the message preview, then the time. The mention type is conveyed
             // by the leading icon, so no redundant "X mentioned you" title.
