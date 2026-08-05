@@ -44,11 +44,18 @@ import * as Skin from '@/theme/skins/geometry';
 // (tap through to read in full), so cap it: long replies don't dominate the list.
 const QUORUM_PREVIEW_LINES = 2;
 
-// Leading row: 15px glyphs in a 20px line box, so ~2.5px of leading sits above
-// the text. The avatar is nudged down by that much to line its top edge up with
-// the visible top of the title rather than with the invisible text box.
+// Leading row geometry. The title is 15px glyphs in a 20px line box, and the
+// visible top of a capital sits well below the top of that box: half the leading
+// (~2.5px), plus the gap between the em box top and the cap height (~2px for the
+// platform sans). So the avatar has to come down by roughly 4px to have its top
+// edge line up with the text you can actually see.
+//
+// Both go through Skin.font() at the point of use. The nudge compensates for
+// FONT metrics, so it has to scale on the same axis as the line box it is
+// offsetting — a raw pixel value silently drifts on any skin with a fontScale
+// other than 1, growing the line box while the compensation stays put.
 const LEADING_LINE_HEIGHT = 20;
-const AVATAR_TOP_NUDGE = 2;
+const AVATAR_TOP_NUDGE = 4;
 
 // Clear-action copy, keyed by the active filter so the button and the dialog
 // both name exactly what is about to go. The wording differs per scope on
@@ -542,7 +549,7 @@ const createStyles = (theme: AppTheme) =>
     iconWrap: {
       width: 36,
       height: 36,
-      marginTop: AVATAR_TOP_NUDGE,
+      marginTop: Skin.font(AVATAR_TOP_NUDGE),
       borderRadius: Skin.circleOrSquare(18),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
@@ -551,13 +558,13 @@ const createStyles = (theme: AppTheme) =>
     avatar: {
       width: 36,
       height: 36,
-      marginTop: AVATAR_TOP_NUDGE,
+      marginTop: Skin.font(AVATAR_TOP_NUDGE),
       borderRadius: Skin.circleOrSquare(18),
       backgroundColor: theme.colors.surface3,
     },
     // For the leading slot that sizes itself and only needs the offset.
     avatarNudge: {
-      marginTop: AVATAR_TOP_NUDGE,
+      marginTop: Skin.font(AVATAR_TOP_NUDGE),
     },
     body: {
       flex: 1,
