@@ -102,8 +102,9 @@ function quorumRowIcon(entry: UnifiedNotification): IconSymbolName {
     case 'mention-roles':
       return 'shield';
     case 'dm':
-      // Same envelope the background message pings wear — both rows are
-      // "a message arrived", just at different levels of detail.
+      // Unreachable in practice: a DM row shows the sender's picture, or their
+      // initials when there is no picture, so it never falls back to a glyph.
+      // Kept so the switch stays total.
       return 'envelope';
     case 'mention-you':
     default:
@@ -123,38 +124,43 @@ function isQuorumDM(entry: UnifiedNotification): boolean {
  *
  * The glyph already distinguishes them, but a shape difference at 18px is a
  * much weaker signal than a colour difference — and the panel is a scanning
- * surface. Hues are chosen for what the row demands of you, loudest first:
- * `@everyone` is the one that interrupts a whole space (red), a direct `@you`
- * is addressed to you personally (blue), a role mention reached you via a hat
- * you happen to wear (green), and a message is its own conversation (orange).
+ * surface. Hues are chosen for what the row demands of you: `@everyone` is the
+ * one that interrupts a whole space (red), a direct `@you` is aimed at you by
+ * name (orange), a role mention reached you via a hat you happen to wear
+ * (green), and a reply continues something you already said (blue).
  *
- * Replies keep the accent colour: they are personal like `@you`, but a distinct
- * hue keeps the two apart when both sit in the same list.
+ * `@you` and reply are the two personal kinds and sit next to each other
+ * constantly, so they get the two most separated hues of the four rather than
+ * two shades of the same idea.
+ *
+ * Only rows that fall back to a GLYPH reach this. A DM shows the sender's face
+ * (or their initials), so it never needs a colour of its own — see the leading
+ * slot in `renderItem`.
  */
 function rowAccent(entry: UnifiedNotification, theme: AppTheme): string {
   switch (entry.raw?.quorum?.kind) {
     case 'mention-everyone':
       return theme.colors.danger;
     case 'mention-you':
-      return theme.colors.info;
+      return MENTION_YOU_ACCENT;
     case 'mention-roles':
       return theme.colors.success;
     case 'reply':
-      return theme.colors.primary;
-    case 'dm':
-      return MESSAGE_ACCENT;
+      return theme.colors.info;
     default:
-      // Background message pings — a message arrived, same as a DM row, just
-      // with less detail. Same colour, so they read as the same kind of thing.
-      return MESSAGE_ACCENT;
+      // Background message pings. These are the generic "you have new
+      // messages" rows raised while the app was asleep — there is no person to
+      // draw, so they keep the neutral accent rather than competing with the
+      // mention hues for attention they haven't earned.
+      return theme.colors.primary;
   }
 }
 
-// Orange for "a message arrived". The utility tokens have no orange, and
-// `warning` is an amber that reads as a caution state, which a message is not —
-// so this comes from the accent-theme palette, which does. Fixed rather than
-// theme-derived on purpose: it means "message", not "your chosen accent".
-const MESSAGE_ACCENT = accentThemes.orange[500];
+// Orange for a direct `@you`. The utility tokens have no orange, and `warning`
+// is an amber that reads as a caution state, which a mention is not — so this
+// comes from the accent-theme palette, which does. Fixed rather than
+// theme-derived on purpose: it means "@you", not "your chosen accent".
+const MENTION_YOU_ACCENT = accentThemes.orange[500];
 
 /** Tint behind the leading icon — the same hue, far enough back that the glyph
  *  stays the thing you see. */
@@ -302,14 +308,20 @@ export default function NotificationsScreen() {
         >
           {item.actorAvatarUrl ? (
             <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
-          ) : item.source === 'farcaster' ? (
-            // Same top nudge as the other three branches. This one is easy to
-            // miss because it takes `style` rather than wearing styles.avatar,
-            // and it only shows for actors with no profile picture — so the row
-            // beside a real photo looks right while its neighbours do not.
+          ) : item.source === 'farcaster' || isQuorumDM(item) ? (
+            // A person with no profile picture — Farcaster actor or Quorum DM
+            // sender alike. Initials, not a glyph: a DM is from somebody, and
+            // the row should say who even when we have no photo of them.
+            //
+            // Same top nudge as the other branches. This one is easy to miss
+            // because it takes `style` rather than wearing styles.avatar, and it
+            // only shows for actors with no profile picture — so the row beside
+            // a real photo looks right while its neighbours do not.
             <DefaultAvatar
               displayName={item.title}
-              address={item.id}
+              // Seeds the gradient. The sender's address for a DM, so the same
+              // person keeps the same colour across rows; the row id otherwise.
+              address={item.raw?.quorum?.senderId ?? item.id}
               size={36}
               style={styles.avatarNudge}
             />

@@ -242,11 +242,14 @@ comparison doc / the push code.
 - These OS pushes are SEPARATE from the in-app panel; a space message produces a
   native push (generic) AND, in-app, a logged mention/reply row (rich).
 - **Row iconography is colour-coded by kind** (`rowAccent` in the notifications
-  tab): `@everyone` red, `@you` blue, `@role` green, reply the theme accent,
-  and any message row (Quorum DM or background ping) orange. The circle behind
-  the glyph is the same hue at 16% alpha, so the kind is readable while
-  scanning without reading a word. A DM row that resolves an avatar shows the
-  sender's picture instead of a glyph, matching the Farcaster rows.
+  tab): `@everyone` red, `@you` orange, `@role` green, reply blue, and the
+  generic background pings the theme accent. `@you` and reply take the two most
+  separated hues because they are the two personal kinds and sit side by side
+  constantly. The circle behind the glyph is the same hue at 16% alpha, so the
+  kind is readable while scanning without reading a word.
+- **A DM row never shows a glyph.** It shows the sender's picture, or their
+  initials (`DefaultAvatar`) when there is none — a DM is from somebody, and
+  the row should say who. Same treatment the Farcaster rows already had.
 - **The OS banner and the in-app row are two payloads, not one.** The banner
   keeps whatever generic copy the background check raised; the in-app row for a
   Farcaster direct-cast ping is rebuilt at render time by joining the ping's
