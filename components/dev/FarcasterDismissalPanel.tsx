@@ -34,6 +34,18 @@
  * reads 0, something other than dismissal hid them — which is exactly the kind
  * of false pass a bare "did the rows disappear?" eyeball test would sail past.
  *
+ * THE "FC CHECK" ROW serves the same purpose for the background direct-cast
+ * check, which in production only ever runs from the OS background task on a
+ * 15-minute floor. Testing the rows it raises would otherwise mean backgrounding
+ * the app and waiting for the OS to feel like scheduling it — slow, and
+ * unrepeatable, because the first run advances the watermark past everything.
+ * "Run" invokes the check directly; "−1h" rewinds the watermark so the same
+ * conversations count as new again. Both are lossless: pings are keyed per
+ * conversation, so a re-run refreshes existing rows rather than duplicating
+ * them. The result line reports whether the run raised per-conversation pings
+ * or tripped the cap into a digest — the two look different on screen, and
+ * guessing which one you got is how a cap bug hides.
+ *
  * Only ever mounted from a `__DEV__` gate at the call site (see the
  * notifications tab); there is no separate internal gate here, matching
  * DmBurstSheet.
@@ -52,6 +64,17 @@ import {
   restoreNotificationSnapshot,
   useNotificationSnapshot,
 } from '@/services/dev/notificationSnapshot';
+import {
+  checkFarcasterDirectCasts,
+  getFarcasterCheckWatermark,
+  rewindFarcasterCheckWatermark,
+} from '@/services/notifications/BackgroundMessageService';
+
+/** How far back a rewind moves the Farcaster watermark. An hour is usually
+ *  under the per-conversation ping cap, so a rewind-then-run produces the
+ *  tappable per-conversation rows rather than the digest. Rewind twice to go
+ *  back further and deliberately trip the cap. */
+const REWIND_MS = 60 * 60 * 1000;
 
 interface FarcasterDismissalPanelProps {
   theme: AppTheme;
@@ -66,6 +89,36 @@ export function FarcasterDismissalPanel({
   const clearedBefore = useFarcasterClearedBefore();
   const snapshot = useNotificationSnapshot();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const [checkState, setCheckState] = React.useState<
+    { running: boolean; label: string }
+  >({ running: false, label: 'not run' });
+  // Not reactive (plain MMKV, no subscription) — bumped by hand after each
+  // action so the displayed watermark can't silently lag what was written.
+  const [watermark, setWatermark] = React.useState<number>(() =>
+    getFarcasterCheckWatermark(),
+  );
+
+  const handleRunCheck = useCallback(async () => {
+    setCheckState({ running: true, label: 'running…' });
+    const result = await checkFarcasterDirectCasts();
+    setWatermark(getFarcasterCheckWatermark());
+    setCheckState({
+      running: false,
+      label: !result.success
+        ? `failed: ${result.error ?? 'unknown'}`
+        : result.newMessageCount === 0
+          ? 'nothing new'
+          : result.digest
+            ? `digest ×${result.newMessageCount} (over the cap)`
+            : `${result.newMessageCount} ping${result.newMessageCount === 1 ? '' : 's'}`,
+    });
+  }, []);
+
+  const handleRewind = useCallback(() => {
+    rewindFarcasterCheckWatermark(REWIND_MS);
+    setWatermark(getFarcasterCheckWatermark());
+    setCheckState({ running: false, label: 'rewound — run again' });
+  }, []);
 
   const handleReset = useCallback(() => {
     // No confirm on either action: both are the UNDO direction. They only ever
@@ -110,6 +163,23 @@ export function FarcasterDismissalPanel({
             <Text style={styles.buttonLabel}>Restore</Text>
           </TouchableOpacity>
         )}
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.value}>
+          fc check: {checkState.label} · seen to {watermark ? time(watermark) : 'never'}
+        </Text>
+        <TouchableOpacity onPress={handleRewind} hitSlop={8} style={styles.button}>
+          <Text style={styles.buttonLabel}>−1h</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handleRunCheck}
+          hitSlop={8}
+          style={styles.button}
+          disabled={checkState.running}
+        >
+          <Text style={styles.buttonLabel}>Run</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );

@@ -80,14 +80,53 @@ export async function checkForNewMessages(): Promise<BackgroundCheckResult> {
   }
 }
 
+export interface FarcasterCheckResult extends BackgroundCheckResult {
+  /**
+   * True when the run collapsed into ONE generic digest ping instead of raising
+   * one per conversation. Surfaced (rather than inferred from the count)
+   * because the two produce visibly different rows — per-conversation rows are
+   * tappable and name their sender, the digest row does neither — and "which
+   * did I just get?" is otherwise a guess.
+   */
+  digest: boolean;
+}
+
+/** The last-seen watermark the Farcaster check compares against. Dev instrument. */
+export function getFarcasterCheckWatermark(): number {
+  const raw = mmkvStorage.getItem(LAST_FC_MESSAGE_KEY);
+  return raw ? parseInt(raw, 10) : 0;
+}
+
 /**
- * Check for new Farcaster direct cast messages
+ * Move the Farcaster watermark BACKWARDS so recent conversations count as new
+ * again on the next check. Dev instrument only.
+ *
+ * Without it, testing the background check on a device is a one-shot: the first
+ * run advances the watermark past everything, and a second run finds nothing
+ * until real new messages arrive. Rewinding turns it into a loop.
+ *
+ * Lossless — it only changes which direct casts are considered new for the
+ * purposes of raising a ping. Re-pinged conversations collapse onto their
+ * existing row (the pings are keyed per conversation), so a rewind cannot
+ * duplicate rows or delete anything.
  */
-async function checkFarcasterDirectCasts(): Promise<BackgroundCheckResult> {
+export function rewindFarcasterCheckWatermark(byMs: number): void {
+  const next = Math.max(0, Date.now() - byMs);
+  mmkvStorage.setItem(LAST_FC_MESSAGE_KEY, String(next));
+}
+
+/**
+ * Check for new Farcaster direct cast messages.
+ *
+ * Exported for the dev panel so the check can be run on demand. In production
+ * it is only ever reached through `checkForNewMessages` from the OS background
+ * task, which has a 15-minute floor — far too coarse to test against by hand.
+ */
+export async function checkFarcasterDirectCasts(): Promise<FarcasterCheckResult> {
   try {
     const token = await getFarcasterAuthToken();
     if (!token) {
-      return { newMessageCount: 0, success: true };
+      return { newMessageCount: 0, success: true, digest: false };
     }
 
     // Get last seen timestamp
@@ -120,7 +159,7 @@ async function checkFarcasterDirectCasts(): Promise<BackgroundCheckResult> {
           origin: 'farcaster',
         },
       });
-      return { newMessageCount: plan.digestCount, success: true };
+      return { newMessageCount: plan.digestCount, success: true, digest: true };
     }
 
     // One ping per conversation. `conversationId` is what makes the in-app row
@@ -142,11 +181,12 @@ async function checkFarcasterDirectCasts(): Promise<BackgroundCheckResult> {
       });
     }
 
-    return { newMessageCount: plan.conversations.length, success: true };
+    return { newMessageCount: plan.conversations.length, success: true, digest: false };
   } catch (error) {
     return {
       newMessageCount: 0,
       success: false,
+      digest: false,
       error: error instanceof Error ? error.message : 'Farcaster check failed',
     };
   }
