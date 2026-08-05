@@ -172,6 +172,11 @@ export default function NotificationsScreen() {
         router.push(`/spaces/${link.spaceId}/${link.channelId}`);
       } else if (link.conversationId) {
         router.push(`/(tabs)/messages/dm/${encodeURIComponent(link.conversationId)}`);
+      } else {
+        // A generic background ping — raised while the app was asleep, with
+        // nothing decrypted and no conversation to open. Land on the inbox
+        // rather than matching no branch and swallowing the tap.
+        router.push('/(tabs)/messages');
       }
     } else if (link.type === 'cast') {
       // Bounce to the feed tab; it owns the thread modal/cast viewer.

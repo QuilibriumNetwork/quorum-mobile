@@ -17,6 +17,7 @@ import { getAllSpaceInboxAddresses } from '../config/spaceStorage';
 import { encryptionStateStorage } from '../crypto/encryption-state-storage';
 import { showMessageNotification } from './NotificationService';
 import { getDirectCastConversations } from '../farcasterClient';
+import { planFarcasterPings } from './farcasterPingPlan';
 import { mmkvStorage } from '../offline/storage';
 
 import { getApiConfig } from '../api/config';
@@ -100,42 +101,48 @@ async function checkFarcasterDirectCasts(): Promise<BackgroundCheckResult> {
       limit: 20,
     });
 
-    let newMessageCount = 0;
-    let latestTimestamp = lastSeenTimestamp;
-
-    // Check for new messages in conversations
-    for (const conversation of conversations) {
-      const lastMessage = conversation.lastMessage;
-      if (lastMessage && lastMessage.serverTimestamp > lastSeenTimestamp) {
-        // This is a new message we haven't seen
-        newMessageCount++;
-        if (lastMessage.serverTimestamp > latestTimestamp) {
-          latestTimestamp = lastMessage.serverTimestamp;
-        }
-      }
-    }
+    const plan = planFarcasterPings(conversations, lastSeenTimestamp);
 
     // Update last seen timestamp
-    if (latestTimestamp > lastSeenTimestamp) {
-      mmkvStorage.setItem(LAST_FC_MESSAGE_KEY, String(latestTimestamp));
+    if (plan.latestTimestamp > lastSeenTimestamp) {
+      mmkvStorage.setItem(LAST_FC_MESSAGE_KEY, String(plan.latestTimestamp));
     }
 
-    // Show notification if there are new messages
-    if (newMessageCount > 0) {
+    if (plan.digestCount > 0) {
+      // Too many to be worth one row each. No conversationId — the tap lands
+      // on the Messages tab, which is the right destination for a digest.
       await showMessageNotification({
         title: 'New Messages',
-        body: newMessageCount === 1
-          ? 'You have a new direct message'
-          : `You have ${newMessageCount} new direct messages`,
+        body: `You have ${plan.digestCount} new direct messages`,
         data: {
           type: 'message',
           messageId: `fc-${Date.now()}`,
           origin: 'farcaster',
         },
       });
+      return { newMessageCount: plan.digestCount, success: true };
     }
 
-    return { newMessageCount, success: true };
+    // One ping per conversation. `conversationId` is what makes the in-app row
+    // tappable AND what lets the per-DM mute gate in `showMessageNotification`
+    // see the conversation at all; `logId` keys the in-app row to the
+    // conversation so repeat runs refresh one row rather than stacking
+    // identical ones.
+    for (const conversation of plan.conversations) {
+      await showMessageNotification({
+        title: 'New Messages',
+        body: 'You have a new direct message',
+        data: {
+          type: 'message',
+          messageId: `fc-${conversation.lastMessage?.messageId ?? conversation.conversationId}`,
+          conversationId: `farcaster:${conversation.conversationId}`,
+          origin: 'farcaster',
+        },
+        logId: `fc-conv:${conversation.conversationId}`,
+      });
+    }
+
+    return { newMessageCount: plan.conversations.length, success: true };
   } catch (error) {
     return {
       newMessageCount: 0,
