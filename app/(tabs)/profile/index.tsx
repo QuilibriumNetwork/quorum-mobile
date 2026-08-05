@@ -292,9 +292,10 @@ export default function NotificationsScreen() {
                 </Text>
               </Text>
               {(() => {
-                const q = item.raw?.quorum;
-                const author = q?.senderDisplayName?.trim();
-                const text = q?.preview?.text;
+                const author = item.raw?.quorum?.senderDisplayName?.trim();
+                // Not raw.quorum.preview.text — that is the unresolved wire
+                // form, mention tokens and all.
+                const text = item.previewText;
                 if (!author && !text) return null;
                 return (
                   <Text style={styles.quorumMessage} numberOfLines={QUORUM_PREVIEW_LINES}>

@@ -84,7 +84,6 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [Two icons left in the registry gap](issues/.open/2026-08-03-icon-registry-residual-gaps-mood-happy-and-headphones-filled.md)
 - 🐛 [One member's row is carrying another member's Farcaster identity](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md)
 - 🐛 [This device can key 0 of 3 Spaces it imported from the config blob](issues/.open/2026-08-04-mobile-cannot-key-any-space-it-imported-from-the-config-blob.md)
-- 🐛 [A mention notification shows an address where a name should be](issues/.open/2026-08-05-notification-previews-show-raw-addresses-instead-of-mention-names.md)
 - 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
 - 📋 [Message composer — further improvements](issues/.open/2026-06-16-message-composer-further-improvements.md)
 - 📋 [Split profile header has no visible "edit" cue](issues/.open/2026-06-16-split-profile-edit-affordance-not-discoverable.md)
@@ -145,6 +144,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [Deleting a non-empty group takes all its channels with it](issues/.done/2026-08-03-group-delete-destroys-its-channels-and-dialogs-promise-unenforced-rules.md)
 - 🐛 [The safety logs we keep adding do not exist where they are needed](issues/.done/2026-08-04-logger-is-a-no-op-in-production-and-debug-is-dead-in-dev.md)
 - 🐛 [Mobile publishes a narrowed Space list, emptying every desktop sidebar](issues/.done/2026-08-04-mobile-publishes-a-narrowed-space-list-and-empties-every-desktop-sidebar.md)
+- 🐛 [A mention notification shows an address where a name should be](issues/.done/2026-08-05-notification-previews-show-raw-addresses-instead-of-mention-names.md)
 - 📋 [Channel reorder mutations should broadcast (not local-only)](issues/.done/2026-05-29-channel-reorder-mutations-should-broadcast.md)
 - 📋 [Port DM update-profile (identity sync over DM sessions) from desktop](issues/.done/2026-06-09-port-dm-update-profile-from-desktop.md)
 - 📋 [Task: make `primaryUsername` (and `isProfilePublic`) survive a device switch and reliably reach the published public profile](issues/.done/2026-06-10-primary-username-sync-and-publish.md)
@@ -258,4 +258,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-05 15:26:57
+**Last Updated**: 2026-08-05 16:01:49

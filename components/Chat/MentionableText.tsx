@@ -15,6 +15,7 @@ import { Text, Image, StyleSheet, TextStyle, View } from 'react-native';
 import type { Emoji, SpaceMember, Channel, Role } from '@quilibrium/quorum-shared';
 import { getEmojiByName } from '@/data/emojiNames';
 import { resolveMemberName, formatResolvedName } from '@/utils/resolveMemberName';
+import { findMentionTokens } from '@/utils/mentionTokens';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 import { useTranslatable } from '@/services/translation/useTranslatable';
@@ -60,10 +61,9 @@ interface MentionableTextProps {
   receiptBlock?: React.ReactNode;
 }
 
-// Regex patterns for @mentions, URLs, and :emoji:
-// Channel matching is done by looking up actual channel names, not regex
-// Group 1: bracketed canonical format @<address>, group 2: legacy bare @address
-const MENTION_REGEX = /@<([^>]+)>|@(everyone)|@([a-zA-Z0-9_.\-]+)/g;
+// Mention tokenizing lives in utils/mentionTokens so the notification path can
+// share it — see that file. Channel matching is done by looking up actual
+// channel names, not regex.
 const EMOJI_REGEX = /:([a-zA-Z0-9_-]+):/g;
 // URL regex - matches http(s) URLs
 const URL_REGEX = /https?:\/\/[^\s<>"\])}]+/gi;
@@ -245,12 +245,11 @@ function MentionableTextBase({
 
     const matches: Match[] = [];
 
-    // Find @mentions and @everyone
-    // Group 1: @<address> (canonical), group 2: @everyone, group 3: @address (legacy)
-    MENTION_REGEX.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = MENTION_REGEX.exec(text)) !== null) {
-      if (match[2] === 'everyone') {
+    // Find @mentions and @everyone. Tokenizing is shared with the notification
+    // path (utils/mentionTokens); resolving a token to a member or a role stays
+    // here, because only this surface holds the full roster.
+    for (const token of findMentionTokens(text)) {
+      if (token.kind === 'everyone') {
         // Only style @everyone when the sender was actually authorized to use it
         // (mentions.everyone set AND sender holds mention:everyone — computed by
         // the caller). An unauthorized/spoofed @everyone renders as plain text,
@@ -258,22 +257,22 @@ function MentionableTextBase({
         if (everyoneAuthorized) {
           matches.push({
             type: 'mention',
-            start: match.index,
-            end: match.index + match[0].length,
-            content: match[0],
+            start: token.start,
+            end: token.end,
+            content: token.raw,
             data: { userId: 'everyone', displayName: 'everyone', isSelf: false },
           });
         }
         continue;
       }
-      const name = (match[1] || match[3] || '').toLowerCase();
+      const name = token.key.toLowerCase();
       const member = memberMap[name];
       if (member) {
         matches.push({
           type: 'mention',
-          start: match.index,
-          end: match.index + match[0].length,
-          content: match[0],
+          start: token.start,
+          end: token.end,
+          content: token.raw,
           data: {
             userId: member.address,
             displayName: formatResolvedName(resolveMemberName(member)),
@@ -282,16 +281,17 @@ function MentionableTextBase({
         });
         continue;
       }
-      // Not a member — is it a role? `@roleTag` (group 3) resolves to a styled
-      // mention pill (display name = the role tag), matching the markdown path
-      // and desktop (one accent color for all mention types, not the role color).
-      const role = match[3] ? roleMap[name] : undefined;
+      // Not a member — is it a role? Only the BARE form carries a role tag
+      // (`@<…>` is always an address), and it resolves to a styled mention pill
+      // whose display name is the role tag, matching the markdown path and
+      // desktop (one accent color for all mention types, not the role color).
+      const role = token.kind === 'bare' ? roleMap[name] : undefined;
       if (role) {
         matches.push({
           type: 'mention',
-          start: match.index,
-          end: match.index + match[0].length,
-          content: match[0],
+          start: token.start,
+          end: token.end,
+          content: token.raw,
           data: { userId: `role:${role.roleId}`, displayName: role.roleTag, isSelf: false },
         });
       }
@@ -352,6 +352,7 @@ function MentionableTextBase({
     }
 
     // Find :emoji: patterns
+    let match: RegExpExecArray | null;
     EMOJI_REGEX.lastIndex = 0;
     while ((match = EMOJI_REGEX.exec(text)) !== null) {
       const emojiName = match[1].toLowerCase();

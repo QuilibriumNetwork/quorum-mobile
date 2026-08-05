@@ -31,7 +31,13 @@ import {
   getLocalNotificationTypes,
   isConversationMutedForCurrentUser,
 } from '@/services/config';
-import { messagePreview, messageSenderName } from '@/utils/messagePreview';
+import { messagePreview, messageSenderName, type MessagePreview } from '@/utils/messagePreview';
+import { mentionedAddresses, renderMentionsAsPlainText } from '@/utils/mentionTokens';
+import {
+  formatResolvedName,
+  resolveMemberName,
+  type ResolvableMember,
+} from '@/utils/resolveMemberName';
 
 export interface LogMentionOrReplyCtx {
   spaceId: string;
@@ -44,11 +50,57 @@ export interface LogMentionOrReplyCtx {
   channelName?: string;
   /** Mute/notify gate — same `shouldNotifyForContext` result the badge uses. */
   notifyForBadge: boolean;
-  /** Resolve a space member (for sender display name). */
+  /**
+   * Resolve a space member — used for the sender's display name AND for any
+   * addresses mentioned inside the message body.
+   *
+   * Declared loosely because the roster reaches us from several queries and not
+   * all of them type the two-slot identity fields; `resolveMemberName` reads
+   * whichever are present.
+   */
   getSpaceMember: (
     spaceId: string,
     memberId: string
-  ) => Promise<{ display_name?: string; name?: string } | undefined>;
+  ) => Promise<Partial<ResolvableMember> | undefined>;
+}
+
+/**
+ * Rewrite `@<QmAbc…>` in a preview into `@Their Name`, resolving each mentioned
+ * address against the space roster.
+ *
+ * Done at WRITE time rather than render time because the panel is global across
+ * spaces: resolving later would mean per-space roster lookups from a surface
+ * that has no space. Here we are already inside one space and already awaiting
+ * `getSpaceMember` for the sender, so this is the same mechanism repeated.
+ *
+ * A stored name going stale if someone renames is acceptable, and arguably
+ * correct: a notification is a point-in-time record of what arrived.
+ */
+async function resolvePreviewMentions(
+  preview: MessagePreview,
+  ctx: LogMentionOrReplyCtx,
+): Promise<MessagePreview> {
+  const addresses = mentionedAddresses(preview.text);
+  if (addresses.length === 0) return preview;
+
+  const names = new Map<string, string>();
+  await Promise.all(
+    addresses.map(async (address) => {
+      try {
+        const member = await ctx.getSpaceMember(ctx.spaceId, address);
+        if (!member) return;
+        const resolved = resolveMemberName({ ...member, address });
+        // isAddressFallback means every tier missed, so the "name" is just the
+        // address again — leave it unresolved and let the renderer truncate,
+        // rather than substituting one form of the hash for another.
+        if (!resolved.isAddressFallback) names.set(address, formatResolvedName(resolved));
+      } catch {
+        // A roster miss is not a reason to drop the whole notification.
+      }
+    }),
+  );
+
+  return { ...preview, text: renderMentionsAsPlainText(preview.text, (a) => names.get(a)) };
 }
 
 function senderIdOf(message: Message): string | undefined {
@@ -123,16 +175,26 @@ export async function logMentionOrReply(
     ctx.spaceId && senderId
       ? await ctx.getSpaceMember(ctx.spaceId, senderId)
       : undefined;
+  // `messageSenderName` takes the narrower `string | undefined` shape; the
+  // roster's identity fields are nullable, so normalize rather than widening
+  // that util's contract for one caller.
+  const senderNameFields = senderMember
+    ? {
+        display_name: senderMember.display_name ?? undefined,
+        name: senderMember.name ?? undefined,
+      }
+    : undefined;
   const senderName = messageSenderName(
     senderId || undefined,
     ctx.userAddress ?? undefined,
-    senderId && senderMember ? { [senderId]: senderMember } : undefined
+    senderId && senderNameFields ? { [senderId]: senderNameFields } : undefined
   );
   // A RESOLVED display name only (no address fallback) — the row shows the
   // author prefix solely when we have a real name, so unsynced senders don't
   // surface a raw "Qm..." hash. `messageSenderName` would fall back to a short
   // address, so we read the member fields directly here instead.
-  const senderDisplayName = senderMember?.display_name || senderMember?.name || undefined;
+  const senderDisplayName =
+    senderNameFields?.display_name || senderNameFields?.name || undefined;
 
   const entry: SpaceMentionEntry = {
     id: `${ctx.spaceId}:${ctx.channelId}:${message.messageId}`,
@@ -145,7 +207,7 @@ export async function logMentionOrReply(
     senderId,
     senderName,
     senderDisplayName,
-    preview: messagePreview(message),
+    preview: await resolvePreviewMentions(messagePreview(message), ctx),
     createdAt: message.createdDate || Date.now(),
   };
   appendMentionReplyLog(entry);
@@ -199,9 +261,15 @@ export function logDirectMessage(ctx: LogDirectMessageCtx): void {
   // banner — the conversation stays reachable from the Messages tab.
   if (isConversationMutedForCurrentUser(ctx.conversationId)) return;
 
-  const preview = messagePreview(ctx.message);
+  const raw = messagePreview(ctx.message);
   // An event with nothing to say (a receipt, a profile update) is not a row.
-  if (!preview.text.trim()) return;
+  if (!raw.text.trim()) return;
+  // No roster to resolve against in a DM, but a raw `@<Qm…>` must still not
+  // reach the row — the truncating fallback handles it.
+  const preview: MessagePreview = {
+    ...raw,
+    text: renderMentionsAsPlainText(raw.text),
+  };
 
   const entry: DmEntry = {
     id: `dm:${ctx.conversationId}`,

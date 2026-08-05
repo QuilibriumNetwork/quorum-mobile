@@ -9,6 +9,7 @@
  */
 
 import { isScamCast } from '@/services/farcaster/scamFilter';
+import { renderMentionsAsPlainText } from '@/utils/mentionTokens';
 import { isDismissed, reachedWatermark } from './farcasterDismissal';
 import { notificationLogOrigin, type NotificationLogEntry } from './notificationLog';
 import type { MentionReplyEntry } from './mentionReplyLog';
@@ -27,6 +28,15 @@ export interface UnifiedNotification {
   title: string;
   body?: string;
   actorAvatarUrl?: string;
+  /**
+   * Quorum rows only: the message preview with mention tokens already resolved.
+   *
+   * Exists so a renderer that lays author and text out separately (the panel
+   * does) reads a finished value instead of re-deriving one from `raw` — which
+   * is precisely how the raw-`@<Qm…>`-hash bug happened: `body` was resolved,
+   * the field the row actually rendered was not.
+   */
+  previewText?: string;
   /** Routing payload — consumer picks branch on `type` to deep-link. */
   link?:
     | { type: 'message'; spaceId?: string; channelId?: string; conversationId?: string }
@@ -317,12 +327,25 @@ function quorumTitle(e: MentionReplyEntry): string {
   }
 }
 
+/**
+ * Mention tokens are resolved to names at WRITE time, where the space roster is
+ * in hand. This is the backstop for anything that reached the log without it:
+ * rows written before that existed, and any address the roster could not
+ * resolve. With no resolver it only truncates, which is the difference between
+ * a row reading "@Qm3f4a…8b2 take a look" and one that is a 46-character hash
+ * with the actual message pushed off the end.
+ */
+function previewText(e: MentionReplyEntry): string {
+  const text = e.preview?.text?.trim();
+  return text ? renderMentionsAsPlainText(text) : '';
+}
+
 /** Channel breadcrumb + message preview text, e.g. "#general · hey there". */
 function quorumBody(e: MentionReplyEntry): string {
-  if (e.kind === 'dm') return e.preview?.text?.trim() ?? '';
+  if (e.kind === 'dm') return previewText(e);
   const channel = e.channelName ? `#${e.channelName}` : '#channel';
   const crumb = e.threadId ? `${channel} › Thread` : channel;
-  const text = e.preview?.text?.trim();
+  const text = previewText(e);
   return text ? `${crumb} · ${text}` : crumb;
 }
 
@@ -333,6 +356,7 @@ export function quorumToUnified(e: MentionReplyEntry): UnifiedNotification {
     timestamp: e.createdAt,
     title: quorumTitle(e),
     body: quorumBody(e),
+    previewText: previewText(e),
     link:
       e.kind === 'dm'
         ? { type: 'message', conversationId: e.conversationId }
