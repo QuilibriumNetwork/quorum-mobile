@@ -72,13 +72,63 @@ this side rather than by the lead dev, so it has not had the lead dev's review.
 **Recommendation: option 1**, with option 3 as the fallback for any context where
 the key genuinely is not available.
 
-**The open engineering question for option 1:** is the derived key reachable
-where the log is WRITTEN? `logMentionOrReply` runs on the WebSocket receive path
-(app foregrounded, key loaded — fine). The background task at
-`BackgroundMessageService.ts:239` explicitly does not have keys, which is why it
-can only emit ciphertext-free generic text. Encrypting the store is only viable
-if reads/writes on every path can obtain the key. **Resolve this before
-committing to the approach.**
+### RESOLVED 2026-08-05 — the key IS reachable where it matters
+
+Investigated before committing to the approach. Answer: **encrypt the mention
+log; keep the ping log content-free.** The constraint and the exposure do not
+overlap.
+
+**The key.** HKDF-SHA256 over the Ed448 private key, read from SecureStore under
+`WHEN_UNLOCKED_THIS_DEVICE_ONLY` (`services/storage/messagesDb.ts:50-52`), then
+**memoized in module scope** (`:122`, `cipherKeyHexCache`).
+
+That memoization is decisive. Once a live process derives the key it stays in
+memory, and lock state stops mattering for that process. The only genuinely
+unreachable case is a **cold background process never unlocked since launch**
+(push wake / background fetch on a phone locked since boot).
+
+**And that case is iOS-only.** `keychainAccessible` is marked `@platform ios` in
+expo-secure-store's type definitions; Android ignores it. So the constraint bites
+on exactly one platform, in exactly one process state.
+
+**Mapped onto the two logs:**
+
+| Log | Written by | Cold bg process? | Encryptable |
+|---|---|---|---|
+| mention log (holds message text) | only `logMentionOrReply` ← `WebSocketContext` | no — needs a live React tree | **yes** |
+| ping log (generic strings only) | `BackgroundMessageService` | yes | not reliably on iOS |
+
+Writer set verified exhaustively: `appendMentionReplyLog` has one caller
+(`logMentionOrReply`), which has two (`WebSocketContext` live ~L2924 and catch-up
+~L4757). Both require a live app process, so the key is always already cached.
+
+**The log carrying the actual exposure is the encryptable one. The log that
+cannot be encrypted carries no message content today.**
+
+### Consequences for the rest of this issue
+
+- **§1 → encrypt the mention log.** No toggle, no user decision, no fallback path
+  needed. Make "the ping log never holds message content" an explicit rule rather
+  than an accident.
+- **§3 Quorum DM precision has no conflict.** The DM task already writes from the
+  decrypted WebSocket path, which lands in the mention log — encrypted *and*
+  precise. The wanted behaviour is the architecturally cheap one.
+- **§2 Farcaster DC precision should not persist content at all.** Join the
+  stored ping to the live conversation list at render (`useFarcasterDirectCasts`
+  already fetches it) instead of writing sender/preview into the log. Rich rows,
+  nothing added at rest, and it sidesteps the one path that cannot encrypt.
+
+### Two implementation notes
+
+- **MMKV takes its key at `createMMKV()`**, and these stores are module-scope
+  constants created at import, before any key exists. They need lazy creation on
+  first use. `recrypt()` exists but does not dodge the ordering problem.
+- **Do NOT "fix" this by switching to `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`.** It
+  would make the key reachable everywhere, but it is the SAME key the messages DB
+  uses, so it weakens that too — and an existing keychain item does not pick up a
+  changed accessibility attribute without being rewritten (INFERRED, unverified).
+  That is the lead dev's crypto posture; do not change it as a side effect of a
+  notifications feature.
 
 ## 2. The generic rows are neither precise nor tappable
 
@@ -145,10 +195,12 @@ which is why it is filed here rather than done separately.
 
 Sequenced so the privacy decision gates the content work.
 
-- **A. Resolve §1 first.** Establish whether the derived cipher key is reachable
-  on every notification-log read/write path. Then either encrypt the stores or
-  fall back to structural-only rows. Nothing in B/C should ship before this
-  lands, because each one increases the amount of message text at rest.
+- **A. Encrypt the mention log** (key-availability question resolved above —
+  every writer runs in a live process with the key cached). Requires moving the
+  store from module-scope `createMMKV` to lazy creation on first use. Make
+  "the ping log never holds message content" explicit while here. Nothing in
+  B/C should ship before this lands, because each one increases the amount of
+  message text at rest.
   - **Do not miss `quorum-dev-notification-snapshot`** (`services/dev/notificationSnapshot.ts`).
     It holds a full second copy of both logs, preview text included, in its own
     unencrypted MMKV store. Encrypting the two primary logs while leaving it
@@ -160,8 +212,11 @@ Sequenced so the privacy decision gates the content work.
   and independent of the content question — a row that does nothing on tap is a
   bug regardless.
 - **C. Split the OS payload from the in-app payload** in
-  `showMessageNotification`, then enrich the Farcaster direct-cast rows
-  (sender + preview) while the OS banner stays generic.
+  `showMessageNotification`, then enrich the Farcaster direct-cast rows while
+  the OS banner stays generic. Per the resolution above, enrich them at RENDER
+  time from the live conversation list rather than by persisting sender/preview
+  into the ping log — that path cannot encrypt, so the content should never
+  reach it.
 - **D. Wire the trash icon** to Quorum mention rows.
 - **E.** Revisit `android:allowBackup="true"` — decide deliberately, and exclude
   the notification stores from backup if it stays on.
