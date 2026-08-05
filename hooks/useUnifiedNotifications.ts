@@ -20,7 +20,8 @@ import {
 } from './useFarcasterNotifications';
 import { useHaatzNotifications } from './useHaatzNotifications';
 import { useDMMute } from '@/hooks/chat/useDMMute';
-import { useFarcasterConversations } from '@/hooks/chat/useFarcasterDirectCasts';
+import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
+import type { Conversation } from '@/hooks/chat/useConversations';
 import { coerceMessagePreview } from '@/utils/messagePreview';
 import {
   getLastSeenTimestamp,
@@ -93,27 +94,25 @@ export function useUnifiedNotifications(
   // Local dismissal watermark — Farcaster rows can't be cleared server-side.
   const clearedBefore = useFarcasterClearedBefore();
 
-  // Render-time enrichment source for the Farcaster direct-cast pings. The
-  // background check that raised them stored only a routing id on purpose, so
-  // the sender and message text are joined back on from here every render
-  // rather than being written into the log.
-  const dmConversations = useFarcasterConversations({ enabled: enrichConversations });
+  // Render-time enrichment source for the message rows. Covers BOTH products:
+  // the Farcaster direct-cast pings (whose log stores only a routing id, on
+  // purpose) and the Quorum DM rows (whose log stores no avatar). Joined back
+  // on every render rather than written into the log.
+  const dmConversations = useUnifiedConversations({ enabled: enrichConversations });
   const conversationDetails = useMemo(() => {
     const map = new Map<string, ConversationDetail>();
-    for (const page of dmConversations.data?.pages ?? []) {
-      for (const c of page.conversations) {
-        map.set(c.conversationId, {
-          displayName: c.displayName ?? '',
-          // Farcaster rows store a plain string, Quorum rows the typed preview
-          // — coerce so this doesn't depend on which wrote it.
-          preview: coerceMessagePreview(c.lastMessagePreview).text || undefined,
-          senderName: c.lastMessageSenderName,
-          avatarUrl: c.icon || undefined,
-        });
-      }
+    for (const c of dmConversations.conversations as Conversation[]) {
+      map.set(c.conversationId, {
+        displayName: c.displayName ?? '',
+        // Farcaster rows store a plain string, Quorum rows the typed preview
+        // — coerce so this doesn't depend on which wrote it.
+        preview: coerceMessagePreview(c.lastMessagePreview).text || undefined,
+        senderName: c.lastMessageSenderName,
+        avatarUrl: c.icon || undefined,
+      });
     }
     return map;
-  }, [dmConversations.data?.pages]);
+  }, [dmConversations.conversations]);
 
   const officialFarcaster = useMemo(
     () => flattenFarcasterNotifications(farcasterQuery.data?.pages),

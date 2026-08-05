@@ -457,6 +457,58 @@ describe('partitionNotifications — Quorum DM rows', () => {
     );
     expect(result.quorumItems[0].title).toBe('Someone');
   });
+
+  it('takes the sender avatar from the live conversation list', () => {
+    // The log stores no picture — an avatar is the one thing that should always
+    // be current rather than a point-in-time record — so the row joins the
+    // conversation list for it, the same way the Farcaster ping rows do.
+    const result = partitionNotifications(
+      input({
+        quorumEntries: [dm()],
+        conversationDetails: new Map([
+          ['dm-conv', { displayName: 'Dana', avatarUrl: 'https://example.test/dana.png' }],
+        ]),
+      }),
+    );
+    expect(result.quorumItems[0].actorAvatarUrl).toBe('https://example.test/dana.png');
+  });
+
+  it('refreshes the name from the conversation when it resolves', () => {
+    // Repairs a row logged before the sender's profile had synced, which would
+    // otherwise show a truncated address forever.
+    const result = partitionNotifications(
+      input({
+        quorumEntries: [dm({ senderName: 'Qm3f4a…8b2' })],
+        conversationDetails: new Map([['dm-conv', { displayName: 'Dana' }]]),
+      }),
+    );
+    expect(result.quorumItems[0].title).toBe('Dana');
+  });
+
+  it('leaves a DM row without an avatar when the conversation is unknown', () => {
+    // The renderer falls back to the envelope glyph here, so this must be
+    // undefined rather than an empty string an <Image> would try to load.
+    const result = partitionNotifications(
+      input({ quorumEntries: [dm()], conversationDetails: new Map() }),
+    );
+    expect(result.quorumItems[0].actorAvatarUrl).toBeUndefined();
+    expect(result.quorumItems[0].title).toBe('Dana');
+  });
+
+  it('never gives a space mention row an avatar from a same-named conversation', () => {
+    // Only DM rows join the conversation list. A mention row keys on space and
+    // channel, and must not pick up a conversation that happens to share an id.
+    const result = partitionNotifications(
+      input({
+        quorumEntries: [mention({ id: 'space:chan:msg' })],
+        conversationDetails: new Map([
+          ['space:chan:msg', { displayName: 'Nope', avatarUrl: 'https://example.test/x.png' }],
+        ]),
+      }),
+    );
+    expect(result.quorumItems[0].actorAvatarUrl).toBeUndefined();
+    expect(result.quorumItems[0].title).toBe('Carol mentioned you');
+  });
 });
 
 describe('partitionNotifications — render-time conversation enrichment', () => {

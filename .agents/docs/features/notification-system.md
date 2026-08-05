@@ -241,6 +241,12 @@ comparison doc / the push code.
   "privacy-conscious: never message content"). Surfacing message text is avoided.
 - These OS pushes are SEPARATE from the in-app panel; a space message produces a
   native push (generic) AND, in-app, a logged mention/reply row (rich).
+- **Row iconography is colour-coded by kind** (`rowAccent` in the notifications
+  tab): `@everyone` red, `@you` blue, `@role` green, reply the theme accent,
+  and any message row (Quorum DM or background ping) orange. The circle behind
+  the glyph is the same hue at 16% alpha, so the kind is readable while
+  scanning without reading a word. A DM row that resolves an avatar shows the
+  sender's picture instead of a glyph, matching the Farcaster rows.
 - **The OS banner and the in-app row are two payloads, not one.** The banner
   keeps whatever generic copy the background check raised; the in-app row for a
   Farcaster direct-cast ping is rebuilt at render time by joining the ping's
@@ -249,6 +255,10 @@ comparison doc / the push code.
   Sender and message text are deliberately NOT persisted into the ping log —
   same row on screen, nothing extra on disk. The join falls back to the stored
   generic copy whenever it misses.
+- **The same join gives Quorum DM rows their avatar** (`quorumToUnified`). The
+  mention log stores no picture: an avatar is the one thing that should always
+  be current rather than a point-in-time record. It sources both products from
+  `useUnifiedConversations`, so one directory serves both row types.
 
 ## 8. Mute architecture (four levels)
 

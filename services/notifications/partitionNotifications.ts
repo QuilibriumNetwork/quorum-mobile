@@ -349,14 +349,24 @@ function quorumBody(e: MentionReplyEntry): string {
   return text ? `${crumb} · ${text}` : crumb;
 }
 
-export function quorumToUnified(e: MentionReplyEntry): UnifiedNotification {
+export function quorumToUnified(
+  e: MentionReplyEntry,
+  conversations?: ReadonlyMap<string, ConversationDetail>,
+): UnifiedNotification {
+  // A DM row joins the live conversation list for the sender's avatar, exactly
+  // as the Farcaster ping rows do — the log stores no picture, and a picture is
+  // the one thing that should always be current rather than a point-in-time
+  // record. The name follows the same source when it resolves, which also
+  // repairs a row logged before the sender's profile had synced.
+  const detail = e.kind === 'dm' ? conversations?.get(e.conversationId) : undefined;
   return {
     id: `quorum:${e.id}`,
     source: 'quorum',
     timestamp: e.createdAt,
-    title: quorumTitle(e),
+    title: detail?.displayName?.trim() || quorumTitle(e),
     body: quorumBody(e),
     previewText: previewText(e),
+    actorAvatarUrl: detail?.avatarUrl || undefined,
     link:
       e.kind === 'dm'
         ? { type: 'message', conversationId: e.conversationId }
@@ -470,7 +480,9 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
   // definition — no fourth section, no fourth filter pill.
   // Space channel mute is already enforced upstream at log-write time via
   // shouldNotifyForContext.
-  const quorumMentionItems = quorumEntries.map(quorumToUnified).filter(notMutedDM);
+  const quorumMentionItems = quorumEntries
+    .map((e) => quorumToUnified(e, conversationDetails))
+    .filter(notMutedDM);
   const quorumItems = [...quorumMentionItems, ...quorumChat];
   quorumItems.sort((a, b) => b.timestamp - a.timestamp);
 

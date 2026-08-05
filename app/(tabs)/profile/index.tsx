@@ -18,6 +18,8 @@ import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
 import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
+import { accentThemes } from '@/theme/colors';
+import { withAlpha } from '@/theme/skins/mergeSkin';
 import { useAuth } from '@/context/AuthContext';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
@@ -114,6 +116,49 @@ function quorumRowIcon(entry: UnifiedNotification): IconSymbolName {
 function isQuorumDM(entry: UnifiedNotification): boolean {
   return entry.raw?.quorum?.kind === 'dm';
 }
+
+/**
+ * Leading-icon accent per row type, so the KIND of notification is readable at
+ * a glance without reading a word of it.
+ *
+ * The glyph already distinguishes them, but a shape difference at 18px is a
+ * much weaker signal than a colour difference — and the panel is a scanning
+ * surface. Hues are chosen for what the row demands of you, loudest first:
+ * `@everyone` is the one that interrupts a whole space (red), a direct `@you`
+ * is addressed to you personally (blue), a role mention reached you via a hat
+ * you happen to wear (green), and a message is its own conversation (orange).
+ *
+ * Replies keep the accent colour: they are personal like `@you`, but a distinct
+ * hue keeps the two apart when both sit in the same list.
+ */
+function rowAccent(entry: UnifiedNotification, theme: AppTheme): string {
+  switch (entry.raw?.quorum?.kind) {
+    case 'mention-everyone':
+      return theme.colors.danger;
+    case 'mention-you':
+      return theme.colors.info;
+    case 'mention-roles':
+      return theme.colors.success;
+    case 'reply':
+      return theme.colors.primary;
+    case 'dm':
+      return MESSAGE_ACCENT;
+    default:
+      // Background message pings — a message arrived, same as a DM row, just
+      // with less detail. Same colour, so they read as the same kind of thing.
+      return MESSAGE_ACCENT;
+  }
+}
+
+// Orange for "a message arrived". The utility tokens have no orange, and
+// `warning` is an amber that reads as a caution state, which a message is not —
+// so this comes from the accent-theme palette, which does. Fixed rather than
+// theme-derived on purpose: it means "message", not "your chosen accent".
+const MESSAGE_ACCENT = accentThemes.orange[500];
+
+/** Tint behind the leading icon — the same hue, far enough back that the glyph
+ *  stays the thing you see. */
+const ACCENT_WASH = 0.16;
 
 /** Location parts for a space mention row — space (loud) + channel breadcrumb
  *  (muted). Never called for a DM row: a DM has no space or channel. */
@@ -249,6 +294,7 @@ export default function NotificationsScreen() {
       // where it means everything. Farcaster rows stay without one: that feed
       // is the server's, and no per-item dismiss exists for it.
       const showTrash = item.source !== 'farcaster';
+      const accent = rowAccent(item, theme);
       return (
         <Pressable
           style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
@@ -268,15 +314,17 @@ export default function NotificationsScreen() {
               style={styles.avatarNudge}
             />
           ) : item.source === 'quorum' ? (
-            <View style={styles.iconWrap}>
-              <IconSymbol name={quorumRowIcon(item)} color={theme.colors.primary} size={18} />
+            <View style={[styles.iconWrap, { backgroundColor: withAlpha(accent, ACCENT_WASH) }]}>
+              <IconSymbol name={quorumRowIcon(item)} color={accent} size={18} />
             </View>
           ) : (
             // Background message pings. An envelope, not a bell: the row is
             // about a message that arrived, not about the notification itself,
             // and every other row in the panel already uses an outline glyph.
-            <View style={styles.iconWrap}>
-              <IconSymbol name="envelope" color={theme.colors.primary} size={18} />
+            // A DM row that resolved an avatar took the first branch above, so
+            // reaching here means we have no picture for the sender.
+            <View style={[styles.iconWrap, { backgroundColor: withAlpha(accent, ACCENT_WASH) }]}>
+              <IconSymbol name="envelope" color={accent} size={18} />
             </View>
           )}
           {item.source === 'quorum' && !isQuorumDM(item) ? (
@@ -338,7 +386,10 @@ export default function NotificationsScreen() {
         </Pressable>
       );
     },
-    [styles, theme.colors.primary, theme.colors.textMuted, handlePress, handleDelete],
+    // `theme` whole, not picked colours: rowAccent reads four of them, and
+    // listing each is how one gets forgotten and the row keeps a stale accent
+    // across a theme switch.
+    [styles, theme, handlePress, handleDelete],
   );
 
   // Pills only earn their space when there's actually a Farcaster feed to filter
@@ -585,6 +636,9 @@ const createStyles = (theme: AppTheme) =>
       height: 36,
       marginTop: Skin.font(AVATAR_TOP_NUDGE),
       borderRadius: Skin.circleOrSquare(18),
+      // Every call site overrides this with the row's accent wash. Kept as a
+      // neutral floor so a row type that reaches here without one is still a
+      // circle rather than a hole in the list.
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
