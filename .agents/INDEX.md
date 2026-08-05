@@ -26,6 +26,8 @@ This is the main index for all documentation, bug reports, and task management.
 
 ### In Progress
 
+- 📋 [Every in-app notification says who and what](issues/2026-08-05-rich-in-app-notifications-plan.md)
+
 #### Light Theme Contrast
 
 - 📋 [Handoff — light-theme contrast (DONE) + nav-bar fix (built, unverified) + dual-device preview setup (the real open problem)](issues/light-theme-contrast/2026-06-26-HANDOFF-navbar-and-dual-device-preview.md)
@@ -109,7 +111,6 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Deliver quorum-shared to mobile without an npm publish, for everyone](issues/.open/2026-08-01-deliver-quorum-shared-to-mobile-without-npm-publish.md)
 - 📋 [Non-destructive feedback: move the remaining `Alert.alert` sites off native alerts](issues/.open/2026-08-01-non-destructive-alert-alert-to-toasts.md)
 - 📋 [Three pieces the resolver adoption deliberately left](issues/.open/2026-08-04-qns-names-and-the-identity-coverage-instrument.md)
-- 📋 [Every in-app notification says who and what](issues/.open/2026-08-05-rich-in-app-notifications-plan.md)
 
 ### Deferred
 
@@ -257,4 +258,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-05 13:40:49
+**Last Updated**: 2026-08-05 15:26:57

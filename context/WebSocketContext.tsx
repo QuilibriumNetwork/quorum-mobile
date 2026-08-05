@@ -3732,11 +3732,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // the logMentionOrReply call the space path makes at its receive point.
         // Sender and plaintext are both in hand here; this is the same data
         // that just filled lastMessagePreview above.
-        // authenticatedDmSender, NOT senderAddress: on a message we sent from
-        // another device, the self-sync rewrite above has already repointed
-        // conversationId (and therefore senderAddress) at the RECIPIENT, so
-        // senderAddress would pass the self-check and file our own message as
-        // an incoming one from the person we sent it to.
+        //
+        // Passes authenticatedDmSender, NOT senderAddress: on a message we sent
+        // from another device, the self-sync rewrite above has already
+        // repointed conversationId (and therefore senderAddress) at the
+        // RECIPIENT, so senderAddress would pass the self-check and file our
+        // own message as an incoming one from the person we sent it to.
         logDirectMessage({
           conversationId,
           senderId: authenticatedDmSender || senderAddress,
