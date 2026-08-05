@@ -1,12 +1,21 @@
 /**
- * DefaultAvatar — fallback user avatar shown when there's no profile photo.
+ * DefaultAvatar — the avatar for a PERSON who has no profile photo.
  *
- * Renders deterministic initials + gradient via the shared avatar functions
- * (see AvatarInitials). Prefers a human display name so initials are
- * recognizable ("NA" for "Niccolò Angeli"); falls back to the address only
- * when a name genuinely isn't available at the call site.
+ * Renders deterministic initials on a colour derived from their display name,
+ * via the shared `AvatarInitials` renderer. Deterministic matters: the same
+ * person keeps the same colour everywhere in the app and on desktop, so the
+ * avatar carries a little identity of its own rather than being decoration.
  *
- * No external API calls — color and initials are computed locally.
+ * Prefer a real display name over an address. Initials from a name are
+ * recognisable ("AR" for "Ada Rivera"); initials from an address are two
+ * arbitrary characters of a hash, which is only marginally better than
+ * nothing. The `address` prop exists for call sites that genuinely have no
+ * name to offer.
+ *
+ * No network calls — colour and initials are both computed locally.
+ *
+ * See the header of `Avatar.tsx` for which of the five avatar components to
+ * reach for.
  */
 
 import React from 'react';

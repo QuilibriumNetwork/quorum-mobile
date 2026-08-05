@@ -1,3 +1,38 @@
+/**
+ * Avatar — the generic presentational avatar: an image with size presets, a
+ * plain text fallback, and an optional status badge.
+ *
+ * ## Which of these five do I reach for?
+ *
+ * There are five avatar components and their names do not make the choice
+ * obvious, so:
+ *
+ * - **`Avatar`** (this file) — a self-contained UI primitive. Size presets
+ *   (`xs`–`xl`), an optional press handler, an optional status dot. Its
+ *   fallback is whatever STRING you hand it, drawn flat on `surface3`. It
+ *   knows nothing about users, names or identity resolution. Reach for it in
+ *   generic UI, or when you want the status badge.
+ *
+ * - **`DefaultAvatar`** — a person with no photo. Renders deterministic
+ *   initials on a colour derived from their name. Use this, not `Avatar`'s
+ *   string fallback, anywhere a real user is shown: the colour is stable per
+ *   person and matches desktop.
+ *
+ * - **`AvatarInitials`** — the shared initials + gradient renderer underneath
+ *   `DefaultAvatar` (users) and `SpaceIcon` (spaces). Call it directly only if
+ *   you are building a third thing of that kind.
+ *
+ * - **`CachedAvatar`** — a photo in a list. Disk-cached, and rebinds correctly
+ *   when a recycled row is reused. This is the one for feeds and long lists;
+ *   it can fall back to `DefaultAvatar` via `fallbackName`.
+ *
+ * - **`ApexAvatarRing`** — not an avatar. A decorative ring drawn AROUND one
+ *   for Apex subscribers; wraps any of the above.
+ *
+ * Rule of thumb: showing a **person** → `DefaultAvatar` or `CachedAvatar`.
+ * Showing **anything else** → `Avatar`.
+ */
+
 import React, { useState } from 'react';
 import { ImageSourcePropType, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
@@ -48,11 +83,15 @@ const FONT_SIZE_MAP: Record<AvatarSize, number> = {
 /**
  * Avatar component with image, fallback, and optional status badge.
  *
+ * `fallback` is truncated to two characters and upper-cased, and renders flat
+ * on `surface3` — it is NOT the deterministic per-person gradient. For a real
+ * user prefer `DefaultAvatar`, which is (see the file header).
+ *
  * @example
  * ```tsx
  * <Avatar source={user.avatar} size="md" />
  *
- * <Avatar fallback="JD" size="lg" showBadge badgeColor="green" />
+ * <Avatar fallback="AR" size="lg" showBadge badgeColor="green" />
  *
  * <Avatar source={{ uri: imageUrl }} onPress={handlePress} />
  * ```

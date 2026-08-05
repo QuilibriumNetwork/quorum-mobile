@@ -1,6 +1,21 @@
 /**
- * CachedAvatar - Drop-in replacement for Image when displaying profile pictures
- * Uses expo-image with disk caching to avoid reloading on every feed view
+ * CachedAvatar — the avatar for photos inside LISTS. A drop-in replacement for
+ * `Image` that adds disk caching, so a feed does not refetch every face each
+ * time it is scrolled back into view.
+ *
+ * Two things it does that a bare `Image` does not, both of which matter only in
+ * a recycled list and are easy to lose in a refactor:
+ *
+ * - **`recyclingKey`** ties the underlying view to the source, so a reused row
+ *   rebinds to a fresh avatar instead of retaining the previous one. Without
+ *   it an animated avatar can be used after its decoded backing store is purged
+ *   under memory pressure — a crash, not a glitch.
+ * - **`fallbackName`** swaps in `DefaultAvatar` (initials) when the photo is
+ *   missing or fails, because expo-image cannot render a React node on error
+ *   the way a web `<img>` can, so the failure has to be tracked in state.
+ *
+ * See the header of `Avatar.tsx` for which of the five avatar components to
+ * reach for.
  */
 
 import React, { useState } from 'react';
@@ -14,8 +29,9 @@ interface CachedAvatarProps {
   fallback?: ImageSourcePropType;
   /**
    * When set, a missing or failed photo falls back to initials (DefaultAvatar)
-   * derived from this name instead of the static `fallback` image. Lets
-   * callers show "NA" instead of the generic blue logo.
+   * derived from this name instead of the static `fallback` image — so a row
+   * shows "AR" for "Ada Rivera" rather than the generic blue logo, which is
+   * identical for everyone and therefore tells the reader nothing.
    */
   fallbackName?: string;
 }
