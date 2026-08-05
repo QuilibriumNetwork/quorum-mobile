@@ -9,6 +9,7 @@
 
 import {
   planFarcasterPings,
+  rewoundWatermark,
   MAX_FC_CONVERSATION_PINGS,
   type FarcasterPingPlan,
 } from '../services/notifications/farcasterPingPlan';
@@ -118,5 +119,31 @@ describe('planFarcasterPings', () => {
     const plan = planFarcasterPings(many, SEEN);
     expect(plan.digestCount).toBe(0);
     expect(plan.conversations).toHaveLength(n);
+  });
+});
+
+describe('rewoundWatermark (the dev rewind)', () => {
+  const HOUR = 60 * 60 * 1000;
+  const NOW = 100 * HOUR;
+
+  it('accumulates — repeated rewinds keep walking backwards', () => {
+    // The bug this exists for: anchoring on `now` instead of the current
+    // watermark makes every tap land on the same instant, so tapping "go back
+    // further" six times is identical to tapping it once. The button looks
+    // dead, and the tester concludes the FEATURE is broken.
+    const once = rewoundWatermark(NOW, HOUR, NOW);
+    const twice = rewoundWatermark(once, HOUR, NOW);
+    const thrice = rewoundWatermark(twice, HOUR, NOW);
+    expect(once).toBe(NOW - HOUR);
+    expect(twice).toBe(NOW - 2 * HOUR);
+    expect(thrice).toBe(NOW - 3 * HOUR);
+  });
+
+  it('anchors on now only when there is no watermark yet', () => {
+    expect(rewoundWatermark(0, HOUR, NOW)).toBe(NOW - HOUR);
+  });
+
+  it('never goes below zero', () => {
+    expect(rewoundWatermark(HOUR, 10 * HOUR, NOW)).toBe(0);
   });
 });

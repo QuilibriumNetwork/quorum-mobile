@@ -17,7 +17,7 @@ import { getAllSpaceInboxAddresses } from '../config/spaceStorage';
 import { encryptionStateStorage } from '../crypto/encryption-state-storage';
 import { showMessageNotification } from './NotificationService';
 import { getDirectCastConversations } from '../farcasterClient';
-import { planFarcasterPings } from './farcasterPingPlan';
+import { planFarcasterPings, rewoundWatermark } from './farcasterPingPlan';
 import { mmkvStorage } from '../offline/storage';
 
 import { getApiConfig } from '../api/config';
@@ -89,6 +89,24 @@ export interface FarcasterCheckResult extends BackgroundCheckResult {
    * did I just get?" is otherwise a guess.
    */
   digest: boolean;
+  /** False when there is no stored Farcaster token, so nothing was fetched. */
+  hasToken: boolean;
+  /** Conversations the API returned. 0 means the fetch, not the logic, is why
+   *  nothing happened. Note the fetch is `category: 'default'` only — a
+   *  message from someone you have never replied to sits in `request` and is
+   *  invisible here. */
+  conversationsFetched: number;
+  /**
+   * Pings that actually reached the OS and the in-app log, as opposed to
+   * `newMessageCount`, which is what the run DECIDED to send.
+   *
+   * These differ whenever `showMessageNotification` suppresses one — global
+   * notifications off, or the conversation muted. Reporting only the decision
+   * would let a fully-suppressed run read as a success while nothing appeared
+   * on screen, which is the single most misleading thing this instrument
+   * could do.
+   */
+  delivered: number;
 }
 
 /** The last-seen watermark the Farcaster check compares against. Dev instrument. */
@@ -111,7 +129,7 @@ export function getFarcasterCheckWatermark(): number {
  * duplicate rows or delete anything.
  */
 export function rewindFarcasterCheckWatermark(byMs: number): void {
-  const next = Math.max(0, Date.now() - byMs);
+  const next = rewoundWatermark(getFarcasterCheckWatermark(), byMs, Date.now());
   mmkvStorage.setItem(LAST_FC_MESSAGE_KEY, String(next));
 }
 
@@ -126,7 +144,10 @@ export async function checkFarcasterDirectCasts(): Promise<FarcasterCheckResult>
   try {
     const token = await getFarcasterAuthToken();
     if (!token) {
-      return { newMessageCount: 0, success: true, digest: false };
+      return {
+        newMessageCount: 0, success: true, digest: false,
+        hasToken: false, conversationsFetched: 0, delivered: 0,
+      };
     }
 
     // Get last seen timestamp
@@ -150,7 +171,7 @@ export async function checkFarcasterDirectCasts(): Promise<FarcasterCheckResult>
     if (plan.digestCount > 0) {
       // Too many to be worth one row each. No conversationId — the tap lands
       // on the Messages tab, which is the right destination for a digest.
-      await showMessageNotification({
+      const digestId = await showMessageNotification({
         title: 'New Messages',
         body: `You have ${plan.digestCount} new direct messages`,
         data: {
@@ -159,7 +180,11 @@ export async function checkFarcasterDirectCasts(): Promise<FarcasterCheckResult>
           origin: 'farcaster',
         },
       });
-      return { newMessageCount: plan.digestCount, success: true, digest: true };
+      return {
+        newMessageCount: plan.digestCount, success: true, digest: true,
+        hasToken: true, conversationsFetched: conversations.length,
+        delivered: digestId ? 1 : 0,
+      };
     }
 
     // One ping per conversation. `conversationId` is what makes the in-app row
@@ -167,8 +192,9 @@ export async function checkFarcasterDirectCasts(): Promise<FarcasterCheckResult>
     // see the conversation at all; `logId` keys the in-app row to the
     // conversation so repeat runs refresh one row rather than stacking
     // identical ones.
+    let delivered = 0;
     for (const conversation of plan.conversations) {
-      await showMessageNotification({
+      const id = await showMessageNotification({
         title: 'New Messages',
         body: 'You have a new direct message',
         data: {
@@ -179,14 +205,21 @@ export async function checkFarcasterDirectCasts(): Promise<FarcasterCheckResult>
         },
         logId: `fc-conv:${conversation.conversationId}`,
       });
+      if (id) delivered++;
     }
 
-    return { newMessageCount: plan.conversations.length, success: true, digest: false };
+    return {
+      newMessageCount: plan.conversations.length, success: true, digest: false,
+      hasToken: true, conversationsFetched: conversations.length, delivered,
+    };
   } catch (error) {
     return {
       newMessageCount: 0,
       success: false,
       digest: false,
+      hasToken: true,
+      conversationsFetched: 0,
+      delivered: 0,
       error: error instanceof Error ? error.message : 'Farcaster check failed',
     };
   }

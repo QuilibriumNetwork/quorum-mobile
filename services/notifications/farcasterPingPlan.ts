@@ -20,6 +20,21 @@ import type { DirectCastConversation } from '../farcasterClient';
  */
 export const MAX_FC_CONVERSATION_PINGS = 5;
 
+/**
+ * Where a dev rewind of the last-seen watermark lands.
+ *
+ * Anchored on the CURRENT watermark, not on `now`, so repeated rewinds keep
+ * walking backwards. Anchoring on `now` makes the operation idempotent — every
+ * tap landing on the same instant — so "go back further" silently does nothing
+ * and the tester concludes the FEATURE is broken rather than the button.
+ *
+ * Falls back to `now` only when there is no watermark yet, where every message
+ * already counts as new and there is nothing to rewind past.
+ */
+export function rewoundWatermark(current: number, byMs: number, now: number): number {
+  return Math.max(0, (current || now) - byMs);
+}
+
 export interface FarcasterPingPlan {
   /** Conversations to raise one ping each for. Empty when `digestCount > 0`. */
   conversations: DirectCastConversation[];
