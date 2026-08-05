@@ -107,6 +107,19 @@ export interface DisplayMessage {
   sendError?: string;
   // Original message if available
   originalMessage?: SharedMessage;
+  /**
+   * True when the message arrived over a transport that has no notion of a
+   * per-message signature, so "is it signed?" is not a question that can be
+   * asked of it (Farcaster direct casts). The absence of a signature is then a
+   * property of the protocol, not a defect in the message, and the unsigned
+   * warning must be suppressed rather than inverted — the row is neither signed
+   * nor unsigned.
+   *
+   * Only Quorum messages carry `originalMessage.signature`; every other
+   * DisplayMessage looks unsigned to a naive check, which is exactly the trap
+   * this flag exists to close.
+   */
+  signatureNotApplicable?: boolean;
   // Render type for different message displays
   renderType: MessageRenderType;
   // System message specific
@@ -597,6 +610,9 @@ export function directCastToDisplayMessage(
     content,
     renderType,
     systemEventType,
+    // Direct casts are HTTPS calls to the Farcaster API authenticated by the
+    // user's token; the format carries no per-message signature to check.
+    signatureNotApplicable: true,
   };
 
   // Check for embedded image URLs in message text (e.g., imagedelivery.net)
