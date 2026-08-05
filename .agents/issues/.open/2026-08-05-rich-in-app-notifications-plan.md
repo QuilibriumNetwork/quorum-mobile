@@ -47,8 +47,17 @@ executable plan. It consumes slice 2's payload split when it eventually runs.
 
 ## Slices
 
-Each ends in something observable by tapping the app. Ship in order; each is
-independently shippable.
+Each ends in something observable by tapping the app. **Start at slice 1** and
+ship in order.
+
+Each slice is independently shippable, but the order carries one real dependency:
+slice 2 builds the OS-banner / in-app payload split, and slice 3 plus the separate
+native-push issue both consume it. Slices 1 and 4 have no dependencies and could
+move if something blocks.
+
+Nothing in this plan needs a decision from the operator before it can be built —
+see "Decisions taken" below. Where a slice says "ask", it means only if the stated
+approach turns out to be infeasible.
 
 ### Slice 1 — a "New Messages" row goes somewhere
 
@@ -79,12 +88,15 @@ banner still reads "New Messages".*
 exactly why the in-app rows are generic today. Give it two payloads: a generic one
 for the OS banner, a rich one for the in-app row.
 
-**Enrich at render time, do not persist the content.** The panel can join a stored
-ping to the live conversation list (`useFarcasterDirectCasts` already fetches it)
-rather than writing sender and message text into the log. Same result on screen,
-nothing extra kept on disk. There is a storage-layer rationale for this preference
-that is tracked outside this repo — **ask the operator before choosing to persist
-instead.**
+**Enrich at render time. Do not persist the content.** Join the stored ping to the
+live conversation list (`useFarcasterDirectCasts` already fetches it) rather than
+writing sender and message text into the log. Same result on screen, nothing extra
+kept on disk.
+
+This is a decision, not a preference — build it this way. Its rationale is
+storage-layer and is tracked outside this repo. If render-time enrichment turns
+out to be genuinely infeasible, stop and ask the operator rather than falling back
+to persisting.
 
 The data is already in hand at the write site: that background loop holds full
 `DirectCastConversation` objects (`services/farcasterClient.ts:497-512`) with
@@ -117,9 +129,10 @@ call is the fix.
    has the branch.
 4. Make sure the scoped clear covers the new rows (see the shipped clear work).
 
-**Write DM rows through the mention-log path, not the background-ping path.** That
-is deliberate and has a rationale tracked outside this repo; ask the operator
-before changing it.
+**Write DM rows through the mention-log path, not the background-ping path.** This
+is a decision, not a preference — its rationale is storage-layer and tracked
+outside this repo. Build it this way; if it blocks, ask rather than switching to
+the ping path.
 
 The one genuinely unfixable case stays: with the app closed, the background task
 (`BackgroundMessageService.ts:239`) receives `data.encrypted_content` with no keys
@@ -133,21 +146,56 @@ supersede it on catch-up when the app reopens.
 `showTrash = item.source === 'chat'` puts the affordance solely on the generic
 rows, where deleting one of several identical rows means nothing, and gives the
 precise mention rows none. `removeMentionReplyEntry(id)` already exists in
-`mentionReplyLog.ts` and is unwired. Wire it to Quorum rows; reconsider whether the
-generic rows still need it once slices 2-3 make everything distinguishable.
+`mentionReplyLog.ts` and is unwired.
 
-## Decisions still open
+**Show the trash on every row type**, not a swap. By the time this slice runs,
+slices 2 and 3 have made the previously-generic rows distinguishable too, so
+per-row delete is meaningful everywhere and a uniform rule beats a per-source
+exception. `removeMentionReplyEntry` covers the mention and DM rows;
+`removeNotificationLogEntry` already covers the pings.
 
-Neither blocks slice 1, and both want a look at the real screen before being
-settled.
+## Decisions taken
 
-1. **Own section for DMs, or fold into the existing Quorum section?** A third
-   section implies a fourth filter pill (All / Quorum / DMs / Farcaster), and pill
-   width at 320px is the constraint — may need shorter labels or no fourth pill.
-   Worth mocking both before choosing.
-2. **Read-state model for DM rows.** Reuse the conversation's own
-   `lastReadTimestamp` (simpler, already exists) or the two-level model space
-   mentions use. Pick one and keep it consistent; do not run both.
+Both were open when this plan was written and are now settled, so nothing here
+needs a conversation before it can be built. Reasoning recorded so a later change
+is an informed one rather than a re-litigation.
+
+### 1. DMs fold into the existing Quorum section. No fourth pill.
+
+Sections stay at two ("Mentions & messages", "Farcaster"), pills stay at three
+(All / Quorum / Farcaster).
+
+- The section is **already** called "Mentions & messages" — it was renamed when
+  background message pings moved into it. A Quorum DM is a Quorum message, so it
+  is already the right home semantically; nothing needs renaming.
+- A fourth pill (All / Quorum / DMs / Farcaster) does not fit comfortably at
+  320px. `SegmentedPills` supports `scrollable` and `wrap`, so it is technically
+  possible — but a scrolling or two-line filter row for four short labels is worse
+  than not needing the fourth.
+- It preserves the invariant the current filter logic rests on: one pill per
+  section, plus All. Adding a section without a pill, or a pill without a section,
+  is where that logic starts needing special cases.
+- **Reversible if it feels wrong on device.** Section building is already a mapped
+  list (`sections` in `app/(tabs)/profile/index.tsx`), so splitting DMs out later
+  is a small change. Ship folded, look at it, revisit only if the mixed section
+  actually reads badly.
+
+### 2. DM rows reuse the conversation's own `lastReadTimestamp`.
+
+Do **not** give them a second watermark.
+
+- It already exists: `Conversation` carries `lastReadTimestamp` and `unreadCount`
+  (`hooks/chat/useConversations.ts:26-37`), and it is what the Messages tab
+  already uses.
+- A separate watermark would mean **two sources of truth for one fact** — "is this
+  DM unread". Read the DM in the Messages tab and the panel row would still look
+  unread, or the reverse. That drift is silent and would be reported as a
+  mysterious bug months later.
+- The two-level model exists for space mentions because a mention needs a
+  per-channel bubble that survives until you visit that channel. DMs have no
+  equivalent second level; the conversation *is* the destination.
+- **Level 1 is unaffected.** The tab badge answers "have you opened the panel",
+  keyed off the log's own seen mark, and stays shared across all row types.
 
 ## Verify
 
