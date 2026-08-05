@@ -567,6 +567,13 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: Skin.space(8),
+      // Pinned to one line box so this row has the SAME geometry as the Quorum
+      // section's bare-Text first line. Without it the row is as tall as its
+      // tallest child: if the source tag out-grows the title (its label has no
+      // fixed lineHeight, so that depends on platform font metrics), the title
+      // centres inside a taller row and drifts down while the avatar does not,
+      // which looks like an avatar alignment bug and is not one.
+      height: Skin.font(LEADING_LINE_HEIGHT),
     },
     title: {
       flex: 1,
@@ -583,6 +590,9 @@ const createStyles = (theme: AppTheme) =>
     },
     sourceTagLabel: {
       fontSize: Skin.font(10),
+      // Explicit, so the tag's height is a known number rather than whatever
+      // the platform font reports — see the note on titleRow.
+      lineHeight: Skin.font(12),
       fontWeight: '700',
       color: '#8B5CF6',
     },
