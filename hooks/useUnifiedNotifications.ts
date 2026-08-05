@@ -45,6 +45,8 @@ export interface UnifiedNotificationsResult {
   /** Farcaster activity, newest-first. */
   farcasterFeedItems: UnifiedNotification[];
   unreadCount: number;
+  /** Farcaster rows currently hidden by the dismissal watermark (dev panel). */
+  dismissedCount: number;
   isLoading: boolean;
   isFetchingMore: boolean;
   hasMore: boolean;
@@ -97,6 +99,7 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
     quorumItems: partition.quorumItems,
     farcasterFeedItems: partition.farcasterFeedItems,
     unreadCount: partition.unreadCount,
+    dismissedCount: partition.dismissedCount,
     isLoading: farcasterQuery.isLoading || haatzQuery.isLoading,
     isFetchingMore: farcasterQuery.isFetchingNextPage,
     // Stop paging once the fetched pages reach the dismissal watermark —

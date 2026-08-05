@@ -29,36 +29,56 @@ into a pure `partitionNotifications()`. 404 tests pass (26 new, each verified to
 go red when its guard is reverted); typecheck at baseline (11 pre-existing
 errors, none in changed files).
 
-**Verified on device:** sectioning (Slice B) — the two section headers, and the
-background pings landing in the right one.
+**Verified on device (2026-08-05):**
 
-**NOT verified, and blocked for a real reason — this is why the file has NOT
-moved to `.done/`:**
+- Sectioning (Slice B) — the two section headers, background pings in the right
+  one.
+- **Clear Farcaster hides the rows.** Operator-confirmed: "they are correctly
+  hiding".
+- **Reset restores them.** Operator-confirmed via the dev panel. This also
+  validates the instrument itself, so the clear path is now repeatable and
+  non-destructive to test.
 
-- **The watermark itself.** The test that proves it is: clear Farcaster, wait out
-  a full 60s poll cycle, confirm the rows do not return. Everything verified so
-  far proves the filter *renders*, not that dismissal survives a refetch.
+**NOT verified — why this file has NOT moved to `.done/`:**
+
+- **That dismissal survives a refetch.** Clearing and reset were both confirmed,
+  but not that the rows stay hidden once a *fresh* fetch replaces the query
+  cache. Reading the code says the filter re-runs over whatever the cache holds
+  and the watermark lives in MMKV, so nothing about a refetch could bypass it —
+  but that is INFERRED, not observed. Now cheap to check: clear, pull to
+  refresh (forces an immediate refetch, no need to wait out the 60s timer),
+  confirm the rows stay gone and the panel's "hiding N" still reads N, then
+  Reset. ~30 seconds, non-destructive.
 - The control arm (a never-cleared account sees no change in contents, ordering,
   badge or scroll depth).
+- **Clear Quorum / Clear all** — untested. Those delete local logs outright and
+  the dev panel cannot restore them. Testing costs the operator's real mention
+  history, a scarce fixture on a one-test-account setup.
 - No independent code review was run on this branch.
 
-**Why it is blocked:** the operator has one test account, and its accumulated
-notifications are the fixture needed for the follow-up work on precise/tappable
-rows. Spending them to test clearing would destroy the input for the next task.
-This is a fixture-scarcity problem, not an oversight — do not close this out by
-asking him to just run it.
+**⚠️ Correction (2026-08-05) — "Clear Farcaster" is NOT fully reversible, and
+the operator lost data to this claim.** Every clear scope deletes something the
+dev panel cannot restore:
 
-**The unblock, which should be built before asking for any manual run:** the
-Farcaster clear is *fully reversible* — the rows are a remote feed that cannot be
-deleted, so clearing only moves a local watermark, and `resetFarcasterDismissal()`
-(already exported from `farcasterDismissal.ts`) restores everything on the next
-poll. A dev-gated reset affordance, or the user-facing "Undo" noted in §9, makes
-this test non-destructive and repeatable. Follow the existing dev-tool pattern
-(`components/dev/DmBurstSheet.tsx`, surfaced under `__DEV__` in `ProfileModal`).
+| Scope | Watermark (Reset undoes) | Local log delete (permanent) |
+|---|---|---|
+| Clear Farcaster | feed rows hidden | `clearNotificationLogByOrigin('farcaster')` — direct-cast pings **destroyed** |
+| Clear Quorum | — | mention log + Quorum pings destroyed |
+| Clear all | feed rows hidden | both logs destroyed |
 
-Note the asymmetry: the novel, risky mechanism (the watermark) is the reversible
-one. The destructive half is the Quorum clear, which is a plain local-log delete
-whose behaviour predates this PR.
+The behaviour is correct: the Farcaster section renders both feed rows and
+direct-cast pings, so clearing it should clear both. The error was in describing
+the action as reversible because the *watermark* is. Reset restores what the
+watermark hid, nothing more.
+
+The earlier decision to skip a log snapshot as over-engineering was made on that
+bad information — the Farcaster path was believed safe, so the snapshot looked
+like it only served the Quorum path. Revisit knowing that NO clear scope is
+currently loss-free.
+
+Note the asymmetry that made the watermark tractable: the novel mechanism is the
+reversible one, because feed rows are remote and cannot be deleted. Every local
+log delete around it is still one-way.
 
 **Correction to §4.1 during implementation (2026-08-05).** The background-ping
 log is NOT all Quorum. It is written from two call sites for two different

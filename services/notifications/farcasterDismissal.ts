@@ -97,6 +97,16 @@ export function resetFarcasterDismissal(): void {
 }
 
 /**
+ * Force the watermark to an exact value. For the dev snapshot tool, which has
+ * to put back the value a snapshot was taken at — not just clear it.
+ */
+export function setFarcasterClearedBefore(ts: number): void {
+  if (ts > 0) storage.set(KEY_CLEARED_BEFORE, String(ts));
+  else storage.remove(KEY_CLEARED_BEFORE);
+  emit();
+}
+
+/**
  * React subscription helper — re-renders consumers when the watermark moves.
  * Mirrors the pattern used by the notification + mention logs.
  */

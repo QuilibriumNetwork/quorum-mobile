@@ -36,6 +36,8 @@ import {
   useUnifiedNotifications,
   type UnifiedNotification,
 } from '@/hooks/useUnifiedNotifications';
+import { FarcasterDismissalPanel } from '@/components/dev/FarcasterDismissalPanel';
+import { captureNotificationSnapshot } from '@/services/dev/notificationSnapshot';
 import * as Skin from '@/theme/skins/geometry';
 
 // Max preview lines for a Quorum row's message. The panel is a triage surface
@@ -118,6 +120,7 @@ export default function NotificationsScreen() {
     refetch,
     farcasterEnabled,
     farcasterError,
+    dismissedCount,
   } = useUnifiedNotifications();
   const insets = useSafeAreaInsets();
   const { openMiniapp } = useMiniappOverlay();
@@ -333,6 +336,10 @@ export default function NotificationsScreen() {
       variant: 'primary',
     });
     if (!ok) return;
+    // Dev builds only: copy the logs aside first, so a clear can be undone and
+    // these paths are testable more than once. Every scope below destroys at
+    // least one local log that nothing else can recover.
+    if (__DEV__) captureNotificationSnapshot();
     if (activeFilter === 'all') {
       clearMentionReplyLog();
       clearNotificationLog();
@@ -386,6 +393,10 @@ export default function NotificationsScreen() {
           onChange={(k) => setSourceFilter(k as 'all' | 'quorum' | 'farcaster')}
         />
       )}
+      {/* Developer — only mounted in dev builds. Makes the dismissal watermark
+          observable and, crucially, reversible, so testing "Clear Farcaster"
+          doesn't cost a real notification history. */}
+      {__DEV__ && <FarcasterDismissalPanel theme={theme} dismissedCount={dismissedCount} />}
       {farcasterError && farcasterEnabled && (
         // Inline banner — visible whether or not chat notifications are
         // present. This is the only way the user can tell that their

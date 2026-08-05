@@ -93,6 +93,16 @@ export function clearNotificationLogByOrigin(origin: 'quorum' | 'farcaster'): vo
   emit();
 }
 
+/**
+ * Overwrite the whole log. Exists for the dev snapshot tool, which copies the
+ * log aside before a clear so destructive clear paths can be tested more than
+ * once. Not part of any user-facing flow.
+ */
+export function replaceNotificationLog(entries: NotificationLogEntry[]): void {
+  storage.set(KEY_ENTRIES, JSON.stringify(entries.slice(0, MAX_ENTRIES)));
+  emit();
+}
+
 export function removeNotificationLogEntry(id: string): void {
   const next = getNotificationLog().filter(e => e.id !== id);
   storage.set(KEY_ENTRIES, JSON.stringify(next));
