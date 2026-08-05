@@ -219,7 +219,16 @@ export default function NotificationsScreen() {
           {item.actorAvatarUrl ? (
             <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
           ) : item.source === 'farcaster' ? (
-            <DefaultAvatar displayName={item.title} address={item.id} size={36} />
+            // Same top nudge as the other three branches. This one is easy to
+            // miss because it takes `style` rather than wearing styles.avatar,
+            // and it only shows for actors with no profile picture — so the row
+            // beside a real photo looks right while its neighbours do not.
+            <DefaultAvatar
+              displayName={item.title}
+              address={item.id}
+              size={36}
+              style={styles.avatarNudge}
+            />
           ) : item.source === 'quorum' ? (
             <View style={styles.iconWrap}>
               <IconSymbol name={quorumRowIcon(item)} color={theme.colors.primary} size={18} />
@@ -545,6 +554,10 @@ const createStyles = (theme: AppTheme) =>
       marginTop: AVATAR_TOP_NUDGE,
       borderRadius: Skin.circleOrSquare(18),
       backgroundColor: theme.colors.surface3,
+    },
+    // For the leading slot that sizes itself and only needs the offset.
+    avatarNudge: {
+      marginTop: AVATAR_TOP_NUDGE,
     },
     body: {
       flex: 1,
