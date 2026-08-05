@@ -44,6 +44,12 @@ import * as Skin from '@/theme/skins/geometry';
 // (tap through to read in full), so cap it: long replies don't dominate the list.
 const QUORUM_PREVIEW_LINES = 2;
 
+// Leading row: 15px glyphs in a 20px line box, so ~2.5px of leading sits above
+// the text. The avatar is nudged down by that much to line its top edge up with
+// the visible top of the title rather than with the invisible text box.
+const LEADING_LINE_HEIGHT = 20;
+const AVATAR_TOP_NUDGE = 2;
+
 // Clear-action copy, keyed by the active filter so the button and the dialog
 // both name exactly what is about to go. The wording differs per scope on
 // purpose: Quorum rows are local logs we delete outright ("permanently
@@ -518,9 +524,16 @@ const createStyles = (theme: AppTheme) =>
       paddingHorizontal: Skin.space(16),
       gap: Skin.space(12),
     },
+    // AVATAR_TOP_NUDGE offsets the first text line's leading. `alignItems:
+    // 'flex-start'` aligns the BOXES, but a glyph sits below its box top by
+    // roughly (lineHeight - fontSize) / 2, so without this the circle reads as
+    // floating above the title it should line up with. Both leading rows carry
+    // an explicit lineHeight (below) so this stays a fixed number rather than
+    // drifting with platform font metrics.
     iconWrap: {
       width: 36,
       height: 36,
+      marginTop: AVATAR_TOP_NUDGE,
       borderRadius: Skin.circleOrSquare(18),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
@@ -529,6 +542,7 @@ const createStyles = (theme: AppTheme) =>
     avatar: {
       width: 36,
       height: 36,
+      marginTop: AVATAR_TOP_NUDGE,
       borderRadius: Skin.circleOrSquare(18),
       backgroundColor: theme.colors.surface3,
     },
@@ -544,6 +558,7 @@ const createStyles = (theme: AppTheme) =>
     title: {
       flex: 1,
       fontSize: Skin.font(15),
+      lineHeight: Skin.font(LEADING_LINE_HEIGHT),
       fontWeight: '600',
       color: theme.colors.textMain,
     },
@@ -561,6 +576,7 @@ const createStyles = (theme: AppTheme) =>
     // Quorum location-first row: loud space name, muted channel, then message.
     locationLine: {
       fontSize: Skin.font(15),
+      lineHeight: Skin.font(LEADING_LINE_HEIGHT),
       fontWeight: '700',
       color: theme.colors.textMain,
     },
