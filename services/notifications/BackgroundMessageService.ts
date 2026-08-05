@@ -130,6 +130,7 @@ async function checkFarcasterDirectCasts(): Promise<BackgroundCheckResult> {
         data: {
           type: 'message',
           messageId: `fc-${Date.now()}`,
+          origin: 'farcaster',
         },
       });
     }
@@ -242,6 +243,7 @@ async function checkInboxesViaWebSocket(
                 data: {
                   type: 'message',
                   messageId: `bg-${Date.now()}`,
+                  origin: 'quorum',
                 },
               });
             }
