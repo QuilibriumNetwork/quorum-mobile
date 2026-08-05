@@ -149,3 +149,50 @@ describe('logMentionOrReply — mentions inside the body', () => {
     expect(storedText()).toBe('@Brave Light and @Sender both');
   });
 });
+
+describe('logMentionOrReply — a mention of the viewer', () => {
+  // Every row in this section exists because somebody mentioned YOU, so the
+  // viewer's own address is the likeliest one to appear in a body here. It is
+  // also the likeliest to be missing from the roster: joining a space does not
+  // stamp a per-space profile, so `getSpaceMember` commonly returns a row with
+  // no name, or nothing at all.
+  const SELF = { address: ME, displayName: 'Lamat' };
+
+  it('shows the viewer\'s own name when the space has no profile for them', async () => {
+    await logMentionOrReply(
+      replyMentioning(`@<${ME}> ping`),
+      ctx({ self: SELF, getSpaceMember: async () => undefined }),
+    );
+    expect(storedText()).toBe('@Lamat ping');
+  });
+
+  it('shows it even when the roster row exists but is nameless', async () => {
+    await logMentionOrReply(
+      replyMentioning(`@<${ME}> ping`),
+      ctx({ self: SELF, getSpaceMember: async () => ({ address: ME }) }),
+    );
+    expect(storedText()).toBe('@Lamat ping');
+  });
+
+  it('prefers the space profile over the global one when the space has it', async () => {
+    await logMentionOrReply(
+      replyMentioning(`@<${ME}> ping`),
+      ctx({
+        self: SELF,
+        getSpaceMember: async () => ({ address: ME, display_name: 'Lamat in this space' }),
+      }),
+    );
+    expect(storedText()).toBe('@Lamat in this space ping');
+  });
+
+  it('falls back to truncation when there is no self identity either', async () => {
+    // Regression guard for the original omission: without `self` this resolved
+    // to the viewer's own 46-character hash.
+    await logMentionOrReply(
+      replyMentioning(`@<${ME}> ping`),
+      ctx({ self: undefined, getSpaceMember: async () => undefined }),
+    );
+    expect(storedText()).not.toContain(ME);
+    expect(storedText()).toContain('ping');
+  });
+});

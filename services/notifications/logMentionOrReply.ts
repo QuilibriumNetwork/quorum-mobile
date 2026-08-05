@@ -37,6 +37,7 @@ import {
   formatResolvedName,
   resolveMemberName,
   type ResolvableMember,
+  type SelfIdentity,
 } from '@/utils/resolveMemberName';
 
 export interface LogMentionOrReplyCtx {
@@ -50,6 +51,17 @@ export interface LogMentionOrReplyCtx {
   channelName?: string;
   /** Mute/notify gate — same `shouldNotifyForContext` result the badge uses. */
   notifyForBadge: boolean;
+  /**
+   * The viewer's own identity, for resolving a mention OF THEM.
+   *
+   * Not optional in spirit, whatever the type says: every row in this section
+   * exists because someone mentioned YOU, so your own address is the most
+   * likely one to appear in a body here. `resolveMemberName` falls straight
+   * through to the address whenever the space holds no stored identity for the
+   * viewer, which is common — a space you joined but never set a per-space
+   * profile in. Omitting this is how "@you" renders as your own hash.
+   */
+  self?: SelfIdentity;
   /**
    * Resolve a space member — used for the sender's display name AND for any
    * addresses mentioned inside the message body.
@@ -86,17 +98,19 @@ async function resolvePreviewMentions(
   const names = new Map<string, string>();
   await Promise.all(
     addresses.map(async (address) => {
+      let member: Partial<ResolvableMember> | undefined;
       try {
-        const member = await ctx.getSpaceMember(ctx.spaceId, address);
-        if (!member) return;
-        const resolved = resolveMemberName({ ...member, address });
-        // isAddressFallback means every tier missed, so the "name" is just the
-        // address again — leave it unresolved and let the renderer truncate,
-        // rather than substituting one form of the hash for another.
-        if (!resolved.isAddressFallback) names.set(address, formatResolvedName(resolved));
+        member = await ctx.getSpaceMember(ctx.spaceId, address);
       } catch {
         // A roster miss is not a reason to drop the whole notification.
       }
+      // Resolve even with no roster row: `self` can still name the viewer, who
+      // is by far the most likely person to be mentioned in this section.
+      const resolved = resolveMemberName({ ...member, address }, { self: ctx.self });
+      // isAddressFallback means every tier missed, so the "name" is just the
+      // address again — leave it unresolved and let the renderer truncate,
+      // rather than substituting one form of the hash for another.
+      if (!resolved.isAddressFallback) names.set(address, formatResolvedName(resolved));
     }),
   );
 

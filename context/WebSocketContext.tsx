@@ -35,6 +35,7 @@ import React, {
 import { Alert, AppState, AppStateStatus, InteractionManager } from 'react-native';
 
 import type { Conversation } from '@/hooks/chat/useConversations';
+import type { SelfIdentity } from '@/utils/resolveMemberName';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { logDirectMessage, logMentionOrReply } from '@/services/notifications/logMentionOrReply';
 import { summarizeInbound } from '@/services/observability/redactInbound';
@@ -457,6 +458,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // phantom conversation with ourselves, wearing our own name and avatar.
   const fullUserAddrRef = useRef<string | undefined>(undefined);
   fullUserAddrRef.current = user?.address;
+
+  // Same reasoning as the ref above, for the viewer's own identity: the
+  // notification write path resolves mentions, and a mention of the viewer is
+  // the most common kind there. Held in a ref rather than closed over for
+  // exactly the stale-`user` reason documented above.
+  const selfIdentityRef = useRef<SelfIdentity | undefined>(undefined);
+  selfIdentityRef.current = {
+    address: user?.address,
+    displayName: user?.displayName,
+    username: user?.username,
+    profileImage: user?.profileImage,
+  };
 
   // Helper function to get current user address for logging
   const getAddr = () => userAddrRef.current;
@@ -2930,6 +2943,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 ?.flatMap((g) => g.channels)
                 .find((c) => c.channelId === channelId)?.channelName,
               notifyForBadge,
+              // Every row here exists because someone mentioned YOU, so the
+              // viewer's own address is the one most likely to appear in a
+              // body. Without this it resolves to their own hash.
+              self: selfIdentityRef.current,
               getSpaceMember: (sid, mid) => storage.getSpaceMember(sid, mid),
             });
 
@@ -4781,6 +4798,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               ?.flatMap((g) => g.channels)
               .find((c) => c.channelId === channelId)?.channelName,
             notifyForBadge,
+            self: selfIdentityRef.current,
             getSpaceMember: (sid, mid) => storage.getSpaceMember(sid, mid),
           });
 
