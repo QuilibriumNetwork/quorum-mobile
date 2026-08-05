@@ -28,6 +28,7 @@ import { MessageActionSheet } from './MessageActionSheet';
 import { MessageRenderer } from './MessageRenderer';
 import { ReceiptTicks } from './ReceiptTicks';
 import { UnsignedIndicator } from './UnsignedIndicator';
+import { shouldShowUnsignedWarning } from './unsignedWarning';
 import { EditHistoryModal } from './EditHistoryModal';
 import { ReactionDetailsModal } from './ReactionDetailsModal';
 import { SpaceCallBubble } from './SpaceCallBubble';
@@ -875,11 +876,11 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   // Warning shown on any unsigned message (matches desktop). Tap reveals the
   // explanation via a toast — the mobile equivalent of desktop's touch-tooltip.
   // Its own onPress consumes the tap so it doesn't fight the row's long-press.
+  // Whether it shows at all is decided by one shared predicate — see
+  // unsignedWarning.ts, which is also where the reasoning lives.
   const renderUnsignedWarning = useCallback(
     (item: DisplayMessage) => {
-      if (item.renderType === 'system' || item.renderType === 'error') return null;
-      if (item.originalMessage?.signature) return null;
-      if (item.sendStatus === 'sending' || item.sendStatus === 'failed') return null;
+      if (!shouldShowUnsignedWarning(item)) return null;
       return (
         <TouchableOpacity
           onPress={() =>
@@ -919,9 +920,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   );
   const renderUnsignedInline = useCallback(
     (item: DisplayMessage): React.ReactNode => {
-      if (item.renderType === 'system' || item.renderType === 'error') return null;
-      if (item.originalMessage?.signature) return null;
-      if (item.sendStatus === 'sending' || item.sendStatus === 'failed') return null;
+      if (!shouldShowUnsignedWarning(item)) return null;
       return (
         // Yellow tint for the inline warning. (Header/media unsigned still uses
         // theme.colors.warning; see renderUnsignedWarning.)
@@ -943,13 +942,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       // they opt out here (showUnsigned:false). Media rows have no inline text,
       // so they keep it in this compact row (default true).
       const allowUnsigned = opts?.showUnsigned !== false;
-      const showUnsigned =
-        allowUnsigned &&
-        item.renderType !== 'system' &&
-        item.renderType !== 'error' &&
-        !item.originalMessage?.signature &&
-        item.sendStatus !== 'sending' &&
-        item.sendStatus !== 'failed';
+      const showUnsigned = allowUnsigned && shouldShowUnsignedWarning(item);
       const isSending = opts?.isSending;
       if (!isEdited && !showUnsigned && !isSending) return null;
       return (
