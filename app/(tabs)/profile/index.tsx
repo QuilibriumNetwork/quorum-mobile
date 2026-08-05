@@ -134,7 +134,9 @@ export default function NotificationsScreen() {
     farcasterEnabled,
     farcasterError,
     dismissedCount,
-  } = useUnifiedNotifications();
+    // Only the panel pays for the conversation join — the tab badge counts
+    // rows and doesn't care what they say.
+  } = useUnifiedNotifications({ enrichConversations: true });
   const insets = useSafeAreaInsets();
   const { openMiniapp } = useMiniappOverlay();
   const [refreshing, setRefreshing] = useState(false);

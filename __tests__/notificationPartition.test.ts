@@ -29,6 +29,7 @@ jest.mock('react-native-mmkv', () => ({
 
 import {
   partitionNotifications,
+  type ConversationDetail,
   type PartitionInput,
 } from '../services/notifications/partitionNotifications';
 import {
@@ -386,6 +387,116 @@ describe('partitionNotifications — sectioning', () => {
       }),
     );
     expect(result.quorumItems.map((i) => i.id)).toEqual(['quorum:b', 'quorum:a']);
+  });
+});
+
+describe('partitionNotifications — render-time conversation enrichment', () => {
+  const detail = (over: Partial<ConversationDetail> = {}) =>
+    new Map<string, ConversationDetail>([
+      [
+        'conv-1',
+        {
+          displayName: 'Alice',
+          preview: 'see you tomorrow',
+          senderName: 'Alice',
+          avatarUrl: 'https://example.test/alice.png',
+          ...over,
+        },
+      ],
+    ]);
+
+  it('names the sender and shows the message on a ping it can resolve', () => {
+    const result = partitionNotifications(
+      input({
+        chatEntries: [chatEntry({ title: 'New Messages', body: 'You have a new direct message' })],
+        conversationDetails: detail(),
+      }),
+    );
+    expect(result.quorumItems[0]).toMatchObject({
+      title: 'Alice',
+      body: 'see you tomorrow',
+      actorAvatarUrl: 'https://example.test/alice.png',
+    });
+  });
+
+  it('leaves the stored generic copy alone when the conversation is unknown', () => {
+    // The fallback matters more than the happy path: a conversation the list
+    // has not synced yet must still render a readable row, not an empty one.
+    const result = partitionNotifications(
+      input({
+        chatEntries: [chatEntry({ title: 'New Messages', body: 'You have a new direct message' })],
+        conversationDetails: new Map(),
+      }),
+    );
+    expect(result.quorumItems[0]).toMatchObject({
+      title: 'New Messages',
+      body: 'You have a new direct message',
+    });
+    expect(result.quorumItems[0].actorAvatarUrl).toBeUndefined();
+  });
+
+  it('leaves a ping carrying no conversationId generic', () => {
+    // The app-was-closed case: nothing was decrypted, so there is nothing to
+    // join against and the row must not claim otherwise.
+    const result = partitionNotifications(
+      input({
+        chatEntries: [
+          chatEntry({
+            title: 'New Message',
+            body: 'You have new messages waiting',
+            data: { type: 'message', messageId: 'bg-1', origin: 'quorum' },
+          } as Partial<NotificationLogEntry>),
+        ],
+        conversationDetails: detail(),
+      }),
+    );
+    expect(result.quorumItems[0]).toMatchObject({
+      title: 'New Message',
+      body: 'You have new messages waiting',
+    });
+  });
+
+  it('prefixes the sender in a group, where the sender is not the conversation', () => {
+    const result = partitionNotifications(
+      input({
+        chatEntries: [chatEntry()],
+        conversationDetails: detail({ displayName: 'Team', senderName: 'Bob' }),
+      }),
+    );
+    expect(result.quorumItems[0].body).toBe('Bob: see you tomorrow');
+  });
+
+  it('keeps the generic body when the conversation has no message text', () => {
+    const result = partitionNotifications(
+      input({
+        chatEntries: [chatEntry({ body: 'You have a new direct message' })],
+        conversationDetails: detail({ preview: '   ' }),
+      }),
+    );
+    expect(result.quorumItems[0]).toMatchObject({
+      title: 'Alice',
+      body: 'You have a new direct message',
+    });
+  });
+
+  it('changes nothing at all when no conversation list is supplied', () => {
+    // The control arm: the badge mounts the hook without enrichment, so the
+    // no-detail path has to behave exactly as it did before this existed.
+    const bare = partitionNotifications(input({ chatEntries: [chatEntry()] }));
+    expect(bare.quorumItems[0]).toMatchObject({ title: 'New message', body: 'hey' });
+  });
+
+  it('still excludes a muted DM after enrichment', () => {
+    // Enrichment must not become a way for a muted conversation to reappear
+    // wearing a nicer label.
+    const result = partitionNotifications(
+      input({
+        chatEntries: [chatEntry()],
+        conversationDetails: detail(),
+        mutedConversations: new Set(['conv-1']),
+      }),
+    );
+    expect(result.quorumItems).toEqual([]);
   });
 });
 

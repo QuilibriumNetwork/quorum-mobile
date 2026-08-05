@@ -20,6 +20,8 @@ import {
 } from './useFarcasterNotifications';
 import { useHaatzNotifications } from './useHaatzNotifications';
 import { useDMMute } from '@/hooks/chat/useDMMute';
+import { useFarcasterConversations } from '@/hooks/chat/useFarcasterDirectCasts';
+import { coerceMessagePreview } from '@/utils/messagePreview';
 import {
   getLastSeenTimestamp,
   useNotificationLog,
@@ -30,7 +32,10 @@ import {
 } from '@/services/notifications/mentionReplyLog';
 import { useFarcasterClearedBefore } from '@/services/notifications/farcasterDismissal';
 import { partitionNotifications } from '@/services/notifications/partitionNotifications';
-import type { UnifiedNotification } from '@/services/notifications/partitionNotifications';
+import type {
+  ConversationDetail,
+  UnifiedNotification,
+} from '@/services/notifications/partitionNotifications';
 
 // Re-exported so existing consumers keep importing the row type from the hook.
 export type {
@@ -59,7 +64,21 @@ export interface UnifiedNotificationsResult {
   farcasterError: Error | null;
 }
 
-export function useUnifiedNotifications(): UnifiedNotificationsResult {
+export interface UseUnifiedNotificationsOptions {
+  /**
+   * Join the background message pings to the live conversation list so their
+   * rows name the sender and show the message instead of reading "New
+   * Messages". Costs mounting the Farcaster conversations query (a background
+   * poll), so only the panel asks for it — the tab badge counts rows and does
+   * not care what they say.
+   */
+  enrichConversations?: boolean;
+}
+
+export function useUnifiedNotifications(
+  options: UseUnifiedNotificationsOptions = {},
+): UnifiedNotificationsResult {
+  const { enrichConversations = false } = options;
   const { farcasterAuthToken } = useAuth();
   const { entries: chatEntries } = useNotificationLog();
   const { entries: quorumEntries } = useMentionReplyLog();
@@ -74,6 +93,28 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
   // Local dismissal watermark — Farcaster rows can't be cleared server-side.
   const clearedBefore = useFarcasterClearedBefore();
 
+  // Render-time enrichment source for the Farcaster direct-cast pings. The
+  // background check that raised them stored only a routing id on purpose, so
+  // the sender and message text are joined back on from here every render
+  // rather than being written into the log.
+  const dmConversations = useFarcasterConversations({ enabled: enrichConversations });
+  const conversationDetails = useMemo(() => {
+    const map = new Map<string, ConversationDetail>();
+    for (const page of dmConversations.data?.pages ?? []) {
+      for (const c of page.conversations) {
+        map.set(c.conversationId, {
+          displayName: c.displayName ?? '',
+          // Farcaster rows store a plain string, Quorum rows the typed preview
+          // — coerce so this doesn't depend on which wrote it.
+          preview: coerceMessagePreview(c.lastMessagePreview).text || undefined,
+          senderName: c.lastMessageSenderName,
+          avatarUrl: c.icon || undefined,
+        });
+      }
+    }
+    return map;
+  }, [dmConversations.data?.pages]);
+
   const officialFarcaster = useMemo(
     () => flattenFarcasterNotifications(farcasterQuery.data?.pages),
     [farcasterQuery.data?.pages],
@@ -84,6 +125,7 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
       partitionNotifications({
         quorumEntries,
         chatEntries,
+        conversationDetails,
         officialFarcaster,
         haatzFarcaster: haatzQuery.data ?? [],
         clearedBefore,
@@ -91,7 +133,15 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
         lastSeen: getLastSeenTimestamp(),
         quorumTabUnread: getQuorumTabUnreadCount(),
       }),
-    [quorumEntries, chatEntries, officialFarcaster, haatzQuery.data, clearedBefore, mutedConversations],
+    [
+      quorumEntries,
+      chatEntries,
+      conversationDetails,
+      officialFarcaster,
+      haatzQuery.data,
+      clearedBefore,
+      mutedConversations,
+    ],
   );
 
   return {

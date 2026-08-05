@@ -233,7 +233,40 @@ export function blendFarcasterSources(
   return [...official, ...extra];
 }
 
-export function chatToUnified(e: NotificationLogEntry): UnifiedNotification {
+/**
+ * What a stored ping's `conversationId` resolves to, looked up fresh on every
+ * render from the live conversation list.
+ *
+ * Deliberately NOT persisted next to the ping. The notification log keeps the
+ * routing id and the generic banner copy it already showed; who sent what is
+ * joined back on here. Same row on screen, nothing extra written to disk.
+ */
+export interface ConversationDetail {
+  /** The conversation's own name — counterparty for a 1:1, group name else. */
+  displayName: string;
+  /** Latest message text, as the conversation list already renders it. */
+  preview?: string;
+  /** Who sent that message ("You" for the current user). */
+  senderName?: string;
+  avatarUrl?: string;
+}
+
+/**
+ * "Bob: on my way" in a group, or bare "on my way" in a 1:1 — there the sender
+ * and the conversation are the same person, so naming them twice reads oddly
+ * against a title that already says who this is.
+ */
+function conversationSnippet(d: ConversationDetail): string | undefined {
+  const text = d.preview?.trim();
+  if (!text) return undefined;
+  const who = d.senderName?.trim();
+  return who && who !== d.displayName ? `${who}: ${text}` : text;
+}
+
+export function chatToUnified(
+  e: NotificationLogEntry,
+  conversations?: ReadonlyMap<string, ConversationDetail>,
+): UnifiedNotification {
   const data = e.data;
   const link: UnifiedNotification['link'] | undefined =
     data?.type === 'message'
@@ -244,12 +277,21 @@ export function chatToUnified(e: NotificationLogEntry): UnifiedNotification {
           conversationId: data.conversationId,
         }
       : undefined;
+  // The OS banner and the in-app row are no longer the same payload. The
+  // banner stayed generic (it fired from a background task and the lock screen
+  // is deliberately vague); the row is rebuilt here from the live conversation
+  // list. Falls back to the stored generic copy whenever the join misses —
+  // an unsynced conversation, or a ping that never carried an id at all.
+  const detail = data?.conversationId
+    ? conversations?.get(data.conversationId)
+    : undefined;
   return {
     id: `chat:${e.id}`,
     source: 'chat',
     timestamp: e.createdAt,
-    title: e.title,
-    body: e.body,
+    title: detail?.displayName?.trim() || e.title,
+    body: (detail && conversationSnippet(detail)) || e.body,
+    actorAvatarUrl: detail?.avatarUrl || undefined,
     link,
     raw: { chat: e },
   };
@@ -301,6 +343,12 @@ export interface PartitionInput {
   quorumEntries: readonly MentionReplyEntry[];
   /** Background-push mirrors. These are QUORUM messages, not Farcaster. */
   chatEntries: readonly NotificationLogEntry[];
+  /**
+   * Live conversation list, keyed by conversationId, used to give the ping rows
+   * a sender and a message at render time. Absent (or a miss) leaves the row on
+   * the generic copy the log stored.
+   */
+  conversationDetails?: ReadonlyMap<string, ConversationDetail>;
   officialFarcaster: readonly FarcasterNotification[];
   haatzFarcaster: readonly FarcasterNotification[];
   /** Farcaster dismissal watermark; 0 = never cleared. */
@@ -335,6 +383,7 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
   const {
     quorumEntries,
     chatEntries,
+    conversationDetails,
     officialFarcaster,
     haatzFarcaster,
     clearedBefore,
@@ -370,7 +419,9 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
     return !(convId && mutedConversations.has(convId));
   };
 
-  const chatItems = chatEntries.map(chatToUnified).filter(notMutedDM);
+  const chatItems = chatEntries
+    .map((e) => chatToUnified(e, conversationDetails))
+    .filter(notMutedDM);
   // Background pings are raised for BOTH Quorum messages and Farcaster direct
   // casts into one undifferentiated log, so they have to be split by origin —
   // filing the whole log under either heading mislabels the other half.
