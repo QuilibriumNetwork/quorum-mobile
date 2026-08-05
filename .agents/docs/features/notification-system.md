@@ -51,6 +51,11 @@ Space message arrives (WebSocket, live + catch-up paths)
             (MMKV, bounded 200, deduped by message id)
    → useMentionReplyLog() / useChannelMentionUnread() re-render
 
+Quorum DM arrives (same two WebSocket paths)
+   → logDirectMessage(ctx)                            [same file]
+       → gated on DM mute + never our own self-sync echo
+       → appendMentionReplyLog({ kind: 'dm', … })      (keyed PER CONVERSATION)
+
 Farcaster feed (official + haatz), polled
    → useFarcasterNotifications + useHaatzNotifications → blended/deduped
 
@@ -74,27 +79,51 @@ what makes mobile's global panel cheap and offline-resilient.
 
 File: `services/notifications/mentionReplyLog.ts` (MMKV id `quorum-mention-reply-log`).
 
-```ts
-type MentionReplyKind = 'mention-you' | 'mention-everyone' | 'mention-roles' | 'reply';
+A **discriminated union**, because a DM has no space or channel and the
+per-channel read-state machinery has to skip those entries — the compiler is
+what says so, rather than optional fields and a convention (`isSpaceMention`
+narrows).
 
-interface MentionReplyEntry {
-  id: string;              // stable + dedup key: `${spaceId}:${channelId}:${messageId}`
-  kind: MentionReplyKind;
-  spaceId: string;
-  spaceName?: string;      // shown loud as the row's lead
-  channelId: string;
-  channelName?: string;    // breadcrumb (muted)
-  threadId?: string;       // → "#channel › Thread"
+```ts
+type MentionReplyKind =
+  | 'mention-you' | 'mention-everyone' | 'mention-roles' | 'reply'  // space
+  | 'dm';                                                           // Quorum DM
+
+interface MentionReplyEntryBase {
+  id: string;
   senderId: string;
   senderName?: string;     // resolved name OR short-address fallback
   senderDisplayName?: string; // RESOLVED name only (no hash) — drives the row's author prefix
   preview: MessagePreview; // typed { kind, text } — no emoji; renderer prepends an icon
   createdAt: number;       // ms; sort + read-state comparisons
 }
+
+interface SpaceMentionEntry extends MentionReplyEntryBase {
+  kind: 'mention-you' | 'mention-everyone' | 'mention-roles' | 'reply';
+  id: string;              // dedup key: `${spaceId}:${channelId}:${messageId}` — PER MESSAGE
+  spaceId: string;
+  spaceName?: string;      // shown loud as the row's lead
+  channelId: string;
+  channelName?: string;    // breadcrumb (muted)
+  threadId?: string;       // → "#channel › Thread"
+}
+
+interface DmEntry extends MentionReplyEntryBase {
+  kind: 'dm';
+  id: string;              // dedup key: `dm:${conversationId}` — PER CONVERSATION
+  conversationId: string;
+}
+
+type MentionReplyEntry = SpaceMentionEntry | DmEntry;
 ```
 
 - **Bounded** at 200 entries (oldest roll off). **Deduped by `id`** so a message
   seen on both the live and catch-up WS paths yields ONE row.
+- **The two kinds key differently, on purpose.** A space mention is per MESSAGE
+  (each mention is its own event worth its own row). A DM is per CONVERSATION,
+  so an active chat refreshes one row instead of burying the panel under one
+  row per message — the same unit the Messages tab and the Farcaster
+  direct-cast pings use.
 - `senderDisplayName` is set only when a real display name resolves, so unsynced
   senders don't surface a raw `Qm…` hash in the row.
 - `preview` uses the typed `messagePreview` (`utils/messagePreview.ts`): media/
@@ -127,7 +156,10 @@ Researched against Slack, Discord, Apple HIG, NN/g, PatternFly, etc. (see the
 comparison doc). Two decoupled levels:
 
 - **Level 1 — bell/tab badge.** Clears when the user OPENS the Notifications tab
-  (`markQuorumTabSeen` / `getQuorumTabUnreadCount`, a single `quorumLastSeenAt`).
+  (`markQuorumTabSeen` / `getQuorumTabSeenAt`, a single `quorumLastSeenAt`). The
+  count itself is computed in `partitionNotifications`, over the same
+  mute-filtered rows the panel renders — a badge counting a row the panel hides
+  is a number the user cannot clear by opening the tab.
   Purpose: "you have something to look at" → fulfilled on open.
 - **Level 2 — per-space/channel bubble.** Clears only when the user opens that
   CHANNEL (`markChannelMentionsRead` on channel mount; per-channel
@@ -138,6 +170,15 @@ and the two sections obey ONE uniform rule — Farcaster items are terminal (no
 in-app destination) so they have no Level 2; Quorum items keep a per-channel
 bubble until visited. **Rows are never deleted by reading** — only "Clear all"
 deletes them.
+
+**DM rows take Level 1 but deliberately have NO Level 2.** The conversation's
+own `lastReadTimestamp` (`hooks/chat/useConversations.ts`) already answers "is
+this DM unread", and it is what the Messages tab uses. A second watermark here
+would be two sources of truth for one fact: read the DM in Messages and the
+panel row would still look unread, or the reverse. The two-level model exists
+because a space mention needs a per-channel bubble that survives until you visit
+that channel; a DM has no equivalent second level, because the conversation IS
+the destination.
 
 ## 5. Per-space notification-type settings
 
@@ -200,6 +241,27 @@ comparison doc / the push code.
   "privacy-conscious: never message content"). Surfacing message text is avoided.
 - These OS pushes are SEPARATE from the in-app panel; a space message produces a
   native push (generic) AND, in-app, a logged mention/reply row (rich).
+- **Row iconography is colour-coded by kind** (`rowAccent` in the notifications
+  tab): `@everyone` red, `@you` orange, `@role` green, reply blue, and the
+  generic background pings the theme accent. `@you` and reply take the two most
+  separated hues because they are the two personal kinds and sit side by side
+  constantly. The circle behind the glyph is the same hue at 16% alpha, so the
+  kind is readable while scanning without reading a word.
+- **A DM row never shows a glyph.** It shows the sender's picture, or their
+  initials (`DefaultAvatar`) when there is none — a DM is from somebody, and
+  the row should say who. Same treatment the Farcaster rows already had.
+- **The OS banner and the in-app row are two payloads, not one.** The banner
+  keeps whatever generic copy the background check raised; the in-app row for a
+  Farcaster direct-cast ping is rebuilt at render time by joining the ping's
+  stored `conversationId` against the live conversation list
+  (`chatToUnified` + `ConversationDetail` in `partitionNotifications.ts`).
+  Sender and message text are deliberately NOT persisted into the ping log —
+  same row on screen, nothing extra on disk. The join falls back to the stored
+  generic copy whenever it misses.
+- **The same join gives Quorum DM rows their avatar** (`quorumToUnified`). The
+  mention log stores no picture: an avatar is the one thing that should always
+  be current rather than a point-in-time record. It sources both products from
+  `useUnifiedConversations`, so one directory serves both row types.
 
 ## 8. Mute architecture (four levels)
 
@@ -219,7 +281,7 @@ both the in-app log and `showMessageNotification`:
 |---|---|---|
 | Panel scope | **Global** (all spaces, one tab) | **Per-space** (bell in channel header) |
 | Sources | Quorum mentions/replies + Farcaster | Quorum mentions/replies only |
-| DMs in panel | No (Messages tab only) — see open task | No (NavRail dot) |
+| DMs in panel | **Yes** — Quorum DMs (`kind: 'dm'` in the mention log) and Farcaster direct-cast pings, both under the Quorum/Farcaster section for their product | No (NavRail dot) |
 | Data | Persisted MMKV log | Derived live from message store |
 | Read-state | Two-level (tab badge / channel bubble) | Per-channel `lastReadTimestamp` |
 | Type settings | `notificationSettings[spaceId].enabledNotificationTypes` | SAME field |
@@ -272,6 +334,9 @@ already common, so the core logic transfers.
 - `services/config/configService.ts` — `getLocalNotificationTypes`/`setNotificationTypes`
 - `utils/messagePreview.ts` — typed `{kind,text}` previews + icon mapping
 - `context/WebSocketContext.tsx` — receive paths that call `logMentionOrReply`
+  (space) and `logDirectMessage` (DM)
+- `services/notifications/farcasterPingPlan.ts` — pure core of the background
+  Farcaster direct-cast check (mute skip, watermark, per-conversation vs digest)
 - `components/ui/AppTabBar.tsx` (`BellIcon`) — the tab badge
 
-*Last updated: 2026-06-23*
+*Last updated: 2026-08-05*

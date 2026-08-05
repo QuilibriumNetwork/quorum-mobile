@@ -1,9 +1,10 @@
 ---
 type: bug
 title: "Mention notifications show the raw @<Qm…> address instead of the mentioned person's name (desktop resolves it, mobile does not)"
-status: open
+status: done
 priority: medium
 created: 2026-08-05
+updated: 2026-08-05
 area: notifications / mention rendering / identity resolution
 runtime_test: required
 source: observed on device 2026-08-05 — a mention row in the Notifications tab read "@<QmQuCGpEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imXST1>" as its entire preview
@@ -14,6 +15,34 @@ related:
 ---
 
 # A mention notification shows an address where a name should be
+
+## Status
+
+Fixed on `feat/rich-in-app-notifications`. Both halves of the suggested approach
+were taken, because they cover different rows:
+
+- **Write time** (`logMentionOrReply`) resolves each mentioned address against
+  the space roster, so new rows carry real names. Option 1 as suggested — the
+  identity-resolver issue is already `.done`, but cross-space lookup from a
+  global panel is still the expensive direction, so option 2 was not free.
+- **Read time** (`previewText` in `partitionNotifications`) truncates anything
+  that reaches the panel unresolved. This is what fixes the rows ALREADY in the
+  operator's log, which write-time resolution can never reach, plus mentions
+  inside DMs where there is no roster at all.
+
+`MENTION_REGEX` and the token scan moved out of `MentionableText` into
+`utils/mentionTokens.ts`; the chat view now calls the shared tokenizer and keeps
+only its own member/role resolution, which is the part that genuinely needs the
+full roster.
+
+One trap worth recording: the panel rendered `raw.quorum.preview.text` directly
+rather than the resolved `body`, so fixing `quorumBody` alone changed nothing on
+screen. The resolved value is now carried on `UnifiedNotification.previewText`
+so the renderer reads a finished string instead of re-deriving one.
+
+Not verified on device yet — the Verify list below is untouched. Covered by
+`__tests__/mentionTokens.test.ts` (17) and `__tests__/logMentionOrReply.test.ts`
+(6); both were checked by reverting the fix and confirming they go red.
 
 ## Symptom
 

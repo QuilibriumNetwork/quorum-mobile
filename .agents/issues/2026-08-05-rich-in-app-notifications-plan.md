@@ -1,9 +1,10 @@
 ---
 type: task
 title: "Every in-app notification says who and what, and goes somewhere when tapped"
-status: open
+status: in-progress
 priority: medium
 created: 2026-08-05
+updated: 2026-08-05
 area: notifications / notifications tab UI / background message service
 runtime_test: required
 supersedes:
@@ -16,6 +17,66 @@ related:
 ---
 
 # Every in-app notification says who and what
+
+## Status
+
+All four slices are built on `feat/rich-in-app-notifications`, one commit each.
+**Not yet verified on device** — the "Verify" checklist at the bottom is
+untouched, and it is what decides whether this is done. Automated coverage is
+listed per slice below; none of it can prove the on-device half.
+
+| Slice | Commit | Automated coverage |
+|---|---|---|
+| 1 — a "New Messages" row goes somewhere | `2e4667a` | `__tests__/farcasterBackgroundPings.test.ts` (10) |
+| 2 — that row says who and what | `863b960` | `__tests__/notificationPartition.test.ts` (+7) |
+| 3 — Quorum DMs appear in the panel | `8365d4b` | `__tests__/logDirectMessage.test.ts` (9), partition (+8) |
+| 4 — delete the row you actually meant | `9b0b9a4` | `__tests__/mentionReplyLog.test.ts` (7) |
+
+455 tests pass; typecheck is clean apart from 11 errors that predate the branch
+(`app/explore.tsx`, `services/calling/*`). Every new test was checked by
+mutating the code it covers and confirming it goes red — except the two noted
+inline in `mentionReplyLog.test.ts`, which are documented as type guards rather
+than behavioral assertions rather than left looking stronger than they are.
+
+### What the slices did, where they differed from the plan
+
+- **Slice 1** pings **per conversation** rather than raising one aggregate, since
+  a `conversationId` is the thing that makes a row tappable and the aggregate has
+  no single conversation to name. Capped at 5 per run — past that it collapses
+  into one generic digest, so a quiet week does not arrive as twenty banners. A
+  stable `logId` keys the in-app row to the conversation so repeat background
+  runs refresh one row instead of stacking identical ones.
+  - Two follow-ons fell out of having the id: Farcaster's own per-conversation
+    mute can now be honored, and the per-DM mute gate inside
+    `showMessageNotification` can finally see the conversation.
+  - Taps that resolve to nothing now land on the inbox instead of being
+    swallowed, on the OS handler as well as the panel.
+- **Slice 2** is render-time enrichment exactly as specified — nothing extra is
+  persisted. The "two payloads" is the OS banner keeping its stored generic copy
+  while the in-app row is rebuilt by joining `conversationId` against the live
+  conversation list, falling back to the generic copy on every miss. Only the
+  panel mounts that query; the badge counts rows and does not care what they say.
+- **Slice 3** made `MentionReplyEntry` a discriminated union rather than adding
+  optional fields, so the compiler flags every place that assumed a space and a
+  channel. Two things it caught that would otherwise have shipped silently:
+  - the self-sync rewrite repoints `conversationId` at the RECIPIENT for our own
+    messages echoed from another device, so the sender address at that point is
+    not the sender — both call sites use the true sender instead;
+  - the tab badge read the mention log directly, so a DM muted *after* it was
+    logged bumped a badge for a row the panel was hiding. Badge arithmetic moved
+    into `partitionNotifications` behind the same mute filter, replacing
+    `getQuorumTabUnreadCount` with `getQuorumTabSeenAt`.
+- **Slice 4** as specified. Trash on every row we own; Farcaster rows still have
+  none, since that feed is the server's and has no per-item dismiss.
+
+### Deliberately not done
+
+- **Superseding a generic ping with the precise row that catches up.** The plan
+  says a precise row *can* supersede it, and the Verify list does not test it.
+  Both rows currently coexist. Doing it means deleting a `bg-` ping on DM
+  catch-up, and a `bg-` ping may equally have been raised for a space message —
+  so the delete would sometimes remove a row nothing replaced. Left alone rather
+  than shipping a silent-deletion heuristic.
 
 ## Goal
 

@@ -29,6 +29,7 @@ jest.mock('react-native-mmkv', () => ({
 
 import {
   partitionNotifications,
+  type ConversationDetail,
   type PartitionInput,
 } from '../services/notifications/partitionNotifications';
 import {
@@ -40,7 +41,10 @@ import {
 } from '../services/notifications/farcasterDismissal';
 import type { FarcasterNotification } from '../services/farcasterClient';
 import type { NotificationLogEntry } from '../services/notifications/notificationLog';
-import type { MentionReplyEntry } from '../services/notifications/mentionReplyLog';
+import type {
+  DmEntry,
+  MentionReplyEntry,
+} from '../services/notifications/mentionReplyLog';
 
 const T = {
   old: 1_000,
@@ -100,6 +104,19 @@ function mention(over: Partial<MentionReplyEntry> = {}): MentionReplyEntry {
   } as MentionReplyEntry;
 }
 
+function dm(over: Partial<DmEntry> = {}): DmEntry {
+  return {
+    id: 'dm:dm-conv',
+    kind: 'dm',
+    conversationId: 'dm-conv',
+    senderId: 'sender',
+    senderName: 'Dana',
+    preview: { kind: 'text', text: 'lunch?' },
+    createdAt: T.fresh,
+    ...over,
+  };
+}
+
 function input(over: Partial<PartitionInput> = {}): PartitionInput {
   return {
     quorumEntries: [],
@@ -109,7 +126,7 @@ function input(over: Partial<PartitionInput> = {}): PartitionInput {
     clearedBefore: 0,
     mutedConversations: new Set<string>(),
     lastSeen: 0,
-    quorumTabUnread: 0,
+    quorumTabSeenAt: 0,
     ...over,
   };
 }
@@ -389,6 +406,221 @@ describe('partitionNotifications — sectioning', () => {
   });
 });
 
+describe('partitionNotifications — Quorum DM rows', () => {
+  it('files a DM under Quorum, alongside the mentions', () => {
+    // The decision the plan settled: sections are named for the PRODUCT, so a
+    // Quorum DM belongs under "Quorum". No fourth section, no fourth pill.
+    const result = partitionNotifications(
+      input({ quorumEntries: [dm(), mention()], officialFarcaster: [farcasterLike()] }),
+    );
+    expect(result.quorumItems.map((i) => i.id)).toEqual(['quorum:dm:dm-conv', 'quorum:space:chan:msg']);
+    expect(result.farcasterFeedItems.map((i) => i.source)).toEqual(['farcaster']);
+  });
+
+  it('says who sent it and what they said', () => {
+    const result = partitionNotifications(input({ quorumEntries: [dm()] }));
+    expect(result.quorumItems[0]).toMatchObject({ title: 'Dana', body: 'lunch?' });
+  });
+
+  it('links to the conversation, not to a space channel', () => {
+    const result = partitionNotifications(input({ quorumEntries: [dm()] }));
+    expect(result.quorumItems[0].link).toEqual({
+      type: 'message',
+      conversationId: 'dm-conv',
+    });
+  });
+
+  it('keeps the space breadcrumb on mention rows', () => {
+    // The control arm: adding the DM branch must not change how a mention
+    // renders, and a mention link must not acquire a conversationId.
+    const result = partitionNotifications(input({ quorumEntries: [mention()] }));
+    expect(result.quorumItems[0]).toMatchObject({
+      title: 'Carol mentioned you',
+      body: '#general · ping',
+      link: { type: 'message', spaceId: 'space', channelId: 'chan' },
+    });
+  });
+
+  it('excludes a muted DM from the panel', () => {
+    const result = partitionNotifications(
+      input({
+        quorumEntries: [dm({ id: 'dm:muted', conversationId: 'muted' }), dm()],
+        mutedConversations: new Set(['muted']),
+      }),
+    );
+    expect(result.quorumItems.map((i) => i.id)).toEqual(['quorum:dm:dm-conv']);
+  });
+
+  it('falls back to "Someone" rather than showing nothing', () => {
+    const result = partitionNotifications(
+      input({ quorumEntries: [dm({ senderName: undefined })] }),
+    );
+    expect(result.quorumItems[0].title).toBe('Someone');
+  });
+
+  it('takes the sender avatar from the live conversation list', () => {
+    // The log stores no picture — an avatar is the one thing that should always
+    // be current rather than a point-in-time record — so the row joins the
+    // conversation list for it, the same way the Farcaster ping rows do.
+    const result = partitionNotifications(
+      input({
+        quorumEntries: [dm()],
+        conversationDetails: new Map([
+          ['dm-conv', { displayName: 'Dana', avatarUrl: 'https://example.test/dana.png' }],
+        ]),
+      }),
+    );
+    expect(result.quorumItems[0].actorAvatarUrl).toBe('https://example.test/dana.png');
+  });
+
+  it('refreshes the name from the conversation when it resolves', () => {
+    // Repairs a row logged before the sender's profile had synced, which would
+    // otherwise show a truncated address forever.
+    const result = partitionNotifications(
+      input({
+        quorumEntries: [dm({ senderName: 'Qm3f4a…8b2' })],
+        conversationDetails: new Map([['dm-conv', { displayName: 'Dana' }]]),
+      }),
+    );
+    expect(result.quorumItems[0].title).toBe('Dana');
+  });
+
+  it('leaves a DM row without an avatar when the conversation is unknown', () => {
+    // The renderer falls back to the envelope glyph here, so this must be
+    // undefined rather than an empty string an <Image> would try to load.
+    const result = partitionNotifications(
+      input({ quorumEntries: [dm()], conversationDetails: new Map() }),
+    );
+    expect(result.quorumItems[0].actorAvatarUrl).toBeUndefined();
+    expect(result.quorumItems[0].title).toBe('Dana');
+  });
+
+  it('never gives a space mention row an avatar from a same-named conversation', () => {
+    // Only DM rows join the conversation list. A mention row keys on space and
+    // channel, and must not pick up a conversation that happens to share an id.
+    const result = partitionNotifications(
+      input({
+        quorumEntries: [mention({ id: 'space:chan:msg' })],
+        conversationDetails: new Map([
+          ['space:chan:msg', { displayName: 'Nope', avatarUrl: 'https://example.test/x.png' }],
+        ]),
+      }),
+    );
+    expect(result.quorumItems[0].actorAvatarUrl).toBeUndefined();
+    expect(result.quorumItems[0].title).toBe('Carol mentioned you');
+  });
+});
+
+describe('partitionNotifications — render-time conversation enrichment', () => {
+  const detail = (over: Partial<ConversationDetail> = {}) =>
+    new Map<string, ConversationDetail>([
+      [
+        'conv-1',
+        {
+          displayName: 'Alice',
+          preview: 'see you tomorrow',
+          senderName: 'Alice',
+          avatarUrl: 'https://example.test/alice.png',
+          ...over,
+        },
+      ],
+    ]);
+
+  it('names the sender and shows the message on a ping it can resolve', () => {
+    const result = partitionNotifications(
+      input({
+        chatEntries: [chatEntry({ title: 'New Messages', body: 'You have a new direct message' })],
+        conversationDetails: detail(),
+      }),
+    );
+    expect(result.quorumItems[0]).toMatchObject({
+      title: 'Alice',
+      body: 'see you tomorrow',
+      actorAvatarUrl: 'https://example.test/alice.png',
+    });
+  });
+
+  it('leaves the stored generic copy alone when the conversation is unknown', () => {
+    // The fallback matters more than the happy path: a conversation the list
+    // has not synced yet must still render a readable row, not an empty one.
+    const result = partitionNotifications(
+      input({
+        chatEntries: [chatEntry({ title: 'New Messages', body: 'You have a new direct message' })],
+        conversationDetails: new Map(),
+      }),
+    );
+    expect(result.quorumItems[0]).toMatchObject({
+      title: 'New Messages',
+      body: 'You have a new direct message',
+    });
+    expect(result.quorumItems[0].actorAvatarUrl).toBeUndefined();
+  });
+
+  it('leaves a ping carrying no conversationId generic', () => {
+    // The app-was-closed case: nothing was decrypted, so there is nothing to
+    // join against and the row must not claim otherwise.
+    const result = partitionNotifications(
+      input({
+        chatEntries: [
+          chatEntry({
+            title: 'New Message',
+            body: 'You have new messages waiting',
+            data: { type: 'message', messageId: 'bg-1', origin: 'quorum' },
+          } as Partial<NotificationLogEntry>),
+        ],
+        conversationDetails: detail(),
+      }),
+    );
+    expect(result.quorumItems[0]).toMatchObject({
+      title: 'New Message',
+      body: 'You have new messages waiting',
+    });
+  });
+
+  it('prefixes the sender in a group, where the sender is not the conversation', () => {
+    const result = partitionNotifications(
+      input({
+        chatEntries: [chatEntry()],
+        conversationDetails: detail({ displayName: 'Team', senderName: 'Bob' }),
+      }),
+    );
+    expect(result.quorumItems[0].body).toBe('Bob: see you tomorrow');
+  });
+
+  it('keeps the generic body when the conversation has no message text', () => {
+    const result = partitionNotifications(
+      input({
+        chatEntries: [chatEntry({ body: 'You have a new direct message' })],
+        conversationDetails: detail({ preview: '   ' }),
+      }),
+    );
+    expect(result.quorumItems[0]).toMatchObject({
+      title: 'Alice',
+      body: 'You have a new direct message',
+    });
+  });
+
+  it('changes nothing at all when no conversation list is supplied', () => {
+    // The control arm: the badge mounts the hook without enrichment, so the
+    // no-detail path has to behave exactly as it did before this existed.
+    const bare = partitionNotifications(input({ chatEntries: [chatEntry()] }));
+    expect(bare.quorumItems[0]).toMatchObject({ title: 'New message', body: 'hey' });
+  });
+
+  it('still excludes a muted DM after enrichment', () => {
+    // Enrichment must not become a way for a muted conversation to reappear
+    // wearing a nicer label.
+    const result = partitionNotifications(
+      input({
+        chatEntries: [chatEntry()],
+        conversationDetails: detail(),
+        mutedConversations: new Set(['conv-1']),
+      }),
+    );
+    expect(result.quorumItems).toEqual([]);
+  });
+});
+
 describe('partitionNotifications — badge count', () => {
   it('still counts background pings after they move to the Quorum section', () => {
     // The chat rows' `timestamp > lastSeen` fallback used to live inside the
@@ -445,12 +677,42 @@ describe('partitionNotifications — badge count', () => {
   it('sums the three sources', () => {
     const result = partitionNotifications(
       input({
+        quorumEntries: [
+          mention({ id: 'm1', createdAt: T.fresh }),
+          mention({ id: 'm2', createdAt: T.fresh }),
+          mention({ id: 'm3', createdAt: T.fresh }),
+        ],
         chatEntries: [chatEntry({ createdAt: T.fresh })],
         officialFarcaster: [farcasterLike({ timestamp: T.fresh, isUnread: true })],
         lastSeen: T.clear,
-        quorumTabUnread: 3,
+        quorumTabSeenAt: T.clear,
       }),
     );
     expect(result.unreadCount).toBe(5);
+  });
+
+  it('does not count mentions already seen', () => {
+    const result = partitionNotifications(
+      input({
+        quorumEntries: [mention({ createdAt: T.old })],
+        quorumTabSeenAt: T.clear,
+      }),
+    );
+    expect(result.unreadCount).toBe(0);
+  });
+
+  it('does not count a muted DM it is not showing', () => {
+    // The badge and the panel have to agree on what exists. Muting a
+    // conversation after its row was logged hides the row; a badge that keeps
+    // counting it is a number the user cannot resolve by opening the tab.
+    const result = partitionNotifications(
+      input({
+        quorumEntries: [dm({ createdAt: T.fresh })],
+        mutedConversations: new Set(['dm-conv']),
+        quorumTabSeenAt: T.clear,
+      }),
+    );
+    expect(result.quorumItems).toEqual([]);
+    expect(result.unreadCount).toBe(0);
   });
 });

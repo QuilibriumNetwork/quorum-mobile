@@ -9,6 +9,7 @@
  */
 
 import { isScamCast } from '@/services/farcaster/scamFilter';
+import { renderMentionsAsPlainText } from '@/utils/mentionTokens';
 import { isDismissed, reachedWatermark } from './farcasterDismissal';
 import { notificationLogOrigin, type NotificationLogEntry } from './notificationLog';
 import type { MentionReplyEntry } from './mentionReplyLog';
@@ -27,6 +28,15 @@ export interface UnifiedNotification {
   title: string;
   body?: string;
   actorAvatarUrl?: string;
+  /**
+   * Quorum rows only: the message preview with mention tokens already resolved.
+   *
+   * Exists so a renderer that lays author and text out separately (the panel
+   * does) reads a finished value instead of re-deriving one from `raw` — which
+   * is precisely how the raw-`@<Qm…>`-hash bug happened: `body` was resolved,
+   * the field the row actually rendered was not.
+   */
+  previewText?: string;
   /** Routing payload — consumer picks branch on `type` to deep-link. */
   link?:
     | { type: 'message'; spaceId?: string; channelId?: string; conversationId?: string }
@@ -233,7 +243,40 @@ export function blendFarcasterSources(
   return [...official, ...extra];
 }
 
-export function chatToUnified(e: NotificationLogEntry): UnifiedNotification {
+/**
+ * What a stored ping's `conversationId` resolves to, looked up fresh on every
+ * render from the live conversation list.
+ *
+ * Deliberately NOT persisted next to the ping. The notification log keeps the
+ * routing id and the generic banner copy it already showed; who sent what is
+ * joined back on here. Same row on screen, nothing extra written to disk.
+ */
+export interface ConversationDetail {
+  /** The conversation's own name — counterparty for a 1:1, group name else. */
+  displayName: string;
+  /** Latest message text, as the conversation list already renders it. */
+  preview?: string;
+  /** Who sent that message ("You" for the current user). */
+  senderName?: string;
+  avatarUrl?: string;
+}
+
+/**
+ * "Bob: on my way" in a group, or bare "on my way" in a 1:1 — there the sender
+ * and the conversation are the same person, so naming them twice reads oddly
+ * against a title that already says who this is.
+ */
+function conversationSnippet(d: ConversationDetail): string | undefined {
+  const text = d.preview?.trim();
+  if (!text) return undefined;
+  const who = d.senderName?.trim();
+  return who && who !== d.displayName ? `${who}: ${text}` : text;
+}
+
+export function chatToUnified(
+  e: NotificationLogEntry,
+  conversations?: ReadonlyMap<string, ConversationDetail>,
+): UnifiedNotification {
   const data = e.data;
   const link: UnifiedNotification['link'] | undefined =
     data?.type === 'message'
@@ -244,12 +287,21 @@ export function chatToUnified(e: NotificationLogEntry): UnifiedNotification {
           conversationId: data.conversationId,
         }
       : undefined;
+  // The OS banner and the in-app row are no longer the same payload. The
+  // banner stayed generic (it fired from a background task and the lock screen
+  // is deliberately vague); the row is rebuilt here from the live conversation
+  // list. Falls back to the stored generic copy whenever the join misses —
+  // an unsynced conversation, or a ping that never carried an id at all.
+  const detail = data?.conversationId
+    ? conversations?.get(data.conversationId)
+    : undefined;
   return {
     id: `chat:${e.id}`,
     source: 'chat',
     timestamp: e.createdAt,
-    title: e.title,
-    body: e.body,
+    title: detail?.displayName?.trim() || e.title,
+    body: (detail && conversationSnippet(detail)) || e.body,
+    actorAvatarUrl: detail?.avatarUrl || undefined,
     link,
     raw: { chat: e },
   };
@@ -266,27 +318,59 @@ function quorumTitle(e: MentionReplyEntry): string {
       return `${who} mentioned a role you have`;
     case 'reply':
       return `${who} replied to you`;
+    case 'dm':
+      // No verb: a DM row's "who" IS the whole event. The renderer leads with
+      // this line the same way the Farcaster ping rows lead with a name.
+      return who;
     default:
       return who;
   }
 }
 
+/**
+ * Mention tokens are resolved to names at WRITE time, where the space roster is
+ * in hand. This is the backstop for anything that reached the log without it:
+ * rows written before that existed, and any address the roster could not
+ * resolve. With no resolver it only truncates, which is the difference between
+ * a row reading "@Qm3f4a…8b2 take a look" and one that is a 46-character hash
+ * with the actual message pushed off the end.
+ */
+function previewText(e: MentionReplyEntry): string {
+  const text = e.preview?.text?.trim();
+  return text ? renderMentionsAsPlainText(text) : '';
+}
+
 /** Channel breadcrumb + message preview text, e.g. "#general · hey there". */
 function quorumBody(e: MentionReplyEntry): string {
+  if (e.kind === 'dm') return previewText(e);
   const channel = e.channelName ? `#${e.channelName}` : '#channel';
   const crumb = e.threadId ? `${channel} › Thread` : channel;
-  const text = e.preview?.text?.trim();
+  const text = previewText(e);
   return text ? `${crumb} · ${text}` : crumb;
 }
 
-export function quorumToUnified(e: MentionReplyEntry): UnifiedNotification {
+export function quorumToUnified(
+  e: MentionReplyEntry,
+  conversations?: ReadonlyMap<string, ConversationDetail>,
+): UnifiedNotification {
+  // A DM row joins the live conversation list for the sender's avatar, exactly
+  // as the Farcaster ping rows do — the log stores no picture, and a picture is
+  // the one thing that should always be current rather than a point-in-time
+  // record. The name follows the same source when it resolves, which also
+  // repairs a row logged before the sender's profile had synced.
+  const detail = e.kind === 'dm' ? conversations?.get(e.conversationId) : undefined;
   return {
     id: `quorum:${e.id}`,
     source: 'quorum',
     timestamp: e.createdAt,
-    title: quorumTitle(e),
+    title: detail?.displayName?.trim() || quorumTitle(e),
     body: quorumBody(e),
-    link: { type: 'message', spaceId: e.spaceId, channelId: e.channelId },
+    previewText: previewText(e),
+    actorAvatarUrl: detail?.avatarUrl || undefined,
+    link:
+      e.kind === 'dm'
+        ? { type: 'message', conversationId: e.conversationId }
+        : { type: 'message', spaceId: e.spaceId, channelId: e.channelId },
     raw: { quorum: e },
   };
 }
@@ -301,6 +385,12 @@ export interface PartitionInput {
   quorumEntries: readonly MentionReplyEntry[];
   /** Background-push mirrors. These are QUORUM messages, not Farcaster. */
   chatEntries: readonly NotificationLogEntry[];
+  /**
+   * Live conversation list, keyed by conversationId, used to give the ping rows
+   * a sender and a message at render time. Absent (or a miss) leaves the row on
+   * the generic copy the log stored.
+   */
+  conversationDetails?: ReadonlyMap<string, ConversationDetail>;
   officialFarcaster: readonly FarcasterNotification[];
   haatzFarcaster: readonly FarcasterNotification[];
   /** Farcaster dismissal watermark; 0 = never cleared. */
@@ -308,8 +398,8 @@ export interface PartitionInput {
   mutedConversations: ReadonlySet<string>;
   /** Chat-log "seen" watermark, for the badge. */
   lastSeen: number;
-  /** Quorum mention-log unread count (its own watermark), for the badge. */
-  quorumTabUnread: number;
+  /** Mention-log "tab seen" watermark (Level 1) — its own, for the badge. */
+  quorumTabSeenAt: number;
 }
 
 export interface PartitionResult {
@@ -335,12 +425,13 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
   const {
     quorumEntries,
     chatEntries,
+    conversationDetails,
     officialFarcaster,
     haatzFarcaster,
     clearedBefore,
     mutedConversations,
     lastSeen,
-    quorumTabUnread,
+    quorumTabSeenAt,
   } = input;
 
   const official = officialFarcaster.filter(isNotScam);
@@ -363,14 +454,17 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
 
   // Muted DMs are excluded from the panel entirely, consistent with the badge
   // and push suppression. The conversation stays reachable via the Messages
-  // tab. Chat rows are the only rows that carry a conversationId, so this is
-  // a no-op for the rest — but it MUST travel with the chat rows.
+  // tab. Applied to every row that carries a conversationId — background pings
+  // AND Quorum DM rows. The write paths already gate on mute, but a mute
+  // toggled AFTER a row was logged only takes effect here.
   const notMutedDM = (e: UnifiedNotification): boolean => {
     const convId = e.link?.type === 'message' ? e.link.conversationId : undefined;
     return !(convId && mutedConversations.has(convId));
   };
 
-  const chatItems = chatEntries.map(chatToUnified).filter(notMutedDM);
+  const chatItems = chatEntries
+    .map((e) => chatToUnified(e, conversationDetails))
+    .filter(notMutedDM);
   // Background pings are raised for BOTH Quorum messages and Farcaster direct
   // casts into one undifferentiated log, so they have to be split by origin —
   // filing the whole log under either heading mislabels the other half.
@@ -381,10 +475,15 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
     (e) => e.raw?.chat && notificationLogOrigin(e.raw.chat) === 'farcaster',
   );
 
-  // Section 1 — Quorum: space mentions/replies + Quorum background pings.
+  // Section 1 — Quorum: space mentions/replies, Quorum DMs, and Quorum
+  // background pings. Named for the product, so a DM belongs here by
+  // definition — no fourth section, no fourth filter pill.
   // Space channel mute is already enforced upstream at log-write time via
   // shouldNotifyForContext.
-  const quorumItems = [...quorumEntries.map(quorumToUnified), ...quorumChat];
+  const quorumMentionItems = quorumEntries
+    .map((e) => quorumToUnified(e, conversationDetails))
+    .filter(notMutedDM);
+  const quorumItems = [...quorumMentionItems, ...quorumChat];
   quorumItems.sort((a, b) => b.timestamp - a.timestamp);
 
   // Section 2 — Farcaster activity + Farcaster direct-cast pings.
@@ -396,8 +495,10 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
   items.sort((a, b) => b.timestamp - a.timestamp);
 
   // Tab badge (Level 1). Three sources, each with its own "seen" model:
-  //  - Quorum mentions: entries newer than the last tab-open, counted by the
-  //    mention log itself (decoupled from per-channel read state).
+  //  - Quorum mentions + DMs: rows newer than the last tab-open, against the
+  //    mention log's own watermark (decoupled from per-channel read state).
+  //    Counted over the MUTE-FILTERED rows, so a DM muted after it was logged
+  //    can't bump a badge for a row the panel isn't showing.
   //  - background pings: the chat log's lastSeen. These are NOT covered by the
   //    mention log's watermark, so they must be counted separately — folding
   //    them in silently stops the badge from reflecting them.
@@ -407,6 +508,10 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
   // notifications) rather than the two SECTION arrays — the Farcaster section
   // also holds Farcaster direct-cast pings, which are chat rows, so summing the
   // sections would count those twice.
+  const quorumUnread = quorumMentionItems.reduce(
+    (n, e) => (e.timestamp > quorumTabSeenAt ? n + 1 : n),
+    0,
+  );
   const chatUnread = chatItems.reduce((n, e) => (e.timestamp > lastSeen ? n + 1 : n), 0);
   const farcasterUnread = farcasterOnly.reduce((n, e) => {
     const isUnread = e.raw?.farcaster?.isUnread;
@@ -418,7 +523,7 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
     quorumItems,
     farcasterFeedItems,
     items,
-    unreadCount: quorumTabUnread + chatUnread + farcasterUnread,
+    unreadCount: quorumUnread + chatUnread + farcasterUnread,
     reachedWatermark: reached,
     dismissedCount: blended.length - visibleFarcaster.length,
   };

@@ -59,6 +59,19 @@ export interface NotificationContent {
   title: string;
   body: string;
   data?: MessageNotificationData;
+  /**
+   * Stable id for the IN-APP log row, when the caller has one.
+   *
+   * Defaults to the OS notification id, which is fresh on every call — so a
+   * source that pings about the same conversation twice (the background check
+   * runs on a timer) stacks up one identical row per run. Passing a key derived
+   * from the conversation instead makes the newer ping REPLACE the older row
+   * (`appendNotificationLog` dedups by id), which is what a per-conversation
+   * row should do: one row per conversation, showing its latest state.
+   *
+   * Must stay unique across products — prefix it (`fc-conv:…`).
+   */
+  logId?: string;
 }
 
 /**
@@ -142,7 +155,10 @@ export async function showMessageNotification(
     // Mirror to the in-app log so the notification center tab can replay
     // history. The OS tray clears on user dismiss; this log persists.
     appendNotificationLog({
-      id: notificationId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id:
+        content.logId ??
+        notificationId ??
+        `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       title: content.title,
       body: content.body,
       data: content.data,
@@ -246,6 +262,11 @@ export function handleNotificationTap(
         // the thread instead of just landing on the notifications tab.
         cast_hash?: string;
         username?: string;
+        // Locally-raised `type: 'message'` notifications carry the same
+        // routing payload the in-app panel uses.
+        spaceId?: string;
+        channelId?: string;
+        conversationId?: string;
       }
     | undefined;
   if (!data?.type) {
@@ -349,8 +370,23 @@ export function handleNotificationTap(
         routeTo('/(tabs)/profile');
       }
       return;
+    case 'message': {
+      // Notifications WE scheduled (background message checks, foreground
+      // pings) rather than server pushes. Same routing payload the in-app
+      // panel picks apart, so keep the two branches in the same order.
+      if (data.spaceId && data.channelId) {
+        routeTo(`/(tabs)/spaces/${data.spaceId}/${data.channelId}`);
+      } else if (data.conversationId) {
+        routeTo(`/(tabs)/messages/dm/${encodeURIComponent(data.conversationId)}`);
+      } else {
+        // A generic background ping: the app was asleep, nothing was
+        // decrypted, and there is no conversation to open. The inbox is the
+        // closest honest destination — better than swallowing the tap.
+        routeTo('/(tabs)/messages');
+      }
+      return;
+    }
     default:
-      // Legacy / chat-driven local notifications used `type: 'message'`.
       routeTo('/');
   }
 }

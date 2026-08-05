@@ -20,17 +20,23 @@ import {
 } from './useFarcasterNotifications';
 import { useHaatzNotifications } from './useHaatzNotifications';
 import { useDMMute } from '@/hooks/chat/useDMMute';
+import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
+import type { Conversation } from '@/hooks/chat/useConversations';
+import { coerceMessagePreview } from '@/utils/messagePreview';
 import {
   getLastSeenTimestamp,
   useNotificationLog,
 } from '@/services/notifications/notificationLog';
 import {
-  getQuorumTabUnreadCount,
+  getQuorumTabSeenAt,
   useMentionReplyLog,
 } from '@/services/notifications/mentionReplyLog';
 import { useFarcasterClearedBefore } from '@/services/notifications/farcasterDismissal';
 import { partitionNotifications } from '@/services/notifications/partitionNotifications';
-import type { UnifiedNotification } from '@/services/notifications/partitionNotifications';
+import type {
+  ConversationDetail,
+  UnifiedNotification,
+} from '@/services/notifications/partitionNotifications';
 
 // Re-exported so existing consumers keep importing the row type from the hook.
 export type {
@@ -59,7 +65,21 @@ export interface UnifiedNotificationsResult {
   farcasterError: Error | null;
 }
 
-export function useUnifiedNotifications(): UnifiedNotificationsResult {
+export interface UseUnifiedNotificationsOptions {
+  /**
+   * Join the background message pings to the live conversation list so their
+   * rows name the sender and show the message instead of reading "New
+   * Messages". Costs mounting the Farcaster conversations query (a background
+   * poll), so only the panel asks for it — the tab badge counts rows and does
+   * not care what they say.
+   */
+  enrichConversations?: boolean;
+}
+
+export function useUnifiedNotifications(
+  options: UseUnifiedNotificationsOptions = {},
+): UnifiedNotificationsResult {
+  const { enrichConversations = false } = options;
   const { farcasterAuthToken } = useAuth();
   const { entries: chatEntries } = useNotificationLog();
   const { entries: quorumEntries } = useMentionReplyLog();
@@ -74,6 +94,26 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
   // Local dismissal watermark — Farcaster rows can't be cleared server-side.
   const clearedBefore = useFarcasterClearedBefore();
 
+  // Render-time enrichment source for the message rows. Covers BOTH products:
+  // the Farcaster direct-cast pings (whose log stores only a routing id, on
+  // purpose) and the Quorum DM rows (whose log stores no avatar). Joined back
+  // on every render rather than written into the log.
+  const dmConversations = useUnifiedConversations({ enabled: enrichConversations });
+  const conversationDetails = useMemo(() => {
+    const map = new Map<string, ConversationDetail>();
+    for (const c of dmConversations.conversations as Conversation[]) {
+      map.set(c.conversationId, {
+        displayName: c.displayName ?? '',
+        // Farcaster rows store a plain string, Quorum rows the typed preview
+        // — coerce so this doesn't depend on which wrote it.
+        preview: coerceMessagePreview(c.lastMessagePreview).text || undefined,
+        senderName: c.lastMessageSenderName,
+        avatarUrl: c.icon || undefined,
+      });
+    }
+    return map;
+  }, [dmConversations.conversations]);
+
   const officialFarcaster = useMemo(
     () => flattenFarcasterNotifications(farcasterQuery.data?.pages),
     [farcasterQuery.data?.pages],
@@ -84,14 +124,23 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
       partitionNotifications({
         quorumEntries,
         chatEntries,
+        conversationDetails,
         officialFarcaster,
         haatzFarcaster: haatzQuery.data ?? [],
         clearedBefore,
         mutedConversations,
         lastSeen: getLastSeenTimestamp(),
-        quorumTabUnread: getQuorumTabUnreadCount(),
+        quorumTabSeenAt: getQuorumTabSeenAt(),
       }),
-    [quorumEntries, chatEntries, officialFarcaster, haatzQuery.data, clearedBefore, mutedConversations],
+    [
+      quorumEntries,
+      chatEntries,
+      conversationDetails,
+      officialFarcaster,
+      haatzQuery.data,
+      clearedBefore,
+      mutedConversations,
+    ],
   );
 
   return {

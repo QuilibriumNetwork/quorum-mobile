@@ -18,6 +18,8 @@ import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
 import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
+import { accentThemes } from '@/theme/colors';
+import { withAlpha } from '@/theme/skins/mergeSkin';
 import { useAuth } from '@/context/AuthContext';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
@@ -29,7 +31,11 @@ import {
   markNotificationsSeen,
   removeNotificationLogEntry,
 } from '@/services/notifications/notificationLog';
-import { clearMentionReplyLog, markQuorumTabSeen } from '@/services/notifications/mentionReplyLog';
+import {
+  clearMentionReplyLog,
+  markQuorumTabSeen,
+  removeMentionReplyEntry,
+} from '@/services/notifications/mentionReplyLog';
 import { clearFarcasterNotifications } from '@/services/notifications/farcasterDismissal';
 import { markAllFarcasterNotificationsRead } from '@/services/farcasterClient';
 import {
@@ -95,18 +101,79 @@ function quorumRowIcon(entry: UnifiedNotification): IconSymbolName {
       return 'bullhorn';
     case 'mention-roles':
       return 'shield';
+    case 'dm':
+      // Unreachable in practice: a DM row shows the sender's picture, or their
+      // initials when there is no picture, so it never falls back to a glyph.
+      // Kept so the switch stays total.
+      return 'envelope';
     case 'mention-you':
     default:
       return 'at';
   }
 }
 
-/** Location parts for a Quorum row — space (loud) + channel breadcrumb (muted). */
+/** A Quorum DM row renders like a message ping (name, then text), not like a
+ *  space mention (which leads with its Space › #channel breadcrumb). */
+function isQuorumDM(entry: UnifiedNotification): boolean {
+  return entry.raw?.quorum?.kind === 'dm';
+}
+
+/**
+ * Leading-icon accent per row type, so the KIND of notification is readable at
+ * a glance without reading a word of it.
+ *
+ * The glyph already distinguishes them, but a shape difference at 18px is a
+ * much weaker signal than a colour difference — and the panel is a scanning
+ * surface. Hues are chosen for what the row demands of you: `@everyone` is the
+ * one that interrupts a whole space (red), a direct `@you` is aimed at you by
+ * name (orange), a role mention reached you via a hat you happen to wear
+ * (green), and a reply continues something you already said (blue).
+ *
+ * `@you` and reply are the two personal kinds and sit next to each other
+ * constantly, so they get the two most separated hues of the four rather than
+ * two shades of the same idea.
+ *
+ * Only rows that fall back to a GLYPH reach this. A DM shows the sender's face
+ * (or their initials), so it never needs a colour of its own — see the leading
+ * slot in `renderItem`.
+ */
+function rowAccent(entry: UnifiedNotification, theme: AppTheme): string {
+  switch (entry.raw?.quorum?.kind) {
+    case 'mention-everyone':
+      return theme.colors.danger;
+    case 'mention-you':
+      return MENTION_YOU_ACCENT;
+    case 'mention-roles':
+      return theme.colors.success;
+    case 'reply':
+      return theme.colors.info;
+    default:
+      // Background message pings. These are the generic "you have new
+      // messages" rows raised while the app was asleep — there is no person to
+      // draw, so they keep the neutral accent rather than competing with the
+      // mention hues for attention they haven't earned.
+      return theme.colors.primary;
+  }
+}
+
+// Orange for a direct `@you`. The utility tokens have no orange, and `warning`
+// is an amber that reads as a caution state, which a mention is not — so this
+// comes from the accent-theme palette, which does. Fixed rather than
+// theme-derived on purpose: it means "@you", not "your chosen accent".
+const MENTION_YOU_ACCENT = accentThemes.orange[500];
+
+/** Tint behind the leading icon — the same hue, far enough back that the glyph
+ *  stays the thing you see. */
+const ACCENT_WASH = 0.16;
+
+/** Location parts for a space mention row — space (loud) + channel breadcrumb
+ *  (muted). Never called for a DM row: a DM has no space or channel. */
 function quorumLocation(entry: UnifiedNotification): { space: string; channel: string } {
   const q = entry.raw?.quorum;
-  const space = q?.spaceName?.trim() || 'Space';
-  const channel = q?.channelName ? `#${q.channelName}` : '#channel';
-  return { space, channel: q?.threadId ? `${channel} › Thread` : channel };
+  if (!q || q.kind === 'dm') return { space: 'Space', channel: '#channel' };
+  const space = q.spaceName?.trim() || 'Space';
+  const channel = q.channelName ? `#${q.channelName}` : '#channel';
+  return { space, channel: q.threadId ? `${channel} › Thread` : channel };
 }
 
 function formatTime(ts: number): string {
@@ -134,7 +201,9 @@ export default function NotificationsScreen() {
     farcasterEnabled,
     farcasterError,
     dismissedCount,
-  } = useUnifiedNotifications();
+    // Only the panel pays for the conversation join — the tab badge counts
+    // rows and doesn't care what they say.
+  } = useUnifiedNotifications({ enrichConversations: true });
   const insets = useSafeAreaInsets();
   const { openMiniapp } = useMiniappOverlay();
   const [refreshing, setRefreshing] = useState(false);
@@ -172,6 +241,11 @@ export default function NotificationsScreen() {
         router.push(`/spaces/${link.spaceId}/${link.channelId}`);
       } else if (link.conversationId) {
         router.push(`/(tabs)/messages/dm/${encodeURIComponent(link.conversationId)}`);
+      } else {
+        // A generic background ping — raised while the app was asleep, with
+        // nothing decrypted and no conversation to open. Land on the inbox
+        // rather than matching no branch and swallowing the tap.
+        router.push('/(tabs)/messages');
       }
     } else if (link.type === 'cast') {
       // Bounce to the feed tab; it owns the thread modal/cast viewer.
@@ -200,6 +274,9 @@ export default function NotificationsScreen() {
   const handleDelete = useCallback((entry: UnifiedNotification) => {
     if (entry.source === 'chat' && entry.raw?.chat) {
       removeNotificationLogEntry(entry.raw.chat.id);
+    } else if (entry.source === 'quorum' && entry.raw?.quorum) {
+      // Mentions, replies and DMs all live in the mention log.
+      removeMentionReplyEntry(entry.raw.quorum.id);
     }
     // Farcaster items are read-only — server is the source of truth, we
     // can't dismiss individual ones. Leave the trash button hidden for
@@ -217,7 +294,13 @@ export default function NotificationsScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: UnifiedNotification }) => {
-      const showTrash = item.source === 'chat';
+      // Every row we own, not just the ping rows. The affordance used to sit
+      // solely on the generic pings — where deleting one of several identical
+      // rows means nothing — and was missing from the precise mention rows,
+      // where it means everything. Farcaster rows stay without one: that feed
+      // is the server's, and no per-item dismiss exists for it.
+      const showTrash = item.source !== 'farcaster';
+      const accent = rowAccent(item, theme);
       return (
         <Pressable
           style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
@@ -225,30 +308,38 @@ export default function NotificationsScreen() {
         >
           {item.actorAvatarUrl ? (
             <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
-          ) : item.source === 'farcaster' ? (
-            // Same top nudge as the other three branches. This one is easy to
-            // miss because it takes `style` rather than wearing styles.avatar,
-            // and it only shows for actors with no profile picture — so the row
-            // beside a real photo looks right while its neighbours do not.
+          ) : item.source === 'farcaster' || isQuorumDM(item) ? (
+            // A person with no profile picture — Farcaster actor or Quorum DM
+            // sender alike. Initials, not a glyph: a DM is from somebody, and
+            // the row should say who even when we have no photo of them.
+            //
+            // Same top nudge as the other branches. This one is easy to miss
+            // because it takes `style` rather than wearing styles.avatar, and it
+            // only shows for actors with no profile picture — so the row beside
+            // a real photo looks right while its neighbours do not.
             <DefaultAvatar
               displayName={item.title}
-              address={item.id}
+              // Seeds the gradient. The sender's address for a DM, so the same
+              // person keeps the same colour across rows; the row id otherwise.
+              address={item.raw?.quorum?.senderId ?? item.id}
               size={36}
               style={styles.avatarNudge}
             />
           ) : item.source === 'quorum' ? (
-            <View style={styles.iconWrap}>
-              <IconSymbol name={quorumRowIcon(item)} color={theme.colors.primary} size={18} />
+            <View style={[styles.iconWrap, { backgroundColor: withAlpha(accent, ACCENT_WASH) }]}>
+              <IconSymbol name={quorumRowIcon(item)} color={accent} size={18} />
             </View>
           ) : (
             // Background message pings. An envelope, not a bell: the row is
             // about a message that arrived, not about the notification itself,
             // and every other row in the panel already uses an outline glyph.
-            <View style={styles.iconWrap}>
-              <IconSymbol name="envelope" color={theme.colors.primary} size={18} />
+            // A DM row that resolved an avatar took the first branch above, so
+            // reaching here means we have no picture for the sender.
+            <View style={[styles.iconWrap, { backgroundColor: withAlpha(accent, ACCENT_WASH) }]}>
+              <IconSymbol name="envelope" color={accent} size={18} />
             </View>
           )}
-          {item.source === 'quorum' ? (
+          {item.source === 'quorum' && !isQuorumDM(item) ? (
             // Location-first layout: lead with "Space › #channel" (loud), then
             // the message preview, then the time. The mention type is conveyed
             // by the leading icon, so no redundant "X mentioned you" title.
@@ -261,9 +352,10 @@ export default function NotificationsScreen() {
                 </Text>
               </Text>
               {(() => {
-                const q = item.raw?.quorum;
-                const author = q?.senderDisplayName?.trim();
-                const text = q?.preview?.text;
+                const author = item.raw?.quorum?.senderDisplayName?.trim();
+                // Not raw.quorum.preview.text — that is the unresolved wire
+                // form, mention tokens and all.
+                const text = item.previewText;
                 if (!author && !text) return null;
                 return (
                   <Text style={styles.quorumMessage} numberOfLines={QUORUM_PREVIEW_LINES}>
@@ -297,6 +389,8 @@ export default function NotificationsScreen() {
               onPress={() => handleDelete(item)}
               hitSlop={8}
               style={styles.trashButton}
+              accessibilityRole="button"
+              accessibilityLabel="Delete this notification"
             >
               <IconSymbol name="trash" color={theme.colors.textMuted} size={18} />
             </TouchableOpacity>
@@ -304,7 +398,10 @@ export default function NotificationsScreen() {
         </Pressable>
       );
     },
-    [styles, theme.colors.primary, theme.colors.textMuted, handlePress, handleDelete],
+    // `theme` whole, not picked colours: rowAccent reads four of them, and
+    // listing each is how one gets forgotten and the row keeps a stale accent
+    // across a theme switch.
+    [styles, theme, handlePress, handleDelete],
   );
 
   // Pills only earn their space when there's actually a Farcaster feed to filter
@@ -551,6 +648,9 @@ const createStyles = (theme: AppTheme) =>
       height: 36,
       marginTop: Skin.font(AVATAR_TOP_NUDGE),
       borderRadius: Skin.circleOrSquare(18),
+      // Every call site overrides this with the row's accent wash. Kept as a
+      // neutral floor so a row type that reaches here without one is still a
+      // circle rather than a hole in the list.
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
       justifyContent: 'center',
