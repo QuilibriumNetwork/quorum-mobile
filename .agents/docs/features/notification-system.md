@@ -244,7 +244,7 @@ already common, so the core logic transfers.
     (role-only, no owner bypass); otherwise plain text. Matches the notification
     trust rule. (Desktop has the same render-side gap — tasked, see below.)
 - Open tasks (`.agents/tasks/.todo/`):
-  - `2026-06-23-dms-in-global-notification-panel.md` — add DMs to the panel.
+  - `2026-08-05-rich-in-app-notifications-plan.md` — DMs in the panel, richer rows, tappable pings.
   - `2026-06-23-mention-aware-native-push.md` — label space pushes as mention/
     reply (needs lead-dev alignment + NSE verification).
   - `2026-06-21-dm-mute-suppress-native-notifications.md` — DM mute missing from

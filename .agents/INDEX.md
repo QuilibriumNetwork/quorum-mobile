@@ -82,7 +82,6 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [Two icons left in the registry gap](issues/.open/2026-08-03-icon-registry-residual-gaps-mood-happy-and-headphones-filled.md)
 - 🐛 [One member's row is carrying another member's Farcaster identity](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md)
 - 🐛 [This device can key 0 of 3 Spaces it imported from the config blob](issues/.open/2026-08-04-mobile-cannot-key-any-space-it-imported-from-the-config-blob.md)
-- 🐛 [The generic message rows go nowhere](issues/.open/2026-08-05-notification-rows-are-generic-and-untappable.md)
 - 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
 - 📋 [Message composer — further improvements](issues/.open/2026-06-16-message-composer-further-improvements.md)
 - 📋 [Split profile header has no visible "edit" cue](issues/.open/2026-06-16-split-profile-edit-affordance-not-discoverable.md)
@@ -93,7 +92,6 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Share the emoji-picker data layer across desktop + mobile](issues/.open/2026-06-19-share-emoji-picker-data-layer.md)
 - 📋 [Profile screen — single pill-row navigation](issues/.open/2026-06-20-profile-pill-navigation.md)
 - 📋 [DM favorites: sync + wire](issues/.open/2026-06-21-dm-favorites-sync-and-wire.md)
-- 📋 [Add DMs to the global Notifications panel](issues/.open/2026-06-23-dms-in-global-notification-panel.md)
 - 📋 [Mention-aware native push](issues/.open/2026-06-23-mention-aware-native-push.md)
 - 📋 [Channel icon picker polish](issues/.open/2026-06-26-channel-icon-picker-polish.md)
 - 📋 [Coalesce replayed space-manifest during catch-up (stop space/channel flicker)](issues/.open/2026-06-28-coalesce-replay-space-manifest-flicker.md)
@@ -110,6 +108,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Deliver quorum-shared to mobile without an npm publish, for everyone](issues/.open/2026-08-01-deliver-quorum-shared-to-mobile-without-npm-publish.md)
 - 📋 [Non-destructive feedback: move the remaining `Alert.alert` sites off native alerts](issues/.open/2026-08-01-non-destructive-alert-alert-to-toasts.md)
 - 📋 [Three pieces the resolver adoption deliberately left](issues/.open/2026-08-04-qns-names-and-the-identity-coverage-instrument.md)
+- 📋 [Every in-app notification says who and what](issues/.open/2026-08-05-rich-in-app-notifications-plan.md)
 
 ### Deferred
 
@@ -257,4 +256,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-05 13:04:56
+**Last Updated**: 2026-08-05 13:14:08

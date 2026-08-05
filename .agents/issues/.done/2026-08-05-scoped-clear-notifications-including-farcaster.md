@@ -10,7 +10,7 @@ area: notifications / farcaster feed / notifications tab UI
 runtime_test: required
 related:
   - "docs/features/notification-system.md"
-  - "issues/.open/2026-06-23-dms-in-global-notification-panel.md"
+  - "issues/.open/2026-08-05-rich-in-app-notifications-plan.md"
   - "issues/.done/2026-06-13-destructive-operations-confirmation-standard.md"
 ---
 
@@ -203,7 +203,7 @@ Fix: reassign them to the Quorum section and rename its header
 change only.
 
 **Deliberately NOT re-sectioning further.**
-`issues/.open/2026-06-23-dms-in-global-notification-panel.md` already owns the
+`issues/.open/2026-08-05-rich-in-app-notifications-plan.md` already owns the
 question of where message rows belong (it explicitly weighs "third section vs
 fold into Quorum" and "4th filter pill vs not"). Pre-empting those decisions
 here would collide with it. This change is forward-compatible: that task can
