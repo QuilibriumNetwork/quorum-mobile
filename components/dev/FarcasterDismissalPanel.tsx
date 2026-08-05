@@ -10,12 +10,24 @@
  * notifications, which on a one-test-account setup are a scarce fixture needed
  * for other work.
  *
- * It does not have to be destructive. The rows are a REMOTE feed that cannot be
- * deleted, so clearing loses nothing: resetting the watermark brings everything
- * back on the next poll. This panel exposes that reset, which turns a one-shot
- * destructive check into a repeatable loop:
+ * The watermark half does not have to be destructive. Feed rows (likes, follows,
+ * mentions) are a REMOTE feed that cannot be deleted, so hiding them loses
+ * nothing: resetting the watermark brings them back. This panel exposes that
+ * reset, which turns a one-shot check into a repeatable loop:
  *
- *     clear → wait 60s → confirm still gone → Reset → all rows return
+ *     clear → pull to refresh → confirm still gone → Reset → feed rows return
+ *
+ * ⚠️ SCOPE OF THE UNDO — read before trusting it. Reset restores ONLY the rows
+ * the watermark hid. "Clear Farcaster" ALSO calls
+ * `clearNotificationLogByOrigin('farcaster')`, which DELETES the Farcaster
+ * direct-cast ping rows from the local notification log. Those are local
+ * entries, not feed items, and Reset cannot bring them back.
+ *
+ * So a clear/reset cycle is lossless for feed rows and lossy for direct-cast
+ * pings. Do not describe this panel as making "Clear Farcaster" reversible —
+ * it makes the watermark reversible. (Learned the hard way on 2026-08-05: the
+ * distinction was missed, the operator was told the action was safe to test,
+ * and their ping rows were destroyed.)
  *
  * It also shows the watermark value and the live suppressed count, so the
  * mechanism is OBSERVED rather than inferred. If rows vanish while "hiding"

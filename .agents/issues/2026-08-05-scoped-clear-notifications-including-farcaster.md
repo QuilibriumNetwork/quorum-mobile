@@ -51,17 +51,34 @@ errors, none in changed files).
   Reset. ~30 seconds, non-destructive.
 - The control arm (a never-cleared account sees no change in contents, ordering,
   badge or scroll depth).
-- **Clear Quorum / Clear all** — untested and deliberately so. Those genuinely
-  delete local logs and are NOT reversible by the dev panel. Testing them costs
-  the operator's real mention history, which is a scarce fixture on a
-  one-test-account setup. A snapshot/restore for those was considered and
-  rejected as over-engineering: it is a plain delete of two bounded arrays whose
-  behaviour predates this PR and is covered by unit tests.
+- **Clear Quorum / Clear all** — untested. Those delete local logs outright and
+  the dev panel cannot restore them. Testing costs the operator's real mention
+  history, a scarce fixture on a one-test-account setup.
 - No independent code review was run on this branch.
 
-Note the asymmetry that made this tractable: the novel, risky mechanism (the
-watermark) is the *reversible* one, because the rows are a remote feed that
-cannot be deleted. The irreversible half is the boring one.
+**⚠️ Correction (2026-08-05) — "Clear Farcaster" is NOT fully reversible, and
+the operator lost data to this claim.** Every clear scope deletes something the
+dev panel cannot restore:
+
+| Scope | Watermark (Reset undoes) | Local log delete (permanent) |
+|---|---|---|
+| Clear Farcaster | feed rows hidden | `clearNotificationLogByOrigin('farcaster')` — direct-cast pings **destroyed** |
+| Clear Quorum | — | mention log + Quorum pings destroyed |
+| Clear all | feed rows hidden | both logs destroyed |
+
+The behaviour is correct: the Farcaster section renders both feed rows and
+direct-cast pings, so clearing it should clear both. The error was in describing
+the action as reversible because the *watermark* is. Reset restores what the
+watermark hid, nothing more.
+
+The earlier decision to skip a log snapshot as over-engineering was made on that
+bad information — the Farcaster path was believed safe, so the snapshot looked
+like it only served the Quorum path. Revisit knowing that NO clear scope is
+currently loss-free.
+
+Note the asymmetry that made the watermark tractable: the novel mechanism is the
+reversible one, because feed rows are remote and cannot be deleted. Every local
+log delete around it is still one-way.
 
 **Correction to §4.1 during implementation (2026-08-05).** The background-ping
 log is NOT all Quorum. It is written from two call sites for two different
