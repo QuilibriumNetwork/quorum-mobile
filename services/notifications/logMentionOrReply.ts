@@ -26,9 +26,11 @@ import {
   type DmEntry,
   type SpaceMentionEntry,
 } from './mentionReplyLog';
-import { isConversationMutedForCurrentUser } from '@/services/config';
 import { getActiveChannelKey } from '@/hooks/chat/useReplyTracking';
-import { getLocalNotificationTypes } from '@/services/config';
+import {
+  getLocalNotificationTypes,
+  isConversationMutedForCurrentUser,
+} from '@/services/config';
 import { messagePreview, messageSenderName } from '@/utils/messagePreview';
 
 export interface LogMentionOrReplyCtx {

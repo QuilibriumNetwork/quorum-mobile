@@ -29,7 +29,11 @@ import {
   markNotificationsSeen,
   removeNotificationLogEntry,
 } from '@/services/notifications/notificationLog';
-import { clearMentionReplyLog, markQuorumTabSeen } from '@/services/notifications/mentionReplyLog';
+import {
+  clearMentionReplyLog,
+  markQuorumTabSeen,
+  removeMentionReplyEntry,
+} from '@/services/notifications/mentionReplyLog';
 import { clearFarcasterNotifications } from '@/services/notifications/farcasterDismissal';
 import { markAllFarcasterNotificationsRead } from '@/services/farcasterClient';
 import {
@@ -219,6 +223,9 @@ export default function NotificationsScreen() {
   const handleDelete = useCallback((entry: UnifiedNotification) => {
     if (entry.source === 'chat' && entry.raw?.chat) {
       removeNotificationLogEntry(entry.raw.chat.id);
+    } else if (entry.source === 'quorum' && entry.raw?.quorum) {
+      // Mentions, replies and DMs all live in the mention log.
+      removeMentionReplyEntry(entry.raw.quorum.id);
     }
     // Farcaster items are read-only — server is the source of truth, we
     // can't dismiss individual ones. Leave the trash button hidden for
@@ -236,7 +243,12 @@ export default function NotificationsScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: UnifiedNotification }) => {
-      const showTrash = item.source === 'chat';
+      // Every row we own, not just the ping rows. The affordance used to sit
+      // solely on the generic pings — where deleting one of several identical
+      // rows means nothing — and was missing from the precise mention rows,
+      // where it means everything. Farcaster rows stay without one: that feed
+      // is the server's, and no per-item dismiss exists for it.
+      const showTrash = item.source !== 'farcaster';
       return (
         <Pressable
           style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
@@ -316,6 +328,8 @@ export default function NotificationsScreen() {
               onPress={() => handleDelete(item)}
               hitSlop={8}
               style={styles.trashButton}
+              accessibilityRole="button"
+              accessibilityLabel="Delete this notification"
             >
               <IconSymbol name="trash" color={theme.colors.textMuted} size={18} />
             </TouchableOpacity>
