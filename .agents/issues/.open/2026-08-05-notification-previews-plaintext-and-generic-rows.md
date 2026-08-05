@@ -7,7 +7,8 @@ created: 2026-08-05
 area: notifications / at-rest encryption / background message service
 runtime_test: required
 related:
-  - "issues/2026-08-05-scoped-clear-notifications-including-farcaster.md"
+  - "issues/.open/2026-08-05-space-private-keys-and-ratchet-state-unencrypted-at-rest.md"
+  - "issues/.done/2026-08-05-scoped-clear-notifications-including-farcaster.md"
   - "issues/.open/2026-06-23-dms-in-global-notification-panel.md"
   - "docs/features/notification-system.md"
 ---
@@ -19,7 +20,32 @@ together because the fix for the second (make rows precise) makes the first
 (previews stored in the clear) materially worse, so they have to be decided as
 one.
 
-## 1. The privacy problem — this is the blocking one
+## 0. Sequencing correction (2026-08-05) — §1 does NOT block the rest
+
+This issue originally gated the UX work on encrypting the notification previews.
+**That ordering was wrong**, and it was corrected once the surrounding storage
+was actually surveyed rather than assumed:
+
+**Space private keys and Double Ratchet state are already stored unencrypted**
+in `quorum-spaces` and the encryption-state store (both plain
+`createMirroredMMKV`, no `encryptionKey`). Filed separately and at higher
+priority: `2026-08-05-space-private-keys-and-ratchet-state-unencrypted-at-rest.md`.
+
+Given that baseline, anyone with file access already holds the keys that decrypt
+the messages. Notification previews are a strictly smaller subset of what those
+keys unlock, so encrypting them changes little while the key material is in the
+clear.
+
+**Consequences:**
+- The UX work (§2, §3, §4 — rich in-app rows, generic OS banners) is
+  **unblocked**. Its marginal exposure against this baseline is near zero.
+- §1 stays worth doing, but as a **follow-on to the key-material issue**, not a
+  gate before the UX work.
+- If the key-material issue is resolved by encrypting those stores, do §1 in the
+  same pass with the same derivation — the two share every implementation
+  problem (lazy store creation, the iOS App Group mirror).
+
+## 1. The privacy problem — real, but no longer the blocker
 
 **Message preview text is persisted unencrypted on device.**
 
@@ -193,14 +219,17 @@ which is why it is filed here rather than done separately.
 
 ## Scope
 
-Sequenced so the privacy decision gates the content work.
+Reordered per §0 — the UX work leads, encryption follows the key-material issue.
 
-- **A. Encrypt the mention log** (key-availability question resolved above —
-  every writer runs in a live process with the key cached). Requires moving the
-  store from module-scope `createMMKV` to lazy creation on first use. Make
-  "the ping log never holds message content" explicit while here. Nothing in
-  B/C should ship before this lands, because each one increases the amount of
-  message text at rest.
+- **B, C, D first.** They are what the operator actually wants and their
+  marginal exposure is near zero against the §0 baseline.
+- **A. Encrypt the mention log — deferred**, to be done with the key-material
+  issue rather than before the UX work. The key-availability question is already
+  resolved (every mention-log writer runs in a live process with the cipher key
+  cached), so this is ready to implement whenever the key work happens. Requires
+  moving the store from module-scope `createMMKV` to lazy creation on first use.
+  Keep "the ping log never holds message content" as a rule regardless — it is
+  the one path that genuinely cannot encrypt.
   - **Do not miss `quorum-dev-notification-snapshot`** (`services/dev/notificationSnapshot.ts`).
     It holds a full second copy of both logs, preview text included, in its own
     unencrypted MMKV store. Encrypting the two primary logs while leaving it

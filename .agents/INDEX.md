@@ -83,6 +83,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [One member's row is carrying another member's Farcaster identity](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md)
 - 🐛 [This device can key 0 of 3 Spaces it imported from the config blob](issues/.open/2026-08-04-mobile-cannot-key-any-space-it-imported-from-the-config-blob.md)
 - 🐛 [Notification previews sit in plaintext, and the generic rows go nowhere](issues/.open/2026-08-05-notification-previews-plaintext-and-generic-rows.md)
+- 🐛 [Key material sits in plaintext next to the archive it decrypts](issues/.open/2026-08-05-space-private-keys-and-ratchet-state-unencrypted-at-rest.md)
 - 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
 - 📋 [Message composer — further improvements](issues/.open/2026-06-16-message-composer-further-improvements.md)
 - 📋 [Split profile header has no visible "edit" cue](issues/.open/2026-06-16-split-profile-edit-affordance-not-discoverable.md)
@@ -257,4 +258,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-05 12:07:32
+**Last Updated**: 2026-08-05 12:19:35
