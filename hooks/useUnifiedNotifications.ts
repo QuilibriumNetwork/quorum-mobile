@@ -1,12 +1,15 @@
 /**
- * useUnifiedNotifications — merges Farcaster notifications (mentions,
- * replies, likes, recasts, follows) with the local chat notification log
- * (every showMessageNotification call gets logged). The notifications
- * tab + the bell-icon badge both consume this so they stay in sync.
+ * useUnifiedNotifications — gathers the notification panel's inputs (the two
+ * Farcaster feeds, the Quorum mention log, the background-push chat log, mute
+ * state, dismissal watermark) and hands them to `partitionNotifications`.
  *
- * Items are normalized to a single shape and sorted newest-first.
- * Unread count is the number of items with timestamp > lastSeen, where
- * lastSeen is shared across both sources via MMKV.
+ * All the actual logic — cross-source dedup, dismissal, muted-DM exclusion,
+ * badge arithmetic — lives in that pure module so it can be unit-tested
+ * without a renderer. This file should stay thin.
+ *
+ * Two sections come back: "Mentions & messages" (Quorum mentions/replies plus
+ * background message pings) and "Farcaster". The notifications tab and the
+ * bell-icon badge both consume this so they stay in sync.
  */
 
 import { useMemo } from 'react';
@@ -16,302 +19,30 @@ import {
   useFarcasterNotifications,
 } from './useFarcasterNotifications';
 import { useHaatzNotifications } from './useHaatzNotifications';
-import { isScamCast } from '@/services/farcaster/scamFilter';
 import { useDMMute } from '@/hooks/chat/useDMMute';
 import {
   getLastSeenTimestamp,
   useNotificationLog,
-  type NotificationLogEntry,
 } from '@/services/notifications/notificationLog';
 import {
   getQuorumTabUnreadCount,
   useMentionReplyLog,
-  type MentionReplyEntry,
 } from '@/services/notifications/mentionReplyLog';
-import type {
-  FarcasterNotification,
-  FarcasterNotificationType,
-} from '@/services/farcasterClient';
+import { useFarcasterClearedBefore } from '@/services/notifications/farcasterDismissal';
+import { partitionNotifications } from '@/services/notifications/partitionNotifications';
+import type { UnifiedNotification } from '@/services/notifications/partitionNotifications';
 
-export type UnifiedNotificationSource = 'chat' | 'farcaster' | 'quorum';
-
-export interface UnifiedNotification {
-  id: string;
-  source: UnifiedNotificationSource;
-  /** ms epoch — used for sort order and unread comparison. */
-  timestamp: number;
-  title: string;
-  body?: string;
-  actorAvatarUrl?: string;
-  /** Routing payload — consumer picks branch on `type` to deep-link. */
-  link?:
-    | { type: 'message'; spaceId?: string; channelId?: string; conversationId?: string }
-    | { type: 'cast'; castHash: string; username?: string }
-    | { type: 'frame'; url: string };
-  /** Original objects in case a renderer wants more detail. */
-  raw?: {
-    chat?: NotificationLogEntry;
-    farcaster?: FarcasterNotification;
-    quorum?: MentionReplyEntry;
-  };
-}
-
-function actorName(n: FarcasterNotification): string {
-  // Mini-app / frame notifications often have no user actor at all —
-  // they come from the app itself. Use the app's name as the "who" so
-  // the entry isn't shown as "Someone — mini-app". The frame object
-  // is populated by the normalizer when the preview shape includes
-  // any frame/miniApp/app metadata.
-  if (n.frame?.name) return n.frame.name;
-  return (
-    n.actor?.displayName ??
-    n.actor?.username ??
-    (n.actor?.fid != null ? `fid:${n.actor.fid}` : 'Someone')
-  );
-}
-
-function castSnippet(n: FarcasterNotification): string {
-  const text = n.content?.cast?.text ?? '';
-  return text.length > 140 ? text.slice(0, 140) + '…' : text;
-}
-
-function othersSuffix(total: number | undefined): string {
-  if (!total || total <= 1) return '';
-  const others = total - 1;
-  return ` and ${others} other${others === 1 ? '' : 's'}`;
-}
-
-function reactionVerb(n: FarcasterNotification): string {
-  // The /notifications-for-tab response carries `reaction.type` on each
-  // preview item — usually "like". Default to "liked" when present;
-  // reserve room for other reaction types Warpcast may add later.
-  const t = n.reactionType?.toLowerCase();
-  if (!t || t === 'like') return 'liked';
-  return `reacted (${t}) to`;
-}
-
-function farcasterTitleAndBody(n: FarcasterNotification): { title: string; body?: string } {
-  const who = actorName(n);
-  const suffix = othersSuffix(n.totalItemCount);
-  switch (n.type as FarcasterNotificationType) {
-    case 'cast-reaction':
-    case 'cast-like':
-    case 'like':
-      return {
-        title: `${who}${suffix} ${reactionVerb(n)} your cast`,
-        body: castSnippet(n) || undefined,
-      };
-    case 'cast-recast':
-    case 'recast':
-      return {
-        title: `${who}${suffix} recasted your cast`,
-        body: castSnippet(n) || undefined,
-      };
-    case 'cast-mention':
-    case 'mention':
-      return { title: `${who} mentioned you`, body: castSnippet(n) || undefined };
-    case 'cast-reply':
-    case 'reply':
-      return { title: `${who} replied to your cast`, body: castSnippet(n) || undefined };
-    case 'cast-quote':
-    case 'quote':
-      return { title: `${who} quoted your cast`, body: castSnippet(n) || undefined };
-    case 'follow':
-      return { title: `${who}${suffix} followed you` };
-    default:
-      // Mini-app / frame notifications carry a body from the app —
-      // show it directly with the app name as the title. Avoids the
-      // ugly "Someone • mini-app" fallback that comes from joining
-      // the unresolved actor + raw type name.
-      if (n.frame?.body) {
-        return { title: who, body: n.frame.body };
-      }
-      // Other unknown types — best-effort generic title without the
-      // raw type slug, which leaked Warpcast internals to the user.
-      return { title: who, body: castSnippet(n) || undefined };
-  }
-}
-
-function farcasterToUnified(n: FarcasterNotification): UnifiedNotification {
-  const { title, body } = farcasterTitleAndBody(n);
-  const cast = n.content?.cast;
-  // Routing priority: a cast (the most specific deep-link target) wins
-  // over a frame URL. Mini-app notifications typically have NO cast,
-  // only a frame.targetUrl — those route to the in-app browser via a
-  // `frame` link type.
-  let link: UnifiedNotification['link'] | undefined;
-  if (cast?.hash) {
-    link = {
-      type: 'cast',
-      castHash: cast.hash,
-      username: cast.author?.username ?? n.actor?.username,
-    };
-  } else if (n.frame?.targetUrl) {
-    link = { type: 'frame', url: n.frame.targetUrl };
-  }
-  return {
-    id: `fc:${n.id}`,
-    source: 'farcaster',
-    timestamp: n.timestamp,
-    title,
-    body,
-    // Prefer the actor avatar; fall back to the frame's icon for
-    // mini-app entries so the row has a recognizable affordance.
-    actorAvatarUrl: n.actor?.pfp?.url ?? n.frame?.iconUrl,
-    link,
-    raw: { farcaster: n },
-  };
-}
-
-type CanonicalType = 'like' | 'recast' | 'mention' | 'reply' | 'quote' | 'follow' | 'other';
-
-/**
- * Collapse the two sources' wildly different type vocabularies into one
- * canonical bucket so we can dedup across them. The official farcaster.xyz
- * feed and haatz use different (and, on the official side, not fully
- * documented) spellings — `cast-like` vs `likes` vs `reactions`, `cast-reply`
- * vs `replies`, etc. Substring matching is deliberately tolerant so an
- * unanticipated spelling on either side doesn't silently fall to `other` and
- * break dedup (the bug that let mirrored notifications show twice).
- *
- * `reactions` is ambiguous (Warpcast groups likes AND recasts under it), so we
- * disambiguate with `reactionType` when the type itself is generic.
- */
-function canonicalType(n: FarcasterNotification): CanonicalType {
-  const t = (n.type ?? '').toLowerCase();
-  if (t.includes('follow')) return 'follow';
-  if (t.includes('quote')) return 'quote';
-  if (t.includes('mention')) return 'mention';
-  if (t.includes('repl')) return 'reply';
-  if (t.includes('recast')) return 'recast';
-  if (t.includes('react') || t.includes('like')) {
-    return (n.reactionType ?? '').toLowerCase().includes('recast') ? 'recast' : 'like';
-  }
-  return 'other';
-}
-
-/** Canonicalize a cast hash for keying: lowercase, strip an optional 0x. */
-function normHash(hash: string | undefined): string | undefined {
-  return hash ? hash.toLowerCase().replace(/^0x/, '') : undefined;
-}
-
-/**
- * Heuristic cross-source dedup key. The two sources share no ids and won't
- * agree on timestamps to the second, so we key on stable semantic fields:
- *
- *   - likes/recasts: the official feed AGGREGATES these per cast ("X and 5
- *     others liked"), so we key at cast level — this drops every per-actor
- *     haatz like for a cast already covered by the official aggregate.
- *   - replies/mentions/quotes: distinct per (actor, cast).
- *   - follows: keyed by actor fid (no cast involved).
- *
- * Returns null when the notification lacks the fields to build a key, in
- * which case it's never treated as a duplicate.
- */
-function dedupKey(n: FarcasterNotification): string | null {
-  const ct = canonicalType(n);
-  const castHash = normHash(n.content?.cast?.hash);
-  const actorFid = n.actor?.fid;
-  if (ct === 'follow') return actorFid != null ? `follow:${actorFid}` : null;
-  // Likes/recasts reference a SHARED cast (yours) and aggregate across many
-  // actors, so key per (type, cast) — type separates a like from a recast on
-  // the same cast.
-  if (ct === 'like' || ct === 'recast') return castHash ? `${ct}:${castHash}` : null;
-  // Replies/mentions/quotes (and any other cast-bearing notification) each
-  // reference the NEW cast that was created, whose hash is globally unique —
-  // so key by the hash ALONE. This deliberately ignores both the actor (the
-  // official feed often omits it for mentions, putting the author on the cast
-  // instead — the actor-fid asymmetry that let mentions slip through) and the
-  // specific label (a reply that also mentions you can arrive as `reply` from
-  // one source and `mention` from the other — same cast, one notification).
-  if (castHash) return `cast:${castHash}`;
-  return null;
-}
-
-/**
- * Merge the official farcaster.xyz feed with the haatz feed, dropping any
- * haatz item that the official feed already represents. Official items are
- * preferred (richer: stable id, unread flag, aggregation counts, pfp).
- */
-function blendFarcasterSources(
-  official: FarcasterNotification[],
-  haatz: FarcasterNotification[],
-): FarcasterNotification[] {
-  const officialKeys = new Set<string>();
-  for (const n of official) {
-    const k = dedupKey(n);
-    if (k) officialKeys.add(k);
-  }
-  const extra = haatz.filter((n) => {
-    const k = dedupKey(n);
-    return !k || !officialKeys.has(k);
-  });
-  return [...official, ...extra];
-}
-
-function chatToUnified(e: NotificationLogEntry): UnifiedNotification {
-  const data = e.data;
-  const link: UnifiedNotification['link'] | undefined =
-    data?.type === 'message'
-      ? {
-          type: 'message',
-          spaceId: data.spaceId,
-          channelId: data.channelId,
-          conversationId: data.conversationId,
-        }
-      : undefined;
-  return {
-    id: `chat:${e.id}`,
-    source: 'chat',
-    timestamp: e.createdAt,
-    title: e.title,
-    body: e.body,
-    link,
-    raw: { chat: e },
-  };
-}
-
-function quorumTitle(e: MentionReplyEntry): string {
-  const who = e.senderName || 'Someone';
-  switch (e.kind) {
-    case 'mention-you':
-      return `${who} mentioned you`;
-    case 'mention-everyone':
-      return `${who} mentioned @everyone`;
-    case 'mention-roles':
-      return `${who} mentioned a role you have`;
-    case 'reply':
-      return `${who} replied to you`;
-    default:
-      return who;
-  }
-}
-
-/** Channel breadcrumb + message preview text, e.g. "#general · hey there". */
-function quorumBody(e: MentionReplyEntry): string {
-  const channel = e.channelName ? `#${e.channelName}` : '#channel';
-  const crumb = e.threadId ? `${channel} › Thread` : channel;
-  const text = e.preview?.text?.trim();
-  return text ? `${crumb} · ${text}` : crumb;
-}
-
-function quorumToUnified(e: MentionReplyEntry): UnifiedNotification {
-  return {
-    id: `quorum:${e.id}`,
-    source: 'quorum',
-    timestamp: e.createdAt,
-    title: quorumTitle(e),
-    body: quorumBody(e),
-    link: { type: 'message', spaceId: e.spaceId, channelId: e.channelId },
-    raw: { quorum: e },
-  };
-}
+// Re-exported so existing consumers keep importing the row type from the hook.
+export type {
+  UnifiedNotification,
+  UnifiedNotificationSource,
+} from '@/services/notifications/partitionNotifications';
 
 export interface UnifiedNotificationsResult {
   items: UnifiedNotification[];
-  /** Quorum mentions/replies, newest-first — the "Mentions & replies" section. */
+  /** Quorum mentions/replies + background message pings, newest-first. */
   quorumItems: UnifiedNotification[];
-  /** Farcaster activity (+ background chat pings), newest-first. */
+  /** Farcaster activity, newest-first. */
   farcasterFeedItems: UnifiedNotification[];
   unreadCount: number;
   isLoading: boolean;
@@ -335,87 +66,49 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
   // deduped against the official feed so notifications still show when the
   // farcaster.xyz bearer token is missing or expired.
   const haatzQuery = useHaatzNotifications();
-  // Muted DMs are excluded from the unread count below. Consuming the hook (vs
-  // reading MMKV) makes `unreadCount` recompute the moment a mute toggles.
+  // Consuming the hook (vs reading MMKV) makes the panel recompute the moment
+  // a mute toggles.
   const { mutedConversations } = useDMMute();
+  // Local dismissal watermark — Farcaster rows can't be cleared server-side.
+  const clearedBefore = useFarcasterClearedBefore();
 
-  const farcasterItems = useMemo(() => {
-    const isNotScam = (n: FarcasterNotification) =>
-      // Suppress notifications whose target/preview cast references the
-      // hyrpia.xyz wallet-drainer scam — see scamFilter.ts.
-      !isScamCast(n.content?.cast as unknown as Parameters<typeof isScamCast>[0]);
-    const official = flattenFarcasterNotifications(farcasterQuery.data?.pages).filter(isNotScam);
-    const haatz = (haatzQuery.data ?? []).filter(isNotScam);
-    return blendFarcasterSources(official, haatz);
-  }, [farcasterQuery.data?.pages, haatzQuery.data]);
+  const officialFarcaster = useMemo(
+    () => flattenFarcasterNotifications(farcasterQuery.data?.pages),
+    [farcasterQuery.data?.pages],
+  );
 
-  // Drop muted DMs from the attention feed — consistent with the badge + push
-  // suppression. The conversation stays reachable via the messages tab.
-  const notMutedDM = (e: UnifiedNotification) => {
-    const convId = e.link?.type === 'message' ? e.link.conversationId : undefined;
-    return !(convId && mutedConversations.has(convId));
-  };
-
-  // Section 1 — Quorum mentions/replies, newest-first. These carry no
-  // conversationId (they're space channel mentions, not DMs), so the muted-DM
-  // filter doesn't apply; channel/space mute is already enforced upstream at
-  // log-write time via shouldNotifyForContext.
-  const quorumItems = useMemo(() => {
-    const mapped = quorumEntries.map(quorumToUnified);
-    mapped.sort((a, b) => b.timestamp - a.timestamp);
-    return mapped;
-  }, [quorumEntries]);
-
-  // Section 2 — Farcaster activity + background chat pings, newest-first.
-  const farcasterFeedItems = useMemo(() => {
-    const mapped: UnifiedNotification[] = [
-      ...chatEntries.map(chatToUnified),
-      ...farcasterItems.map(farcasterToUnified),
-    ].filter(notMutedDM);
-    mapped.sort((a, b) => b.timestamp - a.timestamp);
-    return mapped;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatEntries, farcasterItems, mutedConversations]);
-
-  // Merged view kept for the tab badge / unread count.
-  const items = useMemo(() => {
-    const merged = [...quorumItems, ...farcasterFeedItems];
-    merged.sort((a, b) => b.timestamp - a.timestamp);
-    return merged;
-  }, [quorumItems, farcasterFeedItems]);
-
-  const unreadCount = useMemo(() => {
-    // Tab badge (Level 1). Three sources, each with its own "seen" model:
-    //  - Quorum: entries newer than the last tab-open (getQuorumTabUnreadCount).
-    //    Decoupled from per-channel read state so opening the tab clears the
-    //    badge without marking channel mentions read.
-    //  - Farcaster: prefer the server isUnread flag (survives web mark-all-read),
-    //    else fall back to the chat-log lastSeen.
-    //  - chat (background pings): lastSeen.
-    // muted-DM exclusion is inherited from the already-filtered section arrays.
-    const lastSeen = getLastSeenTimestamp();
-    const farcasterAndChat = farcasterFeedItems.reduce((n, e) => {
-      if (e.source === 'farcaster') {
-        const isUnread = e.raw?.farcaster?.isUnread;
-        if (typeof isUnread === 'boolean') return isUnread ? n + 1 : n;
-      }
-      return e.timestamp > lastSeen ? n + 1 : n;
-    }, 0);
-    return getQuorumTabUnreadCount() + farcasterAndChat;
-    // quorumItems in deps so the count recomputes when the log/seen-state changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [farcasterFeedItems, quorumItems]);
+  const partition = useMemo(
+    () =>
+      partitionNotifications({
+        quorumEntries,
+        chatEntries,
+        officialFarcaster,
+        haatzFarcaster: haatzQuery.data ?? [],
+        clearedBefore,
+        mutedConversations,
+        lastSeen: getLastSeenTimestamp(),
+        quorumTabUnread: getQuorumTabUnreadCount(),
+      }),
+    [quorumEntries, chatEntries, officialFarcaster, haatzQuery.data, clearedBefore, mutedConversations],
+  );
 
   return {
-    items,
-    quorumItems,
-    farcasterFeedItems,
-    unreadCount,
+    items: partition.items,
+    quorumItems: partition.quorumItems,
+    farcasterFeedItems: partition.farcasterFeedItems,
+    unreadCount: partition.unreadCount,
     isLoading: farcasterQuery.isLoading || haatzQuery.isLoading,
     isFetchingMore: farcasterQuery.isFetchingNextPage,
-    hasMore: !!farcasterQuery.hasNextPage,
+    // Stop paging once the fetched pages reach the dismissal watermark —
+    // everything older is dismissed, so further pages would be entirely
+    // filtered out and infinite scroll would spin for nothing.
+    hasMore: !!farcasterQuery.hasNextPage && !partition.reachedWatermark,
     fetchMore: () => {
-      if (farcasterQuery.hasNextPage && !farcasterQuery.isFetchingNextPage) {
+      if (
+        farcasterQuery.hasNextPage &&
+        !farcasterQuery.isFetchingNextPage &&
+        !partition.reachedWatermark
+      ) {
         void farcasterQuery.fetchNextPage();
       }
     },
@@ -429,6 +122,8 @@ export function useUnifiedNotifications(): UnifiedNotificationsResult {
     // 5xx shouldn't show an error banner. Per the resilience requirement:
     // don't error out just because the official source didn't appear.
     farcasterError:
-      farcasterItems.length > 0 ? null : ((farcasterQuery.error as Error | null) ?? null),
+      partition.farcasterFeedItems.length > 0
+        ? null
+        : ((farcasterQuery.error as Error | null) ?? null),
   };
 }

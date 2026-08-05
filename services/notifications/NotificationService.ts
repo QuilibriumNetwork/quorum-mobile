@@ -43,6 +43,16 @@ export interface MessageNotificationData {
   spaceId?: string;
   channelId?: string;
   messageId: string;
+  /**
+   * Which product the message came from. The in-app panel sections on this —
+   * background pings are raised for BOTH Quorum messages and Farcaster direct
+   * casts, and without it the two are indistinguishable once logged, so one of
+   * them always ends up filed under the wrong heading.
+   *
+   * Optional because entries already persisted predate the field; readers fall
+   * back to the `fc-`/`bg-` messageId prefix for those.
+   */
+  origin?: 'quorum' | 'farcaster';
 }
 
 export interface NotificationContent {

@@ -74,6 +74,25 @@ export function clearNotificationLog(): void {
   emit();
 }
 
+/**
+ * Origin of a background ping. These are raised for BOTH Quorum messages and
+ * Farcaster direct casts into this one log, so a scoped clear has to be able to
+ * delete just one side. `origin` is authoritative; entries logged before the
+ * field existed fall back to the messageId prefix the two call sites use.
+ */
+export function notificationLogOrigin(e: NotificationLogEntry): 'quorum' | 'farcaster' {
+  const origin = e.data?.origin;
+  if (origin) return origin;
+  return e.data?.messageId?.startsWith('fc-') ? 'farcaster' : 'quorum';
+}
+
+/** Delete only the pings belonging to one product. */
+export function clearNotificationLogByOrigin(origin: 'quorum' | 'farcaster'): void {
+  const next = getNotificationLog().filter((e) => notificationLogOrigin(e) !== origin);
+  storage.set(KEY_ENTRIES, JSON.stringify(next));
+  emit();
+}
+
 export function removeNotificationLogEntry(id: string): void {
   const next = getNotificationLog().filter(e => e.id !== id);
   storage.set(KEY_ENTRIES, JSON.stringify(next));

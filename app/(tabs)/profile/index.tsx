@@ -25,10 +25,12 @@ import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import {
   clearNotificationLog,
+  clearNotificationLogByOrigin,
   markNotificationsSeen,
   removeNotificationLogEntry,
 } from '@/services/notifications/notificationLog';
 import { clearMentionReplyLog, markQuorumTabSeen } from '@/services/notifications/mentionReplyLog';
+import { clearFarcasterNotifications } from '@/services/notifications/farcasterDismissal';
 import { markAllFarcasterNotificationsRead } from '@/services/farcasterClient';
 import {
   useUnifiedNotifications,
@@ -39,6 +41,32 @@ import * as Skin from '@/theme/skins/geometry';
 // Max preview lines for a Quorum row's message. The panel is a triage surface
 // (tap through to read in full), so cap it: long replies don't dominate the list.
 const QUORUM_PREVIEW_LINES = 2;
+
+// Clear-action copy, keyed by the active filter so the button and the dialog
+// both name exactly what is about to go. The wording differs per scope on
+// purpose: Quorum rows are local logs we delete outright ("permanently
+// removes", "cannot be undone"), while Farcaster rows are a live remote feed
+// we can only hide on this device — claiming we deleted those would be a lie.
+const CLEAR_COPY = {
+  all: {
+    label: 'Clear all',
+    title: 'Clear all notifications?',
+    message:
+      'This removes every notification shown here. Your Quorum notifications are deleted on this device; Farcaster activity is hidden here but stays on your Farcaster account.',
+  },
+  quorum: {
+    label: 'Clear Quorum',
+    title: 'Clear Quorum notifications?',
+    message:
+      'This permanently removes your Quorum mentions, replies, and message notifications. Your Farcaster activity stays. This cannot be undone.',
+  },
+  farcaster: {
+    label: 'Clear Farcaster',
+    title: 'Clear Farcaster notifications?',
+    message:
+      'This hides your Farcaster notifications on this device. Your Quorum notifications stay, and the activity itself stays on your Farcaster account.',
+  },
+} as const;
 
 /** Leading icon (IconSymbol name) for a Quorum mention/reply row, by kind.
  *  Mirrors the composer + space-settings iconography so the inbox reads
@@ -259,13 +287,26 @@ export default function NotificationsScreen() {
   // view stuck on a now-hidden filter.
   const activeFilter = showFilterPills ? sourceFilter : 'all';
 
+  // How many rows the clear action would actually affect. Gating on this rather
+  // than the total keeps "Clear Farcaster" from being offered over an empty
+  // Farcaster section just because Quorum has rows.
+  const clearableCount =
+    activeFilter === 'quorum'
+      ? quorumItems.length
+      : activeFilter === 'farcaster'
+        ? farcasterFeedItems.length
+        : items.length;
+
   // Two sections: Quorum mentions/replies, then Farcaster activity. Empty
   // sections are dropped so we never render a lone header. The source filter
   // hides the non-selected section.
   const sections = useMemo(() => {
     const out: { key: string; title: string; data: UnifiedNotification[] }[] = [];
     if (quorumItems.length && activeFilter !== 'farcaster') {
-      out.push({ key: 'quorum', title: 'Mentions & replies', data: quorumItems });
+      // "messages" (not "replies") because background push mirrors live here
+      // too — they are Quorum messages, and used to render under the Farcaster
+      // header, which made the Farcaster filter show Quorum rows.
+      out.push({ key: 'quorum', title: 'Mentions & messages', data: quorumItems });
     }
     if (farcasterFeedItems.length && activeFilter !== 'quorum') {
       out.push({ key: 'farcaster', title: 'Farcaster', data: farcasterFeedItems });
@@ -273,29 +314,46 @@ export default function NotificationsScreen() {
     return out;
   }, [quorumItems, farcasterFeedItems, activeFilter]);
 
-  // "Clear all" — empties the inbox (deletes the Quorum log + the chat log) and
-  // marks the tab seen. Named "Clear all" (not "Mark all read") because it
-  // removes the rows, not just their unread state. Destructive + irreversible,
-  // so it asks for confirmation first. The list otherwise persists as history;
-  // per-channel bubbles clear on channel open (Level 2).
-  const handleClearAll = useCallback(async () => {
+  // Clear — scoped to the active filter, so the action does what the pills say
+  // the view contains. Named "Clear" (not "Mark all read") because it removes
+  // the rows, not just their unread state, so it asks for confirmation first.
+  //
+  // The two scopes clear by different mechanisms, which the copy has to be
+  // honest about: Quorum rows are local logs we delete outright, while
+  // Farcaster rows are a remote feed we can only hide on this device (no
+  // server-side delete exists — see farcasterDismissal.ts).
+  const handleClear = useCallback(async () => {
+    const copy = CLEAR_COPY[activeFilter];
     const ok = await confirm({
-      title: 'Clear all notifications?',
-      message:
-        'This permanently removes every notification shown here. This cannot be undone.',
-      confirmLabel: 'Clear all',
+      title: copy.title,
+      message: copy.message,
+      confirmLabel: copy.label,
       cancelLabel: 'Cancel',
       // Non-destructive styling (ConfirmDialog defaults to the red 'danger').
       variant: 'primary',
     });
     if (!ok) return;
-    clearMentionReplyLog();
-    clearNotificationLog();
+    if (activeFilter === 'all') {
+      clearMentionReplyLog();
+      clearNotificationLog();
+      clearFarcasterNotifications();
+    } else if (activeFilter === 'quorum') {
+      clearMentionReplyLog();
+      // Only the Quorum half of the background-ping log — the Farcaster
+      // direct-cast pings in it belong to the other section.
+      clearNotificationLogByOrigin('quorum');
+    } else {
+      clearFarcasterNotifications();
+      clearNotificationLogByOrigin('farcaster');
+    }
+    if (activeFilter !== 'farcaster') {
+      // Advance the Level-1 watermark to now so mentions arriving right after
+      // the clear are compared against the clear time, not a stale tab-open
+      // time.
+      markQuorumTabSeen();
+    }
     markNotificationsSeen();
-    // Advance the Level-1 watermark to now so mentions arriving right after the
-    // clear are compared against the clear time, not a stale tab-open time.
-    markQuorumTabSeen();
-  }, [confirm]);
+  }, [confirm, activeFilter]);
 
   return (
     <FloatingTabScreen surfaceColor={theme.colors.surface1} isDark={isDark} style={{ paddingTop: insets.top }}>
@@ -306,9 +364,9 @@ export default function NotificationsScreen() {
       <View style={styles.header}>
         <Text style={styles.heading}>Notifications</Text>
         <View style={styles.headerSlotRight}>
-          {items.length > 0 && (
-            <TouchableOpacity onPress={handleClearAll} hitSlop={8}>
-              <Text style={styles.clearAllLabel}>Clear all</Text>
+          {clearableCount > 0 && (
+            <TouchableOpacity onPress={handleClear} hitSlop={8}>
+              <Text style={styles.clearAllLabel}>{CLEAR_COPY[activeFilter].label}</Text>
             </TouchableOpacity>
           )}
         </View>
