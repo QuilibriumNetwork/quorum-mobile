@@ -37,6 +37,7 @@ import {
   type UnifiedNotification,
 } from '@/hooks/useUnifiedNotifications';
 import { FarcasterDismissalPanel } from '@/components/dev/FarcasterDismissalPanel';
+import { captureNotificationSnapshot } from '@/services/dev/notificationSnapshot';
 import * as Skin from '@/theme/skins/geometry';
 
 // Max preview lines for a Quorum row's message. The panel is a triage surface
@@ -335,6 +336,10 @@ export default function NotificationsScreen() {
       variant: 'primary',
     });
     if (!ok) return;
+    // Dev builds only: copy the logs aside first, so a clear can be undone and
+    // these paths are testable more than once. Every scope below destroys at
+    // least one local log that nothing else can recover.
+    if (__DEV__) captureNotificationSnapshot();
     if (activeFilter === 'all') {
       clearMentionReplyLog();
       clearNotificationLog();

@@ -48,6 +48,10 @@ import {
   resetFarcasterDismissal,
   useFarcasterClearedBefore,
 } from '@/services/notifications/farcasterDismissal';
+import {
+  restoreNotificationSnapshot,
+  useNotificationSnapshot,
+} from '@/services/dev/notificationSnapshot';
 
 interface FarcasterDismissalPanelProps {
   theme: AppTheme;
@@ -60,58 +64,73 @@ export function FarcasterDismissalPanel({
   dismissedCount,
 }: FarcasterDismissalPanelProps) {
   const clearedBefore = useFarcasterClearedBefore();
+  const snapshot = useNotificationSnapshot();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
 
   const handleReset = useCallback(() => {
-    // No confirm: this is the UNDO direction. It only ever restores rows, and
-    // it is dev-only.
+    // No confirm on either action: both are the UNDO direction. They only ever
+    // restore rows, and this is dev-only.
     resetFarcasterDismissal();
   }, []);
 
-  const stamp = clearedBefore
-    ? new Date(clearedBefore).toLocaleTimeString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      })
-    : 'never';
+  const handleRestore = useCallback(() => {
+    restoreNotificationSnapshot();
+  }, []);
+
+  const time = (ts: number) =>
+    new Date(ts).toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
 
   return (
-    <View style={styles.row}>
-      <View style={styles.textCol}>
-        <Text style={styles.label}>
-          dev · farcaster dismissal
-        </Text>
+    <View style={styles.panel}>
+      <Text style={styles.label}>dev · notifications</Text>
+
+      <View style={styles.row}>
         <Text style={styles.value}>
-          cleared: {stamp} · hiding {dismissedCount}
+          watermark: {clearedBefore ? time(clearedBefore) : 'never'} · hiding {dismissedCount}
         </Text>
+        {clearedBefore > 0 && (
+          <TouchableOpacity onPress={handleReset} hitSlop={8} style={styles.button}>
+            <Text style={styles.buttonLabel}>Reset</Text>
+          </TouchableOpacity>
+        )}
       </View>
-      {clearedBefore > 0 && (
-        <TouchableOpacity onPress={handleReset} hitSlop={8} style={styles.button}>
-          <Text style={styles.buttonLabel}>Reset</Text>
-        </TouchableOpacity>
-      )}
+
+      <View style={styles.row}>
+        <Text style={styles.value}>
+          {snapshot
+            ? `snapshot: ${time(snapshot.takenAt)} · ${snapshot.mentionCount} mentions, ${snapshot.pingCount} pings`
+            : 'snapshot: none (taken automatically on clear)'}
+        </Text>
+        {!!snapshot && (
+          <TouchableOpacity onPress={handleRestore} hitSlop={8} style={styles.button}>
+            <Text style={styles.buttonLabel}>Restore</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
 
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
+    panel: {
+      gap: Skin.space(6),
+      marginHorizontal: Skin.space(12),
+      marginBottom: Skin.space(8),
+      paddingHorizontal: Skin.space(12),
+      paddingVertical: Skin.space(10),
+      borderRadius: Skin.radius(8),
+      backgroundColor: theme.colors.surface3,
+    },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: Skin.space(12),
-      marginHorizontal: Skin.space(12),
-      marginBottom: Skin.space(8),
-      paddingHorizontal: Skin.space(12),
-      paddingVertical: Skin.space(8),
-      borderRadius: Skin.radius(8),
-      backgroundColor: theme.colors.surface3,
-    },
-    textCol: {
-      flex: 1,
-      gap: Skin.space(2),
     },
     label: {
       fontSize: Skin.font(10),
@@ -121,6 +140,7 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.textSubtle,
     },
     value: {
+      flex: 1,
       fontSize: Skin.font(13),
       color: theme.colors.textMain,
       fontVariant: ['tabular-nums'],

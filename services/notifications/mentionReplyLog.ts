@@ -111,6 +111,16 @@ export function clearMentionReplyLog(): void {
   emit();
 }
 
+/**
+ * Overwrite the whole log. Exists for the dev snapshot tool, which copies the
+ * log aside before a clear so destructive clear paths can be tested more than
+ * once. Not part of any user-facing flow.
+ */
+export function replaceMentionReplyLog(entries: MentionReplyEntry[]): void {
+  storage.set(KEY_ENTRIES, JSON.stringify(entries.slice(0, MAX_ENTRIES)));
+  emit();
+}
+
 export function removeMentionReplyEntry(id: string): void {
   const next = getMentionReplyLog().filter((e) => e.id !== id);
   storage.set(KEY_ENTRIES, JSON.stringify(next));
