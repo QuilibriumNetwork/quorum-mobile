@@ -224,6 +224,69 @@ describe('partitionNotifications — Farcaster dismissal', () => {
   });
 });
 
+describe('partitionNotifications — dismissedCount (the dev instrument)', () => {
+  it('reports how many rows the watermark is suppressing', () => {
+    const result = partitionNotifications(
+      input({
+        officialFarcaster: [
+          farcasterLike({ id: 'a', timestamp: T.old, content: { cast: { hash: '0x1' } } }),
+          farcasterLike({ id: 'b', timestamp: T.old, content: { cast: { hash: '0x2' } } }),
+          farcasterLike({ id: 'c', timestamp: T.fresh, content: { cast: { hash: '0x3' } } }),
+        ],
+        clearedBefore: T.clear,
+      }),
+    );
+    expect(result.dismissedCount).toBe(2);
+    expect(result.farcasterFeedItems).toHaveLength(1);
+  });
+
+  it('reports 0 when the user has never cleared', () => {
+    // The number has to be able to read 0 for a real reason, otherwise it
+    // cannot distinguish "dismissal hid these" from "something else did".
+    const result = partitionNotifications(
+      input({ officialFarcaster: [farcasterLike({ timestamp: T.old })], clearedBefore: 0 }),
+    );
+    expect(result.dismissedCount).toBe(0);
+    expect(result.farcasterFeedItems).toHaveLength(1);
+  });
+
+  it('counts post-dedup rows, so a suppressed haatz duplicate is not counted twice', () => {
+    const result = partitionNotifications(
+      input({
+        officialFarcaster: [farcasterLike({ timestamp: T.old })],
+        haatzFarcaster: [haatzLike({ timestamp: T.old })],
+        clearedBefore: T.clear,
+      }),
+    );
+    expect(result.dismissedCount).toBe(1);
+  });
+
+  it('counts haatz-only rows the official feed never covered', () => {
+    // Counting over the official list alone undercounts: a haatz item with no
+    // official counterpart survives the blend, gets dismissed, and would go
+    // unreported — so the panel would show fewer hidden rows than it hid.
+    // (The three cases above cannot catch this: with no haatz-only item,
+    // blended.length and official.length are identical.)
+    const result = partitionNotifications(
+      input({
+        officialFarcaster: [farcasterLike({ timestamp: T.old })],
+        haatzFarcaster: [
+          haatzLike({
+            id: 'haatz-follow',
+            type: 'follow',
+            timestamp: T.old,
+            actor: { fid: 999, username: 'erin' },
+            content: undefined,
+          }),
+        ],
+        clearedBefore: T.clear,
+      }),
+    );
+    expect(result.dismissedCount).toBe(2);
+    expect(result.farcasterFeedItems).toHaveLength(0);
+  });
+});
+
 describe('partitionNotifications — dedup must run before dismissal', () => {
   it('does not resurface haatz per-actor likes for a dismissed official group', () => {
     // The official feed aggregates ("alice and 5 others liked"); haatz reports

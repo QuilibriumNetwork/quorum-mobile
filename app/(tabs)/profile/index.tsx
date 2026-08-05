@@ -36,6 +36,7 @@ import {
   useUnifiedNotifications,
   type UnifiedNotification,
 } from '@/hooks/useUnifiedNotifications';
+import { FarcasterDismissalPanel } from '@/components/dev/FarcasterDismissalPanel';
 import * as Skin from '@/theme/skins/geometry';
 
 // Max preview lines for a Quorum row's message. The panel is a triage surface
@@ -118,6 +119,7 @@ export default function NotificationsScreen() {
     refetch,
     farcasterEnabled,
     farcasterError,
+    dismissedCount,
   } = useUnifiedNotifications();
   const insets = useSafeAreaInsets();
   const { openMiniapp } = useMiniappOverlay();
@@ -386,6 +388,10 @@ export default function NotificationsScreen() {
           onChange={(k) => setSourceFilter(k as 'all' | 'quorum' | 'farcaster')}
         />
       )}
+      {/* Developer — only mounted in dev builds. Makes the dismissal watermark
+          observable and, crucially, reversible, so testing "Clear Farcaster"
+          doesn't cost a real notification history. */}
+      {__DEV__ && <FarcasterDismissalPanel theme={theme} dismissedCount={dismissedCount} />}
       {farcasterError && farcasterEnabled && (
         // Inline banner — visible whether or not chat notifications are
         // present. This is the only way the user can tell that their

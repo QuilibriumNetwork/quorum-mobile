@@ -322,6 +322,13 @@ export interface PartitionResult {
   unreadCount: number;
   /** True once the fetched official pages reach the dismissal watermark. */
   reachedWatermark: boolean;
+  /**
+   * How many fetched Farcaster items the dismissal watermark is currently
+   * suppressing. Surfaced so the dev panel can SHOW the watermark working
+   * rather than leaving "the rows disappeared" to be interpreted — if rows
+   * vanish while this reads 0, something other than dismissal hid them.
+   */
+  dismissedCount: number;
 }
 
 export function partitionNotifications(input: PartitionInput): PartitionResult {
@@ -413,5 +420,6 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
     items,
     unreadCount: quorumTabUnread + chatUnread + farcasterUnread,
     reachedWatermark: reached,
+    dismissedCount: blended.length - visibleFarcaster.length,
   };
 }
