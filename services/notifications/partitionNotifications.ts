@@ -313,7 +313,7 @@ export interface PartitionInput {
 }
 
 export interface PartitionResult {
-  /** "Mentions & messages" section: space mentions/replies + background pings. */
+  /** "Quorum" section: space mentions/replies + background message pings. */
   quorumItems: UnifiedNotification[];
   /** "Farcaster" section: Farcaster activity only. */
   farcasterFeedItems: UnifiedNotification[];

@@ -20,7 +20,7 @@ purpose: >
 Mobile has a **global, in-app Notifications tab** — one inbox across all spaces,
 split into two sections:
 
-1. **Mentions & replies** (Quorum) — `@you`, `@everyone`, `@role`, and replies to
+1. **Quorum** — `@you`, `@everyone`, `@role`, and replies to
    your messages, from any space channel (incl. threads).
 2. **Farcaster** — likes/recasts/mentions/replies/follows/mini-app frames (only
    when a Farcaster account is connected).
@@ -58,7 +58,7 @@ useUnifiedNotifications()                              [hooks/useUnifiedNotifica
    → quorumItems + farcasterFeedItems (each newest-first) + merged items (for badge)
 
 Notifications tab                                      [app/(tabs)/profile/index.tsx]
-   → SectionList: "Mentions & replies" + "Farcaster"
+   → SectionList: "Quorum" + "Farcaster"
    → filter pills (All / Quorum / Farcaster) when both present
 ```
 
@@ -158,7 +158,8 @@ The user picks which types notify, per space — synced cross-device.
 File: `app/(tabs)/profile/index.tsx` (the route is `profile/` but it IS the
 Notifications tab).
 
-- **SectionList**: "Mentions & replies" (Quorum) then "Farcaster". Empty sections
+- **SectionList**: "Quorum" then "Farcaster" (named for the product, so the two
+  headers read as a pair and match the filter pills). Empty sections
   are dropped (no lone header).
 - **Filter pills** (`All / Quorum / Farcaster`, `SegmentedPills variant="solid"`)
   render ONLY when both a Quorum and a Farcaster feed exist — single-source users

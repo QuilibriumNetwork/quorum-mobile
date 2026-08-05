@@ -7,8 +7,8 @@
  * badge arithmetic — lives in that pure module so it can be unit-tested
  * without a renderer. This file should stay thin.
  *
- * Two sections come back: "Mentions & messages" (Quorum mentions/replies plus
- * background message pings) and "Farcaster". The notifications tab and the
+ * Two sections come back: "Quorum" (mentions/replies plus background message
+ * pings) and "Farcaster". The notifications tab and the
  * bell-icon badge both consume this so they stay in sync.
  */
 

@@ -44,6 +44,19 @@ import * as Skin from '@/theme/skins/geometry';
 // (tap through to read in full), so cap it: long replies don't dominate the list.
 const QUORUM_PREVIEW_LINES = 2;
 
+// Leading row geometry. The title is 15px glyphs in a 20px line box, and the
+// visible top of a capital sits well below the top of that box: half the leading
+// (~2.5px), plus the gap between the em box top and the cap height (~2px for the
+// platform sans). So the avatar has to come down by roughly 4px to have its top
+// edge line up with the text you can actually see.
+//
+// Both go through Skin.font() at the point of use. The nudge compensates for
+// FONT metrics, so it has to scale on the same axis as the line box it is
+// offsetting — a raw pixel value silently drifts on any skin with a fontScale
+// other than 1, growing the line box while the compensation stays put.
+const LEADING_LINE_HEIGHT = 20;
+const AVATAR_TOP_NUDGE = 4;
+
 // Clear-action copy, keyed by the active filter so the button and the dialog
 // both name exactly what is about to go. The wording differs per scope on
 // purpose: Quorum rows are local logs we delete outright ("permanently
@@ -213,14 +226,26 @@ export default function NotificationsScreen() {
           {item.actorAvatarUrl ? (
             <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
           ) : item.source === 'farcaster' ? (
-            <DefaultAvatar displayName={item.title} address={item.id} size={36} />
+            // Same top nudge as the other three branches. This one is easy to
+            // miss because it takes `style` rather than wearing styles.avatar,
+            // and it only shows for actors with no profile picture — so the row
+            // beside a real photo looks right while its neighbours do not.
+            <DefaultAvatar
+              displayName={item.title}
+              address={item.id}
+              size={36}
+              style={styles.avatarNudge}
+            />
           ) : item.source === 'quorum' ? (
             <View style={styles.iconWrap}>
               <IconSymbol name={quorumRowIcon(item)} color={theme.colors.primary} size={18} />
             </View>
           ) : (
+            // Background message pings. An envelope, not a bell: the row is
+            // about a message that arrived, not about the notification itself,
+            // and every other row in the panel already uses an outline glyph.
             <View style={styles.iconWrap}>
-              <IconSymbol name="bell.fill" color={theme.colors.primary} size={18} />
+              <IconSymbol name="envelope" color={theme.colors.primary} size={18} />
             </View>
           )}
           {item.source === 'quorum' ? (
@@ -306,10 +331,12 @@ export default function NotificationsScreen() {
   const sections = useMemo(() => {
     const out: { key: string; title: string; data: UnifiedNotification[] }[] = [];
     if (quorumItems.length && activeFilter !== 'farcaster') {
-      // "messages" (not "replies") because background push mirrors live here
-      // too — they are Quorum messages, and used to render under the Farcaster
-      // header, which made the Farcaster filter show Quorum rows.
-      out.push({ key: 'quorum', title: 'Mentions & messages', data: quorumItems });
+      // Named for the product, not its contents, so it reads as a pair with
+      // "Farcaster" and matches the filter pills exactly. Holds mentions,
+      // replies and background message pings — all of them Quorum, which is
+      // the distinction that matters here (they used to render under the
+      // Farcaster header, so the Farcaster filter showed Quorum rows).
+      out.push({ key: 'quorum', title: 'Quorum', data: quorumItems });
     }
     if (farcasterFeedItems.length && activeFilter !== 'quorum') {
       out.push({ key: 'farcaster', title: 'Farcaster', data: farcasterFeedItems });
@@ -513,9 +540,16 @@ const createStyles = (theme: AppTheme) =>
       paddingHorizontal: Skin.space(16),
       gap: Skin.space(12),
     },
+    // AVATAR_TOP_NUDGE offsets the first text line's leading. `alignItems:
+    // 'flex-start'` aligns the BOXES, but a glyph sits below its box top by
+    // roughly (lineHeight - fontSize) / 2, so without this the circle reads as
+    // floating above the title it should line up with. Both leading rows carry
+    // an explicit lineHeight (below) so this stays a fixed number rather than
+    // drifting with platform font metrics.
     iconWrap: {
       width: 36,
       height: 36,
+      marginTop: Skin.font(AVATAR_TOP_NUDGE),
       borderRadius: Skin.circleOrSquare(18),
       backgroundColor: theme.colors.surface3,
       alignItems: 'center',
@@ -524,8 +558,13 @@ const createStyles = (theme: AppTheme) =>
     avatar: {
       width: 36,
       height: 36,
+      marginTop: Skin.font(AVATAR_TOP_NUDGE),
       borderRadius: Skin.circleOrSquare(18),
       backgroundColor: theme.colors.surface3,
+    },
+    // For the leading slot that sizes itself and only needs the offset.
+    avatarNudge: {
+      marginTop: Skin.font(AVATAR_TOP_NUDGE),
     },
     body: {
       flex: 1,
@@ -535,10 +574,18 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: Skin.space(8),
+      // Pinned to one line box so this row has the SAME geometry as the Quorum
+      // section's bare-Text first line. Without it the row is as tall as its
+      // tallest child: if the source tag out-grows the title (its label has no
+      // fixed lineHeight, so that depends on platform font metrics), the title
+      // centres inside a taller row and drifts down while the avatar does not,
+      // which looks like an avatar alignment bug and is not one.
+      height: Skin.font(LEADING_LINE_HEIGHT),
     },
     title: {
       flex: 1,
       fontSize: Skin.font(15),
+      lineHeight: Skin.font(LEADING_LINE_HEIGHT),
       fontWeight: '600',
       color: theme.colors.textMain,
     },
@@ -550,12 +597,16 @@ const createStyles = (theme: AppTheme) =>
     },
     sourceTagLabel: {
       fontSize: Skin.font(10),
+      // Explicit, so the tag's height is a known number rather than whatever
+      // the platform font reports — see the note on titleRow.
+      lineHeight: Skin.font(12),
       fontWeight: '700',
       color: '#8B5CF6',
     },
     // Quorum location-first row: loud space name, muted channel, then message.
     locationLine: {
       fontSize: Skin.font(15),
+      lineHeight: Skin.font(LEADING_LINE_HEIGHT),
       fontWeight: '700',
       color: theme.colors.textMain,
     },
