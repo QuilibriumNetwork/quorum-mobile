@@ -306,10 +306,12 @@ export default function NotificationsScreen() {
   const sections = useMemo(() => {
     const out: { key: string; title: string; data: UnifiedNotification[] }[] = [];
     if (quorumItems.length && activeFilter !== 'farcaster') {
-      // "messages" (not "replies") because background push mirrors live here
-      // too — they are Quorum messages, and used to render under the Farcaster
-      // header, which made the Farcaster filter show Quorum rows.
-      out.push({ key: 'quorum', title: 'Mentions & messages', data: quorumItems });
+      // Named for the product, not its contents, so it reads as a pair with
+      // "Farcaster" and matches the filter pills exactly. Holds mentions,
+      // replies and background message pings — all of them Quorum, which is
+      // the distinction that matters here (they used to render under the
+      // Farcaster header, so the Farcaster filter showed Quorum rows).
+      out.push({ key: 'quorum', title: 'Quorum', data: quorumItems });
     }
     if (farcasterFeedItems.length && activeFilter !== 'quorum') {
       out.push({ key: 'farcaster', title: 'Farcaster', data: farcasterFeedItems });

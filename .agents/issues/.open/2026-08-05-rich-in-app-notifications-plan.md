@@ -162,12 +162,14 @@ is an informed one rather than a re-litigation.
 
 ### 1. DMs fold into the existing Quorum section. No fourth pill.
 
-Sections stay at two ("Mentions & messages", "Farcaster"), pills stay at three
+Sections stay at two ("Quorum", "Farcaster"), pills stay at three
 (All / Quorum / Farcaster).
 
-- The section is **already** called "Mentions & messages" — it was renamed when
-  background message pings moved into it. A Quorum DM is a Quorum message, so it
-  is already the right home semantically; nothing needs renaming.
+- The sections are named for the **product**, not their contents, so the two read
+  as a pair and the headers match the filter pills exactly. ("Mentions &
+  messages" was the earlier name; it described contents while its sibling named a
+  product, which made them look like different kinds of thing.) A Quorum DM
+  belongs under "Quorum" by definition — no renaming, no argument needed.
 - A fourth pill (All / Quorum / DMs / Farcaster) does not fit comfortably at
   320px. `SegmentedPills` supports `scrollable` and `wrap`, so it is technically
   possible — but a scrolling or two-line filter row for four short labels is worse
