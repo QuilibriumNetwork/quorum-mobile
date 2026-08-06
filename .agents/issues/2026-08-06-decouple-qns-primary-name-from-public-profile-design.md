@@ -280,6 +280,59 @@ decision, and unblocks every public-profile user immediately — where §6's
 transport change only helps people who keep their profile private. It is also
 verifiable from outside the app by re-fetching the endpoint above.
 
+## 6c. `primaryUsername` is set in three places and cleared in none
+
+MEASURED by grep, 2026-08-06. Every write to `primaryUsername` in the app:
+
+| Site | Action |
+|---|---|
+| `ProfileModal.tsx:1928` | set |
+| `ProfileModal.tsx:2022` | set |
+| `qns/NameDetailModal.tsx:97` | set |
+
+That is the complete list. **There is no code path anywhere that clears it.**
+Three consequences, all currently live:
+
+**1. You cannot un-elect a primary name.** When `isPrimary` all three surfaces
+render a non-interactive "Primary" badge (`ProfileModal.tsx:1918-1923`,
+`2013-2017`, `NameDetailModal.tsx:355-360`). The only escape is electing a
+*different* name — so a user who owns exactly one name is stuck with it
+permanently, with no way back to their global display name.
+
+**2. Making your primary name private leaves it primary.** `handleMakePrivate`
+→ `submitResolveKeyUpdate(false)` clears the resolve key and then does
+`Alert` + `onRefresh` and nothing else (`NameDetailModal.tsx:152-165`). Your
+`.q` keeps being published and rendered while `resolve/<name>` returns nothing.
+The badge points at a name that no longer resolves to you.
+
+**3. Transferring your primary name away leaves it primary.** Same shape —
+`handleTransfer`'s success path is `Alert` + `onRefresh` + `onClose`
+(`NameDetailModal.tsx:319-324`), no profile write. So you keep publishing a name
+somebody else now owns.
+
+⚠️ **(3) is an impersonation vector, not just untidiness.** Nothing on either
+client verifies that a claimed `primary_username` resolves back to the claimant
+(§5, measured). So after a transfer the new owner elects the name, the old owner
+never stops publishing it, and **both accounts render as `alice.q` to everyone**.
+The `.q` is presented as a trust marker, which makes this worse than an
+ordinary stale field.
+
+### The rule, extended
+
+§6a said electing a `.q` is a display-name change. The corollary is the part
+that closes all of this:
+
+> **Anything that changes which name you resolve to is a display-name change:**
+> electing, un-electing, making a name private, transferring it away. Each must
+> clear or set `primaryUsername` and then run the *same* fan-out — publish the
+> public profile, broadcast to spaces, and in merged mode update the Farcaster
+> display name.
+
+Stated that way the fan-out pushes **the currently resolved display name**, not
+"the `.q`". Un-electing then reverts your Farcaster display name to your global
+name automatically, with no special case and no risk of a one-way write leaving
+an external system stuck on a name you no longer use.
+
 ## 7. What this does NOT change, and what is NOT decided here
 
 - **The public profile keeps carrying `primary_username`.** This adds a
@@ -316,7 +369,10 @@ Ordered. §6b first — it is small, needs no decision, and helps the larger gro
 
 - [ ] **Electing a name primary publishes.** Verified by re-fetching the live public-profile endpoint and seeing `primary_username` appear (§6b)
 - [ ] The join-stamped per-space override no longer masks the `.q` — without this a published `.q` still loses in every space
-- [ ] Merged mode fans the `.q` out to the Farcaster DISPLAY name, with explicit confirmation, and never touches the fname (§6a)
+- [ ] A primary name can be un-elected at all (§6c-1) — today it is permanent for anyone owning one name
+- [ ] Making a name private clears it as primary (§6c-2)
+- [ ] Transferring a name away clears it as primary (§6c-3) — the impersonation case
+- [ ] Merged mode fans the CURRENT RESOLVED display name out to the Farcaster DISPLAY name, in both directions, with explicit confirmation, and never touches the fname (§6a, §6c)
 - [ ] `primaryUsername` on the mobile send path, included in the dedupe signature
 - [ ] Stored on both mobile space receive paths and the DM path, in the global slot group under `globalProfileTimestamp`
 - [ ] Same on desktop
