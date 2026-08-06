@@ -23,8 +23,13 @@ import {
   signStealthOwnership,
 } from '@/services/onboarding/keyService';
 import { getMnemonic, getPrivateKey } from '@/services/onboarding/secureStorage';
+import {
+  changePrimaryName,
+  describeReleasedPrimary,
+} from '@/services/profile/primaryNameChange';
 import { republishSelfProfile } from '@/services/profile/republishSelfProfile';
 import { NO_PRIMARY_NAME } from '@/utils/primaryName';
+import { logger } from '@quilibrium/quorum-shared';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
@@ -109,31 +114,13 @@ export default function NameDetailModal({
    */
   const applyPrimaryName = async (next: string) => {
     if (!user?.address) return;
-    const electing = next !== NO_PRIMARY_NAME;
-
-    updateProfile({ primaryUsername: next });
-    const outcome = await republishSelfProfile({ ...user, primaryUsername: next });
-
-    if (outcome.status === 'failed') {
-      Alert.alert(
-        electing ? 'Primary set, but not published' : 'Primary removed, but not published',
-        `The change is saved on this device. Publishing it failed, so other people will keep seeing your old name until it goes through. Try again from your profile.`,
-      );
-      return;
-    }
-    if (!electing) {
-      Alert.alert('Primary Removed', `@${name} is no longer your primary username.`);
-      return;
-    }
-    Alert.alert(
-      'Primary Set',
-      outcome.status === 'published'
-        ? `@${name} is now your primary username. Other people will see you as ${name}.q.`
-        : // Be straight about this rather than implying the name is now visible.
-          // A private profile is where the `.q` stops: it is the only thing that
-          // carries one to anyone else.
-          `@${name} is now your primary username. Your profile is private, so only you can see it — turn on Public Profile to show ${name}.q to other people.`,
-    );
+    const { title, body } = await changePrimaryName({
+      name,
+      next,
+      self: user,
+      updateProfile,
+    });
+    Alert.alert(title, body);
   };
 
   /**
@@ -162,7 +149,7 @@ export default function NameDetailModal({
   const handleUnsetPrimary = () => {
     Alert.alert(
       'Remove as Primary',
-      `Stop using @${name} as your name? You keep the name and it keeps resolving to your address — you will just show up under your display name again.`,
+      `Stop using @${name} as your name? You keep the name and it keeps resolving to your address. You will just show up under your display name again.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Remove', style: 'destructive', onPress: () => void applyPrimaryName(NO_PRIMARY_NAME) },
@@ -225,16 +212,21 @@ export default function NameDetailModal({
         onSuccess: async () => {
           // A private name can't be your primary one: it no longer resolves to
           // your address, so a `.q` built from it points nowhere.
-          const released = makeResolvable ? null : await releasePrimaryIfElected();
+          //
+          // Guarded because this callback is now async: an exception here would
+          // reject the promise react-query never awaits, swallowing the success
+          // alert and the refresh for an action that already succeeded.
+          let released: Awaited<ReturnType<typeof releasePrimaryIfElected>> = null;
+          try {
+            if (!makeResolvable) released = await releasePrimaryIfElected();
+          } catch (e) {
+            logger.warn('[qns] releasing primary after make-private failed', e);
+          }
           Alert.alert(
             'Success',
             makeResolvable
               ? `@${name} is now publicly resolvable.`
-              : released
-                ? released.status === 'failed'
-                  ? `@${name} is now private. It was your primary name, so it has been removed as primary here — but publishing that change failed, and other people may still see you as ${name}.q for now.`
-                  : `@${name} is now private and no longer resolvable. It was your primary name, so you now show up under your display name.`
-                : `@${name} is now private and no longer resolvable.`
+              : `@${name} is now private and no longer resolvable.${describeReleasedPrimary(name, released)}`
           );
           onRefresh?.();
         },
@@ -398,18 +390,25 @@ export default function NameDetailModal({
                 onSuccess: async () => {
                   // Keeping a transferred name as your primary means you and
                   // its new owner both render as the same `.q`.
-                  const released = await releasePrimaryIfElected();
-                  Alert.alert(
-                    'Transferred',
-                    released
-                      ? released.status === 'failed'
-                        ? `@${name} has been transferred. It was your primary name, so it has been removed as primary here — but publishing that change failed. Retry from your profile: until it publishes, you and the new owner both show up as ${name}.q.`
-                        : `@${name} has been transferred. It was your primary name, so you now show up under your display name.`
-                      : `@${name} has been transferred.`,
-                  );
-                  onRefresh?.();
-                  onClose();
-                  setIsTransferring(false);
+                  //
+                  // try/finally because the transfer has ALREADY succeeded and
+                  // cannot be undone. An exception in this now-async callback
+                  // would leave the spinner turning forever on a completed,
+                  // irreversible action.
+                  let released: Awaited<ReturnType<typeof releasePrimaryIfElected>> = null;
+                  try {
+                    released = await releasePrimaryIfElected();
+                  } catch (e) {
+                    logger.warn('[qns] releasing primary after transfer failed', e);
+                  } finally {
+                    Alert.alert(
+                      'Transferred',
+                      `@${name} has been transferred.${describeReleasedPrimary(name, released)}`,
+                    );
+                    onRefresh?.();
+                    onClose();
+                    setIsTransferring(false);
+                  }
                 },
                 onError: (err) => {
                   Alert.alert('Error', err instanceof Error ? err.message : 'Failed to transfer');

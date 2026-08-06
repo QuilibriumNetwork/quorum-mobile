@@ -63,7 +63,7 @@ describe('republishSelfProfile', () => {
     await republishSelfProfile(self({ primaryUsername: NO_PRIMARY_NAME }));
 
     expect(mockPublish).toHaveBeenCalledTimes(1);
-    expect(mockPublish.mock.calls[0][0].primaryUsername).toBeFalsy();
+    expect(mockPublish.mock.calls[0][0].primaryUsername).toBe(NO_PRIMARY_NAME);
   });
 
   it('does not publish when the profile is private', async () => {
