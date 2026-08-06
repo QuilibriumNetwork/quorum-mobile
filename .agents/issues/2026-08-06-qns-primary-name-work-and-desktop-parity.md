@@ -235,7 +235,12 @@ Two things desktop has that mobile still does not, both worth porting BACK:
 5. **Receiver-side verification (§10a)**, whenever it lands on mobile. A client
    that renders the wire field without checking it exposes its own users
    regardless of what the other client does. **Both clients or neither.**
-6b. **The per-space name field's placeholder.** Leaving that field empty means
+6. **Re-check `messageSenderName`-style surfaces.** Mobile had two places
+   reading the per-space override directly instead of going through the
+   resolver, which broke the moment joins stopped stamping that slot. Desktop
+   may have equivalents; grep for direct `displayName` reads on roster rows
+   before porting the join change.
+7. **The per-space name field's placeholder.** Leaving that field empty means
    "follow my normal name", and the placeholder is how the user is told what
    that resolves to — so it is a promise and must be the name the app would
    actually render, including the `.q`. Desktop's shows a static
@@ -244,12 +249,6 @@ Two things desktop has that mobile still does not, both worth porting BACK:
    `selfNamePlaceholder` (`utils/resolveSelfName.ts`). Small, self-contained,
    and the screen in question is the one that explains the whole two-slot model
    to the user — worth more than its size.
-
-6. **Re-check `messageSenderName`-style surfaces.** Mobile had two places
-   reading the per-space override directly instead of going through the
-   resolver, which broke the moment joins stopped stamping that slot. Desktop
-   may have equivalents; grep for direct `displayName` reads on roster rows
-   before porting the join change.
 
 ### What belongs in `quorum-shared`, and what does not
 
@@ -270,7 +269,27 @@ will disagree with itself:**
    call instead of `resolveMemberName`. Desktop's shape is the fragile one —
    "use this function, not that one, in space contexts" is enforced by nothing,
    and the audit found the mobile equivalent of that mistake at four call sites.
-   It belongs inside `resolveDisplayName`, which already receives both values.
+
+   **This one is NOT ready to implement from this document, and an earlier
+   version of this line pretended it was** by saying `resolveDisplayName`
+   "already receives both values". Two things have to be settled first:
+
+   - **`resolveDisplayName`'s `display_name` parameter means different things
+     in the two clients.** Mobile passes the GLOBAL name into it
+     (`utils/resolveMemberName.ts`, `display_name: global`); desktop passes the
+     roster row's own name (`src/utils/resolveMemberName.ts`,
+     `display_name: realDisplayNameOrUndefined(member.displayName)`). The same
+     parameter is therefore the global tier on one client and something closer
+     to the override on the other. Nothing can move into shared until that
+     contract is named, because the echo check compares exactly these two values.
+   - **Desktop's `resolveSpaceMemberName` does not call shared at all.** It
+     re-implements the whole ladder by hand
+     (`src/utils/resolveMemberName.ts:66` onward). So desktop currently has two
+     resolvers, only one of which delegates. Unifying those is the actual first
+     step, and it is a bigger job than "port the echo check".
+
+   Treat this as a design task with its own short spec, not as a port. It is
+   also why it must not gate the security item below.
 2. **The forged-`.q` guard.** A display name ending in `.q` must never reach the
    render path. **Desktop has zero uses of `hasReservedQnsSuffix`** — grep
    confirms — so the forgery in `.secret/` works against it today. A security
@@ -304,18 +323,31 @@ most-called function and wants its own test pass.
 
 ### Order to do desktop in
 
+**Ready to implement straight from this document:** items 4, 6 and 7. They are
+small, self-contained, and every fact they rest on is cited with a file:line.
+
+**Needs a short design spec first:** the shared echo-demotion move, for the two
+reasons given above. Do not hand that to an agent as a port.
+
+**Blocked on the server:** items 1, 2 and 3 (elect-primary and un-elect) cannot
+be tested end to end until #9 is fixed, because nothing can be published.
+
 1. (4) forged-`.q` guard — security, tiny, no dependencies. Put it in shared
    (see above) rather than porting mobile's copy, so this is the last time it
-   has to be written.
+   has to be written. **Start here.**
 2. (6) audit for direct override reads — must precede any join change. Mobile's
    sweep found **seven** such surfaces, six of them not on any list beforehand,
    and three were the same expression copy-pasted in one file. Budget for that
    rather than assuming desktop has one or two. Grep for direct `displayName`
    reads on roster rows AND on conversation rows; the conversation ones were
    the easiest to miss because they look like they belong there.
-3. The join/config-sync write change, if desktop has equivalent paths
-4. (1)+(2)+(3) elect-primary, once the server (#9) is fixed and it can work
-5. (5) verification, in lockstep with mobile
+3. (7) the per-space placeholder — independent of everything else, and cheap.
+4. Build desktop's fake-profile harness (see START HERE) before any further
+   render work, so the rest can actually be verified.
+5. The join/config-sync write change, if desktop has equivalent paths
+6. The shared echo-demotion move, after its spec exists
+7. (1)+(2)+(3) elect-primary, once the server (#9) is fixed and it can work
+8. (5) receiver-side verification, in lockstep with mobile
 
 Note on ordering (2) before (3): on mobile the join fix and the surfaces that
 read the override slot by hand were shipped as separate commits, and between
