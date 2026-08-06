@@ -41,8 +41,10 @@ is not ours. One is client work still to do. **Desktop has none of the fixes.**
 | 6 | Joining a space stamped your GLOBAL name into everyone's per-space override, which outranks the `.q`, forever | fixed, branch `fix/join-stamps-global-name-into-per-space-override` |
 | 6b | Config sync did the same on every new device | fixed, same branch |
 | 6c | Rows already stamped stayed broken | fixed, same branch (read-time echo check) |
-| 7 | Space Settings member list never resolves a `.q` | **OPEN** |
-| 8 | DM list, DM messages and DM header never resolve a `.q` | **OPEN** |
+| 7 | Space Settings member list never resolves a `.q` | fixed, same branch |
+| 8 | DM list, DM messages and DM header never resolve a `.q` | fixed, same branch |
+| 8b | Both mention surfaces were handed the raw roster, which cannot carry a `.q` | fixed, same branch |
+| 8c | Calls, the header avatar tap (and through it the kick/mute/block confirmations), and your own header avatar | fixed, same branch |
 | 9 | The server refuses every publish carrying a `primary_username` | **BLOCKED — not ours** |
 
 Plus one security issue found on the way, filed in `.secret/`: a display name
@@ -62,23 +64,48 @@ Operator ran this with the fake-QNS dev panel, own account with a `.q` set:
 | DM header | not tested (needs a second client) |
 | User profile modal (tap an avatar) | ❌ still the global name |
 
-The two ✅ rows are #3 and #6 confirmed working on a real device. The ❌ rows are
-#7, #8, and a surface not previously on the list — see below.
+Re-measured later the same day, after #7/#8 landed: the member list, DM
+messages and the profile modal opened from a DM all show the `.q`.
+
+### One device is enough — the second device is not needed
+
+The operator twice deferred testing a surface ("I only have one device").
+That is not a real constraint here: the dev panel's switch **2 · Give EVERYONE
+a `.q`** (`services/dev/fakeQns.ts`, `giveEveryoneAName`) synthesizes a stable
+fake `.q` for every address with no explicit entry, injected at
+`QuorumClient.getPublicProfile` — the single seam every profile read goes
+through. Its own hint names this exact case: "Only needed for the few surfaces
+that can never render you: a DM partner's name, a blocked user."
+
+So the DM list, the DM header and a partner's profile modal are all testable
+solo. The panel invalidates the 1h profile cache on every change, but a screen
+already open still holds a resolved member map — leave and re-enter before
+believing a negative result.
 
 ## Still to do on mobile
 
-- [ ] **#7 — Space Settings member list.** `SpaceSettingsModal.tsx:838` resolves
-      from raw roster rows; only `SpaceChatArea.tsx:245` and `DMChatArea.tsx:173`
-      call the public-profile fallback hook, and a `.q` only travels in a public
-      profile. `hooks/useMembersWithCachedQns.ts` is written for this and is
-      deliberately UNTRACKED until it is wired — it reads already-cached
-      profiles via `useQueries` with `enabled: false`, so it costs no requests.
-- [ ] **#8 — DM surfaces.** `dm/[id].tsx:390` and `messages/index.tsx:216` use
-      `conversation.displayName` raw. Desktop resolves in DMs; mobile does not.
-- [ ] **The user profile modal.** `components/UserProfileModal.tsx:259` renders
-      the global name as the heading and the `.q` as a separate `@handle` line
-      underneath — the same inversion fixed for the OWN profile in #3, on the
-      modal that shows somebody else. Same fix shape as `resolveSelfName`.
+- [x] **#7 — Space Settings member list.** Wired to `useMembersWithCachedQns`,
+      which reads already-cached profiles via `useQueries` with `enabled: false`
+      and so costs no requests.
+- [x] **#8 — DM surfaces.** The list, the header and the messages all resolve.
+      The list needed its own fetch (`hooks/chat/useConversationsWithQnsNames.ts`)
+      rather than a cache read, because the inbox is usually the first screen
+      opened and the cache is cold exactly when it is drawn.
+- [x] **#8b — mentions.** Both the `@` autocomplete and the rendered pill
+      already called the resolver and were handed `membersData`, the raw roster.
+      They now read the same enriched map the message headers use, at no extra
+      fetch (`membersWithEffectiveIdentity`).
+- [x] **#8c — the surfaces found by sweeping every name render.** The audio and
+      video call screens, the DM header avatar tap (which feeds the kick, mute
+      and block confirmations), and your own header avatar, which derived its
+      initials from `displayName || primaryUsername` — the ladder upside down.
+- [ ] **The user profile modal's dead `@handle` line.** `UserProfileModal.tsx:260`
+      renders `@{user.primaryUsername}` under the name. No caller populates
+      `MessageUserInfo.primaryUsername`, so it never renders — the modal is
+      correct today only because every caller now passes an already-resolved
+      `userName`. Either populate the field and show a real secondary handle, or
+      delete it. Leaving dead identity code next to a trust marker is how the
+      next person reintroduces the inversion.
 - [ ] **Receiver-side verification of a claimed `.q`.** Planned in detail in
       `issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md`,
       including the cost analysis, the cache TTL as a security parameter, and
@@ -132,13 +159,76 @@ reading desktop source, not assumed from mobile.
    may have equivalents; grep for direct `displayName` reads on roster rows
    before porting the join change.
 
+### What belongs in `quorum-shared`, and what does not
+
+Audited 2026-08-06 by reading all three repos. **The rules are duplicated and
+have already drifted; the adapters are correctly separate.** Those are different
+problems and only the first is worth fixing.
+
+Shared owns `resolveDisplayName` (the tier ORDER only), `hasReservedQnsSuffix`,
+`validation/displayName`, `formatAddress` and `qns/resolver`. Everything else
+lives twice.
+
+**Move to shared — these are rules, and a rule that exists twice is a rule that
+will disagree with itself:**
+
+1. **The echo demotion.** An override equal to the global name is the join echo,
+   not a per-space name. Mobile applies it INSIDE its one resolver; desktop
+   exposes it as a separate `resolveSpaceMemberName` you have to remember to
+   call instead of `resolveMemberName`. Desktop's shape is the fragile one —
+   "use this function, not that one, in space contexts" is enforced by nothing,
+   and the audit found the mobile equivalent of that mistake at four call sites.
+   It belongs inside `resolveDisplayName`, which already receives both values.
+2. **The forged-`.q` guard.** A display name ending in `.q` must never reach the
+   render path. **Desktop has zero uses of `hasReservedQnsSuffix`** — grep
+   confirms — so the forgery in `.secret/` works against it today. A security
+   rule enforced in one client and not the other is worth less than it looks:
+   the two clients share a network. This one must be un-bypassable and identical
+   on both, which means shared.
+3. **The DM title rule** — a conversation's `displayName` is a GLOBAL name, not
+   a per-conversation override, because a DM cannot be renamed. Mobile now has
+   this in one place (`utils/conversationTitle.ts`); desktop resolves DM names
+   inline. This rule is one line and getting it wrong hides the `.q` in every
+   DM, which is exactly what happened on mobile.
+
+**Keep per-client — these are not rules, and moving them would cost more than
+the duplication:**
+
+- **The two adapters themselves.** Mobile's rows are snake_case
+  (`display_name`, `primary_username`), desktop's are camelCase. A thin
+  translating adapter each is the honest cost of that; it is not duplication.
+- **The address fallback.** Shared's `truncate` is a naive `slice(0,6)…slice(-4)`
+  and is not Qm-aware. Both clients deliberately override it, and mobile picks
+  `long` for DM surfaces and `medium` elsewhere. Presentational.
+- **The self tier.** Mobile resolves its own row from a live in-memory profile;
+  desktop has no equivalent concept.
+- **Every hook.** Different query clients, different storage, different
+  placeholder semantics (desktop repairs an "Unknown User" row; mobile has no
+  such placeholder and falls back at render).
+
+**Sequencing note.** Do (2) first and standalone — it is small, security-
+relevant and has no dependencies. Do NOT block it on (1), which touches shared's
+most-called function and wants its own test pass.
+
 ### Order to do desktop in
 
-1. (4) forged-`.q` guard — security, tiny, no dependencies
-2. (6) audit for direct override reads — must precede any join change
+1. (4) forged-`.q` guard — security, tiny, no dependencies. Put it in shared
+   (see above) rather than porting mobile's copy, so this is the last time it
+   has to be written.
+2. (6) audit for direct override reads — must precede any join change. Mobile's
+   sweep found **seven** such surfaces, six of them not on any list beforehand,
+   and three were the same expression copy-pasted in one file. Budget for that
+   rather than assuming desktop has one or two. Grep for direct `displayName`
+   reads on roster rows AND on conversation rows; the conversation ones were
+   the easiest to miss because they look like they belong there.
 3. The join/config-sync write change, if desktop has equivalent paths
 4. (1)+(2)+(3) elect-primary, once the server (#9) is fixed and it can work
 5. (5) verification, in lockstep with mobile
+
+Note on ordering (2) before (3): on mobile the join fix and the surfaces that
+read the override slot by hand were shipped as separate commits, and between
+them freshly-joined members rendered as bare addresses. Doing (2) first avoids
+reproducing that window on desktop.
 
 ## The blocker, restated
 
@@ -153,8 +243,12 @@ This is why the broadcast transport moved from last to first in the design doc.
 
 ## Definition of done
 
-- [ ] #7 and #8 closed on mobile, verified on device
-- [ ] The user profile modal shows the `.q` as the name
+- [x] #7 and #8 closed on mobile
+- [x] #8b and #8c closed on mobile
+- [ ] All of the above re-measured on device with switch 2 on (one device is
+      enough — see above)
+- [ ] The user profile modal's dead `@handle` line resolved either way
+- [ ] The echo demotion and the forged-`.q` guard live in `quorum-shared`
 - [ ] Desktop items (4) and (6) done
 - [ ] Desktop reaches feature parity on electing and un-electing
 - [ ] Receiver-side verification on BOTH clients, or on neither
