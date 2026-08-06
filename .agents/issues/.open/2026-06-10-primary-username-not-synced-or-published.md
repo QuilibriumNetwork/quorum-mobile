@@ -24,7 +24,7 @@ A user (LaMat) has:
 Yet the **published public profile on the server still has no `primary_username`**:
 
 ```
-GET https://api.quorummessenger.com/users/QmVYRWmquW98yaymeRv7aLn6bqRYr9PAtWcG87Kj25YvPY/public-profile
+GET https://api.quorummessenger.com/users/QmUserUserEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz/public-profile
 → keys: ['display_name', 'profile_image', 'bio', 'timestamp', 'signature']   // no primary_username
 ```
 

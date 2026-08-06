@@ -22,7 +22,7 @@ Two render paths — this matters for the results:
   flow (type @, pick from the list) works in BOTH paths.
 
 Values to reuse:
-- user address: @QmVYRWmquW98yaymeRv7aLn6bqRYr9PAtWcG87Kj25YvPY
+- user address: @QmUserUserEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz
 - user bare name (no-markdown path only): @lamat
 - channel by name: #general
 - channel with a space in the name: #Test Channel
@@ -34,7 +34,7 @@ A. MENTIONS — no-markdown path (plain messages)
 hey @lamat are you around?
 → @lamat is a blue pill (bare name resolved against members).
 
-ping @QmVYRWmquW98yaymeRv7aLn6bqRYr9PAtWcG87Kj25YvPY take a look
+ping @QmUserUserEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz take a look
 → the address renders as a pill showing the member's display name.
 
 @everyone standup in 5
@@ -50,15 +50,15 @@ posted in #Test Channel earlier
 B. MENTIONS — markdown path (message also contains markdown)
 =============================================================
 
-**heads up** @QmVYRWmquW98yaymeRv7aLn6bqRYr9PAtWcG87Kj25YvPY check this
+**heads up** @QmUserUserEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz check this
 → "heads up" bold; the address is a user pill.
 
-**heads up** @QmQuCGpEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imXST1
+**heads up** @QmTestTestEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz
 
 > note for @everyone
 → blockquote containing an @everyone pill.
 
-- follow up with @QmVYRWmquW98yaymeRv7aLn6bqRYr9PAtWcG87Kj25YvPY
+- follow up with @QmUserUserEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz
 → list item with a user pill.
 
 (Channels in the markdown path need the #<channelId> wire form — bare #general

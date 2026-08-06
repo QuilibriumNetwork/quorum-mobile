@@ -16,7 +16,7 @@ import {
   renderMentionsAsPlainText,
 } from '../utils/mentionTokens';
 
-const ADDR = 'QmQuCGpEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imXST1';
+const ADDR = 'QmTestTestEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz';
 const OTHER = 'QmZzZzZzEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imAAA1';
 
 describe('findMentionTokens', () => {

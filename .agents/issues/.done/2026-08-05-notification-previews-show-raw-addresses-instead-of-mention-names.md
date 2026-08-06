@@ -7,7 +7,7 @@ created: 2026-08-05
 updated: 2026-08-05
 area: notifications / mention rendering / identity resolution
 runtime_test: required
-source: observed on device 2026-08-05 — a mention row in the Notifications tab read "@<QmQuCGpEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imXST1>" as its entire preview
+source: observed on device 2026-08-05 — a mention row in the Notifications tab read "@<QmTestTestEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz>" as its entire preview
 related:
   - "issues/.open/2026-08-05-rich-in-app-notifications-plan.md"
   - "issues/.open/2026-08-04-one-identity-resolver-so-names-and-avatars-match-everywhere.md"
@@ -51,7 +51,7 @@ mention token:
 
 ```
 Quorum Test Community Space  #Test chan…
-@<QmQuCGpEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imXST1>
+@<QmTestTestEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz>
 22h ago
 ```
 

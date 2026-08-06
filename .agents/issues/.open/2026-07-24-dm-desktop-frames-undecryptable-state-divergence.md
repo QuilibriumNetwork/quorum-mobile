@@ -431,7 +431,7 @@ conversation:
 
 ## §2. Evidence collected 2026-07-24
 
-- Test pairing: mobile = `QmQuCGpEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imXST1`, desktop = `QmYVto…`.
+- Test pairing: mobile = `QmTestTestEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz`, desktop = `QmYVto…`.
   Both are shared multi-client test accounts (each ~3-5 registered devices: dev mobile, second
   phone, browser profiles, preview build). During part of the day a SECOND desktop instance was
   logged into the MOBILE account — its receipts/messages were correctly received and filed by

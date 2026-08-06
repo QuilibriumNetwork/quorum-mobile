@@ -3,7 +3,7 @@
  * tokens in the message body against the space roster.
  *
  * The observed bug: a mention row's entire preview was
- * `@<QmQuCGpEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imXST1>`. The sender's name was
+ * `@<QmTestTestEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz>`. The sender's name was
  * handled carefully in this same function and deliberately refused to show a
  * hash; mentions inside the body got no equivalent treatment.
  *
@@ -48,7 +48,7 @@ import {
 
 const ME = 'QmMeMeMeEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imMMM1';
 const THEM = 'QmThemThemgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imTT1';
-const MENTIONED = 'QmQuCGpEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imXST1';
+const MENTIONED = 'QmTestTestEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz';
 
 /** A reply to one of my messages, whose body mentions someone. */
 function replyMentioning(text: string): Message {
