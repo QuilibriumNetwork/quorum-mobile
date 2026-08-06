@@ -15,7 +15,7 @@
  * a screenshot to notice.
  */
 
-import { resolveSelfName } from '../utils/resolveSelfName';
+import { resolveSelfName, selfNamePlaceholder } from '../utils/resolveSelfName';
 
 describe('resolveSelfName', () => {
   it('shows the .q as the name when one is primary', () => {
@@ -54,5 +54,58 @@ describe('resolveSelfName', () => {
 
   it('never returns an empty label', () => {
     expect(resolveSelfName({}).label).toBe('Unnamed');
+  });
+});
+
+/**
+ * The placeholder in a per-space name field.
+ *
+ * It is a PROMISE — "leave this empty and you will be shown as this" — so it
+ * has to agree with what the app actually renders. The screen whose job is to
+ * explain the follow-global default was the screen contradicting it.
+ */
+describe('selfNamePlaceholder', () => {
+  it('promises the .q when one is elected', () => {
+    // The regression. `displayName || username` showed "Alice" to a user the
+    // whole app renders as "alice.q".
+    expect(
+      selfNamePlaceholder({ primaryUsername: 'alice', displayName: 'Alice' }, 'fallback'),
+    ).toBe('alice.q');
+  });
+
+  it('promises the global name when there is no .q', () => {
+    expect(selfNamePlaceholder({ displayName: 'Alice' }, 'fallback')).toBe('Alice');
+  });
+
+  it('still honours the deprecated username field when nothing else is set', () => {
+    // `username` is the old alias of primaryUsername. Nothing writes it any
+    // more, but a profile that still carries it should not lose its placeholder.
+    expect(selfNamePlaceholder({ username: 'legacy' }, 'fallback')).toBe('legacy');
+  });
+
+  it('ranks the deprecated field BELOW both live ones', () => {
+    expect(
+      selfNamePlaceholder(
+        { primaryUsername: 'alice', displayName: 'Alice', username: 'legacy' },
+        'fallback',
+      ),
+    ).toBe('alice.q');
+    expect(
+      selfNamePlaceholder({ displayName: 'Alice', username: 'legacy' }, 'fallback'),
+    ).toBe('Alice');
+  });
+
+  it("uses the caller's copy when there is no name at all", () => {
+    // Deliberately NOT resolveSelfName's "Unnamed", which is a rendered name
+    // and would read as though it were already your name.
+    expect(selfNamePlaceholder(undefined, 'Your name in this space')).toBe(
+      'Your name in this space',
+    );
+    expect(selfNamePlaceholder({}, 'Your name in this space')).toBe(
+      'Your name in this space',
+    );
+    expect(
+      selfNamePlaceholder({ displayName: '  ', primaryUsername: '' }, 'Your name in this space'),
+    ).toBe('Your name in this space');
   });
 });

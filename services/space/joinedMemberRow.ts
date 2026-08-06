@@ -87,18 +87,65 @@ export interface JoinParticipant {
  * what happens here. Tracked separately; do not read this function's limitation as the
  * whole story for that case.
  */
+/**
+ * `SpaceMember` in shared declares neither global slot nor its timestamp, so the
+ * two-slot fields are spelled out here the same way the receive handlers do.
+ */
+type MemberWithGlobals = SpaceMember & {
+  global_display_name?: string;
+  global_profile_image?: string;
+  globalProfileTimestamp?: number;
+};
+
+/**
+ * A join's `joinedAt` rides on an unauthenticated payload, so a forged one can
+ * claim any time. Clamping to now keeps honest ordering (an older join really
+ * did happen earlier) while making it impossible to pin a name forever by
+ * claiming the year 3000 and out-ranking every future update.
+ */
+function joinStamp(joinedAt: number | undefined, now: number): number {
+  return isPlausibleTimestamp(joinedAt) ? Math.min(joinedAt, now) : now;
+}
+
 export function buildJoinedMemberRow(
   existing: SpaceMember | undefined,
-  participant: JoinParticipant
-): SpaceMember {
-  const displayFields = {
-    ...(participant.displayName !== undefined
-      ? { display_name: participant.displayName }
-      : {}),
-    ...(participant.userIcon !== undefined
-      ? { profile_image: participant.userIcon }
-      : {}),
-  };
+  participant: JoinParticipant,
+  now: number
+): MemberWithGlobals {
+  // A join carries the joiner's GLOBAL identity — `useSpaceActions` fills it
+  // from `user.displayName || user.username` — so it belongs in the global
+  // slot, NOT the per-space override.
+  //
+  // It used to land in `display_name`, the override slot, which outranks the
+  // QNS `.q` name in the resolution ladder. The effect was that merely joining
+  // a space froze your global name as a deliberate-looking per-space name on
+  // every other member's device, and your `.q` could never win there again.
+  // Nothing in the app cleared it, and mobile had dropped desktop's read-time
+  // echo check on the stated grounds that the override "is no longer stamped at
+  // join" — which this function was doing on every join.
+  //
+  // The override slot is now written only by the real per-space name UI, which
+  // is what makes a non-empty override genuinely deliberate.
+  const stamp = joinStamp(participant.joinedAt, now);
+  const existingStamp = (existing as MemberWithGlobals | undefined)?.globalProfileTimestamp;
+
+  // Same newer-wins guard the `update-profile` receive path applies, so a
+  // late or replayed join cannot undo a fresher global rename.
+  const hasIdentity =
+    participant.displayName !== undefined || participant.userIcon !== undefined;
+  const applyGlobal = hasIdentity && !(existingStamp !== undefined && existingStamp >= stamp);
+
+  const displayFields = applyGlobal
+    ? {
+        ...(participant.displayName !== undefined
+          ? { global_display_name: participant.displayName }
+          : {}),
+        ...(participant.userIcon !== undefined
+          ? { global_profile_image: participant.userIcon }
+          : {}),
+        globalProfileTimestamp: stamp,
+      }
+    : {};
 
   if (existing) {
     return { ...existing, ...displayFields };

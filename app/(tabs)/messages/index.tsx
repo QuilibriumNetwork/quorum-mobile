@@ -17,12 +17,13 @@ import type { Conversation } from '@/hooks/chat';
 import { useDMConversationSettingsLoader } from '@/hooks/chat/useDMConversationSettings';
 import { useDMMute } from '@/hooks/chat/useDMMute';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
+import { useConversationsWithQnsNames } from '@/hooks/chat/useConversationsWithQnsNames';
+import { resolveConversationTitle } from '@/utils/conversationTitle';
 import { useStorageAdapter } from '@/context/StorageContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@quilibrium/quorum-shared';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { haptics } from '@/utils/haptics';
-import { truncateAddress } from '@/utils/formatAddress';
 import { isValidAvatarUri } from '@/utils/validation';
 import { FlashList } from '@shopify/flash-list';
 import { router, Stack } from 'expo-router';
@@ -149,13 +150,18 @@ export default function MessagesInbox() {
   }, []);
 
   const {
-    conversations,
+    conversations: rawConversations,
     isLoading: dmsLoading,
     isRefreshing,
     refetch: refetchDMs,
     fetchNextPage,
     hasNextPage,
   } = useUnifiedConversations();
+
+  // A `.q` name lives only in the partner's public profile, never on the
+  // conversation row, so without this the inbox can never show one. See the
+  // hook for why fetching is affordable for a DM list and was not for a roster.
+  const conversations = useConversationsWithQnsNames(rawConversations);
   const [search, setSearch] = useState('');
   const [newConversationVisible, setNewConversationVisible] = useState(false);
   const [manualRefresh, setManualRefresh] = useState(false);
@@ -201,7 +207,11 @@ export default function MessagesInbox() {
   const items = useMemo<InboxItem[]>(() => {
     const rows: InboxItem[] = [];
 
-    for (const conv of (conversations as Conversation[]) ?? []) {
+    // `primary_username` rides along from the QNS hook above; the cast keeps it
+    // rather than narrowing back to the bare row and losing the `.q`.
+    for (const conv of (conversations as (Conversation & {
+      primary_username?: string;
+    })[]) ?? []) {
       const hasUnread = conv.lastReadTimestamp ? conv.timestamp > conv.lastReadTimestamp : false;
       // Coerce any preview shape (typed, legacy string, raw object) to
       // {kind,text}; an empty text with no icon means "no message yet".
@@ -212,9 +222,9 @@ export default function MessagesInbox() {
       const hasPreview = !!(previewText || previewIcon);
       rows.push({
         id: conv.conversationId,
-        title:
-          conv.displayName ||
-          (conv.address ? truncateAddress(conv.address, 'long') : 'Conversation'),
+        // Same helper the conversation header uses, so a partner cannot be
+        // called one thing in the list and another inside the chat.
+        title: resolveConversationTitle(conv),
         icon: conv.icon,
         address: conv.address,
         timestamp: conv.timestamp,

@@ -196,6 +196,8 @@ export async function logMentionOrReply(
     ? {
         display_name: senderMember.display_name ?? undefined,
         name: senderMember.name ?? undefined,
+        global_display_name: senderMember.global_display_name ?? undefined,
+        primary_username: senderMember.primary_username ?? undefined,
       }
     : undefined;
   const senderName = messageSenderName(
@@ -205,10 +207,21 @@ export async function logMentionOrReply(
   );
   // A RESOLVED display name only (no address fallback) — the row shows the
   // author prefix solely when we have a real name, so unsynced senders don't
-  // surface a raw "Qm..." hash. `messageSenderName` would fall back to a short
-  // address, so we read the member fields directly here instead.
+  // surface a raw "Qm..." hash.
+  //
+  // Now through the same resolver used for names INSIDE the message body a few
+  // lines above, rather than reading the override slot by hand. Reading it by
+  // hand meant a member whose identity lives in the global slot (every
+  // freshly-joined member, once joins stopped stamping the override) got NO
+  // author prefix at all, and a QNS `.q` name could never appear here.
+  const resolvedSender =
+    senderId && senderNameFields
+      ? resolveMemberName({ ...senderNameFields, address: senderId })
+      : undefined;
   const senderDisplayName =
-    senderNameFields?.display_name || senderNameFields?.name || undefined;
+    resolvedSender && !resolvedSender.isAddressFallback
+      ? formatResolvedName(resolvedSender)
+      : undefined;
 
   const entry: SpaceMentionEntry = {
     id: `${ctx.spaceId}:${ctx.channelId}:${message.messageId}`,

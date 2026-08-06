@@ -15,6 +15,7 @@
 
 import type { Message, MessageContent } from '@quilibrium/quorum-shared';
 import type { IconSymbolName } from '@/components/ui/IconSymbol';
+import { formatResolvedName, resolveMemberName, type ResolvableMember } from './resolveMemberName';
 
 /** Discriminator for the media/event class of a message preview. */
 export type MessagePreviewKind =
@@ -174,13 +175,27 @@ export function coerceMessagePreview(value: unknown): MessagePreview {
 export function messageSenderName(
   senderAddress: string | undefined,
   currentUserAddress: string | undefined,
-  memberMap?: Record<string, { display_name?: string; name?: string }>
+  memberMap?: Record<string, ResolvableMember | { display_name?: string; name?: string }>
 ): string | undefined {
   if (!senderAddress) return undefined;
   if (currentUserAddress && senderAddress === currentUserAddress) return 'You';
+
   const member = memberMap?.[senderAddress];
-  const name = member?.display_name || member?.name;
-  if (name) return name;
+  if (member) {
+    // Through the one resolver rather than reading the override slot directly.
+    //
+    // This used to be `display_name || name`, which is only the PER-SPACE
+    // OVERRIDE tier. It happened to work because a join stamped the joiner's
+    // global name into that slot; once joins correctly write the global slot
+    // instead, a freshly-joined member has an empty override and this returned
+    // a truncated address for them. It also meant a QNS `.q` name could never
+    // appear in a preview, for anyone.
+    const resolved = resolveMemberName({ ...member, address: senderAddress });
+    if (!resolved.isAddressFallback) return formatResolvedName(resolved);
+  }
+
+  // Unchanged fallback: this function's callers want a compact address, not
+  // the Qm-aware truncation the resolver would hand back.
   if (senderAddress.length > 12) return `${senderAddress.slice(0, 8)}...`;
   return senderAddress;
 }

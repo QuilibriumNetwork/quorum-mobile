@@ -43,6 +43,7 @@ import {
 import { DraggableChannelGroup } from '@/components/SpaceSettings/DraggableChannelGroup';
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useSpaceMembers } from '@/hooks/chat/useSpaces';
+import { useMembersWithCachedQns } from '@/hooks/useMembersWithCachedQns';
 import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
 import { useBlockUser } from '@/hooks/chat/useBlockUser';
 import { useDeleteSpace, useLeaveSpace, useUpdateSpace } from '@/hooks/chat/useSpaceSettings';
@@ -65,6 +66,7 @@ import {
   resolveMemberAvatar,
   formatResolvedName,
 } from '@/utils/resolveMemberName';
+import { selfNamePlaceholder } from '@/utils/resolveSelfName';
 import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, queryKeys, IMAGE_CONFIGS, type Emoji, type Permission, type Role, type Space, type SpaceMember, type Sticker } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { resolveChannelIconColor } from '@/utils/channelIcon';
@@ -792,7 +794,16 @@ export default function SpaceSettingsModal({
   const channelsScrollRef = useRef<React.ComponentRef<typeof GHScrollView>>(null);
 
   // Members
-  const { data: members = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
+  const { data: rosterMembers = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
+
+  // Attach QNS `.q` names from public profiles chat has ALREADY fetched.
+  //
+  // A `.q` travels only in a published public profile, never in a roster row,
+  // so this screen could never show one for anybody — the resolver here was
+  // correct all along, the field simply never arrived. Fetching a profile per
+  // member is the fetch storm desktop looked at and refused, so this reads the
+  // React Query cache instead and issues no requests at all.
+  const members = useMembersWithCachedQns(rosterMembers);
 
   // The roster shows who is IN the Space. Both `leave` and `kick` blank the
   // member's inbox_address and KEEP the row, so without this a departed or
@@ -1642,7 +1653,10 @@ export default function SpaceSettingsModal({
       <TextInput
         value={spaceProfileDisplayName}
         onChangeText={(t) => { const v = capDisplayName(t); setSpaceProfileDisplayName(v); setSpaceProfileNameError(displayNameLiveError(v)); }}
-        placeholder={user?.displayName || user?.username || 'Your name in this space'}
+        // A promise about what happens if this is left empty, so it must be the
+        // name the app would actually show — the `.q` when one is elected. See
+        // the helper for what the old `displayName || username` got wrong.
+        placeholder={selfNamePlaceholder(user, 'Your name in this space')}
         placeholderTextColor={theme.colors.textMuted}
         // Hard-capped to MAX_DISPLAY_NAME_BYTES by bytes (capDisplayName). No
         // maxLength (counts chars, not bytes). Live error = non-length rules only.

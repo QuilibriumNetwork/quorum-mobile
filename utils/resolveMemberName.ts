@@ -34,21 +34,31 @@
  * addresses. That is exactly the bug this file fixes at the reaction and
  * mention surfaces.
  *
- * ## One case this does NOT handle, on purpose
+ * ## An override that merely ECHOES the global name is not a per-space name
  *
- * Desktop's `resolveSpaceMemberName` compares the roster name against the
- * global name to spot a row that merely ECHOES the global value rather than
- * carrying a deliberate per-space one. We do not, because since the
- * follow-global work (2026-07-16) the override slot is no longer stamped at
- * join, so a non-empty override really is deliberate.
+ * A roster row cannot say whether its override was chosen for this space or is
+ * just the member's global name copied in. So when the two are equal we treat
+ * the override as an echo and let the ladder continue to the QNS name, matching
+ * desktop's `resolveSpaceMemberName`.
  *
- * That holds for rows written after that date. A LEGACY row stamped before it
- * still looks like a deliberate override, so its stale echo will outrank the
- * member's QNS `.q` name here while desktop demotes it — the same member can
- * read differently on the two clients until the row is cleared. This is a
- * pre-existing, documented, decaying gap (see the desktop doc's "Known
- * limitations (accepted)"), not something this file introduced. Do not treat
- * the invariant above as airtight for old data.
+ * This comment previously said the opposite — that the check was unnecessary
+ * because "the override slot is no longer stamped at join". That was false the
+ * whole time it was written: both join paths and config sync stamped the
+ * joiner's GLOBAL name straight into the override, so merely joining a space
+ * froze that name above the member's `.q` forever. Those writes now target the
+ * global slot, and this check heals the rows they already left behind.
+ *
+ * **The trade, taken deliberately:** a member who genuinely chose a per-space
+ * name identical to their global one has it demoted here. The rendered string
+ * only differs if they also have a `.q`, in which case the `.q` wins — and
+ * there is no way to tell that case from the echo, because the stored data is
+ * byte-identical. Desktop accepts the same trade.
+ *
+ * **What it does NOT heal:** a row whose override was stamped at join and whose
+ * owner has since renamed globally. The override is then a STALE echo that no
+ * longer equals the global name, so it still reads as deliberate. That gap is
+ * pre-existing and decays as rows are rewritten; the write-side fix stops it
+ * growing.
  *
  * ## Avatars are not names
  *
@@ -57,7 +67,7 @@
  * name carries no picture. Do not merge the two.
  */
 
-import { resolveDisplayName } from '@quilibrium/quorum-shared';
+import { hasReservedQnsSuffix, resolveDisplayName } from '@quilibrium/quorum-shared';
 import { truncateAddress } from './formatAddress';
 
 export interface ResolvedMemberName {
@@ -108,6 +118,47 @@ const present = (s?: string | null): string | undefined => {
   return t.length ? t : undefined;
 };
 
+/**
+ * A stored display name that would forge the verified-QNS marker is not a name.
+ *
+ * `.q` is a trust marker: it is appended at render ONLY for a name that came
+ * from the QNS tier, and display names are forbidden from ending in `.q` for
+ * exactly that reason. But `validateDisplayName` runs on the four local text
+ * inputs and NOWHERE on receive, so a modified client could broadcast a display
+ * name of `alice.q` and every recipient would render it identically to a real
+ * one — `isQnsVerified` is not surfaced anywhere, so the suffix is the only
+ * signal there is.
+ *
+ * Enforced here, at the single choke point every name surface goes through,
+ * rather than at each of the several write paths. That covers rows already
+ * stored with a forged name, and cannot be bypassed by a write path added later
+ * or one this fix missed.
+ *
+ * Dropping rather than stripping: a name that tried to forge the marker has
+ * told us what it is, and falling through to the next tier is the fail-closed
+ * choice. Stripping would render it as somebody else's bare name instead.
+ *
+ * Shared's helper, not a local `endsWith`, so this and the input validator can
+ * never disagree — it also folds confusable Unicode dots, which a hand-rolled
+ * check would miss.
+ */
+const presentName = (s?: string | null): string | undefined => {
+  const t = present(s);
+  if (!t) return undefined;
+  return hasReservedQnsSuffix(t) ? undefined : t;
+};
+
+/**
+ * A QNS name is stored BARE — the suffix is presentation. One arriving with a
+ * `.q` already on it is malformed however it got here, and would otherwise
+ * render as `alice.q.q`, so it is not trusted as a claim.
+ */
+const presentQnsName = (s?: string | null): string | undefined => {
+  const t = present(s);
+  if (!t) return undefined;
+  return hasReservedQnsSuffix(t) ? undefined : t;
+};
+
 const isSelf = (member: ResolvableMember, self?: SelfIdentity): boolean =>
   !!self?.address && member.address === self.address;
 
@@ -122,9 +173,14 @@ export function resolveMemberName(
   member: ResolvableMember,
   opts: { self?: SelfIdentity } = {},
 ): ResolvedMemberName {
-  const override = present(member.display_name) ?? present(member.name);
-  const qns = present(member.primary_username);
-  const global = present(member.global_display_name);
+  const storedOverride = presentName(member.display_name) ?? presentName(member.name);
+  const qns = presentQnsName(member.primary_username);
+  const global = presentName(member.global_display_name);
+
+  // Demote an override that merely repeats the global name. It is the join
+  // echo, not a name chosen for this space, and leaving it in the override tier
+  // is what let it outrank the member's `.q` (see the header).
+  const override = storedOverride && storedOverride === global ? undefined : storedOverride;
 
   // Delegate the ordering of the tiers shared owns. Only call it when one of
   // them actually has content, so shared's non-Qm-aware address fallback can

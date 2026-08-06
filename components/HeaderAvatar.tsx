@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import * as Skin from '@/theme/skins/geometry';
 import { useAuth } from '@/context';
+import { resolveSelfName } from '@/utils/resolveSelfName';
 import { useTheme } from '@/theme';
 
 const SIZE = 32;
@@ -28,7 +29,24 @@ export function HeaderAvatar() {
   // avatar matches the profile screen.
   const uri = user?.profileImage || user?.farcaster?.pfpUrl || undefined;
   // When no photo, fall back to name initials (not the generic blue logo).
-  const fallbackName = user?.displayName || user?.primaryUsername || '';
+  // Through `resolveSelfName` rather than `displayName || primaryUsername`,
+  // which had the ladder upside down: a `.q` REPLACES the global name, so the
+  // global name winning here meant the one avatar you look at most was derived
+  // from the name you no longer go by. `initialsSource` is the bare name — the
+  // `.q` suffix would otherwise be read as a second word and yield two initials.
+  //
+  // The empty-name case stays empty rather than taking the resolver's
+  // "Unnamed": `CachedAvatar` treats any defined string as a request for
+  // initials, so passing "Unnamed" through would put a "U" on the avatar of
+  // every user who has set no name at all — a visible change this fix has no
+  // business making.
+  const hasSelfName = !!(user?.primaryUsername?.trim() || user?.displayName?.trim());
+  const fallbackName = hasSelfName
+    ? resolveSelfName({
+        primaryUsername: user?.primaryUsername,
+        displayName: user?.displayName,
+      }).initialsSource
+    : '';
 
   return (
     <TouchableOpacity

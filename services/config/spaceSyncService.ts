@@ -24,7 +24,7 @@ import {
   getSpaceKey,
   type SpaceKey,
 } from './spaceStorage';
-import { type Space } from '@quilibrium/quorum-shared';
+import { type Space, type SpaceMember } from '@quilibrium/quorum-shared';
 import { hexToBytes, bytesToHex } from '@quilibrium/quorum-shared';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
 
@@ -281,11 +281,21 @@ export async function syncSpaceFromConfig(
           deriveAddress(Uint8Array.from(hexToBytes(payloadSigning.publicKey)))
         : '';
       const adapter = getMMKVAdapter();
+      // Global slots, not the per-space override. `userInfo` comes from the
+      // synced config blob, so this is the account's GLOBAL name and avatar;
+      // writing it to `display_name` marked it as a name deliberately chosen
+      // for this space, which outranks the QNS `.q` name forever. Same defect
+      // the join paths had, reachable instead by setting up a second device.
       await adapter.saveSpaceMember(spaceId, {
         address: userInfo.address,
-        display_name: userInfo.displayName,
-        profile_image: userInfo.profileImage,
+        global_display_name: userInfo.displayName,
+        global_profile_image: userInfo.profileImage,
+        globalProfileTimestamp: Date.now(),
         inbox_address: signingAddress,
+      } as SpaceMember & {
+        global_display_name?: string;
+        global_profile_image?: string;
+        globalProfileTimestamp?: number;
       });
     }
 

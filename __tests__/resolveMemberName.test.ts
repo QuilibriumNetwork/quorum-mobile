@@ -300,3 +300,130 @@ describe('the surfaces agree', () => {
     expect(resolveMemberName(asReactionRow(own)).isAddressFallback).toBe(true);
   });
 });
+
+describe('an override that only echoes the global name', () => {
+  // Both join paths and config sync used to stamp the member's GLOBAL name
+  // straight into the per-space override, where it outranked their `.q`
+  // permanently. The write side is fixed; this is what heals the rows already
+  // written that way.
+
+  it('lets the QNS name through when the override just repeats the global name', () => {
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      display_name: 'Alice',
+      global_display_name: 'Alice',
+      primary_username: 'alice',
+    });
+
+    expect(resolved.name).toBe('alice');
+    expect(resolved.isQnsVerified).toBe(true);
+  });
+
+  it('still lets a genuinely different per-space name outrank the QNS name', () => {
+    // The tier exists for exactly this: a name chosen for this space wins.
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      display_name: 'Alice (mod)',
+      global_display_name: 'Alice',
+      primary_username: 'alice',
+    });
+
+    expect(resolved.name).toBe('Alice (mod)');
+    expect(resolved.isQnsVerified).toBe(false);
+  });
+
+  it('keeps the override when there is no global name to compare against', () => {
+    // Nothing to call it an echo OF. Demoting on a missing global would blank
+    // the name for every member whose global slot has not arrived yet.
+    const resolved = resolveMemberName({ address: ADDRESS, display_name: 'Alice' });
+
+    expect(resolved.name).toBe('Alice');
+  });
+
+  it('falls through to the global name when the echo is demoted and no QNS exists', () => {
+    // Same string either way, but via the global tier — so a later global
+    // rename reaches this member instead of being masked.
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      display_name: 'Alice',
+      global_display_name: 'Alice',
+    });
+
+    expect(resolved.name).toBe('Alice');
+    expect(resolved.isAddressFallback).toBe(false);
+  });
+
+  it('compares after trimming, so whitespace does not disguise an echo', () => {
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      display_name: '  Alice  ',
+      global_display_name: 'Alice',
+      primary_username: 'alice',
+    });
+
+    expect(resolved.name).toBe('alice');
+  });
+});
+
+describe('a name that tries to forge the verified-QNS marker', () => {
+  // `.q` is appended at render only for the QNS tier, and display names are
+  // forbidden from ending in it. But that validator runs on local text inputs
+  // and never on receive, and `isQnsVerified` is not surfaced anywhere — so the
+  // suffix is the only signal a viewer has. A modified client broadcasting
+  // `display_name: "alice.q"` would otherwise render identically to the real
+  // holder of `alice`.
+
+  it('drops a per-space name ending in .q', () => {
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      display_name: 'alice.q',
+      global_display_name: 'Mallory',
+    });
+
+    expect(resolved.name).toBe('Mallory');
+    expect(resolved.isQnsVerified).toBe(false);
+  });
+
+  it('drops a global name ending in .q', () => {
+    const resolved = resolveMemberName({ address: ADDRESS, global_display_name: 'alice.q' });
+
+    // Fail closed: no name at all rather than a forged one.
+    expect(resolved.isAddressFallback).toBe(true);
+  });
+
+  it('folds confusable unicode dots, so a lookalike cannot slip through', () => {
+    // Shared's helper normalises these; a hand-rolled endsWith('.q') would not.
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      display_name: 'alice\u2024q',
+      global_display_name: 'Mallory',
+    });
+
+    expect(resolved.name).toBe('Mallory');
+  });
+
+  it('is case and whitespace insensitive', () => {
+    expect(
+      resolveMemberName({ address: ADDRESS, display_name: '  Alice.Q  ', global_display_name: 'Mallory' }).name,
+    ).toBe('Mallory');
+  });
+
+  it('rejects a QNS field that already carries the suffix, rather than rendering .q.q', () => {
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      primary_username: 'alice.q',
+      global_display_name: 'Mallory',
+    });
+
+    expect(resolved.name).toBe('Mallory');
+    expect(resolved.isQnsVerified).toBe(false);
+  });
+
+  it('leaves an ordinary name containing a dot alone', () => {
+    // Only the SUFFIX is reserved. "Q." and ".q Corp" are ordinary names.
+    expect(
+      resolveMemberName({ address: ADDRESS, display_name: 'alice.q Corp' }).name,
+    ).toBe('alice.q Corp');
+    expect(resolveMemberName({ address: ADDRESS, display_name: 'R.Q. Jones' }).name).toBe('R.Q. Jones');
+  });
+});
