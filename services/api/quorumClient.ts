@@ -22,6 +22,40 @@ const DEFAULT_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
 };
 
+// Dev-only public-profile overlay, used to synthesize QNS `.q` names on a test
+// account that owns none. Gated at the require() itself, not just at the call
+// site, so neither the module nor its storage reaches a release bundle — the
+// same shape as the DmBurstSheet gate. See services/dev/fakeQns.ts for why the
+// injection point is here and not in the hooks.
+const FakeQnsModule = __DEV__
+  ? (require('@/services/dev/fakeQns') as typeof import('@/services/dev/fakeQns'))
+  : null;
+
+/**
+ * A user's published public profile, as returned by
+ * `GET /users/:addr/public-profile`.
+ *
+ * Declared once and exported so consumers stop re-declaring it. A narrower
+ * local copy in `useUserPublicProfile` silently dropped `primary_username` for
+ * two months, which made the whole QNS tier dead on mobile while the wire was
+ * carrying the field the entire time.
+ */
+export interface PublicProfileResponse {
+  display_name: string;
+  profile_image: string;
+  bio: string;
+  /** QNS primary username, bare (`alice` renders as `alice.q`). */
+  primary_username?: string;
+  timestamp: number;
+  signature: string;
+  farcaster?: {
+    fid: number;
+    custodyAddress: string;
+    farcasterSignature: string;
+    quorumSignature: string;
+  };
+}
+
 /**
  * Inbox registration info
  */
@@ -825,23 +859,16 @@ export class QuorumMobileClient implements QuorumApiClient {
   // isProfilePublic). Used as a fallback when an in-space update-profile
   // hasn't reached this client yet, e.g. for users we share spaces with
   // but joined before they set their profile.
+  //
+  // `primary_username` is the QNS `.q` name, and this response is its ONLY
+  // carrier — it is never in a message broadcast or a roster row. So a member's
+  // `.q` is unknowable without a fetch here, and a user with a private profile
+  // has no `.q` as far as anyone else is concerned.
 
-  async getPublicProfile(address: string): Promise<{
-    display_name: string;
-    profile_image: string;
-    bio: string;
-    primary_username?: string;
-    timestamp: number;
-    signature: string;
-    farcaster?: {
-      fid: number;
-      custodyAddress: string;
-      farcasterSignature: string;
-      quorumSignature: string;
-    };
-  } | null> {
+  async getPublicProfile(address: string): Promise<PublicProfileResponse | null> {
+    let actual: PublicProfileResponse | null;
     try {
-      return await this.fetch(`/users/${address}/public-profile`, {
+      actual = await this.fetch(`/users/${address}/public-profile`, {
         // 2MB cap. A well-formed profile after avatar compression
         // is <250KB. Anything bigger is a pre-fix user whose avatar
         // was uploaded uncompressed; surface as "no profile" rather
@@ -850,16 +877,21 @@ export class QuorumMobileClient implements QuorumApiClient {
       });
     } catch (error: unknown) {
       if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
-        return null;
+        actual = null;
+      } else if (
+        // Same fallthrough for oversized — treat as no profile rather
+        // than propagating to the caller (which would surface a
+        // visible error toast for what should be a soft fallback).
+        error && typeof error === 'object' && 'code' in error && error.code === 'RESPONSE_TOO_LARGE'
+      ) {
+        actual = null;
+      } else {
+        throw error;
       }
-      // Same fallthrough for oversized — treat as no profile rather
-      // than propagating to the caller (which would surface a
-      // visible error toast for what should be a soft fallback).
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'RESPONSE_TOO_LARGE') {
-        return null;
-      }
-      throw error;
     }
+    // Applied to the 404 path too, deliberately: the members you most need a
+    // fake `.q` for are the ones with no public profile at all.
+    return FakeQnsModule ? FakeQnsModule.applyFakeQns(address, actual) : actual;
   }
 
   /**

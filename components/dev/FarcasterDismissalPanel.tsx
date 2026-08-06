@@ -52,9 +52,8 @@
  */
 
 import React, { useCallback } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
-import type { AppTheme } from '@/theme';
+import { StyleSheet } from 'react-native';
+import { DevButton, DevPanel, DevReadout, DevRow } from '@/components/dev/DevPanel';
 import * as Skin from '@/theme/skins/geometry';
 import {
   resetFarcasterDismissal,
@@ -77,18 +76,16 @@ import {
 const REWIND_MS = 60 * 60 * 1000;
 
 interface FarcasterDismissalPanelProps {
-  theme: AppTheme;
   /** Farcaster rows currently suppressed by the watermark. */
   dismissedCount: number;
 }
 
 export function FarcasterDismissalPanel({
-  theme,
   dismissedCount,
 }: FarcasterDismissalPanelProps) {
   const clearedBefore = useFarcasterClearedBefore();
   const snapshot = useNotificationSnapshot();
-  const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const styles = React.useMemo(() => createStyles(), []);
   const [checkState, setCheckState] = React.useState<
     { running: boolean; label: string }
   >({ running: false, label: 'not run yet — tap Run' });
@@ -159,105 +156,47 @@ export function FarcasterDismissalPanel({
     });
 
   return (
-    <View style={styles.panel}>
-      <Text style={styles.label}>dev · notifications</Text>
-
-      <View style={styles.row}>
-        <Text style={styles.value}>
+    <DevPanel title="Notifications" style={styles.panel}>
+      <DevRow>
+        <DevReadout>
           watermark: {clearedBefore ? time(clearedBefore) : 'never'} · hiding {dismissedCount}
-        </Text>
-        {clearedBefore > 0 && (
-          <TouchableOpacity onPress={handleReset} hitSlop={8} style={styles.button}>
-            <Text style={styles.buttonLabel}>Reset</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        </DevReadout>
+        {clearedBefore > 0 && <DevButton label="Reset" onPress={handleReset} />}
+      </DevRow>
 
-      <View style={styles.row}>
-        <Text style={styles.value}>
+      <DevRow>
+        <DevReadout>
           {snapshot
             ? `snapshot: ${time(snapshot.takenAt)} · ${snapshot.mentionCount} mentions, ${snapshot.pingCount} pings`
             : 'snapshot: none (taken automatically on clear)'}
-        </Text>
-        {!!snapshot && (
-          <TouchableOpacity onPress={handleRestore} hitSlop={8} style={styles.button}>
-            <Text style={styles.buttonLabel}>Restore</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        </DevReadout>
+        {!!snapshot && <DevButton label="Restore" onPress={handleRestore} />}
+      </DevRow>
 
       {/* Simulates the OS background wake-up that raises the "you have new
           Farcaster messages" rows. Run = wake up now. −1h = wind the
           already-seen marker back an hour so the same messages count as new
           again (cumulative — each tap goes back another hour). */}
-      <View style={styles.row}>
-        <Text style={styles.value}>
+      <DevRow>
+        <DevReadout>
           fc wake-up · already seen up to{' '}
           {watermark ? time(watermark) : 'never (everything counts as new)'}
-        </Text>
-        <TouchableOpacity onPress={handleRewind} hitSlop={8} style={styles.button}>
-          <Text style={styles.buttonLabel}>−1h</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={handleRunCheck}
-          hitSlop={8}
-          style={styles.button}
-          disabled={checkState.running}
-        >
-          <Text style={styles.buttonLabel}>Run</Text>
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.report}>{checkState.label}</Text>
-    </View>
+        </DevReadout>
+        <DevButton label="−1h" onPress={handleRewind} />
+        <DevButton label="Run" onPress={handleRunCheck} disabled={checkState.running} />
+      </DevRow>
+      {/* Full-width so a multi-clause report isn't squeezed next to the buttons
+          and truncated — the stage it truncates is invariably the one you
+          needed. */}
+      <DevReadout>{checkState.label}</DevReadout>
+    </DevPanel>
   );
 }
 
-const createStyles = (theme: AppTheme) =>
+const createStyles = () =>
   StyleSheet.create({
     panel: {
-      gap: Skin.space(6),
       marginHorizontal: Skin.space(12),
       marginBottom: Skin.space(8),
-      paddingHorizontal: Skin.space(12),
-      paddingVertical: Skin.space(10),
-      borderRadius: Skin.radius(8),
-      backgroundColor: theme.colors.surface3,
-    },
-    row: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: Skin.space(12),
-    },
-    label: {
-      fontSize: Skin.font(10),
-      fontWeight: '700',
-      letterSpacing: 0.5,
-      textTransform: 'uppercase',
-      color: theme.colors.textSubtle,
-    },
-    value: {
-      flex: 1,
-      fontSize: Skin.font(13),
-      color: theme.colors.textMain,
-      fontVariant: ['tabular-nums'],
-    },
-    // Full-width so a multi-clause report isn't squeezed next to the buttons
-    // and truncated — the stage it truncates is invariably the one you needed.
-    report: {
-      fontSize: Skin.font(13),
-      lineHeight: Skin.font(18),
-      color: theme.colors.textMain,
-    },
-    button: {
-      paddingHorizontal: Skin.space(12),
-      paddingVertical: Skin.space(6),
-      borderRadius: Skin.radius(6),
-      backgroundColor: theme.colors.surface1,
-    },
-    buttonLabel: {
-      fontSize: Skin.font(13),
-      fontWeight: '600',
-      color: theme.colors.primary,
     },
   });

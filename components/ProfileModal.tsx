@@ -88,6 +88,10 @@ import {
 } from '@/services/onboarding/secureStorage';
 import { maybeSendUpdateProfileMessage } from '@/services/space/spaceMessageService';
 import { isDevModeLocal, setDevModeLocal, getApiConfig } from '@/services/api/config';
+// Dev-only; rendered behind a `__DEV__` gate at the call site, same as the
+// notifications tab's FarcasterDismissalPanel.
+import { DevPanel, DevRow } from '@/components/dev/DevPanel';
+import { QnsFakePanel } from '@/components/dev/QnsFakePanel';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
@@ -171,22 +175,13 @@ function DevModeSection({ theme }: { theme: AppTheme }) {
   const [isLocal, setIsLocal] = React.useState(isDevModeLocal());
   const config = getApiConfig();
 
-  // Warning-tinted dashed box — same "dev builds only" visual language as the
-  // Apex modal's debug panel.
   return (
-    <View style={{ marginBottom: Skin.space(24) }}>
-      <Text style={{ fontSize: Skin.font(16), fontFamily: theme.fonts.bold.fontFamily, fontWeight: theme.fonts.bold.fontWeight, color: theme.colors.warning, marginBottom: Skin.space(12) }}>
-        Developer (dev builds only)
-      </Text>
-      <View style={{ backgroundColor: theme.colors.surface2, borderRadius: Skin.radius(8), padding: Skin.space(16), borderWidth: 1, borderStyle: 'dashed', borderColor: theme.colors.warning }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <IconSymbol name="chevron.left.forwardslash.chevron.right" size={20} color={theme.colors.warning} style={{ marginRight: Skin.space(12) }} />
-          <View style={{ flex: 1, marginRight: Skin.space(12) }}>
-            <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Use Local API</Text>
-            <Text style={{ fontSize: Skin.font(12), color: theme.colors.textSubtle, marginTop: Skin.space(2) }}>
-              {isLocal ? config.baseUrl : 'Connects to production'}
-            </Text>
-          </View>
+    <View style={{ marginBottom: Skin.space(24), gap: Skin.space(12) }}>
+      <DevPanel title="Developer">
+        <DevRow
+          label="Use Local API"
+          hint={isLocal ? config.baseUrl : 'Connects to production'}
+        >
           <Switch
             value={isLocal}
             onValueChange={(v) => {
@@ -197,10 +192,12 @@ function DevModeSection({ theme }: { theme: AppTheme }) {
                 `Now using ${v ? 'localhost' : 'production'}. Restart the app for the change to take full effect.`,
               );
             }}
-            trackColor={{ true: theme.colors.primary }}
+            trackColor={{ true: theme.colors.warning }}
           />
-        </View>
-      </View>
+        </DevRow>
+      </DevPanel>
+
+      <QnsFakePanel />
     </View>
   );
 }

@@ -34,6 +34,8 @@ import { getQuorumClient } from '@/services/api/quorumClient';
 import { USDC_ICON_URL } from '@/services/wallet/balanceService';
 import { getLocalTokenIconUri } from '@/services/wallet/tokenIcons';
 import WalletSelector from '@/components/wallet/WalletSelector';
+// Dev-only; rendered behind a `__DEV__` gate at the call site.
+import { DevButton, DevButtonRow, DevPanel } from '@/components/dev/DevPanel';
 import { useTheme, type AppTheme } from '@/theme';
 import { getErrorMessage } from '@/utils/error';
 import { truncateAddress } from '@/utils/formatAddress';
@@ -519,27 +521,17 @@ export default function ApexSubscribeModal({ visible, onClose, mode }: ApexSubsc
 
         {/* DEV-ONLY debug panel — never rendered in release builds. */}
         {__DEV__ && (
-          <View style={styles.debugBox}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
-              <IconSymbol name="chevron.left.forwardslash.chevron.right" size={16} color={theme.colors.warning} />
-              <Text style={styles.debugTitle}>Debug (dev builds only)</Text>
-            </View>
-            <Text style={styles.debugHint}>
-              Walk the Apex flow without paying. Empty slot picks are padded
-              with debug spaces; state is local-only.
-            </Text>
-            <View style={styles.debugButtonRow}>
-              <TouchableOpacity style={styles.debugButton} onPress={() => debugActivate(false)}>
-                <Text style={styles.debugButtonText}>Skip payment & activate</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.debugButton} onPress={() => debugActivate(true)}>
-                <Text style={styles.debugButtonText}>Set expired</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.debugButton} onPress={debugClear}>
-                <Text style={styles.debugButtonText}>Clear</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <DevPanel
+            title="Debug"
+            hint="Walk the Apex flow without paying. Empty slot picks are padded with debug spaces; state is local-only."
+            style={styles.debugBox}
+          >
+            <DevButtonRow>
+              <DevButton label="Skip payment & activate" onPress={() => debugActivate(false)} />
+              <DevButton label="Set expired" onPress={() => debugActivate(true)} />
+              <DevButton label="Clear" onPress={debugClear} />
+            </DevButtonRow>
+          </DevPanel>
         )}
       </ScrollView>
     </BaseModal>
@@ -576,43 +568,16 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
     },
+    // Spacing only — the dashed warning frame now comes from DevPanel, so the
+    // treatment can never drift from the other dev panels.
     debugBox: {
       marginTop: Skin.space(16),
       marginBottom: Skin.space(24),
-      padding: Skin.space(12),
-      borderRadius: Skin.radius(10),
-      borderWidth: 1,
-      borderStyle: 'dashed',
-      borderColor: theme.colors.warning,
-    },
-    debugTitle: {
-      fontSize: Skin.font(12),
-      fontFamily: theme.fonts.bold.fontFamily,
-      fontWeight: theme.fonts.bold.fontWeight,
-      color: theme.colors.warning,
-      marginBottom: Skin.space(4),
     },
     debugHint: {
       fontSize: Skin.font(11),
       color: theme.colors.textSubtle,
       marginBottom: Skin.space(8),
-    },
-    debugButtonRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: Skin.space(8),
-    },
-    debugButton: {
-      paddingVertical: Skin.space(6),
-      paddingHorizontal: Skin.space(10),
-      borderRadius: Skin.radius(8),
-      backgroundColor: theme.colors.surface2,
-      borderWidth: 1,
-      borderColor: theme.colors.warning,
-    },
-    debugButtonText: {
-      fontSize: Skin.font(12),
-      color: theme.colors.warning,
     },
     renewHint: {
       fontSize: Skin.font(13),

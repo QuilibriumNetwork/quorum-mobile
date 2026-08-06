@@ -520,7 +520,7 @@ export default function NotificationsScreen() {
       {/* Developer — only mounted in dev builds. Makes the dismissal watermark
           observable and, crucially, reversible, so testing "Clear Farcaster"
           doesn't cost a real notification history. */}
-      {__DEV__ && <FarcasterDismissalPanel theme={theme} dismissedCount={dismissedCount} />}
+      {__DEV__ && <FarcasterDismissalPanel dismissedCount={dismissedCount} />}
       {farcasterError && farcasterEnabled && (
         // Inline banner — visible whether or not chat notifications are
         // present. This is the only way the user can tell that their
