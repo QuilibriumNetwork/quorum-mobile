@@ -200,13 +200,23 @@ profile toggle only controls whether Quorum *displays* the label.
 
 ## Status
 
-Parts 1 and the instrument's prerequisite landed 2026-08-06 on
-`feat/dev-fake-qns-and-member-qns-plumbing` (mobile) and `feat/dev-fake-qns`
-(desktop). Mobile: 513 tests, four mutations confirmed capable of turning them
-red. Desktop: 1050 tests, three mutations confirmed.
+**2026-08-06 — part 1 shipped in PR #236** (`feat: .q names reach other members,
+and a dev switch to see them without owning one`). Desktop's half is on
+`feat/dev-fake-qns`, not yet shipped.
 
-Still open: part 2 (the hook's inlined precedence) and part 3 (the
-identity-coverage port) are untouched. The §5a observation run is the immediate
-next step and needs a device.
+What landed: the field survives the type boundary, the fetch gate widened to
+match desktop so a known member is still asked about their `.q`, and
+`primary_username` reaches the member row. Plus the dev overlay on both clients.
+Mobile 514 tests with four mutations confirmed capable of turning them red;
+desktop 1050 with three.
+
+**Deliberately still open, which is why this file stays in `.open/`:**
+
+- Part 2, the hook's inlined precedence — untouched.
+- Part 3, the identity-coverage port — untouched.
+- The §5a observation run. The tool exists; nobody has run it. Until that
+  happens, "a member with a `.q` renders as their `.q`" is READ, not MEASURED.
+- The two parity gaps in §5a-A and §5a-B are recorded but not filed as their own
+  issues, and not fixed.
 
 *Last updated: 2026-08-06*
