@@ -84,15 +84,109 @@ another client's request), so a member showing as an address is ambiguous
 between "the rule is wrong" and "the data was never delivered". Eyeballing
 screens cannot separate those. A number can.
 
+## 4. The second reason the tier was dead (found 2026-08-06)
+
+§1 was right that the field was discarded at the type boundary. It was not the
+whole story, and fixing only that would have produced no visible change.
+
+MEASURED: the fetch was gated on a member missing a name *or* an avatar
+(`!effName || !effIcon`). That gate was sound while the public profile only ever
+supplied a fallback name/avatar — once the roster global slot carries those, the
+fetch buys nothing. It stopped being sound the moment QNS mattered, because the
+public profile is the **only** carrier of `primary_username`. Any member already
+known by name would never be asked about their `.q`, so the tier could not fire
+for them.
+
+Either defect alone was sufficient to keep QNS invisible. Desktop does not have
+this one: READ, `src/hooks/business/user/useMembersWithPublicProfileFallback.ts:67-78`
+fetches every visible sender and says why in a comment.
+
+## 5. How to actually see any of this: the dev overlay
+
+Shipped 2026-08-06 on both clients. A `.q` costs real money, so the tool
+synthesizes one rather than requiring a registration.
+
+| | mobile | desktop |
+|---|---|---|
+| control | Profile → Developer → Fake QNS | `/dev/fake-qns` |
+| seam | `QuorumMobileClient.getPublicProfile` | `QuorumApiClient.getPublicProfile` |
+| core | `services/dev/fakeQns.ts` | `src/dev/fake-qns/fakeQnsCore.ts` |
+
+Both cores are deliberately identical, including the derived names, and both
+suites assert the same hard-coded derivation — a parity comparison where the two
+clients were handed different inputs is not a comparison.
+
+The seam is the API client, not the hooks, which structurally avoids the trap
+the desktop doc records: every public-profile hook shares one React Query key,
+so a hook-level fake that missed one caches a real `null` and never appears.
+
+**Mobile's panel has one half that is NOT an overlay.** "My .q name" writes
+`user.primaryUsername` for real, because that is the actual product path. With a
+public profile, the next publish signs it into the v2 payload and POSTs it to
+the configured API — production unless "Use Local API" is on. Clear it when
+done. Desktop has no equivalent because it never publishes `primary_username`.
+
+### 5a. The observation run
+
+Set "Enable" + "Give everyone a .q". Reopen the space after every change — an
+open screen holds an already-resolved member map, so a stale screen reads as a
+negative result.
+
+Expected `.q` (mobile surfaces that go through `formatResolvedName`):
+
+- [ ] message sender names — `MessagesList.tsx:691`
+- [ ] reply-preview author — `Chat/types.ts:523`
+- [ ] mention pills in rendered markdown — `MessageMarkdownRenderer.native.tsx:366`
+- [ ] mention autocomplete rows, and matching by typing the `.q` — `MessageInput.tsx:516,1122`
+- [ ] reaction details — `ReactionDetailsModal.tsx:106`
+- [ ] space settings member list + blocked users — `SpaceSettingsModal.tsx:838,862`
+- [ ] mention/reply notification bodies — `logMentionOrReply.ts:113`
+
+Expected `.q` from `user.primaryUsername` (self only, no overlay involved):
+profile header, header avatar fallback, tab bar, Farcaster identity badge.
+
+**Expected to show NO `.q`, and this is the finding, not a bug in the tool:**
+mobile's DM surfaces. The conversation list and DM header read
+`conversation.displayName` raw (`app/(tabs)/messages/dm/[id].tsx:390`,
+`messages/index.tsx:216`) and never reach the adapter. Desktop *does* resolve
+there (`DirectMessage.tsx:259,372`, `useConversationsWithProfileBackfill.ts:116`).
+Same person, two clients, two names. File it if confirmed.
+
+### 5b. The two questions this answers directly
+
+**Does a `.q` beat the global display name?** Yes, by the ladder. Control arm:
+set a per-space name for yourself in one space and not another. The space with
+the override must show the override; the other must show the `.q`. If both show
+the same thing the precedence is inverted, and everything converging is NOT a
+pass.
+
+**Is a `.q` visible when the profile is private?** No. `primary_username` travels
+only in the published public profile, so a private profile has no `.q` as far as
+anyone else is concerned. Flip "All profiles private" to see exactly that. Note
+this is independent of QNS resolvability: `GET names.quilibrium.com/resolve/:name`
+is public regardless, so people can still find your address by name — the
+profile toggle only controls whether Quorum *displays* the label.
+
 ## Definition of done
 
-- [ ] `PublicProfile` in `hooks/useUserPublicProfile.ts` carries `primary_username`
-- [ ] The merge in `useMembersWithPublicProfileFallback` propagates it onto the member row
-- [ ] The stale comment at `useMembersWithPublicProfileFallback.ts:61` is made true
-- [ ] A member with a `.q` name renders as their `.q` name, with the suffix styled, on the surfaces that use `formatResolvedName`
-- [ ] Confirmed whether `primary_username` can reach an in-space member row at all, or only via the public profile
+- [x] `PublicProfile` in `hooks/useUserPublicProfile.ts` carries `primary_username` — now an alias of the client's own type, so a field can no longer be lost here
+- [x] The merge in `useMembersWithPublicProfileFallback` propagates it onto the member row
+- [x] The stale comment at `useMembersWithPublicProfileFallback.ts:61` is made true — the gate it described is gone (§4)
+- [x] Confirmed whether `primary_username` can reach an in-space member row at all, or only via the public profile — public profile only, and the fetch gate had to widen before it could arrive
+- [ ] A member with a `.q` name renders as their `.q` name on the surfaces that use `formatResolvedName` — **the overlay makes this observable; the run in §5a has not been done yet**
 - [ ] The hook delegates tier ordering to the adapter while keeping its own timestamp merge, and chat behaviour is unchanged (this is the risky one — chat is the reference path)
 - [ ] Desktop's identity-coverage pure core is ported and a before/after number recorded
 - [ ] Same number produced on desktop for the same space, so parity is a comparison and not an impression
 
-*Last updated: 2026-08-04*
+## Status
+
+Parts 1 and the instrument's prerequisite landed 2026-08-06 on
+`feat/dev-fake-qns-and-member-qns-plumbing` (mobile) and `feat/dev-fake-qns`
+(desktop). Mobile: 513 tests, four mutations confirmed capable of turning them
+red. Desktop: 1050 tests, three mutations confirmed.
+
+Still open: part 2 (the hook's inlined precedence) and part 3 (the
+identity-coverage port) are untouched. The §5a observation run is the immediate
+next step and needs a device.
+
+*Last updated: 2026-08-06*
