@@ -313,12 +313,46 @@ will disagree with itself:**
 
    Treat this as a design task with its own short spec, not as a port. It is
    also why it must not gate the security item below.
-2. **The forged-`.q` guard.** A display name ending in `.q` must never reach the
-   render path. **Desktop has zero uses of `hasReservedQnsSuffix`** — grep
-   confirms — so the forgery in `.secret/` works against it today. A security
-   rule enforced in one client and not the other is worth less than it looks:
-   the two clients share a network. This one must be un-bypassable and identical
-   on both, which means shared.
+2. **The forged-`.q` guard — DONE in shared 2026-08-06 (`2476059`), and it is
+   NOT sufficient for desktop.** Read this before assuming the item is closed.
+
+   The guard now lives inside `resolveDisplayName`, so every tier it resolves
+   drops a name that would forge the marker. Mobile is covered twice (its own
+   adapter still has the rule; the duplicate can go when mobile bumps its shared
+   dep — it is on `2.1.0-39` from npm, and npm has not been published past that).
+
+   Desktop consumes shared through a **local symlink** (`link:../quorum-shared`,
+   resolved and verified), so it picked the guard up the moment shared was
+   rebuilt — no publish needed. Its full suite passes: 1119 tests.
+
+   **But desktop is still exposed on the surfaces that matter.** It has TWO
+   resolvers, and only one delegates to shared. `resolveSpaceMemberName`
+   (`src/utils/resolveMemberName.ts:66`) hand-rolls the ladder and returns early
+   on the roster name, the QNS name and the global name — **all three
+   unguarded**. It reaches the shared-backed `resolveMemberName` only when every
+   tier is empty, i.e. the address-fallback case, where there is nothing left to
+   forge. And it is what 10+ surfaces call: messages, mentions, reactions,
+   notifications, pinned messages, the channel view.
+
+   So the practical state is: guarded in DMs and wherever `resolveMemberName` is
+   called directly, unguarded in every space context. **Fixing that is a
+   two-or-three line change in desktop** — route those three reads through
+   `hasReservedQnsSuffix`, which shared already exports — and it should happen
+   before this item is called done. Doing it properly (making
+   `resolveSpaceMemberName` delegate) is the design task in item 1.
+
+   This is the concrete proof of why item 1 matters: putting a rule in shared
+   protects only the paths that actually call shared.
+
+   *(Superseded note: this item previously read "desktop has zero uses of
+   `hasReservedQnsSuffix`". True when written, and still true of desktop's own
+   source — it now inherits the rule through shared instead, on one of its two
+   paths.)*
+
+   The principle that put it here still holds, and is the reason the remaining
+   desktop gap is not acceptable: a rule enforced in one client and not the
+   other is worth less than it looks, because the two clients share a network. A
+   forged name a mobile user never sees is one a desktop user reads instead.
 3. **The DM title rule** — a conversation's `displayName` is a GLOBAL name, not
    a per-conversation override, because a DM cannot be renamed. Mobile now has
    this in one place (`utils/conversationTitle.ts`); desktop resolves DM names
