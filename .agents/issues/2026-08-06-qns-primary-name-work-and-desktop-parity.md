@@ -313,8 +313,9 @@ will disagree with itself:**
 
    Treat this as a design task with its own short spec, not as a port. It is
    also why it must not gate the security item below.
-2. **The forged-`.q` guard — DONE in shared 2026-08-06 (`2476059`), and it is
-   NOT sufficient for desktop.** Read this before assuming the item is closed.
+2. **The forged-`.q` guard — DONE on all three repos, 2026-08-06.** Shared
+   `#77`, desktop `06c38370d` on `main`. Mobile already had it. The history
+   below is kept because the gap it describes is the argument for item 1.
 
    The guard now lives inside `resolveDisplayName`, so every tier it resolves
    drops a name that would forge the marker. Mobile is covered twice (its own
@@ -325,24 +326,27 @@ will disagree with itself:**
    resolved and verified), so it picked the guard up the moment shared was
    rebuilt — no publish needed. Its full suite passes: 1119 tests.
 
-   **But desktop is still exposed on the surfaces that matter.** It has TWO
-   resolvers, and only one delegates to shared. `resolveSpaceMemberName`
-   (`src/utils/resolveMemberName.ts:66`) hand-rolls the ladder and returns early
-   on the roster name, the QNS name and the global name — **all three
-   unguarded**. It reaches the shared-backed `resolveMemberName` only when every
-   tier is empty, i.e. the address-fallback case, where there is nothing left to
-   forge. And it is what 10+ surfaces call: messages, mentions, reactions,
-   notifications, pinned messages, the channel view.
+   **Shared alone did not cover desktop, and that is the lesson worth keeping.**
+   Desktop has TWO resolvers and only one delegates. `resolveSpaceMemberName`
+   (`src/utils/resolveMemberName.ts`) hand-rolls the ladder and returns early on
+   the roster name, the QNS name and the global name — all three unguarded. It
+   reaches the shared-backed `resolveMemberName` only when every tier is empty,
+   where there is nothing left to forge. And it is what 10+ surfaces call:
+   messages, mentions, reactions, notifications, pinned messages, the channel
+   view. So immediately after the shared fix, desktop was guarded in DMs and
+   unguarded in every space context.
 
-   So the practical state is: guarded in DMs and wherever `resolveMemberName` is
-   called directly, unguarded in every space context. **Fixing that is a
-   two-or-three line change in desktop** — route those three reads through
-   `hasReservedQnsSuffix`, which shared already exports — and it should happen
-   before this item is called done. Doing it properly (making
-   `resolveSpaceMemberName` delegate) is the design task in item 1.
+   Closed in `06c38370d` by routing those three reads through
+   `hasReservedQnsSuffix`, applied BEFORE the roster-vs-global echo comparison —
+   compared raw, a forged roster name differs from the global one, which reads
+   as a deliberate per-space name and returns the forged string outright. Nine
+   tests; reverting the guard turns five red. Full desktop suite green (1128).
 
-   This is the concrete proof of why item 1 matters: putting a rule in shared
-   protects only the paths that actually call shared.
+   **This is the concrete proof of why item 1 matters: a rule placed in shared
+   protects only the paths that actually call shared.** Desktop's second
+   resolver still needs to be made to delegate, and until it is, every future
+   rule added to shared will have to be manually mirrored into it — exactly the
+   drift this section exists to end.
 
    *(Superseded note: this item previously read "desktop has zero uses of
    `hasReservedQnsSuffix`". True when written, and still true of desktop's own
