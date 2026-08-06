@@ -23,6 +23,8 @@ import {
   signStealthOwnership,
 } from '@/services/onboarding/keyService';
 import { getMnemonic, getPrivateKey } from '@/services/onboarding/secureStorage';
+import { republishSelfProfile } from '@/services/profile/republishSelfProfile';
+import { NO_PRIMARY_NAME } from '@/utils/primaryName';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
@@ -93,9 +95,79 @@ export default function NameDetailModal({
     }
   }, [visible]);
 
+  /**
+   * Change which name you resolve to, then make sure that reaches other people.
+   *
+   * Electing used to be `updateProfile` plus an alert, which changed only what
+   * the electing user saw — a `.q` travels to anyone else exclusively inside
+   * the published public profile. The republish is what makes the election
+   * real, so it belongs to every path that changes the elected name rather
+   * than to the elect button alone.
+   *
+   * `updateProfile` is a React state update, so `user` still carries the OLD
+   * name on the line below it; the override is spread in explicitly.
+   */
+  const applyPrimaryName = async (next: string) => {
+    if (!user?.address) return;
+    const electing = next !== NO_PRIMARY_NAME;
+
+    updateProfile({ primaryUsername: next });
+    const outcome = await republishSelfProfile({ ...user, primaryUsername: next });
+
+    if (outcome.status === 'failed') {
+      Alert.alert(
+        electing ? 'Primary set, but not published' : 'Primary removed, but not published',
+        `The change is saved on this device. Publishing it failed, so other people will keep seeing your old name until it goes through. Try again from your profile.`,
+      );
+      return;
+    }
+    if (!electing) {
+      Alert.alert('Primary Removed', `@${name} is no longer your primary username.`);
+      return;
+    }
+    Alert.alert(
+      'Primary Set',
+      outcome.status === 'published'
+        ? `@${name} is now your primary username. Other people will see you as ${name}.q.`
+        : // Be straight about this rather than implying the name is now visible.
+          // A private profile is where the `.q` stops: it is the only thing that
+          // carries one to anyone else.
+          `@${name} is now your primary username. Your profile is private, so only you can see it — turn on Public Profile to show ${name}.q to other people.`,
+    );
+  };
+
+  /**
+   * Drop this name as primary because it just stopped being usable as one —
+   * made private, or transferred away. Distinct from `handleUnsetPrimary`,
+   * which is the user deliberately un-electing a name they still hold.
+   *
+   * Without this, the two actions leave you publishing a name that no longer
+   * resolves to you, or worse, one that now belongs to somebody else. Nothing
+   * checks that a claimed `.q` really resolves back to the claimant, so a
+   * transferred-but-still-elected name renders identically on both accounts.
+   *
+   * Returns null when there was nothing to release, so callers can leave their
+   * message alone in the common case.
+   */
+  const releasePrimaryIfElected = async () => {
+    if (!user?.address || !isPrimary) return null;
+    updateProfile({ primaryUsername: NO_PRIMARY_NAME });
+    return republishSelfProfile({ ...user, primaryUsername: NO_PRIMARY_NAME });
+  };
+
   const handleSetPrimary = () => {
-    updateProfile({ primaryUsername: name });
-    Alert.alert('Primary Set', `@${name} is now your primary username.`);
+    void applyPrimaryName(name);
+  };
+
+  const handleUnsetPrimary = () => {
+    Alert.alert(
+      'Remove as Primary',
+      `Stop using @${name} as your name? You keep the name and it keeps resolving to your address — you will just show up under your display name again.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => void applyPrimaryName(NO_PRIMARY_NAME) },
+      ],
+    );
   };
 
   /**
@@ -150,12 +222,19 @@ export default function NameDetailModal({
         timestamp,
         nonce,
       }, {
-        onSuccess: () => {
+        onSuccess: async () => {
+          // A private name can't be your primary one: it no longer resolves to
+          // your address, so a `.q` built from it points nowhere.
+          const released = makeResolvable ? null : await releasePrimaryIfElected();
           Alert.alert(
             'Success',
             makeResolvable
               ? `@${name} is now publicly resolvable.`
-              : `@${name} is now private and no longer resolvable.`
+              : released
+                ? released.status === 'failed'
+                  ? `@${name} is now private. It was your primary name, so it has been removed as primary here — but publishing that change failed, and other people may still see you as ${name}.q for now.`
+                  : `@${name} is now private and no longer resolvable. It was your primary name, so you now show up under your display name.`
+                : `@${name} is now private and no longer resolvable.`
           );
           onRefresh?.();
         },
@@ -316,8 +395,18 @@ export default function NameDetailModal({
                 timestamp,
                 nonce,
               }, {
-                onSuccess: () => {
-                  Alert.alert('Transferred', `@${name} has been transferred.`);
+                onSuccess: async () => {
+                  // Keeping a transferred name as your primary means you and
+                  // its new owner both render as the same `.q`.
+                  const released = await releasePrimaryIfElected();
+                  Alert.alert(
+                    'Transferred',
+                    released
+                      ? released.status === 'failed'
+                        ? `@${name} has been transferred. It was your primary name, so it has been removed as primary here — but publishing that change failed. Retry from your profile: until it publishes, you and the new owner both show up as ${name}.q.`
+                        : `@${name} has been transferred. It was your primary name, so you now show up under your display name.`
+                      : `@${name} has been transferred.`,
+                  );
                   onRefresh?.();
                   onClose();
                   setIsTransferring(false);
@@ -417,6 +506,21 @@ export default function NameDetailModal({
               <View style={styles.actionContent}>
                 <Text style={styles.actionText}>Set as Primary</Text>
                 <Text style={styles.actionSubtext}>Use this as your main username</Text>
+              </View>
+              <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          )}
+
+          {/* Remove as Primary — the only place a primary name can be
+              un-elected. Without it, a user who owns one name is stuck with it
+              as their display name permanently: every other surface renders
+              `isPrimary` as a badge with nothing to tap. */}
+          {isPrimary && (
+            <TouchableOpacity style={styles.actionButton} onPress={handleUnsetPrimary}>
+              <IconSymbol name="star" size={18} color={theme.colors.textMuted} />
+              <View style={styles.actionContent}>
+                <Text style={styles.actionText}>Remove as Primary</Text>
+                <Text style={styles.actionSubtext}>Go back to your display name (you keep the name)</Text>
               </View>
               <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
             </TouchableOpacity>

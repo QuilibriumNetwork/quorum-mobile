@@ -19,6 +19,7 @@ import { useToast } from '@/context/ToastContext';
 import { compressAvatarImage } from '@/services/media/imageAttachment';
 import { getHypersnapOptInChoice, setHypersnapOptInChoice } from '@/services/farcaster/hypersnapOptIn';
 import { provisionHypersnapSigner, forgetHypersnapSigner } from '@/services/farcaster/hypersnapProvision';
+import { republishSelfProfile } from '@/services/profile/republishSelfProfile';
 import { truncateAddress } from '@/utils/formatAddress';
 import {
   useBucketLookup,
@@ -1553,6 +1554,35 @@ export default function ProfileModal({
   // Track which names have been made resolvable (locally after successful API call)
   const [resolvableNames, setResolvableNames] = React.useState<Set<string>>(new Set());
 
+  /**
+   * Elect a QNS name as the name you go by.
+   *
+   * The publish is the point. A `.q` reaches anyone else only inside your
+   * published public profile, so electing without republishing changed what
+   * you saw and nothing about what anybody else saw — until some later,
+   * unrelated profile edit happened to carry the name along.
+   *
+   * `updateProfile` is a React state update, so `user` below still holds the
+   * previous name; the new one is spread in explicitly.
+   */
+  const handleSetPrimary = async (name: string) => {
+    if (!user?.address) return;
+    updateProfile({ primaryUsername: name });
+    const outcome = await republishSelfProfile({ ...user, primaryUsername: name });
+
+    Alert.alert(
+      outcome.status === 'failed' ? 'Primary set, but not published' : 'Primary Set',
+      outcome.status === 'published'
+        ? `@${name} is now your primary username. Other people will see you as ${name}.q.`
+        : outcome.status === 'not-public'
+          // Say so plainly instead of implying the name is now visible. A
+          // private profile is where the `.q` stops — it is the only thing
+          // that carries one to anyone else.
+          ? `@${name} is now your primary username. Your profile is private, so only you can see it — turn on Public Profile to show ${name}.q to other people.`
+          : `@${name} is saved as your primary username on this device, but publishing it failed. Other people will keep seeing your old name until it goes through.`,
+    );
+  };
+
   const handleMakeResolvable = (name: string) => {
     if (!user?.quilibriumAddress || !user?.publicKey || !bucketRecords) return;
 
@@ -1924,10 +1954,7 @@ export default function ProfileModal({
                           ) : (
                             <TouchableOpacity
                               style={styles.setPrimaryButton}
-                              onPress={() => {
-                                updateProfile({ primaryUsername: name });
-                                Alert.alert('Primary Set', `@${name} is now your primary username.`);
-                              }}
+                              onPress={() => void handleSetPrimary(name)}
                             >
                               <Text style={styles.setPrimaryButtonText}>Set as Primary</Text>
                             </TouchableOpacity>
@@ -2018,10 +2045,7 @@ export default function ProfileModal({
                         ) : (
                           <TouchableOpacity
                             style={styles.setPrimaryButton}
-                            onPress={() => {
-                              updateProfile({ primaryUsername: name });
-                              Alert.alert('Primary Set', `@${name} is now your primary username.`);
-                            }}
+                            onPress={() => void handleSetPrimary(name)}
                           >
                             <Text style={styles.setPrimaryButtonText}>Set as Primary</Text>
                           </TouchableOpacity>

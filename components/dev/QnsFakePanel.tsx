@@ -55,6 +55,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context';
+import { NO_PRIMARY_NAME } from '@/utils/primaryName';
 import { useTheme, type AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 import {
@@ -106,7 +107,7 @@ export function QnsFakePanel() {
     // suffix is appended at render. Storing it with the suffix would render
     // "name.q.q".
     const trimmed = selfName.trim().replace(/\.q$/i, '');
-    updateProfile({ primaryUsername: trimmed || undefined });
+    updateProfile({ primaryUsername: trimmed || NO_PRIMARY_NAME });
 
     // Pin the same name for your own address in the overlay.
     //
@@ -126,7 +127,7 @@ export function QnsFakePanel() {
 
   const handleClearSelf = useCallback(() => {
     setSelfName('');
-    updateProfile({ primaryUsername: undefined });
+    updateProfile({ primaryUsername: NO_PRIMARY_NAME });
     if (user?.address) {
       removeFakeQnsEntry(user.address);
       setState(getFakeQnsState());
