@@ -387,15 +387,16 @@ export default function DMChatScreen() {
   // the hook count jump between the first render (no conversation, 59
   // hooks) and the second (conversation arrived, 61 hooks). React's
   // hook-order check fires that exact path.
-  // Through the one resolver, so a DM header obeys the same ladder as every
-  // other surface. The stored `displayName` sits in the OVERRIDE tier here —
-  // it is the name you gave this conversation — so it still outranks the `.q`,
-  // which is the intended precedence.
+  // Through the one resolver, so a DM header obeys the same ladder as
+  // everywhere else. `displayName` goes in the GLOBAL tier: a DM cannot be
+  // renamed (no UI exists), so that value is the partner's own global name,
+  // not a name you chose for this conversation. Treating it as an override
+  // would rank it above their `.q`.
   const title = useMemo(() => {
     if (!conversation?.address) return 'Conversation';
     const resolved = resolveMemberName({
       address: conversation.address,
-      display_name: conversation.displayName,
+      global_display_name: conversation.displayName,
       // Straight from the fetched profile rather than threaded through the
       // conversation row: `conversation` is a union whose base half does not
       // declare the field, and this is the only consumer.

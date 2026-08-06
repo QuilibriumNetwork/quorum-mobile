@@ -145,21 +145,34 @@ export const DMChatArea = React.memo(function DMChatArea({
   const hasExistingSession = useHasEncryptionSession(conversationId);
 
   // Build the local member map (just the two participants in a DM).
+  //
+  // GLOBAL slots, not the per-space override. A DM has no per-conversation
+  // name — there is no UI to rename one, and `displayName` on the row is
+  // whatever the partner broadcast as their GLOBAL name
+  // (`services/dm/dmProfileService.ts`). Putting it in the override tier made
+  // it outrank the partner's QNS `.q`, so a DM could never show one — the same
+  // defect the join paths had, in a different place.
   const dmMemberMap = useMemo<MemberMap>(() => {
+    // `SpaceMember` declares neither global slot, so the entry type is widened
+    // the same way every other two-slot write site does it.
+    type DmEntry = MemberMap[string] & {
+      global_display_name?: string;
+      global_profile_image?: string;
+    };
     const map: MemberMap = {};
     if (conversationData) {
       map[conversationData.address ?? ''] = {
         address: conversationData.address ?? '',
-        display_name: conversationData.displayName,
-        profile_image: conversationData.icon,
-      } as MemberMap[string];
+        global_display_name: conversationData.displayName,
+        global_profile_image: conversationData.icon,
+      } as DmEntry;
     }
     if (user?.address) {
       map[user.address] = {
         address: user.address,
-        display_name: user.displayName || user.username,
-        profile_image: user.profileImage,
-      } as MemberMap[string];
+        global_display_name: user.displayName || user.username,
+        global_profile_image: user.profileImage,
+      } as DmEntry;
     }
     return map;
   }, [conversationData, user]);
