@@ -172,6 +172,37 @@ believing a negative result.
 Desktop is behind on everything below. Audited 2026-08-06; findings are from
 reading desktop source, not assumed from mobile.
 
+### How the two clients got out of step, since it explains the shape of this
+
+Desktop fixed the join stamping on **2026-08-05** in PR #313 — four commits:
+`f991082a9` (own override slot), `f12106a5b` (an incoming join is a global
+identity), `b069bd637` (one-time clear of legacy overrides) and `6bd2df171` (a
+tripwire on unexpected writes to the own override slot).
+
+Mobile's equivalent was NOT fixed alongside it. It was filed as an open
+question in desktop's own
+`.agents/issues/.open/2026-08-05-mobile-identity-parity-after-the-desktop-phase-1-fix.md`
+— "**UNKNOWN — the urgent one**... This is the item to answer first" — and sat
+unanswered for a day. The answer, found 2026-08-06, was yes: mobile stamped on
+both join paths AND on config sync, so it was still manufacturing the traps
+desktop had just cleared, on every member's device. That file predicted this
+consequence exactly.
+
+**The lesson to carry into the desktop work: a fix that lands on one client and
+leaves the other as a TODO is not a shipped fix.** The clients share a network,
+so the unfixed one keeps producing the state the fixed one is cleaning up.
+
+Two things desktop has that mobile still does not, both worth porting BACK:
+
+- **`6bd2df171`, the tripwire** on unexpected writes to your own override slot.
+  Mobile has no equivalent instrument, and its equivalent bug had lived for
+  months undetected.
+- **`b069bd637`, the one-time legacy clear.** Mobile instead heals at READ time
+  via the echo demotion, which is less invasive but cannot heal a row whose
+  owner has since renamed globally (that override is now a STALE echo and reads
+  as deliberate). Desktop's own file says not to port its clear blindly — it was
+  justified by a measurement on a real account. Measure mobile before deciding.
+
 ### What desktop already has, and does better
 
 - **One publish call site**, not four: `useUserSettings.saveChanges`
@@ -204,6 +235,16 @@ reading desktop source, not assumed from mobile.
 5. **Receiver-side verification (§10a)**, whenever it lands on mobile. A client
    that renders the wire field without checking it exposes its own users
    regardless of what the other client does. **Both clients or neither.**
+6b. **The per-space name field's placeholder.** Leaving that field empty means
+   "follow my normal name", and the placeholder is how the user is told what
+   that resolves to — so it is a promise and must be the name the app would
+   actually render, including the `.q`. Desktop's shows a static
+   `t\`Display Name\`` (`SpaceSettingsModal/Account.tsx:217`) and promises
+   nothing; mobile's promised the wrong name until 2026-08-06. Port mobile's
+   `selfNamePlaceholder` (`utils/resolveSelfName.ts`). Small, self-contained,
+   and the screen in question is the one that explains the whole two-slot model
+   to the user — worth more than its size.
+
 6. **Re-check `messageSenderName`-style surfaces.** Mobile had two places
    reading the per-space override directly instead of going through the
    resolver, which broke the moment joins stopped stamping that slot. Desktop
