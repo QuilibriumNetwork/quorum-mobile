@@ -32,8 +32,24 @@ Set a QNS name primary, turn your public profile OFF, and nobody else ever sees
 your `.q`. Not in a space, not in a DM, nowhere. Your own profile screen shows
 it, so it looks like it is working.
 
-Nothing in the UI says this. The operator, who has more context on this
-subsystem than any real user will, did not know — and only found out by asking.
+### The UI copy is not silent — it is worse than silent
+
+An earlier draft of this section claimed "nothing in the UI says this." **That
+was wrong**, corrected 2026-08-06 from a device screenshot. The Public Profile
+toggle reads (`components/ProfileModal.tsx:4284`):
+
+> "Let anyone see your display name, picture, bio, and QNS username — **even
+> outside shared spaces**. Off by default."
+
+So the tie is disclosed. But read it as a user: "even outside shared spaces"
+states that the toggle *extends* visibility beyond your spaces, which strongly
+implies your QNS username is already visible **inside** them. It is not. The
+copy is actively misleading in exactly the direction that misled both people on
+this thread, one of whom wrote the resolver.
+
+That makes the copy a defect in its own right, independent of whether §6 ships.
+If the transport change lands, the sentence becomes true and needs no edit. If
+it does not, the sentence has to change.
 
 ## 2. Why they are tied today
 
@@ -190,6 +206,80 @@ the row and ranks it correctly. Once the field arrives, the ladder works.
 both a public profile and a broadcast supply a `.q` they will agree, since both
 come from the same `user.primaryUsername`.
 
+## 6a. The `.q` is a DISPLAY NAME, not a username — and that decides the Farcaster question
+
+Added 2026-08-06 after the merged-profile case was raised. The product copy calls
+it a "QNS username" and `ProfileSplitModeModal.tsx:37` says "Fname and QNS
+usernames always stay in their own system", which reads as: the `.q` is a handle
+like an fname, so it should sit beside `@fname` rather than replace a name.
+
+**That classification is wrong, and the code already disagrees with it.**
+
+| | Farcaster | Quorum |
+|---|---|---|
+| Username (handle) | `@gattopardo` (fname) | — none. There is an address. |
+| Display name | "GattoPardo Far" | display name, **overridden by the `.q`** |
+
+`primary_username` sits in the DISPLAY-NAME ladder (`resolveDisplayName`:
+override → `.q` → `display_name` → address) and beats `display_name`. It never
+competes with a handle, because Quorum has no handle. Functionally it is a
+display name that happens to be registered.
+
+Three consequences:
+
+1. **The `.q` belongs in the name slot in every layout**, including merged —
+   not in the handles row next to `@fname`. Those are different kinds of thing.
+2. **In MERGED mode the `.q` should fan out to Farcaster's display name.** Merge
+   means one display name across both systems; the `.q` is the display name.
+   `UnifiedProfileEditModal.tsx:253-271` already writes `displayName` to
+   Farcaster on a merged save — it just currently sends the global name.
+3. **The Farcaster USERNAME is never touched.** `@gattopardo` is a handle in
+   another system. Confirmed unchanged by anything here.
+
+In SPLIT mode the two identities stay separate, so the Farcaster card keeps its
+own display name and only the Quorum card shows the `.q`.
+
+### The rule this collapses to
+
+**Electing a `.q` primary is a display-name change, so it must do everything a
+display-name change does**: publish the Quorum public profile, broadcast to
+spaces, and — in merged mode only — update the Farcaster display name.
+
+Today it does none of them (§6b). That single rule explains the publish bug, the
+staleness, and the Farcaster gap as one omission rather than three.
+
+⚠️ **Consent caveat, and it is not optional.** Writing a user's Farcaster display
+name is a write to an external, public system. "Set as Primary" lives in the QNS
+section and mentions nothing about Farcaster. Silently renaming someone's
+Farcaster profile because they elected a QNS name would be a genuinely bad
+surprise. The fan-out must name what it is about to change and be confirmed.
+
+## 6b. Electing a name primary does nothing at all today
+
+MEASURED 2026-08-06 against production. An account with a real, resolvable `.q`
+(`GET names.quilibrium.com/resolve/lamat` returns its resolve key) and a
+published public profile has **no `primary_username` on the server**:
+
+```
+GET api.quorummessenger.com/users/<addr>/public-profile
+→ keys: bio, display_name, profile_image, signature, timestamp
+```
+
+READ, the cause: all three "Set as Primary" handlers
+(`ProfileModal.tsx:1928`, `ProfileModal.tsx:2022`,
+`qns/NameDetailModal.tsx:96`) are two lines — `updateProfile({ primaryUsername })`
+then an `Alert`. Publishing only happens on a profile save or a public-toggle
+flip (`ProfileModal.tsx:735, 1152, 1266`, `UnifiedProfileEditModal.tsx:142`).
+
+So the name sits in local storage and never reaches the wire. This is the
+unresolved remainder of
+`issues/.open/2026-06-10-primary-username-not-synced-or-published.md`.
+
+**This is the first thing to fix.** It is small, client-only, needs no design
+decision, and unblocks every public-profile user immediately — where §6's
+transport change only helps people who keep their profile private. It is also
+verifiable from outside the app by re-fetching the endpoint above.
+
 ## 7. What this does NOT change, and what is NOT decided here
 
 - **The public profile keeps carrying `primary_username`.** This adds a
@@ -222,6 +312,11 @@ this issue exists.
 
 ## 9. Definition of done
 
+Ordered. §6b first — it is small, needs no decision, and helps the larger group.
+
+- [ ] **Electing a name primary publishes.** Verified by re-fetching the live public-profile endpoint and seeing `primary_username` appear (§6b)
+- [ ] The join-stamped per-space override no longer masks the `.q` — without this a published `.q` still loses in every space
+- [ ] Merged mode fans the `.q` out to the Farcaster DISPLAY name, with explicit confirmation, and never touches the fname (§6a)
 - [ ] `primaryUsername` on the mobile send path, included in the dedupe signature
 - [ ] Stored on both mobile space receive paths and the DM path, in the global slot group under `globalProfileTimestamp`
 - [ ] Same on desktop
@@ -234,8 +329,18 @@ this issue exists.
 ## Status
 
 **2026-08-06 — design agreed, not yet implemented.** Written after the privacy
-counter-argument in §4b was raised and then refuted against source. Awaiting a
-plan discussion before code.
+counter-argument in §4b was raised and then refuted against source.
+
+Reordered the same day after measuring production: §6b (electing a name primary
+never publishes) is the first fix, not the transport change. The `.q` is broken
+today even WITH a public profile, which the original draft assumed worked.
+
+§6a added after the merged-Farcaster case: the `.q` is a display name, not a
+handle, which is why it belongs in the name slot everywhere and why merged mode
+should carry it to Farcaster's display name.
+
+§1 corrected: the UI copy does disclose the tie, and is misleading rather than
+silent. The earlier claim that it said nothing was wrong.
 
 Blocked on nothing.
 
