@@ -157,7 +157,7 @@ report's retest; the DM failures belong to that one.
    the 34-byte multihash `Qm…` form. FALSE. The misread was desktop's `sha256.digest(pk).bytes`,
    which in the `multiformats` lib IS the 34-byte multihash (`[0x12,0x20,…]`), not the raw digest.
    **Runtime-proven both sides emit the identical `Qm…` address** from the same key
-   (`QmT9a5uGGvRuyBndu78GT8RV3HzD9PysZNzf3AAn8wrYia`). Lead dev also confirmed desktop addresses are
+   (`QmPeerEEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imzzzz`). Lead dev also confirmed desktop addresses are
    the `Qm…` form. → No format mismatch, no migration, no "which side moves" decision.
 
 2. **❌ Native-vs-WASM Ed448 incompatibility.** Claimed mobile's native Rust Ed448 signatures don't
