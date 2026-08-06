@@ -26,6 +26,17 @@ alongside the global name that already travels that way.
 This is a **client-only change**. No `quorum-shared` release, no server change,
 no protocol break. Evidence in §3.
 
+> **Updated 2026-08-06 after measuring production.** This was argued as a second
+> transport alongside the public profile. The public-profile transport turns out
+> to be **entirely non-functional** — the server refuses every publish carrying a
+> `primary_username` (§10). So this is not an addition, it is the only route a
+> `.q` has, and it moves from last in the plan to first.
+>
+> It comes with a condition that was previously waved off: the receiving client
+> MUST verify a claimed name against the resolver before rendering it (§10a).
+> Removing the server from the loop removes the only party that was ever meant
+> to check.
+
 ## 1. The symptom
 
 Set a QNS name primary, turn your public profile OFF, and nobody else ever sees
@@ -343,12 +354,81 @@ an external system stuck on a name you no longer use.
 - **Signing `primaryUsername` properly** means adding it to `canonicalize`, which
   WOULD break signature compatibility across versions. Not done here. It is a
   clean, separate ask for the lead.
-- **Whether the server validates QNS ownership** on public-profile POST. Unknown
-  from these repos. The answer decides whether the `.q` badge means anything
-  today; ask the lead.
-- **Verifying a claimed `.q` client-side** (resolve it, check it maps back to the
-  claimant) is not in scope and may not be wanted — it is a fetch per name. Filed
-  as an observation, not a proposal.
+- ~~**Whether the server validates QNS ownership** on public-profile POST.
+  Unknown from these repos.~~ **ANSWERED 2026-08-06 by measurement — see §10.**
+  It does validate, and the validation is broken, so the transport this document
+  proposes is no longer an addition. It is the only one that works.
+- ~~**Verifying a claimed `.q` client-side** is not in scope and may not be
+  wanted.~~ **REVERSED 2026-08-06 — it is now a hard requirement, see §10a.**
+  That sentence was written while assuming the server checked. It does not, in
+  practice, so nothing does.
+- **Signing `primaryUsername` properly** means adding it to `canonicalize`, which
+  WOULD break signature compatibility across versions. Not done here. It is a
+  clean, separate ask for the lead.
+
+## 10. The public-profile transport is DEAD, which promotes this one
+
+Measured 2026-08-06 against production, from a mobile dev build.
+
+`POST /users/:addr/public-profile` carrying a `primary_username` is refused:
+
+```
+HTTP 400
+qns primary username failed validation: qns lookup: Get "./": stopped after 10 redirects
+```
+
+The same publish without the field succeeds. Two names were tried seconds apart
+from the same account — one unregistered, one genuinely resolvable to a
+different address — and both produced a **byte-identical** error, so the failure
+happens before the name is considered. The server's own outbound lookup URL is
+malformed. Full write-up:
+`issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md`.
+
+Consequences for this design:
+
+1. **The framing in §7 was wrong.** "This adds a transport, it does not remove
+   one" assumed the existing transport worked. It does not, for anyone, and has
+   not for as long as anyone can check. The space and DM broadcast is not a
+   second road; today it is the only road.
+2. **Priority moves.** This was ordered last, as the change that only helps
+   private-profile users. It is now the only way a `.q` reaches another human
+   without a server fix that is not ours to make.
+3. **The public-profile route stays in the plan** for its real audience —
+   strangers with no shared space, whom a broadcast can never reach. It just
+   cannot be the first one built.
+
+### 10a. Verification is part of the feature, not a follow-up
+
+The server intends to check that a claimed primary name really belongs to the
+claimant. That is the right check, and its absence in practice is what makes a
+`.q` currently worth nothing as a trust marker.
+
+Broadcasting the `.q` over the space and DM paths removes the server from the
+loop entirely. So **shipping this transport without a client-side check would
+let any client claim any name, including one belonging to somebody else.** A
+`.q` is a real identity on the network; that is not an acceptable state to ship
+even briefly.
+
+Requirements, all of them binding:
+
+- **The RECEIVER verifies, not the sender.** A check in the sending client
+  protects nobody: a modified client skips it. The receiving client resolves the
+  claimed name and confirms it maps back to the sender's address before
+  rendering it.
+- **Fail closed.** No resolution, no network, ambiguous answer: show the global
+  display name. Never render an unverified `.q`. Under-showing a real name is
+  recoverable; showing a fake one is not.
+- **Cache with a short life.** A name transferred away keeps verifying until the
+  cache expires, so the TTL is a security parameter, not a performance one.
+  The resolver is healthy and cheap — measured repeatedly the same day.
+- **Both clients or neither.** A client that renders the field without checking
+  it exposes its own users regardless of what the other client does. Desktop
+  cannot take the wire field without also taking the check.
+
+The resolver being the one healthy part of the system is what makes this
+practical: `GET names.quilibrium.com/resolve/<name>` answered correctly on every
+attempt on 2026-08-06, including for the exact names the server's own lookup
+choked on.
 
 ## 8. How we verify
 
@@ -367,11 +447,15 @@ this issue exists.
 
 Ordered. §6b first — it is small, needs no decision, and helps the larger group.
 
-- [ ] **Electing a name primary publishes.** Verified by re-fetching the live public-profile endpoint and seeing `primary_username` appear (§6b)
-- [ ] The join-stamped per-space override no longer masks the `.q` — without this a published `.q` still loses in every space
-- [ ] A primary name can be un-elected at all (§6c-1) — today it is permanent for anyone owning one name
-- [ ] Making a name private clears it as primary (§6c-2)
-- [ ] Transferring a name away clears it as primary (§6c-3) — the impersonation case
+- [x] **Electing a name primary publishes.** Client side done. The re-fetch check
+      cannot pass until the server is fixed — the publish is correctly formed and
+      correctly refused (§10)
+- [x] A primary name can be un-elected at all (§6c-1) — today it is permanent for anyone owning one name
+- [x] Making a name private clears it as primary (§6c-2)
+- [x] Transferring a name away clears it as primary (§6c-3) — the impersonation case
+- [ ] The join-stamped per-space override no longer masks the `.q` — without this a published `.q` still loses in every space, on either transport
+- [ ] **The receiver verifies a claimed `.q` against the resolver before rendering it, and fails closed (§10a)** — blocking for the broadcast transport, not optional
+- [ ] The server's QNS lookup is fixed, so the public-profile route works for strangers (not ours; filed)
 - [ ] Merged mode fans the CURRENT RESOLVED display name out to the Farcaster DISPLAY name, in both directions, with explicit confirmation, and never touches the fname (§6a, §6c)
 - [ ] `primaryUsername` on the mobile send path, included in the dedupe signature
 - [ ] Stored on both mobile space receive paths and the DM path, in the global slot group under `globalProfileTimestamp`
@@ -398,6 +482,19 @@ should carry it to Farcaster's display name.
 §1 corrected: the UI copy does disclose the tie, and is misleading rather than
 silent. The earlier claim that it said nothing was wrong.
 
-Blocked on nothing.
+**2026-08-06 — §6b, §6c-1, §6c-2 and §6c-3 implemented and reviewed**, on branch
+`fix/qns-names-in-member-list-and-dms`. Electing now publishes, un-electing
+exists, and both make-private and transfer clear the election. Clearing had to
+be spelled `''` rather than `undefined` or it silently reverted at the next
+login; see `utils/primaryName.ts`.
+
+**2026-08-06 — §10 added, and it reverses two things this document asserted.**
+Measured against production: the server refuses every publish carrying a
+`primary_username`, for any name, owned or not. So the public-profile transport
+is dead rather than merely limited, this transport becomes the only one, and
+receiver-side verification (§10a) becomes blocking rather than out of scope.
+
+Blocked on nothing for the client work. §10's server fix is not ours, and the
+public-profile route cannot be verified end to end until it lands.
 
 *Last updated: 2026-08-06*
