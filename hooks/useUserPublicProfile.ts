@@ -8,15 +8,21 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { getQuorumClient } from '@/services/api/quorumClient';
+import {
+  getQuorumClient,
+  type PublicProfileResponse,
+} from '@/services/api/quorumClient';
 
-export interface PublicProfile {
-  display_name: string;
-  profile_image: string;
-  bio: string;
-  timestamp: number;
-  signature: string;
-}
+/**
+ * Re-exported from the API client rather than re-declared.
+ *
+ * This used to be a hand-written interface that happened to omit
+ * `primary_username`. The field was on the wire the whole time; the narrower
+ * type quietly discarded it, so no member ever carried a `.q` name and the QNS
+ * rung of the resolution ladder could never fire. Aliasing the client's own
+ * type means a field added to the response can no longer be lost here.
+ */
+export type PublicProfile = PublicProfileResponse;
 
 export const publicProfileQueryKey = (address: string | undefined) =>
   ['user-public-profile', address ?? ''] as const;

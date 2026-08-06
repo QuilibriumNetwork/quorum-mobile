@@ -1,0 +1,237 @@
+/**
+ * QnsFakePanel — dev-build-only controls for faking QNS `.q` names.
+ *
+ * WHY THIS EXISTS. Every QNS surface in the app is unreachable on an account
+ * that owns no registered name, and a name costs real money. So the tier that
+ * outranks a user's display name everywhere could break, or could never have
+ * worked at all, and using the app would not reveal it. This panel makes the
+ * whole ladder reachable without buying anything.
+ *
+ * ## The two halves are NOT the same mechanism
+ *
+ * - **Your own `.q`** is written straight into your profile via
+ *   `updateProfile({ primaryUsername })`. That is the real product path — the
+ *   "Set as Primary" button on an owned name calls exactly this. The button is
+ *   gated on owning a resolvable name; the write underneath is not.
+ *
+ *   ⚠️ This is REAL STATE, not an overlay. If your profile is public, the next
+ *   publish signs the fake name into the v2 payload and POSTs it to whichever
+ *   API the "Use Local API" switch points at — production, by default — where
+ *   other beta users fetching your profile would see it. Clear it when done.
+ *
+ * - **Everyone else's `.q`** is an overlay applied to public-profile READS. It
+ *   never leaves the device and writes nothing. See `services/dev/fakeQns.ts`.
+ *
+ * ## Read the cache note before concluding anything is broken
+ *
+ * Public profiles are cached for an hour. Every control here invalidates that
+ * cache on change, which is why they must be driven from this panel rather than
+ * by calling the store's setters. Even so, a screen that is already open holds
+ * an already-resolved member map — leave the space and come back before
+ * believing a negative result.
+ *
+ * ## What a green run does and does not prove
+ *
+ * Everything downstream of the network is real: the merge, the ladder, the
+ * render. Publishing, the signature payload and the server are not exercised.
+ *
+ * Only ever mounted from a `__DEV__` gate at the call site (ProfileModal's
+ * developer section), matching DmBurstSheet and FarcasterDismissalPanel.
+ */
+
+import React, { useCallback, useMemo, useState } from 'react';
+import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/context';
+import { useTheme, type AppTheme } from '@/theme';
+import * as Skin from '@/theme/skins/geometry';
+import {
+  DevButton,
+  DevPanel,
+  DevReadout,
+  DevRow,
+  DevWarning,
+} from '@/components/dev/DevPanel';
+import {
+  clearFakeQns,
+  getFakeQnsState,
+  removeFakeQnsEntry,
+  setFakeQnsEntry,
+  setFakeQnsState,
+  type FakeQnsState,
+} from '@/services/dev/fakeQns';
+
+export function QnsFakePanel() {
+  const { theme } = useTheme();
+  const queryClient = useQueryClient();
+  const { user, updateProfile } = useAuth();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const [state, setState] = useState<FakeQnsState>(() => getFakeQnsState());
+  const [selfName, setSelfName] = useState<string>(user?.primaryUsername ?? '');
+
+  /** Drop every cached public profile so the next render refetches through the
+   *  overlay. Without this a toggle looks inert for up to an hour. */
+  const invalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['user-public-profile'] });
+  }, [queryClient]);
+
+  const update = useCallback(
+    (next: Partial<FakeQnsState>) => {
+      setState(setFakeQnsState(next));
+      invalidate();
+    },
+    [invalidate],
+  );
+
+  const handleReset = useCallback(() => {
+    setState(clearFakeQns());
+    invalidate();
+  }, [invalidate]);
+
+  const handleApplySelf = useCallback(() => {
+    // Accept "name" or "name.q" — the stored value is always bare, and the
+    // suffix is appended at render. Storing it with the suffix would render
+    // "name.q.q".
+    const trimmed = selfName.trim().replace(/\.q$/i, '');
+    updateProfile({ primaryUsername: trimmed || undefined });
+
+    // Pin the same name for your own address in the overlay.
+    //
+    // Your profile header reads `user.primaryUsername` directly, but your row
+    // in a member list or on your own messages goes through the public-profile
+    // path like anyone else's — so without this, the "everyone gets a .q" sweep
+    // would show you as qXXXX in chat while your header said the name you just
+    // typed. Two different names for yourself on one screen is exactly the
+    // confusion this tool is supposed to remove.
+    if (user?.address) {
+      if (trimmed) setFakeQnsEntry(user.address, { primaryUsername: trimmed });
+      else removeFakeQnsEntry(user.address);
+      setState(getFakeQnsState());
+      invalidate();
+    }
+  }, [selfName, updateProfile, user?.address, invalidate]);
+
+  const handleClearSelf = useCallback(() => {
+    setSelfName('');
+    updateProfile({ primaryUsername: undefined });
+    if (user?.address) {
+      removeFakeQnsEntry(user.address);
+      setState(getFakeQnsState());
+      invalidate();
+    }
+  }, [updateProfile, user?.address, invalidate]);
+
+  const mode = state.allProfilesPrivate
+    ? 'all profiles private'
+    : state.giveEveryoneAName
+      ? 'everyone gets a .q'
+      : 'no overlay';
+
+  return (
+    <DevPanel
+      title="Fake QNS"
+      hint="See where a .q name renders without owning one. Reads only — nothing is published."
+    >
+      <DevRow
+        label="Enable fake QNS"
+        hint="Master switch. Off = identical to a release build."
+      >
+        <Switch
+          value={state.enabled}
+          onValueChange={(v) => update({ enabled: v })}
+          trackColor={{ true: theme.colors.warning }}
+        />
+      </DevRow>
+
+      <DevRow
+        label="Give everyone a .q"
+        hint="Stable qXXXX name per address. The fast way to find every surface that renders a name."
+        disabled={!state.enabled}
+      >
+        <Switch
+          value={state.giveEveryoneAName}
+          disabled={!state.enabled}
+          onValueChange={(v) => update({ giveEveryoneAName: v })}
+          trackColor={{ true: theme.colors.warning }}
+        />
+      </DevRow>
+
+      <DevRow
+        label="All profiles private"
+        hint="Every public-profile fetch returns nothing — what others see when a profile is not public. Overrides the switch above."
+        disabled={!state.enabled}
+      >
+        <Switch
+          value={state.allProfilesPrivate}
+          disabled={!state.enabled}
+          onValueChange={(v) => update({ allProfilesPrivate: v })}
+          trackColor={{ true: theme.colors.warning }}
+        />
+      </DevRow>
+
+      {/* Your own name is real profile state, not an overlay — hence the
+          separate treatment and the warning under it. */}
+      <View style={styles.divider} />
+      <DevRow label="My .q name" hint="Real profile field, not an overlay." />
+      <View style={styles.inputRow}>
+        <TextInput
+          style={styles.input}
+          value={selfName}
+          onChangeText={setSelfName}
+          placeholder="e.g. qatest"
+          placeholderTextColor={theme.colors.textSubtle}
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="Fake primary QNS username"
+        />
+        <DevButton label="Set" onPress={handleApplySelf} />
+        <DevButton label="Clear" onPress={handleClearSelf} />
+      </View>
+      <DevWarning>
+        Writes to your profile. With a public profile this publishes the name to
+        the configured API. Clear it when you are done.
+      </DevWarning>
+
+      <View style={styles.divider} />
+      <DevRow>
+        <DevReadout>
+          {state.enabled ? mode : 'off'}
+          {user?.primaryUsername ? ` · me: ${user.primaryUsername}.q` : ' · me: none'}
+        </DevReadout>
+        <DevButton label="Reset" onPress={handleReset} />
+      </DevRow>
+      <Text style={styles.note}>
+        Reopen the space after a change — an open screen holds an
+        already-resolved member map.
+      </Text>
+    </DevPanel>
+  );
+}
+
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    divider: {
+      height: 1,
+      backgroundColor: theme.colors.surface2,
+    },
+    inputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(8),
+    },
+    input: {
+      flex: 1,
+      height: 38,
+      borderRadius: Skin.radius(8),
+      paddingHorizontal: Skin.space(10),
+      fontSize: Skin.font(14),
+      color: theme.colors.textMain,
+      backgroundColor: theme.colors.surface2,
+    },
+    note: {
+      fontSize: Skin.font(11),
+      lineHeight: Skin.font(15),
+      color: theme.colors.textSubtle,
+    },
+  });

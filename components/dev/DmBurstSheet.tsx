@@ -18,6 +18,7 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import type { AppTheme } from '@/theme';
 import { BaseModal } from '@/components/shared';
 import { Button } from '@/components/ui/Button';
+import { DevTitle } from '@/components/dev/DevPanel';
 import * as Skin from '@/theme/skins/geometry';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
 import { useRecipientRegistration, toRecipientInfo } from '@/hooks/chat/useRecipientRegistration';
@@ -229,7 +230,7 @@ export function DmBurstSheet({
   return (
     <BaseModal visible={visible} onClose={onClose} showHandle avoidKeyboard scrollable>
       <View style={styles.container}>
-        <Text style={styles.title}>DM Test Burst</Text>
+        <DevTitle title="DM Test Burst" style={styles.title} />
         <Text style={styles.subtitle}>
           Sends a numbered burst through the real send path and records a
           send-side timestamp for each message.
@@ -328,11 +329,8 @@ const createStyles = (theme: AppTheme) =>
       paddingTop: Skin.space(4),
       paddingBottom: Skin.space(16),
     },
+    // Spacing only — the glyph and the warning colour come from DevTitle.
     title: {
-      fontSize: Skin.font(18),
-      fontFamily: theme.fonts.bold.fontFamily,
-      fontWeight: theme.fonts.bold.fontWeight,
-      color: theme.colors.textMain,
       marginBottom: Skin.space(4),
     },
     subtitle: {
