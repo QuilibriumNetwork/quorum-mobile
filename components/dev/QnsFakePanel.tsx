@@ -7,6 +7,18 @@
  * worked at all, and using the app would not reveal it. This panel makes the
  * whole ladder reachable without buying anything.
  *
+ * ## Giving yourself a name covers most of the job
+ *
+ * Nearly every surface that renders a name can render YOU: your messages, a
+ * reply to your own message, a mention you typed at yourself (the autocomplete
+ * does not exclude you — `MessageInput.tsx:515`), your reactions, and the
+ * notification body when someone mentions you, since the name resolved there is
+ * the MENTIONED person rather than the sender (`logMentionOrReply.ts:95-118`).
+ *
+ * The everyone switch exists only for what is left: a DM partner's name and a
+ * blocked user, neither of which can ever be you. It is a coverage sweep, not a
+ * state anybody would really be in.
+ *
  * ## The two halves are NOT the same mechanism
  *
  * - **Your own `.q`** is written straight into your profile via
@@ -173,16 +185,17 @@ export function QnsFakePanel() {
         the configured API. Clear it when you are done.
       </DevWarning>
       <Text style={styles.note}>
-        Covers your profile header, tab bar, your own messages and your own
-        reactions. It cannot cover a surface that renders SOMEONE ELSE (a
-        mention pill aimed at another person, a reply preview, a DM partner) —
-        that is what switch 2 is for.
+        This covers most of the job. Nearly every surface can render YOU: your
+        messages, a reply to your own message, a mention you type at yourself,
+        the autocomplete row, your reactions, and the notification body when
+        someone mentions you — the name in that body is the mentioned person,
+        not the sender.
       </Text>
 
       <View style={styles.divider} />
       <DevRow
         label="2 · Give EVERYONE a .q"
-        hint="Coverage sweep, not a realistic state. Stable qXXXX name per address, so every surface that renders a name lights up in one pass. Never overwrites a real registration."
+        hint="Only needed for the few surfaces that can never render you: a DM partner's name, a blocked user. Coverage sweep, not a realistic state. Never overwrites a real registration."
         disabled={!state.enabled}
       >
         <Switch
@@ -195,7 +208,7 @@ export function QnsFakePanel() {
 
       <DevRow
         label="3 · All profiles private"
-        hint="Every public-profile fetch returns nothing — what someone who messages you sees when your profile is not public. Overrides switch 2."
+        hint="Every public-profile fetch returns nothing. For YOUR OWN profile the real public/private toggle above is the better test — it is end-to-end. This only simulates OTHER people being private. Overrides switch 2."
         disabled={!state.enabled}
       >
         <Switch
