@@ -482,8 +482,9 @@ should carry it to Farcaster's display name.
 §1 corrected: the UI copy does disclose the tie, and is misleading rather than
 silent. The earlier claim that it said nothing was wrong.
 
-**2026-08-06 — §6b, §6c-1, §6c-2 and §6c-3 implemented and reviewed**, on branch
-`fix/qns-names-in-member-list-and-dms`. Electing now publishes, un-electing
+**2026-08-06 — §6b, §6c-1, §6c-2 and §6c-3 shipped as PR #238** (`fix: a
+primary .q name is your name, can be un-elected, and actually reaches other
+people`), after two independent review passes. Electing now publishes, un-electing
 exists, and both make-private and transfer clear the election. Clearing had to
 be spelled `''` rather than `undefined` or it silently reverted at the next
 login; see `utils/primaryName.ts`.

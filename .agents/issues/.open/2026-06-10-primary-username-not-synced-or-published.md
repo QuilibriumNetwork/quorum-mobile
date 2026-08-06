@@ -3,7 +3,7 @@ type: bug
 title: "primaryUsername is never synced to config and may not reach the published public profile"
 status: open
 created: 2026-06-10
-updated: 2026-06-10
+updated: 2026-08-06
 severity: medium
 blocks: [qns-username-display-cross-platform, qns-username-own-device-sync]
 runtime-repro: confirmed
@@ -86,3 +86,43 @@ Gap A compounds this: `primaryUsername` isn't even in `UserConfig`, so it can't 
 ## Updates
 - **2026-08-04 14:08**: 2026-08-04 re-check. The 2026-06-13 blockers are RESOLVED in code: installed shared 2.1.0-39 has UserConfig.primaryUsername (dist/types/user.d.ts:76); AuthContext.updateProfile copies it into configUpdates (line 510); the configTask read-back bridges it into both setUser and MMKV (lines 359, 379); publicProfile.ts already publishes it when truthy. So Gap A and Gap B's mechanism are both complete. BUT the symptom persists: re-running the issue's own server probe today returns keys [bio, display_name, profile_image, signature, timestamp] - still no primary_username. Open question is whether that account simply has not re-published since the fixes landed (cause 2 in the body) or the chain is still broken. Next step: save/re-publish the profile once, then re-probe. Do not close on the code reading alone.
 - **2026-08-04 14:20**: CORRECTION to the note above (same day). The server probe in it is NOT evidence and should be ignored: it hit the address recorded in this issue back in June, which is not the account under test today, and the account actually being tested has no registered QNS name at all - so primary_username would be absent regardless of whether the code works. The code-reading half of that note still stands (all Gap A/B mechanisms are present in 2.1.0-39 + AuthContext + configTask + publicProfile.ts). What remains genuinely unverified is whether the chain PUBLISHES correctly, and verifying it needs an account that (a) has a registered QNS name, (b) has it set as primary, and (c) has public profile ON. Without such an account this cannot be measured, only read. Do not re-run the probe against the June address expecting a signal.
+- **2026-08-06 — the open question in the note above is ANSWERED, and the answer is two causes, not one.**
+
+  That note said verifying the publish chain needed an account with a registered
+  QNS name, set primary, public profile ON, and that without one this "cannot be
+  measured, only read". It turned out not to need such an account: the dev
+  fake-QNS panel drives the same publish path on an account owning no name, so
+  the whole round trip became measurable. Both causes are now identified.
+
+  **Cause 1 (client) — electing a name never triggered a publish at all.**
+  `handleSetPrimary` was `updateProfile({ primaryUsername })` plus an alert. The
+  publish path read `user.primaryUsername` correctly, as this issue's step 4
+  said, but nothing ever ran it on election. So the field only ever reached the
+  server if some unrelated edit happened to publish afterwards. Step 4's
+  "add a re-publish-on-Set-as-Primary trigger only if a residual gap remains"
+  was exactly the residual gap. **Fixed in PR #238.**
+
+  **Cause 2 (server) — the publish is refused, for everyone.** With cause 1
+  fixed, the POST now happens and comes back:
+
+  ```
+  HTTP 400
+  qns primary username failed validation: qns lookup: Get "./": stopped after 10 redirects
+  ```
+
+  Two names tried seconds apart from one account — one unregistered, one
+  genuinely resolvable to a different address — produced byte-identical errors,
+  so the failure precedes any consideration of the name. The server's own
+  outbound QNS lookup URL is malformed. Filed as
+  [`2026-08-06-server-rejects-every-primary-username-publish.md`](2026-08-06-server-rejects-every-primary-username-publish.md).
+
+  **This explains the June probe rather than leaving it ambiguous.** Re-running
+  it today against the same LaMat address returns the same key list, and now we
+  know it is not a stale account or an unpublished profile: that record could
+  not have carried a `primary_username` however many times it was re-saved.
+
+  **Stays open.** Cause 1 is fixed and shipped; cause 2 is not ours. The
+  end-to-end symptom this issue describes is unchanged until the server lookup is
+  fixed, so this is not closable on the client work alone.
+
+*Last updated: 2026-08-06*
