@@ -364,3 +364,66 @@ describe('an override that only echoes the global name', () => {
     expect(resolved.name).toBe('alice');
   });
 });
+
+describe('a name that tries to forge the verified-QNS marker', () => {
+  // `.q` is appended at render only for the QNS tier, and display names are
+  // forbidden from ending in it. But that validator runs on local text inputs
+  // and never on receive, and `isQnsVerified` is not surfaced anywhere — so the
+  // suffix is the only signal a viewer has. A modified client broadcasting
+  // `display_name: "alice.q"` would otherwise render identically to the real
+  // holder of `alice`.
+
+  it('drops a per-space name ending in .q', () => {
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      display_name: 'alice.q',
+      global_display_name: 'Mallory',
+    });
+
+    expect(resolved.name).toBe('Mallory');
+    expect(resolved.isQnsVerified).toBe(false);
+  });
+
+  it('drops a global name ending in .q', () => {
+    const resolved = resolveMemberName({ address: ADDRESS, global_display_name: 'alice.q' });
+
+    // Fail closed: no name at all rather than a forged one.
+    expect(resolved.isAddressFallback).toBe(true);
+  });
+
+  it('folds confusable unicode dots, so a lookalike cannot slip through', () => {
+    // Shared's helper normalises these; a hand-rolled endsWith('.q') would not.
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      display_name: 'alice\u2024q',
+      global_display_name: 'Mallory',
+    });
+
+    expect(resolved.name).toBe('Mallory');
+  });
+
+  it('is case and whitespace insensitive', () => {
+    expect(
+      resolveMemberName({ address: ADDRESS, display_name: '  Alice.Q  ', global_display_name: 'Mallory' }).name,
+    ).toBe('Mallory');
+  });
+
+  it('rejects a QNS field that already carries the suffix, rather than rendering .q.q', () => {
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      primary_username: 'alice.q',
+      global_display_name: 'Mallory',
+    });
+
+    expect(resolved.name).toBe('Mallory');
+    expect(resolved.isQnsVerified).toBe(false);
+  });
+
+  it('leaves an ordinary name containing a dot alone', () => {
+    // Only the SUFFIX is reserved. "Q." and ".q Corp" are ordinary names.
+    expect(
+      resolveMemberName({ address: ADDRESS, display_name: 'alice.q Corp' }).name,
+    ).toBe('alice.q Corp');
+    expect(resolveMemberName({ address: ADDRESS, display_name: 'R.Q. Jones' }).name).toBe('R.Q. Jones');
+  });
+});

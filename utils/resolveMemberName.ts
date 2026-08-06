@@ -67,7 +67,7 @@
  * name carries no picture. Do not merge the two.
  */
 
-import { resolveDisplayName } from '@quilibrium/quorum-shared';
+import { hasReservedQnsSuffix, resolveDisplayName } from '@quilibrium/quorum-shared';
 import { truncateAddress } from './formatAddress';
 
 export interface ResolvedMemberName {
@@ -118,6 +118,47 @@ const present = (s?: string | null): string | undefined => {
   return t.length ? t : undefined;
 };
 
+/**
+ * A stored display name that would forge the verified-QNS marker is not a name.
+ *
+ * `.q` is a trust marker: it is appended at render ONLY for a name that came
+ * from the QNS tier, and display names are forbidden from ending in `.q` for
+ * exactly that reason. But `validateDisplayName` runs on the four local text
+ * inputs and NOWHERE on receive, so a modified client could broadcast a display
+ * name of `alice.q` and every recipient would render it identically to a real
+ * one — `isQnsVerified` is not surfaced anywhere, so the suffix is the only
+ * signal there is.
+ *
+ * Enforced here, at the single choke point every name surface goes through,
+ * rather than at each of the several write paths. That covers rows already
+ * stored with a forged name, and cannot be bypassed by a write path added later
+ * or one this fix missed.
+ *
+ * Dropping rather than stripping: a name that tried to forge the marker has
+ * told us what it is, and falling through to the next tier is the fail-closed
+ * choice. Stripping would render it as somebody else's bare name instead.
+ *
+ * Shared's helper, not a local `endsWith`, so this and the input validator can
+ * never disagree — it also folds confusable Unicode dots, which a hand-rolled
+ * check would miss.
+ */
+const presentName = (s?: string | null): string | undefined => {
+  const t = present(s);
+  if (!t) return undefined;
+  return hasReservedQnsSuffix(t) ? undefined : t;
+};
+
+/**
+ * A QNS name is stored BARE — the suffix is presentation. One arriving with a
+ * `.q` already on it is malformed however it got here, and would otherwise
+ * render as `alice.q.q`, so it is not trusted as a claim.
+ */
+const presentQnsName = (s?: string | null): string | undefined => {
+  const t = present(s);
+  if (!t) return undefined;
+  return hasReservedQnsSuffix(t) ? undefined : t;
+};
+
 const isSelf = (member: ResolvableMember, self?: SelfIdentity): boolean =>
   !!self?.address && member.address === self.address;
 
@@ -132,9 +173,9 @@ export function resolveMemberName(
   member: ResolvableMember,
   opts: { self?: SelfIdentity } = {},
 ): ResolvedMemberName {
-  const storedOverride = present(member.display_name) ?? present(member.name);
-  const qns = present(member.primary_username);
-  const global = present(member.global_display_name);
+  const storedOverride = presentName(member.display_name) ?? presentName(member.name);
+  const qns = presentQnsName(member.primary_username);
+  const global = presentName(member.global_display_name);
 
   // Demote an override that merely repeats the global name. It is the join
   // echo, not a name chosen for this space, and leaving it in the override tier
