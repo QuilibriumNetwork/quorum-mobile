@@ -79,9 +79,13 @@ The two ✅ rows are #3 and #6 confirmed working on a real device. The ❌ rows 
       the global name as the heading and the `.q` as a separate `@handle` line
       underneath — the same inversion fixed for the OWN profile in #3, on the
       modal that shows somebody else. Same fix shape as `resolveSelfName`.
+- [ ] **Receiver-side verification of a claimed `.q`.** Planned in detail in
+      `issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md`,
+      including the cost analysis, the cache TTL as a security parameter, and
+      the rule that a failed check degrades the NAME and never the message.
 - [ ] **The broadcast transport (§10a of the design doc).** Now the only route
-      a `.q` can reach anyone while #9 is broken. **Blocked on receiver-side
-      verification**, which is binding, not optional.
+      a `.q` can reach anyone while #9 is broken. **Blocked on the verification
+      above**, which is binding, not optional.
 - [ ] **Merged Farcaster mode** fans the resolved display name to Farcaster's
       display name, never the fname.
 

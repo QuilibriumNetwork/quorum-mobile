@@ -114,6 +114,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Deliver quorum-shared to mobile without an npm publish, for everyone](issues/.open/2026-08-01-deliver-quorum-shared-to-mobile-without-npm-publish.md)
 - 📋 [Non-destructive feedback: move the remaining `Alert.alert` sites off native alerts](issues/.open/2026-08-01-non-destructive-alert-alert-to-toasts.md)
 - 📋 [Three pieces the resolver adoption deliberately left](issues/.open/2026-08-04-qns-names-and-the-identity-coverage-instrument.md)
+- 📋 [Verifying a `.q` claim, without paying for it on every render](issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md)
 
 ### Deferred
 
@@ -262,4 +263,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-06 15:00:19
+**Last Updated**: 2026-08-06 15:06:58
