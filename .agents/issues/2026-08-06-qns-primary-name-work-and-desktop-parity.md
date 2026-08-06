@@ -22,6 +22,57 @@ related:
 **Read this first.** The work touches two repos and is spread across five other
 issue files. This is the index and the parity plan; the others hold detail.
 
+## START HERE if you are picking up the desktop work cold
+
+You are working in **`quorum-desktop`**, with `quorum-mobile` as the reference
+implementation and `quorum-shared` as the place two rules should end up. All
+three repos sit side by side on this machine.
+
+**Read, in this order, and do not skip 2 — it is the one that stops you porting
+the wrong thing:**
+
+1. This whole file. The chain table tells you what was broken; the desktop
+   sections tell you what desktop is missing.
+2. **"What belongs in `quorum-shared`, and what does not"** below. Two of the
+   items are rules that must move to shared rather than be copied a third time.
+   Copying them is the failure mode this section exists to prevent.
+3. `issues/.secret/2026-08-06-a-display-name-can-impersonate-a-verified-q-name.md`
+   in THIS repo — the security item, with the working mechanism. Desktop is
+   exposed to it today.
+4. Desktop's own `.agents/docs/features/qns-username-display.md`, which records
+   decisions desktop already made (including why it refuses to fetch a full
+   roster). Do not overturn those without reading them.
+
+**Reference implementations in `quorum-mobile`**, all on branch
+`fix/join-stamps-global-name-into-per-space-override`:
+
+| what | mobile file |
+|---|---|
+| the ladder, echo demotion, forgery guard | `utils/resolveMemberName.ts` |
+| your own name (no per-space tier) | `utils/resolveSelfName.ts` |
+| the DM title rule | `utils/conversationTitle.ts` |
+| roster array ← public-profile map | `hooks/useMembersWithPublicProfileFallback.ts` (`membersWithEffectiveIdentity`) |
+| free cache read, no requests | `hooks/useMembersWithCachedQns.ts` |
+| the DM list's own fetch, and why it is affordable | `hooks/chat/useConversationsWithQnsNames.ts` |
+| electing / un-electing a primary name | `services/profile/primaryNameChange.ts`, `republishSelfProfile.ts`, `utils/primaryName.ts` |
+
+**How to verify anything you change.** Do not hand the operator a manual test
+first — build or use the harness. Mobile's dev panel (`services/dev/fakeQns.ts`)
+injects synthetic public profiles at `QuorumClient.getPublicProfile`, the single
+seam every profile read passes through, and its "give everyone a `.q`" switch
+makes every name surface in the app testable on one device. **Desktop has no
+equivalent and should get one before the render work**, for the reason mobile's
+module docstring gives: desktop already tried the hook-level version, and it
+failed silently because all the public-profile hooks share one React Query key.
+
+**Two standing rules for this work**, both learned the hard way here:
+
+- Every fix needs a test that has been shown to FAIL without it. Revert the fix,
+  watch it go red, put it back. An assertion that passes either way is worse
+  than no test.
+- Label every claim MEASURED / READ / INFERRED. On this subsystem specifically,
+  four confident readings were falsified by measurement in a single day.
+
 ## The one-line state
 
 A primary `.q` name is meant to be your name everywhere, outranking your global
