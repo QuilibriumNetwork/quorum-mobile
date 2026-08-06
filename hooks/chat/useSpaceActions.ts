@@ -16,7 +16,7 @@ import { NativeCryptoProvider } from '@/services/crypto/native-provider';
 import { getDeviceKeyset } from '@/services/onboarding/secureStorage';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes, type Space } from '@quilibrium/quorum-shared';
+import { bytesToHex, hexToBytes, type Space, type SpaceMember } from '@quilibrium/quorum-shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import bs58 from 'bs58';
 import * as multihashes from 'multihashes';
@@ -443,13 +443,24 @@ export function useJoinSpace() {
         }
       }
 
-      // 6.5. Save joiner as a member of the space
+      // 6.5. Save joiner as a member of the space.
+      //
+      // Global slots, not the per-space override — these are our GLOBAL name and
+      // avatar, and the override tier means "a name deliberately chosen for this
+      // space", which is what the space settings UI writes. Putting them in the
+      // override outranked our own QNS `.q` name on our own device, matching the
+      // same bug on the receiving side in `buildJoinedMemberRow`.
       if (user?.address) {
         await adapter.saveSpaceMember(space.spaceId, {
           address: user.address,
-          display_name: user.displayName || user.username,
-          profile_image: user.profileImage,
+          global_display_name: user.displayName || user.username,
+          global_profile_image: user.profileImage,
+          globalProfileTimestamp: Date.now(),
           inbox_address: inboxAddress,
+        } as SpaceMember & {
+          global_display_name?: string;
+          global_profile_image?: string;
+          globalProfileTimestamp?: number;
         });
       }
 

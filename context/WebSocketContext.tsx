@@ -1172,7 +1172,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                       spaceId,
                       participant.address
                     );
-                    const memberRow = buildJoinedMemberRow(existingMember, participant);
+                    // One clock for both writes below, so the stored row and the
+                    // cached row cannot end up with different global timestamps
+                    // and disagree about which is fresher.
+                    const joinReceivedAt = Date.now();
+                    const memberRow = buildJoinedMemberRow(existingMember, participant, joinReceivedAt);
 
                     await adapter.saveSpaceMember(spaceId, memberRow);
 
@@ -1185,7 +1189,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                       const idx = old.findIndex((m: SpaceMember) => m.address === participant.address);
                       if (idx >= 0) {
                         const next = [...old];
-                        next[idx] = buildJoinedMemberRow(next[idx], participant);
+                        next[idx] = buildJoinedMemberRow(next[idx], participant, joinReceivedAt);
                         return next;
                       }
                       return [...old, memberRow];
