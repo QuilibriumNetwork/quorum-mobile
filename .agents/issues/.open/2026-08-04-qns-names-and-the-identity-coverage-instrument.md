@@ -132,25 +132,45 @@ Set "Enable" + "Give everyone a .q". Reopen the space after every change — an
 open screen holds an already-resolved member map, so a stale screen reads as a
 negative result.
 
-Expected `.q` (mobile surfaces that go through `formatResolvedName`):
+Expected `.q` (mobile surfaces that go through `formatResolvedName`, all of them
+downstream of a chat screen and therefore fed by the fallback hook):
 
 - [ ] message sender names — `MessagesList.tsx:691`
 - [ ] reply-preview author — `Chat/types.ts:523`
 - [ ] mention pills in rendered markdown — `MessageMarkdownRenderer.native.tsx:366`
 - [ ] mention autocomplete rows, and matching by typing the `.q` — `MessageInput.tsx:516,1122`
 - [ ] reaction details — `ReactionDetailsModal.tsx:106`
-- [ ] space settings member list + blocked users — `SpaceSettingsModal.tsx:838,862`
 - [ ] mention/reply notification bodies — `logMentionOrReply.ts:113`
 
 Expected `.q` from `user.primaryUsername` (self only, no overlay involved):
 profile header, header avatar fallback, tab bar, Farcaster identity badge.
 
-**Expected to show NO `.q`, and this is the finding, not a bug in the tool:**
-mobile's DM surfaces. The conversation list and DM header read
+### The two places expected to show NO `.q` — findings, not tool faults
+
+Both were discovered by asking the tool what it could reach, before running it.
+Stated here because each would otherwise read as "the fake did not work".
+
+**A. The Space Settings member list, for everyone including yourself.**
+MEASURED 2026-08-06: only `SpaceChatArea.tsx:245` and `DMChatArea.tsx:173` call
+`useMembersWithPublicProfileFallback`. `SpaceSettingsModal.tsx:838` resolves
+from raw roster rows, and a roster row never carries `primary_username` — the
+public profile is its only carrier. Your own row does not escape this either:
+the self tier reads `displayName`/`username`, not `primaryUsername`.
+
+Desktop's member sidebar *does* show it, by cheap-merging `primaryUsername` from
+`effectiveMembers` for members who have posted (its own doc calls the
+lurkers-show-nothing remainder a known limitation). So this is a parity gap with
+a known, cheap shape to copy — no new fetch.
+
+**B. Mobile's DM surfaces.** The conversation list and DM header read
 `conversation.displayName` raw (`app/(tabs)/messages/dm/[id].tsx:390`,
-`messages/index.tsx:216`) and never reach the adapter. Desktop *does* resolve
-there (`DirectMessage.tsx:259,372`, `useConversationsWithProfileBackfill.ts:116`).
-Same person, two clients, two names. File it if confirmed.
+`messages/index.tsx:216`) and never reach the adapter. Desktop resolves there
+(`DirectMessage.tsx:259,372`, `useConversationsWithProfileBackfill.ts:116`).
+Note the DM *message* surfaces are fine — `DMChatArea` does use the hook — so
+this is specifically the list and the header.
+
+Same person, two clients, two names, in both cases. File each once the run
+confirms it.
 
 ### 5b. The two questions this answers directly
 

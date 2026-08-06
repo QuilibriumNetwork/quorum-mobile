@@ -144,36 +144,16 @@ export function QnsFakePanel() {
         />
       </DevRow>
 
-      <DevRow
-        label="Give everyone a .q"
-        hint="Stable qXXXX name per address. The fast way to find every surface that renders a name."
-        disabled={!state.enabled}
-      >
-        <Switch
-          value={state.giveEveryoneAName}
-          disabled={!state.enabled}
-          onValueChange={(v) => update({ giveEveryoneAName: v })}
-          trackColor={{ true: theme.colors.warning }}
-        />
-      </DevRow>
-
-      <DevRow
-        label="All profiles private"
-        hint="Every public-profile fetch returns nothing — what others see when a profile is not public. Overrides the switch above."
-        disabled={!state.enabled}
-      >
-        <Switch
-          value={state.allProfilesPrivate}
-          disabled={!state.enabled}
-          onValueChange={(v) => update({ allProfilesPrivate: v })}
-          trackColor={{ true: theme.colors.warning }}
-        />
-      </DevRow>
-
-      {/* Your own name is real profile state, not an overlay — hence the
-          separate treatment and the warning under it. */}
+      {/* Ordered by what you reach for. Giving yourself a name is the whole job
+          most of the time; the two blanket switches below are for questions it
+          cannot answer on its own. Before this order, the first control on
+          screen was the one that fakes everybody, which reads as the main path
+          and is not. */}
       <View style={styles.divider} />
-      <DevRow label="My .q name" hint="Real profile field, not an overlay." />
+      <DevRow
+        label="1 · Give MYSELF a .q"
+        hint="Start here. Sets your real primary-username field AND pins the same name for your address, so your profile header and your own chat rows agree."
+      />
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
@@ -192,6 +172,39 @@ export function QnsFakePanel() {
         Writes to your profile. With a public profile this publishes the name to
         the configured API. Clear it when you are done.
       </DevWarning>
+      <Text style={styles.note}>
+        Covers your profile header, tab bar, your own messages and your own
+        reactions. It cannot cover a surface that renders SOMEONE ELSE (a
+        mention pill aimed at another person, a reply preview, a DM partner) —
+        that is what switch 2 is for.
+      </Text>
+
+      <View style={styles.divider} />
+      <DevRow
+        label="2 · Give EVERYONE a .q"
+        hint="Coverage sweep, not a realistic state. Stable qXXXX name per address, so every surface that renders a name lights up in one pass. Never overwrites a real registration."
+        disabled={!state.enabled}
+      >
+        <Switch
+          value={state.giveEveryoneAName}
+          disabled={!state.enabled}
+          onValueChange={(v) => update({ giveEveryoneAName: v })}
+          trackColor={{ true: theme.colors.warning }}
+        />
+      </DevRow>
+
+      <DevRow
+        label="3 · All profiles private"
+        hint="Every public-profile fetch returns nothing — what someone who messages you sees when your profile is not public. Overrides switch 2."
+        disabled={!state.enabled}
+      >
+        <Switch
+          value={state.allProfilesPrivate}
+          disabled={!state.enabled}
+          onValueChange={(v) => update({ allProfilesPrivate: v })}
+          trackColor={{ true: theme.colors.warning }}
+        />
+      </DevRow>
 
       <View style={styles.divider} />
       <DevRow>
@@ -205,6 +218,14 @@ export function QnsFakePanel() {
         Reopen the space after a change — an open screen holds an
         already-resolved member map.
       </Text>
+      {/* Stated here rather than left to be discovered: the member list is the
+          screen most people would open first to check this, and it is the one
+          screen no setting here can affect. */}
+      <DevWarning>
+        Expect NO .q in the Space Settings member list, for anyone. That screen
+        reads roster rows and never fetches a public profile, which is the only
+        carrier of a .q. Not a fault in this tool — desktop does show it there.
+      </DevWarning>
     </DevPanel>
   );
 }
