@@ -43,6 +43,7 @@ import {
 import { DraggableChannelGroup } from '@/components/SpaceSettings/DraggableChannelGroup';
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useSpaceMembers } from '@/hooks/chat/useSpaces';
+import { useMembersWithCachedQns } from '@/hooks/useMembersWithCachedQns';
 import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
 import { useBlockUser } from '@/hooks/chat/useBlockUser';
 import { useDeleteSpace, useLeaveSpace, useUpdateSpace } from '@/hooks/chat/useSpaceSettings';
@@ -792,7 +793,16 @@ export default function SpaceSettingsModal({
   const channelsScrollRef = useRef<React.ComponentRef<typeof GHScrollView>>(null);
 
   // Members
-  const { data: members = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
+  const { data: rosterMembers = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
+
+  // Attach QNS `.q` names from public profiles chat has ALREADY fetched.
+  //
+  // A `.q` travels only in a published public profile, never in a roster row,
+  // so this screen could never show one for anybody — the resolver here was
+  // correct all along, the field simply never arrived. Fetching a profile per
+  // member is the fetch storm desktop looked at and refused, so this reads the
+  // React Query cache instead and issues no requests at all.
+  const members = useMembersWithCachedQns(rosterMembers);
 
   // The roster shows who is IN the Space. Both `leave` and `kick` blank the
   // member's inbox_address and KEEP the row, so without this a departed or

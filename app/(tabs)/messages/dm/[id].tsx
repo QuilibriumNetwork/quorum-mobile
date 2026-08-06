@@ -15,6 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@quilibrium/quorum-shared';
 import type { Conversation } from '@quilibrium/quorum-shared';
 import { useUserPublicProfile } from '@/hooks/useUserPublicProfile';
+import { formatResolvedName, resolveMemberName } from '@/utils/resolveMemberName';
 import { useBookmarks, useReceiptSettings } from '@/hooks/useUserConfig';
 import { useCall } from '@/context';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
@@ -386,9 +387,24 @@ export default function DMChatScreen() {
   // the hook count jump between the first render (no conversation, 59
   // hooks) and the second (conversation arrived, 61 hooks). React's
   // hook-order check fires that exact path.
-  const title =
-    conversation?.displayName ||
-    (conversation?.address ? truncateAddress(conversation.address, 'long') : 'Conversation');
+  // Through the one resolver, so a DM header obeys the same ladder as every
+  // other surface. The stored `displayName` sits in the OVERRIDE tier here —
+  // it is the name you gave this conversation — so it still outranks the `.q`,
+  // which is the intended precedence.
+  const title = useMemo(() => {
+    if (!conversation?.address) return 'Conversation';
+    const resolved = resolveMemberName({
+      address: conversation.address,
+      display_name: conversation.displayName,
+      // Straight from the fetched profile rather than threaded through the
+      // conversation row: `conversation` is a union whose base half does not
+      // declare the field, and this is the only consumer.
+      primary_username: recipientPublicProfile?.primary_username,
+    });
+    return resolved.isAddressFallback
+      ? truncateAddress(conversation.address, 'long')
+      : formatResolvedName(resolved);
+  }, [conversation?.address, conversation?.displayName, recipientPublicProfile?.primary_username]);
 
   // Tapping the avatar or name in the header opens the same profile
   // modal that tapping a pfp inside the chat opens. Builds a minimal
