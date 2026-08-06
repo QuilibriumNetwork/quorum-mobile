@@ -12,6 +12,37 @@ discovered-by: quorum-desktop QNS-usernames port (the first consumer of primary_
 
 # `primaryUsername` is never synced to config and may not reach the published public profile
 
+## Status
+
+**2026-08-06 — the client half is done; the symptom in this file is now a SERVER
+bug, and that is the answer this issue was missing.**
+
+The sync gap and the publish gap were both closed on mobile (PR #238 added the
+elect/un-elect flow and the actual publish; PR #239 finished the render side).
+So the client now does send `primary_username`.
+
+**It is refused.** `POST /users/:addr/public-profile` carrying any
+`primary_username` returns HTTP 400:
+
+```
+qns primary username failed validation: qns lookup: Get "./": stopped after 10 redirects
+```
+
+Measured against production 2026-08-06. Two names tried seconds apart — one
+unregistered, one genuinely resolvable — produced **byte-identical** errors, so
+the failure precedes any consideration of the name: the server's own outbound
+QNS lookup URL is malformed. This also explains the original observation in this
+file, that LaMat's published profile had no `primary_username` despite the name
+resolving correctly.
+
+Full reproduction:
+`issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md`.
+
+**Stays open** as a `type: bug` because the user-visible symptom is unchanged —
+no published profile carries a `.q` — and nothing here can be verified fixed
+until the server accepts the field. Re-measure then; the client work needed to
+make it pass is believed complete but has never once succeeded end to end.
+
 > **Progress 2026-06-13.** Gap A (add `primaryUsername` to shared `UserConfig`) is MERGED to quorum-shared master + bumped to `2.1.0-30` (PR #40) — but NOT yet published to npm (no auto-publish CI). Gap B's *mechanism* (the config→user read-back bridge) shipped in mobile PR #81, but it deliberately does NOT bridge `primaryUsername` because the field doesn't exist in the installed shared type yet. Still OPEN/BLOCKED. To finish once `2.1.0-30` is published + mobile dep bumped: Step 2 (copy `primaryUsername` into `configUpdates`) + one-line addition to the `configTask` bridge. See task `2026-06-10-primary-username-sync-and-publish.md`.
 
 ## Symptoms

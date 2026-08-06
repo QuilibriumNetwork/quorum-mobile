@@ -19,6 +19,29 @@ related:
 
 # One page for the whole `.q` effort
 
+## Status
+
+**2026-08-06 — mobile shipped in PR #239** (`fix: joining a space no longer
+freezes your global name, and a .q resolves on every surface`), 16 commits.
+
+What landed: breaks 1–8c of the chain below. Joins and config sync write the
+global slot instead of the per-space override, rows already stamped are healed
+at read time, and every name surface now resolves through the one ladder — the
+member list, all four DM surfaces, both mention surfaces, the call screens, the
+profile modal, your own avatar and the per-space name placeholder. A display
+name ending in `.q` can no longer forge the verified marker. Two regression
+instruments shipped with it: a test that runs the real join output through every
+name path, and a guard that fails on any new raw override read in `components/`
+or `app/`. 608 tests, verified on device with the fake-QNS sweep switch.
+
+**This file stays open.** It is the index for work that is mostly NOT done:
+
+- Desktop parity — none of it started
+- The two `quorum-shared` moves
+- Receiver-side verification, and the broadcast transport that depends on it
+- The server blocker (#9), which is not ours and which keeps a `.q` invisible to
+  every real user until it is fixed
+
 **Read this first.** The work touches two repos and is spread across five other
 issue files. This is the index and the parity plan; the others hold detail.
 

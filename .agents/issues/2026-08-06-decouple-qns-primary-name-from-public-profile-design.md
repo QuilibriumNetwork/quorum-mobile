@@ -468,6 +468,19 @@ Ordered. §6b first — it is small, needs no decision, and helps the larger gro
 
 ## Status
 
+**2026-08-06 — the render half shipped in PR #239.** Every surface now resolves
+a `.q` through the one ladder, the forged-suffix guard is in, and the join/config
+-sync write paths were fixed. That is everything downstream of the network.
+
+**Still not implemented, and the two are linked:** §10a receiver-side
+verification (planned in full in
+`issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md`) and the
+broadcast transport, which §10a is a binding precondition for. Do not ship the
+transport first — a client that renders the wire field without checking it
+exposes its own users regardless of what the other client does.
+
+Also still open: §6a merged-Farcaster mode.
+
 **2026-08-06 — design agreed, not yet implemented.** Written after the privacy
 counter-argument in §4b was raised and then refuted against source.
 
