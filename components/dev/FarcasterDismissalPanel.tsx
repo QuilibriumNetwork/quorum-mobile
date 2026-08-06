@@ -156,7 +156,13 @@ export function FarcasterDismissalPanel({
     });
 
   return (
-    <DevPanel title="Notifications" style={styles.panel}>
+    <DevPanel
+      title="Notifications"
+      // Suppression stays visible while folded. A collapsed panel quietly
+      // hiding notifications would read as "there are none".
+      badge={clearedBefore > 0 ? `hiding ${dismissedCount}` : undefined}
+      style={styles.panel}
+    >
       <DevRow>
         <DevReadout>
           watermark: {clearedBefore ? time(clearedBefore) : 'never'} · hiding {dismissedCount}

@@ -180,7 +180,8 @@ function DevModeSection({ theme }: { theme: AppTheme }) {
 
   return (
     <View style={{ marginBottom: Skin.space(24), gap: Skin.space(12) }}>
-      <DevPanel title="Developer">
+      {/* One row, so folding it would cost a tap to save nothing. */}
+      <DevPanel title="Developer" collapsible={false}>
         <DevRow
           label="Use Local API"
           hint={isLocal ? config.baseUrl : 'Connects to production'}

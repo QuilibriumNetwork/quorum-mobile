@@ -215,6 +215,13 @@ export function QnsFakePanel() {
   return (
     <DevPanel
       title="Fake QNS"
+      // Anything actively changing what the app shows stays legible while
+      // folded, so a collapsed panel cannot quietly be overriding names.
+      badge={
+        state.enabled
+          ? `${mode}${user?.primaryUsername ? ` · ${user.primaryUsername}.q` : ''}`
+          : undefined
+      }
       hint="See where a .q name renders without owning one. Giving YOURSELF one publishes, like the real button; giving everyone else one is a read-side overlay that never leaves the device."
     >
       <DevRow
