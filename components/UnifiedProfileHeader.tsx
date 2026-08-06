@@ -6,6 +6,7 @@ import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/Segmente
 import type { UserInfo } from '@/context/AuthContext';
 import type { ProfileAuthor } from '@/hooks/useFarcasterProfile';
 import { truncateAddress } from '@/utils/formatAddress';
+import { resolveSelfName } from '@/utils/resolveSelfName';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -14,6 +15,7 @@ import * as Skin from '@/theme/skins/geometry';
 
 /** Which identity the big profile card shows when unmerged with both profiles. */
 export type IdentityTab = 'quorum' | 'farcaster';
+
 
 interface UnifiedProfileHeaderProps {
   user: UserInfo;
@@ -54,6 +56,8 @@ export default function UnifiedProfileHeader({
     return <QuorumOnlyHeader user={user} onEdit={onEditQuorum} onCopyAddress={onCopyAddress} theme={theme} styles={styles} />;
   }
 
+  const selfName = resolveSelfName(user);
+
   // Unmerged with both profiles: one big card + a [Quorum | Farcaster] switcher
   // above it. Swapping changes only this card; the nav pills below are separate.
   if (splitMode) {
@@ -84,9 +88,9 @@ export default function UnifiedProfileHeader({
           />
         ) : (
           <BigProfileCard
-            displayName={user.displayName || user.primaryUsername || 'Unnamed'}
+            displayName={selfName.label}
+            avatarName={selfName.initialsSource}
             avatarUri={user.profileImage}
-            qname={user.primaryUsername ? `${user.primaryUsername}.q` : undefined}
             address={user.address}
             onCopyAddress={onCopyAddress}
             onEdit={onEditQuorum}
@@ -100,11 +104,17 @@ export default function UnifiedProfileHeader({
 
   // Merged mode — show one identity, prefer Quorum display fields with Farcaster
   // as fallback. Handle + address are always shown together.
-  const displayName =
-    user.displayName ||
-    farcasterProfile?.displayName ||
-    user.farcaster?.username ||
-    'Unnamed';
+  //
+  // The `.q` leads here too when there is one. Farcaster only supplies a name
+  // when Quorum has none at all, which now means neither a `.q` nor a global.
+  const hasQns = !!(user.primaryUsername ?? '').trim();
+  const displayName = hasQns
+    ? selfName.label
+    : user.displayName ||
+      farcasterProfile?.displayName ||
+      user.farcaster?.username ||
+      'Unnamed';
+  const avatarName = hasQns ? selfName.initialsSource : displayName;
   const avatarUri = user.profileImage || farcasterProfile?.pfp?.url || user.farcaster?.pfpUrl;
 
   return (
@@ -113,7 +123,7 @@ export default function UnifiedProfileHeader({
         <CachedAvatar
           source={avatarUri ? { uri: avatarUri } : null}
           style={styles.mergedAvatar}
-          fallbackName={displayName}
+          fallbackName={avatarName}
         />
         <View style={styles.editBadge}>
           <IconSymbol name="pencil" size={12} color="#fff" />
@@ -130,7 +140,10 @@ export default function UnifiedProfileHeader({
             @{user.farcaster.username}
           </Text>
         )}
-        {user.primaryUsername && (
+        {/* Only when the `.q` is NOT already the name above — repeating it as a
+            sub-label is what made it read as a decoration rather than as the
+            identity it is. */}
+        {!hasQns && user.primaryUsername && (
           <Text style={[styles.handleText, { color: theme.colors.accent }]} numberOfLines={1}>
             {user.primaryUsername}.q
           </Text>
@@ -160,6 +173,7 @@ export default function UnifiedProfileHeader({
  */
 function BigProfileCard({
   displayName,
+  avatarName,
   avatarUri,
   qname,
   username,
@@ -171,8 +185,13 @@ function BigProfileCard({
   styles,
 }: {
   displayName: string;
+  /** Name the avatar placeholder derives initials from. Defaults to
+   *  `displayName`; pass the bare name when `displayName` carries a `.q`
+   *  suffix, so `gatto.q` initials as "G" rather than splitting on the dot. */
+  avatarName?: string;
   avatarUri?: string | null;
-  /** Quorum `.q` primary username, e.g. "alice.q". */
+  /** Quorum `.q` primary username, e.g. "alice.q". Only for cards where the
+   *  `.q` is NOT already the name above — otherwise it repeats itself. */
   qname?: string;
   /** Farcaster @handle. */
   username?: string;
@@ -191,7 +210,7 @@ function BigProfileCard({
         <CachedAvatar
           source={avatarUri ? { uri: avatarUri } : null}
           style={styles.mergedAvatar}
-          fallbackName={displayName}
+          fallbackName={avatarName ?? displayName}
         />
         <View style={styles.editBadge}>
           <IconSymbol name="pencil" size={12} color="#fff" />
@@ -251,27 +270,23 @@ function QuorumOnlyHeader({
   theme: AppTheme;
   styles: ReturnType<typeof createStyles>;
 }) {
-  const displayName = user.displayName || user.primaryUsername || 'Unnamed';
+  // Same ladder as every other surface: the `.q` IS the name when there is one.
+  const selfName = resolveSelfName(user);
   return (
     <View style={styles.mergedContainer}>
       <TouchableOpacity onPress={onEdit} activeOpacity={0.8} style={styles.mergedAvatarWrap}>
         <CachedAvatar
           source={user.profileImage ? { uri: user.profileImage } : null}
           style={styles.mergedAvatar}
-          fallbackName={displayName}
+          fallbackName={selfName.initialsSource}
         />
         <View style={styles.editBadge}>
           <IconSymbol name="pencil" size={12} color="#fff" />
         </View>
       </TouchableOpacity>
       <Text style={styles.mergedDisplayName} numberOfLines={1}>
-        {displayName}
+        {selfName.label}
       </Text>
-      {user.primaryUsername ? (
-        <Text style={[styles.handleText, { color: theme.colors.accent }]} numberOfLines={1}>
-          {user.primaryUsername}.q
-        </Text>
-      ) : null}
       <TouchableOpacity
         style={styles.addressRow}
         onPress={onCopyAddress}

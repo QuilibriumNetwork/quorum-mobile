@@ -28,28 +28,87 @@ import * as Skin from '@/theme/skins/geometry';
 interface DevPanelProps {
   /** Shown next to the `</>` glyph. "(dev builds only)" is appended for you. */
   title: string;
-  /** One or two lines saying what the panel is for. */
+  /** One or two lines saying what the panel is for. Visible while collapsed. */
   hint?: string;
+  /**
+   * A short live-state string kept visible while collapsed, e.g. "everyone gets
+   * a .q". Use it for anything the panel is currently DOING, so a folded panel
+   * can never hide an override that is changing what the app shows.
+   */
+  badge?: string;
+  /**
+   * Set false for a panel small enough to just sit there. A one-row panel
+   * behind a tap is worse than a one-row panel: the tap costs more than the
+   * space it saves, and a chevron implies there is more inside than there is.
+   */
+  collapsible?: boolean;
   style?: StyleProp<ViewStyle>;
   children?: React.ReactNode;
 }
 
-export function DevPanel({ title, hint, style, children }: DevPanelProps) {
+/**
+ * Collapsed by default, because these panels live inside product screens rather
+ * than behind a dev menu, and one with a dozen controls pushes the real
+ * settings off the screen. Title and description stay visible, so the panel is
+ * still identifiable without opening it.
+ *
+ * The `badge` is what makes folding safe: a collapsed panel silently overriding
+ * what the app displays would be worse than a long one. Anything currently in
+ * effect has to be legible without expanding.
+ */
+export function DevPanel({
+  title,
+  hint,
+  badge,
+  collapsible = true,
+  style,
+  children,
+}: DevPanelProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const [open, setOpen] = React.useState(false);
+  const expanded = open || !collapsible;
+
+  const heading = (
+    <>
+      <IconSymbol
+        name="chevron.left.forwardslash.chevron.right"
+        size={16}
+        color={theme.colors.warning}
+      />
+      <Text style={styles.title}>{title} (dev builds only)</Text>
+      {!!badge && !expanded && (
+        <Text style={styles.badge} numberOfLines={1}>
+          {badge}
+        </Text>
+      )}
+    </>
+  );
 
   return (
     <View style={[styles.box, style]}>
-      <View style={styles.titleRow}>
-        <IconSymbol
-          name="chevron.left.forwardslash.chevron.right"
-          size={16}
-          color={theme.colors.warning}
-        />
-        <Text style={styles.title}>{title} (dev builds only)</Text>
-      </View>
+      {collapsible ? (
+        <TouchableOpacity
+          style={styles.titleRow}
+          onPress={() => setOpen((v) => !v)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityLabel={`${title}, dev builds only. ${expanded ? 'Collapse' : 'Expand'}.`}
+          hitSlop={8}
+        >
+          {heading}
+          <View style={styles.titleSpacer} />
+          <IconSymbol
+            name={expanded ? 'chevron.down' : 'chevron.right'}
+            size={14}
+            color={theme.colors.warning}
+          />
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.titleRow}>{heading}</View>
+      )}
       {!!hint && <Text style={styles.hint}>{hint}</Text>}
-      <View style={styles.body}>{children}</View>
+      {expanded && <View style={styles.body}>{children}</View>}
     </View>
   );
 }
@@ -166,6 +225,20 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: Skin.space(6),
+    },
+    /** Pushes the chevron to the far edge without stretching the badge. */
+    titleSpacer: {
+      flex: 1,
+    },
+    badge: {
+      flexShrink: 1,
+      fontSize: Skin.font(11),
+      color: theme.colors.textMain,
+      backgroundColor: theme.colors.surface2,
+      borderRadius: Skin.radius(6),
+      paddingHorizontal: Skin.space(6),
+      paddingVertical: Skin.space(2),
+      overflow: 'hidden',
     },
     title: {
       fontSize: Skin.font(12),

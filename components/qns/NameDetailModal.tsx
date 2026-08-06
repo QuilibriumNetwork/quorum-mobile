@@ -23,6 +23,14 @@ import {
   signStealthOwnership,
 } from '@/services/onboarding/keyService';
 import { getMnemonic, getPrivateKey } from '@/services/onboarding/secureStorage';
+import {
+  changePrimaryName,
+  describeReleasedPrimary,
+  shouldReleasePrimary,
+} from '@/services/profile/primaryNameChange';
+import { republishSelfProfile } from '@/services/profile/republishSelfProfile';
+import { NO_PRIMARY_NAME } from '@/utils/primaryName';
+import { logger } from '@quilibrium/quorum-shared';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React from 'react';
@@ -69,6 +77,9 @@ export default function NameDetailModal({
   const [transferAddress, setTransferAddress] = React.useState('');
   const [isTransferring, setIsTransferring] = React.useState(false);
   const [isCancelling, setIsCancelling] = React.useState(false);
+  /** Guards the two actions that now hit the network, matching every other
+   *  action in this sheet. Without it a double tap sends two publishes. */
+  const [isChangingPrimary, setIsChangingPrimary] = React.useState(false);
 
   const { data: listing, isLoading: isLoadingListing } = useGetResaleListingByName(name, {
     enabled: visible && !!name,
@@ -93,9 +104,67 @@ export default function NameDetailModal({
     }
   }, [visible]);
 
+  /**
+   * Change which name you resolve to, then make sure that reaches other people.
+   *
+   * Electing used to be `updateProfile` plus an alert, which changed only what
+   * the electing user saw — a `.q` travels to anyone else exclusively inside
+   * the published public profile. The republish is what makes the election
+   * real, so it belongs to every path that changes the elected name rather
+   * than to the elect button alone.
+   *
+   * `updateProfile` is a React state update, so `user` still carries the OLD
+   * name on the line below it; the override is spread in explicitly.
+   */
+  const applyPrimaryName = async (next: string) => {
+    if (!user?.address || isChangingPrimary) return;
+    setIsChangingPrimary(true);
+    try {
+      const { title, body } = await changePrimaryName({
+        name,
+        next,
+        self: user,
+        updateProfile,
+      });
+      Alert.alert(title, body);
+    } finally {
+      setIsChangingPrimary(false);
+    }
+  };
+
+  /**
+   * Drop this name as primary because it just stopped being usable as one —
+   * made private, or transferred away. Distinct from `handleUnsetPrimary`,
+   * which is the user deliberately un-electing a name they still hold.
+   *
+   * Without this, the two actions leave you publishing a name that no longer
+   * resolves to you, or worse, one that now belongs to somebody else. Nothing
+   * checks that a claimed `.q` really resolves back to the claimant, so a
+   * transferred-but-still-elected name renders identically on both accounts.
+   *
+   * Returns null when there was nothing to release, so callers can leave their
+   * message alone in the common case.
+   */
+  const releasePrimaryIfElected = async (stillResolvesToYou: boolean) => {
+    if (!user?.address) return null;
+    if (!shouldReleasePrimary({ isPrimary, stillResolvesToYou })) return null;
+    updateProfile({ primaryUsername: NO_PRIMARY_NAME });
+    return republishSelfProfile({ ...user, primaryUsername: NO_PRIMARY_NAME });
+  };
+
   const handleSetPrimary = () => {
-    updateProfile({ primaryUsername: name });
-    Alert.alert('Primary Set', `@${name} is now your primary username.`);
+    void applyPrimaryName(name);
+  };
+
+  const handleUnsetPrimary = () => {
+    Alert.alert(
+      'Remove as Primary',
+      `Stop using @${name} as your name? You keep the name and it keeps resolving to your address. You will just show up under your display name again.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => void applyPrimaryName(NO_PRIMARY_NAME) },
+      ],
+    );
   };
 
   /**
@@ -150,12 +219,26 @@ export default function NameDetailModal({
         timestamp,
         nonce,
       }, {
-        onSuccess: () => {
+        onSuccess: async () => {
+          // A private name can't be your primary one: it no longer resolves to
+          // your address, so a `.q` built from it points nowhere.
+          //
+          // Guarded because this callback is now async: an exception here would
+          // reject the promise react-query never awaits, swallowing the success
+          // alert and the refresh for an action that already succeeded.
+          let released: Awaited<ReturnType<typeof releasePrimaryIfElected>> = null;
+          try {
+            // Making it resolvable leaves it pointing at you, so it stays
+            // primary; making it private does not.
+            released = await releasePrimaryIfElected(makeResolvable);
+          } catch (e) {
+            logger.warn('[qns] releasing primary after make-private failed', e);
+          }
           Alert.alert(
             'Success',
             makeResolvable
               ? `@${name} is now publicly resolvable.`
-              : `@${name} is now private and no longer resolvable.`
+              : `@${name} is now private and no longer resolvable.${describeReleasedPrimary(name, released)}`
           );
           onRefresh?.();
         },
@@ -316,11 +399,30 @@ export default function NameDetailModal({
                 timestamp,
                 nonce,
               }, {
-                onSuccess: () => {
-                  Alert.alert('Transferred', `@${name} has been transferred.`);
-                  onRefresh?.();
-                  onClose();
-                  setIsTransferring(false);
+                onSuccess: async () => {
+                  // Keeping a transferred name as your primary means you and
+                  // its new owner both render as the same `.q`.
+                  //
+                  // try/finally because the transfer has ALREADY succeeded and
+                  // cannot be undone. An exception in this now-async callback
+                  // would leave the spinner turning forever on a completed,
+                  // irreversible action.
+                  let released: Awaited<ReturnType<typeof releasePrimaryIfElected>> = null;
+                  try {
+                    // It now belongs to somebody else, so it never resolves to
+                    // you again.
+                    released = await releasePrimaryIfElected(false);
+                  } catch (e) {
+                    logger.warn('[qns] releasing primary after transfer failed', e);
+                  } finally {
+                    Alert.alert(
+                      'Transferred',
+                      `@${name} has been transferred.${describeReleasedPrimary(name, released)}`,
+                    );
+                    onRefresh?.();
+                    onClose();
+                    setIsTransferring(false);
+                  }
                 },
                 onError: (err) => {
                   Alert.alert('Error', err instanceof Error ? err.message : 'Failed to transfer');
@@ -412,11 +514,34 @@ export default function NameDetailModal({
 
           {/* Set as Primary */}
           {isResolvable && !isPrimary && (
-            <TouchableOpacity style={styles.actionButton} onPress={handleSetPrimary}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleSetPrimary}
+              disabled={isChangingPrimary}
+            >
               <IconSymbol name="star" size={18} color={theme.colors.primary} />
               <View style={styles.actionContent}>
                 <Text style={styles.actionText}>Set as Primary</Text>
                 <Text style={styles.actionSubtext}>Use this as your main username</Text>
+              </View>
+              <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          )}
+
+          {/* Remove as Primary — the only place a primary name can be
+              un-elected. Without it, a user who owns one name is stuck with it
+              as their display name permanently: every other surface renders
+              `isPrimary` as a badge with nothing to tap. */}
+          {isPrimary && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleUnsetPrimary}
+              disabled={isChangingPrimary}
+            >
+              <IconSymbol name="star" size={18} color={theme.colors.textMuted} />
+              <View style={styles.actionContent}>
+                <Text style={styles.actionText}>Remove as Primary</Text>
+                <Text style={styles.actionSubtext}>Go back to your display name (you keep the name)</Text>
               </View>
               <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
             </TouchableOpacity>

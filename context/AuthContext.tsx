@@ -25,6 +25,7 @@ import { registerFarcasterAuthFailureHandler } from '../services/farcaster/authT
 import { initializeEncryptionKeys, uploadUserRegistration, deriveQuilibriumAddressWithMnemonic, ensurePrivateKey } from '../services/onboarding/keyService';
 import { NativeSigningProvider } from '../services/crypto';
 import { getConfig, saveConfig } from '../services/config';
+import { mergeSyncedPrimaryName } from '../utils/primaryName';
 import { logger } from '@quilibrium/quorum-shared';
 // Auth state types
 export type AuthState = 'loading' | 'unauthenticated' | 'onboarding' | 'authenticated';
@@ -359,7 +360,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     ...(configIsNewer && {
                       bio: config.bio ?? base.bio,
                       isProfilePublic: guardPublic,
-                      primaryUsername: config.primaryUsername ?? base.primaryUsername,
+                      primaryUsername: mergeSyncedPrimaryName(config.primaryUsername, base.primaryUsername),
                     }),
                   };
                 });
@@ -376,7 +377,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
                       neverStamped && cur.isProfilePublic === false && remotePublic
                         ? false
                         : remotePublic,
-                    primaryUsername: config.primaryUsername ?? cur.primaryUsername,
+                    primaryUsername: mergeSyncedPrimaryName(config.primaryUsername, cur.primaryUsername),
                   }),
                 };
                 mmkvStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(merged));

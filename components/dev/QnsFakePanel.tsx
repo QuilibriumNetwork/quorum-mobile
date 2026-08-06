@@ -21,15 +21,21 @@
  *
  * ## The two halves are NOT the same mechanism
  *
- * - **Your own `.q`** is written straight into your profile via
- *   `updateProfile({ primaryUsername })`. That is the real product path — the
- *   "Set as Primary" button on an owned name calls exactly this. The button is
- *   gated on owning a resolvable name; the write underneath is not.
+ * - **Your own `.q`** takes the real product path: write the field, then
+ *   publish. "Set as Primary" on an owned name does exactly this. The button is
+ *   gated on owning a resolvable name; the path underneath never was, which is
+ *   what lets an account owning nothing exercise the whole round trip.
  *
- *   ⚠️ This is REAL STATE, not an overlay. If your profile is public, the next
- *   publish signs the fake name into the v2 payload and POSTs it to whichever
- *   API the "Use Local API" switch points at — production, by default — where
- *   other beta users fetching your profile would see it. Clear it when done.
+ *   ⚠️ This is REAL STATE and a REAL POST, not an overlay. The fake name is
+ *   signed into the v2 payload and sent to whichever API "Use Local API" points
+ *   at — production, by default — where anyone fetching your profile sees it.
+ *   Clear when done; Clear publishes the un-election the same way. Turning
+ *   Public Profile off deletes the whole record and is the escape hatch if a
+ *   clear does not take.
+ *
+ *   This is also the only way to answer a question no unit test can: whether
+ *   the server REPLACES the stored profile (so an omitted `primary_username`
+ *   clears it) or merges into it (so un-electing silently does nothing).
  *
  * - **Everyone else's `.q`** is an overlay applied to public-profile READS. It
  *   never leaves the device and writes nothing. See `services/dev/fakeQns.ts`.
@@ -55,6 +61,8 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context';
+import { republishSelfProfile } from '@/services/profile/republishSelfProfile';
+import { NO_PRIMARY_NAME } from '@/utils/primaryName';
 import { useTheme, type AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 import {
@@ -73,6 +81,24 @@ import {
   type FakeQnsState,
 } from '@/services/dev/fakeQns';
 
+/**
+ * Surface the server's own words for a rejected publish.
+ *
+ * Worth the few lines: a bare "FAILED" cannot distinguish "the server refuses a
+ * name you do not own" (a working ownership check) from "the server does not
+ * understand the signing payload that carries a name at all" (electing has
+ * never worked for anybody). Those call for opposite responses, and the
+ * `logger.warn` in the publish path is filtered in dev, so this readout is the
+ * only place the reason is visible.
+ */
+function formatPublishError(error: unknown): string {
+  const e = error as { message?: string; status?: number; code?: string } | null;
+  if (!e) return 'unknown';
+  return [e.status ? `HTTP ${e.status}` : null, e.code, e.message ?? String(error)]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 export function QnsFakePanel() {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
@@ -81,6 +107,12 @@ export function QnsFakePanel() {
 
   const [state, setState] = useState<FakeQnsState>(() => getFakeQnsState());
   const [selfName, setSelfName] = useState<string>(user?.primaryUsername ?? '');
+  /** Result of the last publish attempt, so the round trip is observable from
+   *  inside the app rather than only by refetching the endpoint. */
+  const [publishOutcome, setPublishOutcome] = useState<string>('');
+  /** Blocks a second tap while a POST is in flight. Two overlapping publishes
+   *  race to be the server's last write, and the loser silently wins. */
+  const [publishing, setPublishing] = useState(false);
 
   /** Drop every cached public profile so the next render refetches through the
    *  overlay. Without this a toggle looks inert for up to an hour. */
@@ -101,12 +133,38 @@ export function QnsFakePanel() {
     invalidate();
   }, [invalidate]);
 
-  const handleApplySelf = useCallback(() => {
+  const handleApplySelf = useCallback(async () => {
     // Accept "name" or "name.q" — the stored value is always bare, and the
     // suffix is appended at render. Storing it with the suffix would render
     // "name.q.q".
     const trimmed = selfName.trim().replace(/\.q$/i, '');
-    updateProfile({ primaryUsername: trimmed || undefined });
+    const next = trimmed || NO_PRIMARY_NAME;
+    updateProfile({ primaryUsername: next });
+
+    // Publish, exactly as the product's "Set as Primary" now does.
+    //
+    // Without this the panel simulates only HALF the product path: it writes
+    // the local field, so every surface that reads your own profile lights up,
+    // while the one thing that carries a `.q` to anybody else never happens.
+    // That is precisely the bug this whole area had, so a tool that reproduced
+    // it would hide the fix rather than demonstrate it.
+    //
+    // It also makes the panel the only way to exercise elect-and-publish
+    // end to end on an account that owns no name — the real button is gated on
+    // owning a resolvable one, the write underneath never was.
+    if (user) {
+      setPublishing(true);
+      setPublishOutcome('publishing…');
+      const outcome = await republishSelfProfile({ ...user, primaryUsername: next });
+      setPublishOutcome(
+        outcome.status === 'published'
+          ? `published ${next || '(cleared)'}`
+          : outcome.status === 'not-public'
+            ? 'not published (profile is private)'
+            : `publish FAILED: ${formatPublishError(outcome.error)}`,
+      );
+      setPublishing(false);
+    }
 
     // Pin the same name for your own address in the overlay.
     //
@@ -122,17 +180,38 @@ export function QnsFakePanel() {
       setState(getFakeQnsState());
       invalidate();
     }
-  }, [selfName, updateProfile, user?.address, invalidate]);
+  }, [selfName, updateProfile, user, invalidate]);
 
-  const handleClearSelf = useCallback(() => {
+  const handleClearSelf = useCallback(async () => {
     setSelfName('');
-    updateProfile({ primaryUsername: undefined });
+    updateProfile({ primaryUsername: NO_PRIMARY_NAME });
     if (user?.address) {
       removeFakeQnsEntry(user.address);
       setState(getFakeQnsState());
       invalidate();
     }
-  }, [updateProfile, user?.address, invalidate]);
+    // Publish the un-election too. This is the half of the round trip that
+    // cannot be proved by any test here: whether the server REPLACES the
+    // stored record (so an omitted `primary_username` clears it) or merges
+    // into it (so the old name survives and un-elect is a lie). Watch the
+    // readout, then refetch the profile.
+    if (user) {
+      setPublishing(true);
+      setPublishOutcome('publishing…');
+      const outcome = await republishSelfProfile({
+        ...user,
+        primaryUsername: NO_PRIMARY_NAME,
+      });
+      setPublishOutcome(
+        outcome.status === 'published'
+          ? 'published (cleared)'
+          : outcome.status === 'not-public'
+            ? 'not published (profile is private)'
+            : `publish FAILED: ${formatPublishError(outcome.error)}`,
+      );
+      setPublishing(false);
+    }
+  }, [updateProfile, user, invalidate]);
 
   const mode = state.allProfilesPrivate
     ? 'all profiles private'
@@ -143,7 +222,14 @@ export function QnsFakePanel() {
   return (
     <DevPanel
       title="Fake QNS"
-      hint="See where a .q name renders without owning one. Reads only — nothing is published."
+      // Anything actively changing what the app shows stays legible while
+      // folded, so a collapsed panel cannot quietly be overriding names.
+      badge={
+        state.enabled
+          ? `${mode}${user?.primaryUsername ? ` · ${user.primaryUsername}.q` : ''}`
+          : undefined
+      }
+      hint="See where a .q name renders without owning one. Giving YOURSELF one publishes, like the real button; giving everyone else one is a read-side overlay that never leaves the device."
     >
       <DevRow
         label="Enable fake QNS"
@@ -177,12 +263,23 @@ export function QnsFakePanel() {
           autoCorrect={false}
           accessibilityLabel="Fake primary QNS username"
         />
-        <DevButton label="Set" onPress={handleApplySelf} />
-        <DevButton label="Clear" onPress={handleClearSelf} />
+        <DevButton
+          label="Set"
+          onPress={() => void handleApplySelf()}
+          disabled={publishing}
+        />
+        <DevButton
+          label="Clear"
+          onPress={() => void handleClearSelf()}
+          disabled={publishing}
+        />
       </View>
+      {!!publishOutcome && <DevReadout>{publishOutcome}</DevReadout>}
       <DevWarning>
-        Writes to your profile. With a public profile this publishes the name to
-        the configured API. Clear it when you are done.
+        Set and Clear PUBLISH, the same as the real Set as Primary button — to
+        the configured API, which is production unless Use Local API is on. With
+        a private profile nothing leaves the device. Clear when you are done, or
+        turn Public Profile off, which deletes the whole published record.
       </DevWarning>
       <Text style={styles.note}>
         This covers most of the job. Nearly every surface can render YOU: your

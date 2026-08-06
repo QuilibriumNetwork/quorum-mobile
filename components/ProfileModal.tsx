@@ -19,6 +19,8 @@ import { useToast } from '@/context/ToastContext';
 import { compressAvatarImage } from '@/services/media/imageAttachment';
 import { getHypersnapOptInChoice, setHypersnapOptInChoice } from '@/services/farcaster/hypersnapOptIn';
 import { provisionHypersnapSigner, forgetHypersnapSigner } from '@/services/farcaster/hypersnapProvision';
+import { changePrimaryName } from '@/services/profile/primaryNameChange';
+import { NO_PRIMARY_NAME } from '@/utils/primaryName';
 import { truncateAddress } from '@/utils/formatAddress';
 import {
   useBucketLookup,
@@ -177,7 +179,8 @@ function DevModeSection({ theme }: { theme: AppTheme }) {
 
   return (
     <View style={{ marginBottom: Skin.space(24), gap: Skin.space(12) }}>
-      <DevPanel title="Developer">
+      {/* One row, so folding it would cost a tap to save nothing. */}
+      <DevPanel title="Developer" collapsible={false}>
         <DevRow
           label="Use Local API"
           hint={isLocal ? config.baseUrl : 'Connects to production'}
@@ -1552,6 +1555,75 @@ export default function ProfileModal({
 
   // Track which names have been made resolvable (locally after successful API call)
   const [resolvableNames, setResolvableNames] = React.useState<Set<string>>(new Set());
+  /** Electing now hits the network, so the rows need the same in-flight guard
+   *  every other action in this modal already has. Disables ALL rows, not just
+   *  the tapped one: two elections in flight would race to be last write. */
+  const [isChangingPrimary, setIsChangingPrimary] = React.useState(false);
+
+  /**
+   * Elect a QNS name as the name you go by.
+   *
+   * The publish is the point. A `.q` reaches anyone else only inside your
+   * published public profile, so electing without republishing changed what
+   * you saw and nothing about what anybody else saw — until some later,
+   * unrelated profile edit happened to carry the name along.
+   *
+   * `updateProfile` is a React state update, so `user` below still holds the
+   * previous name; the new one is spread in explicitly.
+   */
+  const handleSetPrimary = async (name: string) => {
+    if (!user?.address || isChangingPrimary) return;
+    setIsChangingPrimary(true);
+    try {
+      const { title, body } = await changePrimaryName({
+        name,
+        next: name,
+        self: user,
+        updateProfile,
+      });
+      Alert.alert(title, body);
+    } finally {
+      setIsChangingPrimary(false);
+    }
+  };
+
+  /**
+   * Un-elect from a list row.
+   *
+   * The name detail sheet also offers this, but it is only reachable from the
+   * OWNED names list. A delegated name (someone else owns it, it resolves to
+   * you) has no detail sheet, so without this the un-elect affordance exists
+   * for one class of name and not the other, and a user who elects a delegated
+   * name is stuck with it exactly as before.
+   */
+  const handleUnsetPrimary = (name: string) => {
+    Alert.alert(
+      'Remove as Primary',
+      `Stop using @${name} as your name? You keep the name and it keeps resolving to your address. You will just show up under your display name again.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            if (!user?.address || isChangingPrimary) return;
+            setIsChangingPrimary(true);
+            try {
+              const { title, body } = await changePrimaryName({
+                name,
+                next: NO_PRIMARY_NAME,
+                self: user,
+                updateProfile,
+              });
+              Alert.alert(title, body);
+            } finally {
+              setIsChangingPrimary(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handleMakeResolvable = (name: string) => {
     if (!user?.quilibriumAddress || !user?.publicKey || !bucketRecords) return;
@@ -1917,17 +1989,22 @@ export default function ProfileModal({
                       <View style={styles.usernameRight}>
                         {isResolvable ? (
                           isPrimary ? (
-                            <View style={styles.primaryBadge}>
-                              <IconSymbol name="star.fill" size={14} color={theme.colors.primary} />
-                              <Text style={styles.primaryText}>Primary</Text>
-                            </View>
+                            // Matches the delegated list. The detail sheet this
+                            // row opens also offers un-elect, but a static badge
+                            // sitting where the action button was gives no hint
+                            // that the choice is reversible at all.
+                            <TouchableOpacity
+                              style={styles.setPrimaryButton}
+                              onPress={() => handleUnsetPrimary(name)}
+                              disabled={isChangingPrimary}
+                            >
+                              <Text style={styles.setPrimaryButtonText}>Remove as Primary</Text>
+                            </TouchableOpacity>
                           ) : (
                             <TouchableOpacity
                               style={styles.setPrimaryButton}
-                              onPress={() => {
-                                updateProfile({ primaryUsername: name });
-                                Alert.alert('Primary Set', `@${name} is now your primary username.`);
-                              }}
+                              onPress={() => void handleSetPrimary(name)}
+                              disabled={isChangingPrimary}
                             >
                               <Text style={styles.setPrimaryButtonText}>Set as Primary</Text>
                             </TouchableOpacity>
@@ -2011,17 +2088,22 @@ export default function ProfileModal({
                       </View>
                       <View style={styles.usernameRight}>
                         {isPrimary ? (
-                          <View style={styles.primaryBadge}>
-                            <IconSymbol name="star.fill" size={14} color={theme.colors.primary} />
-                            <Text style={styles.primaryText}>Primary</Text>
-                          </View>
+                          // Tappable, not a static badge. The row subtitle
+                          // already reads "Primary username", so the status is
+                          // not lost, and this is the only un-elect route for a
+                          // delegated name.
+                          <TouchableOpacity
+                            style={styles.setPrimaryButton}
+                            onPress={() => handleUnsetPrimary(name)}
+                            disabled={isChangingPrimary}
+                          >
+                            <Text style={styles.setPrimaryButtonText}>Remove as Primary</Text>
+                          </TouchableOpacity>
                         ) : (
                           <TouchableOpacity
                             style={styles.setPrimaryButton}
-                            onPress={() => {
-                              updateProfile({ primaryUsername: name });
-                              Alert.alert('Primary Set', `@${name} is now your primary username.`);
-                            }}
+                            onPress={() => void handleSetPrimary(name)}
+                            disabled={isChangingPrimary}
                           >
                             <Text style={styles.setPrimaryButtonText}>Set as Primary</Text>
                           </TouchableOpacity>
