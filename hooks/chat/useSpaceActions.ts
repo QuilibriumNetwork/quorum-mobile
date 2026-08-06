@@ -443,6 +443,14 @@ export function useJoinSpace() {
         }
       }
 
+      // One clock for this whole join. The local self-row stamp below and the
+      // `joinedAt` signed into the broadcast further down were two separate
+      // Date.now() calls with key generation and an Ed448 signature between
+      // them, so the local stamp was ALWAYS older than the one everyone else
+      // received. A rename landing in that window would be reverted on their
+      // devices by the newer-wins guard while surviving on ours.
+      const joinedAt = Date.now();
+
       // 6.5. Save joiner as a member of the space.
       //
       // Global slots, not the per-space override — these are our GLOBAL name and
@@ -455,7 +463,7 @@ export function useJoinSpace() {
           address: user.address,
           global_display_name: user.displayName || user.username,
           global_profile_image: user.profileImage,
-          globalProfileTimestamp: Date.now(),
+          globalProfileTimestamp: joinedAt,
           inbox_address: inboxAddress,
         } as SpaceMember & {
           global_display_name?: string;
@@ -614,8 +622,8 @@ export function useJoinSpace() {
             // address + id + inboxAddress + pubKey + inboxKey + identityKey + preKey + userIcon + displayName + joinedAt
             const userIcon = user?.profileImage || '';
             const displayName = user?.displayName || user?.username || '';
-            // Mint once so the signed value and the wire value are identical.
-            const joinedAt = Date.now();
+            // `joinedAt` is minted once for the whole join, above, so the
+            // signed value, the wire value and our own local row all agree.
             const msgToSign = user!.address +
               ratchet.id +
               inboxAddress +

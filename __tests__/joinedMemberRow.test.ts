@@ -218,6 +218,10 @@ describe('buildJoinedMemberRow', () => {
       const row = buildJoinedMemberRow(undefined, { ...participant, joinedAt }, NOW);
 
       expect(row.joinedAt).toBeUndefined();
+      // And the global stamp falls back to the clock rather than storing the
+      // poison. An Infinity here would make existingStamp >= stamp always true,
+      // freezing the member's name permanently.
+      expect(row.globalProfileTimestamp).toBe(NOW);
     });
 
     it('is not invented with a name or avatar the join did not send', () => {
