@@ -80,6 +80,16 @@ export function useMembersWithCachedQns<T extends RosterRow>(members: T[]): T[] 
     })),
   });
 
+  // Key the memo on the `.q` values themselves, not on the profile objects.
+  // `useQueries` returns a fresh array every render, and joining the objects
+  // would stringify each to "[object Object]" — a dep that cannot tell one
+  // profile from another, so a cache entry whose `.q` CHANGED would never
+  // re-render. The names are the only field read here, so joining them is both
+  // cheaper and strictly more precise.
+  const qnsKey = cached
+    .map((q) => (q?.data as PublicProfile | null | undefined)?.primary_username ?? '')
+    .join('|');
+
   const qnsByAddress = useMemo(() => {
     const out = new Map<string, string>();
     addresses.forEach((address, i) => {
@@ -89,10 +99,8 @@ export function useMembersWithCachedQns<T extends RosterRow>(members: T[]): T[] 
       if (trimmed) out.set(address, trimmed);
     });
     return out;
-    // `cached` is a fresh array every render, so key the memo on the values that
-    // actually matter rather than the array identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addresses, cached.map((q) => q?.data).join('|')]);
+  }, [addresses, qnsKey]);
 
   return useMemo(() => {
     if (qnsByAddress.size === 0) return members;

@@ -36,7 +36,10 @@ import { useFarcasterChannel } from '@/hooks/useFarcasterChannel';
 import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
 import { useEffectiveBindings } from '@/services/space/channelBindings';
 import { flattenMessages, useMessages } from '@/hooks/chat/useMessages';
-import { useMembersWithPublicProfileFallback } from '@/hooks/useMembersWithPublicProfileFallback';
+import {
+  membersWithEffectiveIdentity,
+  useMembersWithPublicProfileFallback,
+} from '@/hooks/useMembersWithPublicProfileFallback';
 import { useSendSpaceMessage } from '@/hooks/chat/useSendSpaceMessage';
 import { useSendEmbedMessage } from '@/hooks/chat/useSendEmbedMessage';
 import { useAddSpaceReaction, useRemoveSpaceReaction } from '@/hooks/chat/useSpaceReactions';
@@ -243,6 +246,26 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
     return Array.from(set);
   }, [messagesPages]);
   const effectiveMemberMap = useMembersWithPublicProfileFallback(memberMap, senderAddresses);
+
+  // Mentions — both the `@` autocomplete and the rendered pill — resolve names
+  // from this array. It used to be `membersData`, the raw roster, and a roster
+  // row never carries `primary_username`: a `.q` reaches the client only in a
+  // public profile. So both surfaces called the resolver correctly and were
+  // simply handed data that could not contain the answer, while the message
+  // header two lines away rendered the `.q` fine from `effectiveMemberMap`.
+  //
+  // Reusing that map costs nothing — it is already computed for the headers,
+  // and this adds no fetch and no query subscription.
+  //
+  // Accepted limitation, the same one desktop takes: the map only enriches
+  // members who appear as a sender in the loaded messages, so mentioning a
+  // member who has never posted here still shows their global name. Fixing that
+  // means fetching the whole roster, which is the fetch storm both clients
+  // deliberately refused.
+  const membersWithIdentity = useMemo(
+    () => membersWithEffectiveIdentity(membersData, effectiveMemberMap) as SpaceMember[] | undefined,
+    [membersData, effectiveMemberMap],
+  );
 
   // Message search
   //
@@ -760,7 +783,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
           onReply={handleReplyToMessage}
           onDelete={handleDeleteMessage}
           canDeleteMessage={canDeleteMessage}
-          members={membersData}
+          members={membersWithIdentity}
           channels={channelsData}
           roles={spaceData?.roles}
           currentUserId={user?.address}
@@ -817,7 +840,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             customEmojis={spaceData?.emojis}
             stickers={spaceData?.stickers}
             onSendSticker={handleSendSticker}
-            members={membersData}
+            members={membersWithIdentity}
             channels={channelsData}
             roles={spaceData?.roles}
             currentUserId={user?.address}

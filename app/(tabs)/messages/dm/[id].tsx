@@ -15,11 +15,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@quilibrium/quorum-shared';
 import type { Conversation } from '@quilibrium/quorum-shared';
 import { useUserPublicProfile } from '@/hooks/useUserPublicProfile';
-import { formatResolvedName, resolveMemberName } from '@/utils/resolveMemberName';
+import { resolveConversationTitle } from '@/utils/conversationTitle';
 import { useBookmarks, useReceiptSettings } from '@/hooks/useUserConfig';
 import { useCall } from '@/context';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
-import { truncateAddress } from '@/utils/formatAddress';
 import { useTheme } from '@/theme';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
@@ -387,25 +386,23 @@ export default function DMChatScreen() {
   // the hook count jump between the first render (no conversation, 59
   // hooks) and the second (conversation arrived, 61 hooks). React's
   // hook-order check fires that exact path.
-  // Through the one resolver, so a DM header obeys the same ladder as
-  // everywhere else. `displayName` goes in the GLOBAL tier: a DM cannot be
-  // renamed (no UI exists), so that value is the partner's own global name,
-  // not a name you chose for this conversation. Treating it as an override
-  // would rank it above their `.q`.
-  const title = useMemo(() => {
-    if (!conversation?.address) return 'Conversation';
-    const resolved = resolveMemberName({
-      address: conversation.address,
-      global_display_name: conversation.displayName,
-      // Straight from the fetched profile rather than threaded through the
-      // conversation row: `conversation` is a union whose base half does not
-      // declare the field, and this is the only consumer.
-      primary_username: recipientPublicProfile?.primary_username,
-    });
-    return resolved.isAddressFallback
-      ? truncateAddress(conversation.address, 'long')
-      : formatResolvedName(resolved);
-  }, [conversation?.address, conversation?.displayName, recipientPublicProfile?.primary_username]);
+  // The same helper the inbox row uses, so the header and the list cannot call
+  // the same partner two different things. The rule it applies — `displayName`
+  // is a GLOBAL name, not a per-conversation override, because a DM cannot be
+  // renamed — is documented there.
+  //
+  // `primary_username` comes straight from the fetched profile rather than
+  // through the conversation row: `conversation` is a union whose base half does
+  // not declare the field, and this is its only consumer.
+  const title = useMemo(
+    () =>
+      resolveConversationTitle({
+        address: conversation?.address,
+        displayName: conversation?.displayName,
+        primary_username: recipientPublicProfile?.primary_username,
+      }),
+    [conversation?.address, conversation?.displayName, recipientPublicProfile?.primary_username],
+  );
 
   // Tapping the avatar or name in the header opens the same profile
   // modal that tapping a pfp inside the chat opens. Builds a minimal

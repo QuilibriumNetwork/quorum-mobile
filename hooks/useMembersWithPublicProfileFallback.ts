@@ -119,6 +119,30 @@ export function mergeMemberIdentity(
   };
 }
 
+/**
+ * Project a roster ARRAY through the effective member MAP.
+ *
+ * Surfaces that take `SpaceMember[]` rather than a `MemberMap` — the mention
+ * autocomplete and the rendered mention pill — were reading the raw roster,
+ * which can never carry `primary_username`: a `.q` reaches the client only in a
+ * public profile. They resolved names correctly and were simply handed data
+ * that could not contain the answer.
+ *
+ * Order is taken from the roster, not from the map, because the autocomplete
+ * list is presented in roster order and `Object.values` would hand back
+ * insertion order instead.
+ *
+ * A member the map does not know is passed through untouched, so this is safe
+ * whatever the map happens to hold.
+ */
+export function membersWithEffectiveIdentity(
+  members: MemberWithTs[] | undefined,
+  effective: MemberMap,
+): MemberWithTs[] | undefined {
+  if (!members) return members;
+  return members.map((m) => (effective[m.address] as MemberWithTs) ?? m);
+}
+
 export function useMembersWithPublicProfileFallback(
   members: MemberMap,
   visibleAddresses: string[],
