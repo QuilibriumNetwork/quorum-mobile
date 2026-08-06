@@ -300,3 +300,67 @@ describe('the surfaces agree', () => {
     expect(resolveMemberName(asReactionRow(own)).isAddressFallback).toBe(true);
   });
 });
+
+describe('an override that only echoes the global name', () => {
+  // Both join paths and config sync used to stamp the member's GLOBAL name
+  // straight into the per-space override, where it outranked their `.q`
+  // permanently. The write side is fixed; this is what heals the rows already
+  // written that way.
+
+  it('lets the QNS name through when the override just repeats the global name', () => {
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      display_name: 'Alice',
+      global_display_name: 'Alice',
+      primary_username: 'alice',
+    });
+
+    expect(resolved.name).toBe('alice');
+    expect(resolved.isQnsVerified).toBe(true);
+  });
+
+  it('still lets a genuinely different per-space name outrank the QNS name', () => {
+    // The tier exists for exactly this: a name chosen for this space wins.
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      display_name: 'Alice (mod)',
+      global_display_name: 'Alice',
+      primary_username: 'alice',
+    });
+
+    expect(resolved.name).toBe('Alice (mod)');
+    expect(resolved.isQnsVerified).toBe(false);
+  });
+
+  it('keeps the override when there is no global name to compare against', () => {
+    // Nothing to call it an echo OF. Demoting on a missing global would blank
+    // the name for every member whose global slot has not arrived yet.
+    const resolved = resolveMemberName({ address: ADDRESS, display_name: 'Alice' });
+
+    expect(resolved.name).toBe('Alice');
+  });
+
+  it('falls through to the global name when the echo is demoted and no QNS exists', () => {
+    // Same string either way, but via the global tier — so a later global
+    // rename reaches this member instead of being masked.
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      display_name: 'Alice',
+      global_display_name: 'Alice',
+    });
+
+    expect(resolved.name).toBe('Alice');
+    expect(resolved.isAddressFallback).toBe(false);
+  });
+
+  it('compares after trimming, so whitespace does not disguise an echo', () => {
+    const resolved = resolveMemberName({
+      address: ADDRESS,
+      display_name: '  Alice  ',
+      global_display_name: 'Alice',
+      primary_username: 'alice',
+    });
+
+    expect(resolved.name).toBe('alice');
+  });
+});
