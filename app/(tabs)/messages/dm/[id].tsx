@@ -357,35 +357,12 @@ export default function DMChatScreen() {
     router.back();
   }, [conversationId, recipientAddress, isFarcasterConversation, sendDeleteConversationSignal, storage, queryClient]);
 
-  const { initiateCall } = useCall();
-  const handleCallPress = useCallback(() => {
-    if (!conversationId || !recipientAddress || !conversation) return;
-    initiateCall({
-      conversationId,
-      recipientAddress,
-      recipientDisplayName: conversation.displayName || recipientAddress.slice(0, 12),
-      recipientAvatar: conversation.icon || '',
-      mediaType: 'audio',
-    });
-  }, [conversationId, recipientAddress, conversation, initiateCall]);
-
-  const handleVideoCallPress = useCallback(() => {
-    if (!conversationId || !recipientAddress || !conversation) return;
-    initiateCall({
-      conversationId,
-      recipientAddress,
-      recipientDisplayName: conversation.displayName || recipientAddress.slice(0, 12),
-      recipientAvatar: conversation.icon || '',
-      mediaType: 'video',
-    });
-  }, [conversationId, recipientAddress, conversation, initiateCall]);
-
-  // Title + header components are declared BEFORE the early returns so
-  // their hooks run in the same order on every render. Previously these
-  // sat below the `if (!conversation) return ...` guards, which made
-  // the hook count jump between the first render (no conversation, 59
-  // hooks) and the second (conversation arrived, 61 hooks). React's
-  // hook-order check fires that exact path.
+  // Declared BEFORE the early returns so hooks run in the same order on every
+  // render. Previously the title and header components sat below the
+  // `if (!conversation) return ...` guards, which made the hook count jump
+  // between the first render (no conversation) and the second (conversation
+  // arrived) — React's hook-order check fires on exactly that.
+  //
   // The same helper the inbox row uses, so the header and the list cannot call
   // the same partner two different things. The rule it applies — `displayName`
   // is a GLOBAL name, not a per-conversation override, because a DM cannot be
@@ -394,6 +371,11 @@ export default function DMChatScreen() {
   // `primary_username` comes straight from the fetched profile rather than
   // through the conversation row: `conversation` is a union whose base half does
   // not declare the field, and this is its only consumer.
+  //
+  // It sits above the call handlers because they name the person on the
+  // ringing screen. Leaving it below meant their `useCallback` closed over a
+  // title computed before the `.q` had arrived and, since their deps do not
+  // include the public profile, never picked up the corrected one.
   const title = useMemo(
     () =>
       resolveConversationTitle({
@@ -404,6 +386,29 @@ export default function DMChatScreen() {
     [conversation?.address, conversation?.displayName, recipientPublicProfile?.primary_username],
   );
 
+  const { initiateCall } = useCall();
+  const handleCallPress = useCallback(() => {
+    if (!conversationId || !recipientAddress || !conversation) return;
+    initiateCall({
+      conversationId,
+      recipientAddress,
+      recipientDisplayName: title,
+      recipientAvatar: conversation.icon || '',
+      mediaType: 'audio',
+    });
+  }, [conversationId, recipientAddress, conversation, title, initiateCall]);
+
+  const handleVideoCallPress = useCallback(() => {
+    if (!conversationId || !recipientAddress || !conversation) return;
+    initiateCall({
+      conversationId,
+      recipientAddress,
+      recipientDisplayName: title,
+      recipientAvatar: conversation.icon || '',
+      mediaType: 'video',
+    });
+  }, [conversationId, recipientAddress, conversation, title, initiateCall]);
+
   // Tapping the avatar or name in the header opens the same profile
   // modal that tapping a pfp inside the chat opens. Builds a minimal
   // MessageUserInfo from the conversation row + public-profile merge.
@@ -411,7 +416,12 @@ export default function DMChatScreen() {
     if (!conversation || !conversation.address) return;
     setSelectedUserProfile({
       userId: conversation.address,
-      userName: conversation.displayName || conversation.address.slice(0, 12),
+      // The resolved name, not the raw row. This one value reaches further
+      // than it looks: the profile modal hands it straight to the kick, mute
+      // and block confirmations, so a raw name here means those three
+      // destructive dialogs name the person differently from every other
+      // surface — including the header the user just tapped.
+      userName: title,
       userAvatar: conversation.icon,
       // Forward Farcaster linkage from the conversation row so the
       // profile modal can render the linked-FC row. Without this the
@@ -420,7 +430,7 @@ export default function DMChatScreen() {
       farcasterFid: conversation.farcasterFid,
       farcasterUsername: conversation.farcasterUsername,
     });
-  }, [conversation]);
+  }, [conversation, title]);
 
   // The bar is ours, not the navigation stack's — see ScreenHeader for why.
   // Each branch below still sets the route `title`, so anything reading it
