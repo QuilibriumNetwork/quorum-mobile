@@ -81,6 +81,24 @@ import {
   type FakeQnsState,
 } from '@/services/dev/fakeQns';
 
+/**
+ * Surface the server's own words for a rejected publish.
+ *
+ * Worth the few lines: a bare "FAILED" cannot distinguish "the server refuses a
+ * name you do not own" (a working ownership check) from "the server does not
+ * understand the signing payload that carries a name at all" (electing has
+ * never worked for anybody). Those call for opposite responses, and the
+ * `logger.warn` in the publish path is filtered in dev, so this readout is the
+ * only place the reason is visible.
+ */
+function formatPublishError(error: unknown): string {
+  const e = error as { message?: string; status?: number; code?: string } | null;
+  if (!e) return 'unknown';
+  return [e.status ? `HTTP ${e.status}` : null, e.code, e.message ?? String(error)]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 export function QnsFakePanel() {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
@@ -139,7 +157,7 @@ export function QnsFakePanel() {
           ? `published ${next || '(cleared)'}`
           : outcome.status === 'not-public'
             ? 'not published (profile is private)'
-            : 'publish FAILED',
+            : `publish FAILED: ${formatPublishError(outcome.error)}`,
       );
     }
 
@@ -183,7 +201,7 @@ export function QnsFakePanel() {
           ? 'published (cleared)'
           : outcome.status === 'not-public'
             ? 'not published (profile is private)'
-            : 'publish FAILED',
+            : `publish FAILED: ${formatPublishError(outcome.error)}`,
       );
     }
   }, [updateProfile, user, invalidate]);
