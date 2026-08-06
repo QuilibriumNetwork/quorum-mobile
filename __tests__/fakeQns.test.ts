@@ -93,6 +93,21 @@ describe('applyFakeQns — give everyone a name', () => {
     expect(deriveFakeQName(A)).toBe(deriveFakeQName(A));
   });
 
+  it('derives the same name desktop would, so the clients stay comparable', () => {
+    // The tool's whole purpose is comparing what the two clients render for the
+    // same member, which means nothing if they synthesize different names for
+    // them. Hard-coded rather than recomputed: a test that mirrored the
+    // implementation would pass through any change to it, which is exactly what
+    // must not happen to a value shared with another repo.
+    //
+    // The identical assertion lives in quorum-desktop's
+    // `src/dev/tests/identity-coverage/fakeQnsCore.test.ts`. Change one, change
+    // both — or the parity comparison silently stops being one.
+    expect(deriveFakeQName('QmAlice1111111111111111111111111111111111')).toBe(
+      'qaalic',
+    );
+  });
+
   it('never fakes over a REAL published .q', () => {
     // If the instrument overwrote a genuine registration, the one case it
     // exists to observe would be the one case it hid.
