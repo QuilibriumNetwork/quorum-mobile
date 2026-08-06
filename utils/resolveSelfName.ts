@@ -57,6 +57,46 @@ export interface ResolvedSelfName {
   isQnsVerified: boolean;
 }
 
+/**
+ * The placeholder for a per-space name field, e.g. Space Settings → Account.
+ *
+ * ## A placeholder here is a PROMISE, not decoration
+ *
+ * Leaving the field empty is the default and means "follow my normal name".
+ * The placeholder is how the user is told what that resolves to — so it has to
+ * be the name the app would ACTUALLY render, or it is simply untrue.
+ *
+ * It was `displayName || username`, which got that wrong twice:
+ *
+ * - It ranked the global name above the QNS name, so a user who had elected
+ *   `alice.q` saw a field promising `Alice` while every surface in the app
+ *   showed them as `alice.q`. The one screen whose job is to explain the rule
+ *   was the screen contradicting it.
+ * - `username` is the DEPRECATED alias of `primaryUsername` (see `UserInfo`),
+ *   so the QNS name only ever appeared here via a field nothing writes any
+ *   more, and then only when no global name existed at all.
+ *
+ * Kept as a last-resort rung rather than deleted, so a user whose profile still
+ * carries the old field does not lose their placeholder entirely.
+ *
+ * `emptyLabel` is the caller's copy for "we have no name for you", e.g.
+ * "Your name in this space" — deliberately NOT `resolveSelfName`'s "Unnamed",
+ * which is a rendered name and would read as though it were already your name.
+ */
+export function selfNamePlaceholder(
+  // `null` as well as `undefined`: the auth context types its user as
+  // `UserInfo | null`, and making the caller narrow it would just move the
+  // no-user case out of the one function that already has an answer for it.
+  user: (SelfNameInput & { username?: string }) | null | undefined,
+  emptyLabel: string,
+): string {
+  const hasName =
+    !!(user?.primaryUsername ?? '').trim() || !!(user?.displayName ?? '').trim();
+  if (hasName) return resolveSelfName(user!).label;
+
+  return (user?.username ?? '').trim() || emptyLabel;
+}
+
 export function resolveSelfName(user: SelfNameInput): ResolvedSelfName {
   const qns = (user.primaryUsername ?? '').trim();
   if (qns) {

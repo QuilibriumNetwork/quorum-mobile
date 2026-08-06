@@ -66,6 +66,7 @@ import {
   resolveMemberAvatar,
   formatResolvedName,
 } from '@/utils/resolveMemberName';
+import { selfNamePlaceholder } from '@/utils/resolveSelfName';
 import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, queryKeys, IMAGE_CONFIGS, type Emoji, type Permission, type Role, type Space, type SpaceMember, type Sticker } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { resolveChannelIconColor } from '@/utils/channelIcon';
@@ -1652,7 +1653,10 @@ export default function SpaceSettingsModal({
       <TextInput
         value={spaceProfileDisplayName}
         onChangeText={(t) => { const v = capDisplayName(t); setSpaceProfileDisplayName(v); setSpaceProfileNameError(displayNameLiveError(v)); }}
-        placeholder={user?.displayName || user?.username || 'Your name in this space'}
+        // A promise about what happens if this is left empty, so it must be the
+        // name the app would actually show — the `.q` when one is elected. See
+        // the helper for what the old `displayName || username` got wrong.
+        placeholder={selfNamePlaceholder(user, 'Your name in this space')}
         placeholderTextColor={theme.colors.textMuted}
         // Hard-capped to MAX_DISPLAY_NAME_BYTES by bytes (capDisplayName). No
         // maxLength (counts chars, not bytes). Live error = non-length rules only.
