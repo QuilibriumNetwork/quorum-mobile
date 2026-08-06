@@ -26,6 +26,7 @@ import { getMnemonic, getPrivateKey } from '@/services/onboarding/secureStorage'
 import {
   changePrimaryName,
   describeReleasedPrimary,
+  shouldReleasePrimary,
 } from '@/services/profile/primaryNameChange';
 import { republishSelfProfile } from '@/services/profile/republishSelfProfile';
 import { NO_PRIMARY_NAME } from '@/utils/primaryName';
@@ -76,6 +77,9 @@ export default function NameDetailModal({
   const [transferAddress, setTransferAddress] = React.useState('');
   const [isTransferring, setIsTransferring] = React.useState(false);
   const [isCancelling, setIsCancelling] = React.useState(false);
+  /** Guards the two actions that now hit the network, matching every other
+   *  action in this sheet. Without it a double tap sends two publishes. */
+  const [isChangingPrimary, setIsChangingPrimary] = React.useState(false);
 
   const { data: listing, isLoading: isLoadingListing } = useGetResaleListingByName(name, {
     enabled: visible && !!name,
@@ -113,14 +117,19 @@ export default function NameDetailModal({
    * name on the line below it; the override is spread in explicitly.
    */
   const applyPrimaryName = async (next: string) => {
-    if (!user?.address) return;
-    const { title, body } = await changePrimaryName({
-      name,
-      next,
-      self: user,
-      updateProfile,
-    });
-    Alert.alert(title, body);
+    if (!user?.address || isChangingPrimary) return;
+    setIsChangingPrimary(true);
+    try {
+      const { title, body } = await changePrimaryName({
+        name,
+        next,
+        self: user,
+        updateProfile,
+      });
+      Alert.alert(title, body);
+    } finally {
+      setIsChangingPrimary(false);
+    }
   };
 
   /**
@@ -136,8 +145,9 @@ export default function NameDetailModal({
    * Returns null when there was nothing to release, so callers can leave their
    * message alone in the common case.
    */
-  const releasePrimaryIfElected = async () => {
-    if (!user?.address || !isPrimary) return null;
+  const releasePrimaryIfElected = async (stillResolvesToYou: boolean) => {
+    if (!user?.address) return null;
+    if (!shouldReleasePrimary({ isPrimary, stillResolvesToYou })) return null;
     updateProfile({ primaryUsername: NO_PRIMARY_NAME });
     return republishSelfProfile({ ...user, primaryUsername: NO_PRIMARY_NAME });
   };
@@ -218,7 +228,9 @@ export default function NameDetailModal({
           // alert and the refresh for an action that already succeeded.
           let released: Awaited<ReturnType<typeof releasePrimaryIfElected>> = null;
           try {
-            if (!makeResolvable) released = await releasePrimaryIfElected();
+            // Making it resolvable leaves it pointing at you, so it stays
+            // primary; making it private does not.
+            released = await releasePrimaryIfElected(makeResolvable);
           } catch (e) {
             logger.warn('[qns] releasing primary after make-private failed', e);
           }
@@ -397,7 +409,9 @@ export default function NameDetailModal({
                   // irreversible action.
                   let released: Awaited<ReturnType<typeof releasePrimaryIfElected>> = null;
                   try {
-                    released = await releasePrimaryIfElected();
+                    // It now belongs to somebody else, so it never resolves to
+                    // you again.
+                    released = await releasePrimaryIfElected(false);
                   } catch (e) {
                     logger.warn('[qns] releasing primary after transfer failed', e);
                   } finally {
@@ -500,7 +514,11 @@ export default function NameDetailModal({
 
           {/* Set as Primary */}
           {isResolvable && !isPrimary && (
-            <TouchableOpacity style={styles.actionButton} onPress={handleSetPrimary}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleSetPrimary}
+              disabled={isChangingPrimary}
+            >
               <IconSymbol name="star" size={18} color={theme.colors.primary} />
               <View style={styles.actionContent}>
                 <Text style={styles.actionText}>Set as Primary</Text>
@@ -515,7 +533,11 @@ export default function NameDetailModal({
               as their display name permanently: every other surface renders
               `isPrimary` as a badge with nothing to tap. */}
           {isPrimary && (
-            <TouchableOpacity style={styles.actionButton} onPress={handleUnsetPrimary}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleUnsetPrimary}
+              disabled={isChangingPrimary}
+            >
               <IconSymbol name="star" size={18} color={theme.colors.textMuted} />
               <View style={styles.actionContent}>
                 <Text style={styles.actionText}>Remove as Primary</Text>

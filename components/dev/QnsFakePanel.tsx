@@ -110,6 +110,9 @@ export function QnsFakePanel() {
   /** Result of the last publish attempt, so the round trip is observable from
    *  inside the app rather than only by refetching the endpoint. */
   const [publishOutcome, setPublishOutcome] = useState<string>('');
+  /** Blocks a second tap while a POST is in flight. Two overlapping publishes
+   *  race to be the server's last write, and the loser silently wins. */
+  const [publishing, setPublishing] = useState(false);
 
   /** Drop every cached public profile so the next render refetches through the
    *  overlay. Without this a toggle looks inert for up to an hour. */
@@ -150,6 +153,7 @@ export function QnsFakePanel() {
     // end to end on an account that owns no name — the real button is gated on
     // owning a resolvable one, the write underneath never was.
     if (user) {
+      setPublishing(true);
       setPublishOutcome('publishing…');
       const outcome = await republishSelfProfile({ ...user, primaryUsername: next });
       setPublishOutcome(
@@ -159,6 +163,7 @@ export function QnsFakePanel() {
             ? 'not published (profile is private)'
             : `publish FAILED: ${formatPublishError(outcome.error)}`,
       );
+      setPublishing(false);
     }
 
     // Pin the same name for your own address in the overlay.
@@ -191,6 +196,7 @@ export function QnsFakePanel() {
     // into it (so the old name survives and un-elect is a lie). Watch the
     // readout, then refetch the profile.
     if (user) {
+      setPublishing(true);
       setPublishOutcome('publishing…');
       const outcome = await republishSelfProfile({
         ...user,
@@ -203,6 +209,7 @@ export function QnsFakePanel() {
             ? 'not published (profile is private)'
             : `publish FAILED: ${formatPublishError(outcome.error)}`,
       );
+      setPublishing(false);
     }
   }, [updateProfile, user, invalidate]);
 
@@ -256,8 +263,16 @@ export function QnsFakePanel() {
           autoCorrect={false}
           accessibilityLabel="Fake primary QNS username"
         />
-        <DevButton label="Set" onPress={() => void handleApplySelf()} />
-        <DevButton label="Clear" onPress={() => void handleClearSelf()} />
+        <DevButton
+          label="Set"
+          onPress={() => void handleApplySelf()}
+          disabled={publishing}
+        />
+        <DevButton
+          label="Clear"
+          onPress={() => void handleClearSelf()}
+          disabled={publishing}
+        />
       </View>
       {!!publishOutcome && <DevReadout>{publishOutcome}</DevReadout>}
       <DevWarning>

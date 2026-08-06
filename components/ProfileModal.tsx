@@ -20,7 +20,6 @@ import { compressAvatarImage } from '@/services/media/imageAttachment';
 import { getHypersnapOptInChoice, setHypersnapOptInChoice } from '@/services/farcaster/hypersnapOptIn';
 import { provisionHypersnapSigner, forgetHypersnapSigner } from '@/services/farcaster/hypersnapProvision';
 import { changePrimaryName } from '@/services/profile/primaryNameChange';
-import { republishSelfProfile } from '@/services/profile/republishSelfProfile';
 import { NO_PRIMARY_NAME } from '@/utils/primaryName';
 import { truncateAddress } from '@/utils/formatAddress';
 import {
@@ -1556,6 +1555,10 @@ export default function ProfileModal({
 
   // Track which names have been made resolvable (locally after successful API call)
   const [resolvableNames, setResolvableNames] = React.useState<Set<string>>(new Set());
+  /** Electing now hits the network, so the rows need the same in-flight guard
+   *  every other action in this modal already has. Disables ALL rows, not just
+   *  the tapped one: two elections in flight would race to be last write. */
+  const [isChangingPrimary, setIsChangingPrimary] = React.useState(false);
 
   /**
    * Elect a QNS name as the name you go by.
@@ -1569,14 +1572,19 @@ export default function ProfileModal({
    * previous name; the new one is spread in explicitly.
    */
   const handleSetPrimary = async (name: string) => {
-    if (!user?.address) return;
-    const { title, body } = await changePrimaryName({
-      name,
-      next: name,
-      self: user,
-      updateProfile,
-    });
-    Alert.alert(title, body);
+    if (!user?.address || isChangingPrimary) return;
+    setIsChangingPrimary(true);
+    try {
+      const { title, body } = await changePrimaryName({
+        name,
+        next: name,
+        self: user,
+        updateProfile,
+      });
+      Alert.alert(title, body);
+    } finally {
+      setIsChangingPrimary(false);
+    }
   };
 
   /**
@@ -1598,14 +1606,19 @@ export default function ProfileModal({
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            if (!user?.address) return;
-            const { title, body } = await changePrimaryName({
-              name,
-              next: NO_PRIMARY_NAME,
-              self: user,
-              updateProfile,
-            });
-            Alert.alert(title, body);
+            if (!user?.address || isChangingPrimary) return;
+            setIsChangingPrimary(true);
+            try {
+              const { title, body } = await changePrimaryName({
+                name,
+                next: NO_PRIMARY_NAME,
+                self: user,
+                updateProfile,
+              });
+              Alert.alert(title, body);
+            } finally {
+              setIsChangingPrimary(false);
+            }
           },
         },
       ],
@@ -1983,6 +1996,7 @@ export default function ProfileModal({
                             <TouchableOpacity
                               style={styles.setPrimaryButton}
                               onPress={() => handleUnsetPrimary(name)}
+                              disabled={isChangingPrimary}
                             >
                               <Text style={styles.setPrimaryButtonText}>Remove as Primary</Text>
                             </TouchableOpacity>
@@ -1990,6 +2004,7 @@ export default function ProfileModal({
                             <TouchableOpacity
                               style={styles.setPrimaryButton}
                               onPress={() => void handleSetPrimary(name)}
+                              disabled={isChangingPrimary}
                             >
                               <Text style={styles.setPrimaryButtonText}>Set as Primary</Text>
                             </TouchableOpacity>
@@ -2080,6 +2095,7 @@ export default function ProfileModal({
                           <TouchableOpacity
                             style={styles.setPrimaryButton}
                             onPress={() => handleUnsetPrimary(name)}
+                            disabled={isChangingPrimary}
                           >
                             <Text style={styles.setPrimaryButtonText}>Remove as Primary</Text>
                           </TouchableOpacity>
@@ -2087,6 +2103,7 @@ export default function ProfileModal({
                           <TouchableOpacity
                             style={styles.setPrimaryButton}
                             onPress={() => void handleSetPrimary(name)}
+                            disabled={isChangingPrimary}
                           >
                             <Text style={styles.setPrimaryButtonText}>Set as Primary</Text>
                           </TouchableOpacity>

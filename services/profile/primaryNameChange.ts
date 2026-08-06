@@ -105,6 +105,30 @@ function describe(
 }
 
 /**
+ * Whether an action that changed a name's status should also drop it as your
+ * primary one.
+ *
+ * The rule is one sentence: **a name stops being your primary the moment it
+ * stops pointing at you.** Making it private stops it resolving; transferring it
+ * hands it to somebody else. Making it resolvable does the opposite and must
+ * change nothing.
+ *
+ * Extracted and tested because the call sites express it as a negation
+ * (`!makeResolvable`) inside a react-query callback that nothing in CI executes.
+ * Flipping that one `!` would mean "making a name resolvable un-elects it" and
+ * "making it private leaves it elected" — both silent, both wrong, and neither
+ * caught by any type.
+ */
+export function shouldReleasePrimary(params: {
+  /** Is this name the user's currently elected primary? */
+  isPrimary: boolean;
+  /** Will the name still resolve to this user after the action? */
+  stillResolvesToYou: boolean;
+}): boolean {
+  return params.isPrimary && !params.stillResolvesToYou;
+}
+
+/**
  * The clause to append when an action made a name unusable as your primary one
  * and so dropped it: making it private, or transferring it away.
  *
