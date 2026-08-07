@@ -26,7 +26,6 @@ This is the main index for all documentation, bug reports, and task management.
 
 ### In Progress
 
-- 🐛 [Re-import sheet keyboard trap](issues/2026-06-12-reimport-sheet-keyboard-covers-and-traps.md)
 - 📋 [Every in-app notification says who and what](issues/2026-08-05-rich-in-app-notifications-plan.md)
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
@@ -127,6 +126,7 @@ This is the main index for all documentation, bug reports, and task management.
 
 - 🐛 [IconSymbol throws on Tabler icon names received from desktop manifests](issues/.done/2026-06-09-iconsymbol-throws-on-tabler-icon-names-from-desktop.md)
 - 🐛 [Mobile saves pin / mute / thread control messages as junk timeline bubbles](issues/.done/2026-06-12-mobile-saves-pin-mute-thread-control-msgs-as-junk-bubbles.md)
+- 🐛 [Re-import sheet keyboard trap](issues/.done/2026-06-12-reimport-sheet-keyboard-covers-and-traps.md)
 - 🐛 [Desktop space changes don't sync to mobile (Android timestamp overflow)](issues/.done/2026-06-12-space-manifest-changes-not-syncing-to-mobile-silent-failure.md)
 - 🐛 [Physical Android device: "Unable to load script" — full session report](issues/.done/2026-06-12-unable-to-load-script-physical-device.md)
 - 🐛 [Channel icons don't render cross-platform (vocabulary mismatch)](issues/.done/2026-06-13-channel-icons-dont-render-cross-platform-vocabulary-mismatch.md)
@@ -264,4 +264,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-07 10:19:38
+**Last Updated**: 2026-08-07 10:43:27

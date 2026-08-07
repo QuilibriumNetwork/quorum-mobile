@@ -1,7 +1,7 @@
 ---
 type: bug
 title: "Farcaster re-import sheet: keyboard covers the whole sheet and cannot be dismissed"
-status: in-progress
+status: done
 severity: high
 created: 2026-06-12
 updated: 2026-08-07
@@ -14,9 +14,32 @@ found-on: iPhone, TestFlight 1.1.0 build 55 (reporter); second reporter 2026-07-
 
 ## Status
 
-Fix written on `fix/ios-reimport-sheet-keyboard-trap`, **not yet verified on a device.**
-The geometry is READ (from RN and keyboard-controller native source, cited below), not
-MEASURED. Android verification is now possible via a new dev panel — see "How to test".
+**2026-08-07 — shipped in PR #241** (`fix: the Farcaster re-import sheet no longer hides
+under a keyboard you can't dismiss`).
+
+What landed: the card is lifted above the live keyboard height, its content scrolls under a
+height cap, the backdrop is a `Pressable` that drops the keyboard before closing, and the
+input takes `submitBehavior="blurAndSubmit"` so Return dismisses. The hand-rolled
+Cancel/Import row was replaced with `ConfirmActions surface="sheet"`. A `__DEV__` opener was
+added in ProfileModal's developer section, since the sheet has no product entry point.
+
+Closed on the operator's call, and upstream #78 closed with it. What that closure does and
+does not rest on:
+
+- ✅ **Android, operator-confirmed:** with the keyboard up, the input and both buttons stay
+  visible; Return closes the keyboard; a backdrop tap closes it and keeps the typed text.
+- 🔲 **iOS: never tested.** #78 was reported twice from iPhone, and the dev loop here is
+  Android-only. What Android cannot vouch for is the keyboard height/timing and the
+  `submitBehavior` Return path, which goes through `RCTBackedTextInputDelegateAdapter.mm`
+  rather than Android's `ReactEditText`. Still open as item 11 in
+  [ios-verification-checklist.md](../docs/ios-verification-checklist.md) — closing this file
+  did not close that.
+- 🔲 **The `ConfirmActions` swap was made *after* the Android pass** and has not been
+  re-exercised. Low risk (six other sheets use the same component), but it is not covered by
+  the confirmation above.
+
+If an iPhone report says this is still broken, reopen from checklist item 11 rather than
+starting over; the "If it FAILS on iOS" notes there name the two likely causes.
 
 ## Symptom
 
