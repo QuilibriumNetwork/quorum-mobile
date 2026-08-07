@@ -31,6 +31,7 @@ import {
   getConversationSetting,
   setConversationSetting,
   mergeConversationSettings,
+  stripBookmarkSenderIcons,
   logger,
 } from '@quilibrium/quorum-shared';
 import { getAllSpaces, getSpaceKey, getSpaceKeys, saveSpaceKey, clearSpaceStorage } from './spaceStorage';
@@ -100,22 +101,78 @@ function validateItems(items: NavItem[]): NavItem[] {
 }
 
 // Bookmark Storage
+//
+// These two functions are the ONLY read and write points for the MMKV bookmark
+// store, which is what makes them the place to strip
+// `cachedPreview.senderIcon`. Between them they cover the upload (saveConfig),
+// the stored config copy (getConfig) and the remote merge, so no path can put
+// an embedded avatar back into the config blob.
+//
+// Why that matters: the blob is the only cross-device transport for every
+// synced setting, and its failure mode is the quiet kind — a device that cannot
+// publish keeps working, looks correct locally, and simply stops telling any
+// other device anything. Measured on a real desktop account 2026-08-05:
+// bookmarks were 656 KB of an 873 KB blob against a ~1 MB working ceiling, and
+// 94% of that was a full base64 avatar copied into EVERY bookmark rather than
+// referenced. Mobile never wrote senderIcon itself, but it adopts bookmarks
+// from desktop, so without this it re-inflates the blob for the whole account.
+// The avatar is a render cache, rebuildable from `senderAddress`.
+//
+// Nothing on mobile renders a bookmark today (BookmarksPanel has no entry
+// point, and never showed an avatar even when reached), so this is sync
+// hygiene with no visible behaviour attached to it. Whoever adds that surface
+// resolves the avatar from `cachedPreview.senderAddress` — and should read
+// desktop's ladder first, because a DM conversation record carries the
+// COUNTERPART's identity, so reading it without checking who sent the message
+// renders your own name beside the other person's face.
 
 export function getLocalBookmarks(address: string): Bookmark[] {
   const key = `${BOOKMARKS_KEY_PREFIX}${address}`;
   const data = bookmarkStorage.getString(key);
   if (!data) return [];
+
+  let parsed: unknown;
   try {
-    return JSON.parse(data) as Bookmark[];
+    parsed = JSON.parse(data);
   } catch {
     return [];
   }
+
+  // The old code returned whatever JSON.parse produced. Stripping calls .map on
+  // it, so a store holding valid JSON that is not an array — corruption, or a
+  // future writer bug — would now throw from a getter that never threw before,
+  // and saveConfig calls it OUTSIDE its try/catch, so one bad value would stop
+  // that device saving its config at all. Treat it as an empty list instead.
+  if (!Array.isArray(parsed)) return [];
+
+  // Read-only on purpose: this strips the value it hands back and does NOT
+  // rewrite the store. Desktop reclaims its IndexedDB copy with a one-shot
+  // sweep, and the equivalent here would be to write the stripped array back
+  // from this getter — but a write inside a read is the one line in this change
+  // that could LOSE a bookmark (saveLocalBookmarks truncates to
+  // MAX_BOOKMARKS), and bookmarks are invisible on mobile today, so nobody
+  // would see it happen. The account would just find them missing on desktop.
+  //
+  // It costs nothing to skip: MMKV reclaims the bytes on the first write of any
+  // kind, and every write path already strips. Adopting a config blob that has
+  // bookmarks calls saveLocalBookmarks (see getConfig), which happens on the
+  // first successful pull for exactly the accounts that have anything to
+  // reclaim. Adding or removing a bookmark does the same.
+  return stripBookmarkSenderIcons(parsed as Bookmark[]).bookmarks;
 }
 
 function saveLocalBookmarks(address: string, bookmarks: Bookmark[]): void {
   const key = `${BOOKMARKS_KEY_PREFIX}${address}`;
+  // The read above is what keeps the UPLOAD thin regardless of what is on disk.
+  // This one keeps the disk itself clean: a device still on an older build
+  // publishes bookmarks that carry an avatar, and storing one verbatim would
+  // park megabytes in a memory-mapped store for a list mobile cannot even
+  // display. The two halves are deliberately independent — either alone keeps
+  // the blob thin, which is why the migration needs no coordination between
+  // devices.
+  const { bookmarks: stripped } = stripBookmarkSenderIcons(bookmarks);
   // Enforce max bookmarks limit
-  const limitedBookmarks = bookmarks.slice(0, BOOKMARKS_CONFIG.MAX_BOOKMARKS);
+  const limitedBookmarks = stripped.slice(0, BOOKMARKS_CONFIG.MAX_BOOKMARKS);
   bookmarkStorage.set(key, JSON.stringify(limitedBookmarks));
 }
 
