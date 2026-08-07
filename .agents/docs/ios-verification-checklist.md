@@ -292,6 +292,37 @@ coloured artifacts behind the keys.
 - **Do NOT fix a hitch by restoring the preload** — that reinstates this bug. The next lever
   is an opaque scrim above the panel while the keyboard is up.
 
+### 11. Farcaster re-import sheet is usable with the keyboard up 🔲
+**▶ Ask:** "In a dev build, go to Account → Settings, find the dashed 'Farcaster re-import
+sheet' box, expand it and tap Open. Tap the text box so the keyboard comes up. Can you still
+see the text box and both buttons? Then: does pressing Return close the keyboard, and does
+tapping the dimmed area above the sheet close it too?"
+**Pass:** input + Cancel + Import all stay visible above the keyboard; Return closes the
+keyboard; a tap on the dim area closes the keyboard (a second tap closes the sheet).
+**Fail:** anything sits behind the keyboard, or the keyboard can't be dismissed.
+
+**Context (agent):**
+- **What:** upstream issue #78, reported twice from iPhone (TestFlight 1.1.0 b55, and again
+  2026-07-19). The sheet was bottom-anchored inside a raw `<Modal>` with no keyboard
+  avoidance, an inert backdrop `View`, and a `multiline` input — so the keyboard covered the
+  entire sheet and none of drag / tap-outside / Return dismissed it. Full writeup:
+  `.agents/issues/2026-06-12-reimport-sheet-keyboard-covers-and-traps.md`.
+- **Why this one IS Android-testable, unusually:** an RN `<Modal>` gets its own window, and
+  `KeyboardProvider` sets modal windows to `SOFT_INPUT_ADJUST_NOTHING`
+  (`ModalAttachedWatcher.kt:96`), so Android never resized it either. The Android run is
+  therefore real signal here — but only for the lift. The iOS-specific parts are still the
+  keyboard *height and timing* and the `submitBehavior` Return handling, which goes through
+  `RCTBackedTextInputDelegateAdapter.mm` rather than Android's `ReactEditText`.
+- **Reachability:** the sheet has no product entry point unless the custody key is missing
+  from SecureStore while the profile still claims a fid. Hence the `__DEV__` panel
+  (`components/dev/FarcasterReimportPanel.tsx`) — it will not be in a TestFlight build, so
+  an external iOS tester cannot run this Ask. It needs an internal dev build.
+- **JS-only** — ships over OTA once verified.
+- **If it FAILS on iOS:** if the card is lifted but by the wrong amount, the suspect is
+  `insets.bottom` being double-counted (iOS home-indicator inset is inside the keyboard
+  frame). If Return still inserts a newline, `submitBehavior` isn't reaching the native
+  view — check the Fabric path in `RCTTextInputComponentView.mm` (`getSubmitBehavior`).
+
 > **Cross-cutting note for #6–#9:** all four are the same shape — a native iOS surface
 > behaving differently from its Android counterpart, invisible from this dev loop. Before
 > writing any new navigation-header, chrome or composer code, read
@@ -305,4 +336,4 @@ _(none yet — move ✅ items here with the date + tester)_
 
 ---
 
-*Last updated: 2026-08-01*
+*Last updated: 2026-08-07*
