@@ -26,7 +26,6 @@ This is the main index for all documentation, bug reports, and task management.
 
 ### In Progress
 
-- 🐛 [Mobile re-publishes bookmark avatars into the config blob](issues/2026-08-07-mobile-republishes-bookmark-avatars-into-the-config-blob.md)
 - 📋 [Every in-app notification says who and what](issues/2026-08-05-rich-in-app-notifications-plan.md)
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
@@ -153,6 +152,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [The safety logs we keep adding do not exist where they are needed](issues/.done/2026-08-04-logger-is-a-no-op-in-production-and-debug-is-dead-in-dev.md)
 - 🐛 [Mobile publishes a narrowed Space list, emptying every desktop sidebar](issues/.done/2026-08-04-mobile-publishes-a-narrowed-space-list-and-empties-every-desktop-sidebar.md)
 - 🐛 [A mention notification shows an address where a name should be](issues/.done/2026-08-05-notification-previews-show-raw-addresses-instead-of-mention-names.md)
+- 🐛 [Mobile re-publishes bookmark avatars into the config blob](issues/.done/2026-08-07-mobile-republishes-bookmark-avatars-into-the-config-blob.md)
 - 📋 [Channel reorder mutations should broadcast (not local-only)](issues/.done/2026-05-29-channel-reorder-mutations-should-broadcast.md)
 - 📋 [Port DM update-profile (identity sync over DM sessions) from desktop](issues/.done/2026-06-09-port-dm-update-profile-from-desktop.md)
 - 📋 [Task: make `primaryUsername` (and `isProfilePublic`) survive a device switch and reliably reach the published public profile](issues/.done/2026-06-10-primary-username-sync-and-publish.md)
@@ -266,4 +266,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-07 11:07:36
+**Last Updated**: 2026-08-07 11:30:57

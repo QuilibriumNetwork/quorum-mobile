@@ -1,7 +1,7 @@
 ---
 type: bug
 title: "Mobile re-publishes bookmark avatars into the config blob"
-status: in-progress
+status: done
 priority: medium
 created: 2026-08-07
 updated: 2026-08-07
@@ -17,14 +17,27 @@ related:
 
 ## Status
 
-**2026-08-07 — implemented, awaiting review and ship.** This is the mobile half
-of the desktop fix that shipped in desktop PR #314 with shared PR #75
-(`2.1.0-40`). It was blocked on that shared version reaching npm; mobile took
-the pin in `eb069a3`, so it is unblocked.
+**2026-08-07 — SHIPPED in PR #242** (`fix: mobile no longer re-publishes
+bookmark avatars into the config blob`). This is the mobile half of the desktop
+fix that shipped in desktop PR #314 with shared PR #75 (`2.1.0-40`). It was
+blocked on that shared version reaching npm; mobile took the pin in `eb069a3`,
+which unblocked it.
 
-Desktop's issue lists this as the first of two things left open. The other,
-§4.3's pre-flight blob size guard, is a separate issue on desktop and is not
-touched here.
+What landed: bookmarks are stripped of `cachedPreview.senderIcon` on both read
+and write of the MMKV bookmark store, which between them are the only two
+access points — so the upload, the stored config copy and the remote merge are
+all covered. Plus an `Array.isArray` guard on the parsed store, because
+stripping maps over that value and `saveConfig` reads it outside its try/catch.
+
+Desktop's issue listed this as the first of two things it left open. The other,
+§4.3's pre-flight blob size guard, has its own issue on desktop and is not
+touched here. Desktop's issue also has its own residual measurement to take, so
+it stays open on that side.
+
+Closed as `done`: this issue's scope was the mobile strip, it is shipped, and
+the verification below was run in the session that shipped it. The two
+follow-ups named at the bottom are separate pieces of work, not remainders of
+this one.
 
 ## What was wrong
 
