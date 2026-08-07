@@ -26,6 +26,7 @@ This is the main index for all documentation, bug reports, and task management.
 
 ### In Progress
 
+- 🐛 [Re-import sheet keyboard trap](issues/2026-06-12-reimport-sheet-keyboard-covers-and-traps.md)
 - 📋 [Every in-app notification says who and what](issues/2026-08-05-rich-in-app-notifications-plan.md)
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
@@ -263,4 +264,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-07 09:55:17
+**Last Updated**: 2026-08-07 10:19:38
