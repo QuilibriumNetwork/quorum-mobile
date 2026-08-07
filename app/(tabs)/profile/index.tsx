@@ -46,15 +46,6 @@ import { FarcasterDismissalPanel } from '@/components/dev/FarcasterDismissalPane
 import { captureNotificationSnapshot } from '@/services/dev/notificationSnapshot';
 import * as Skin from '@/theme/skins/geometry';
 
-// Dev-only opener for the Farcaster re-import sheet, which is otherwise
-// unreachable without a corrupted keychain. Gated at the require() itself, not
-// just at render — `__DEV__` inlines to `false` in a release build, so this
-// whole line reduces to `const FarcasterReimportPanel = null` and the require()
-// never executes. Mirrors the DmBurstSheet gate in messages/dm/[id].tsx.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const FarcasterReimportPanelModule = __DEV__ ? (require('@/components/dev/FarcasterReimportPanel') as typeof import('@/components/dev/FarcasterReimportPanel')) : null;
-const FarcasterReimportPanel = FarcasterReimportPanelModule?.FarcasterReimportPanel ?? null;
-
 // Max preview lines for a Quorum row's message. The panel is a triage surface
 // (tap through to read in full), so cap it: long replies don't dominate the list.
 const QUORUM_PREVIEW_LINES = 2;
@@ -530,9 +521,6 @@ export default function NotificationsScreen() {
           observable and, crucially, reversible, so testing "Clear Farcaster"
           doesn't cost a real notification history. */}
       {__DEV__ && <FarcasterDismissalPanel dismissedCount={dismissedCount} />}
-      {/* Opens the Farcaster re-import sheet, which has no reachable entry point
-          in a healthy build (its trigger is a missing custody key). */}
-      {__DEV__ && FarcasterReimportPanel && <FarcasterReimportPanel />}
       {farcasterError && farcasterEnabled && (
         // Inline banner — visible whether or not chat notifications are
         // present. This is the only way the user can tell that their

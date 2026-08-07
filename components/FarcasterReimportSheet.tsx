@@ -13,7 +13,6 @@
 
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   Keyboard,
   Modal,
   Pressable,
@@ -27,7 +26,7 @@ import {
 import { useKeyboardState, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { ConfirmActions } from '@/components/shared/ConfirmActions';
 import { useTheme } from '@/theme';
 import {
   deriveFarcasterKeys,
@@ -214,32 +213,19 @@ export default function FarcasterReimportSheet({ visible, onClose, onImported }:
                 {error}
               </Text>
             ) : null}
-            <View style={styles.actionRow}>
-              <TouchableOpacity
-                onPress={onClose}
-                disabled={busy}
-                style={[styles.action, { borderColor: theme.colors.border }]}
-              >
-                <Text style={[styles.actionText, { color: theme.colors.textMain }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => void handleImport()}
-                disabled={busy}
-                style={[
-                  styles.action,
-                  {
-                    backgroundColor: theme.colors.primary,
-                    opacity: busy ? 0.6 : 1,
-                  },
-                ]}
-              >
-                {busy ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={[styles.actionText, { color: '#fff' }]}>Import</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+            {/* The shared cancel/confirm pair, not a hand-rolled row — this
+                sheet was one of the places that had drifted. */}
+            <ConfirmActions
+              confirmLabel="Import"
+              variant="primary"
+              surface="sheet"
+              onConfirm={() => void handleImport()}
+              onCancel={onClose}
+              cancelDisabled={busy}
+              confirmDisabled={busy}
+              confirmLoading={busy}
+              style={styles.actionRow}
+            />
           </ScrollView>
         </Animated.View>
       </View>
@@ -273,14 +259,7 @@ const styles = createSkinnable(() => StyleSheet.create({
     textAlignVertical: 'top',
   },
   error: { fontSize: Skin.font(13) },
-  actionRow: { flexDirection: 'row', gap: Skin.space(8), marginTop: Skin.space(4) },
-  action: {
-    flex: 1,
-    paddingVertical: Skin.space(12),
-    borderRadius: Skin.radius(10),
-    borderWidth: Skin.border(1),
-    borderColor: 'transparent',
-    alignItems: 'center',
-  },
-  actionText: { fontSize: Skin.font(15), fontWeight: '600' },
+  // Spacing only. Row direction, gap and the buttons themselves belong to
+  // ConfirmActions — its `style` prop is for the host's own layout.
+  actionRow: { marginTop: Skin.space(4) },
 }));

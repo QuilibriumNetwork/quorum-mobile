@@ -293,8 +293,8 @@ coloured artifacts behind the keys.
   is an opaque scrim above the panel while the keyboard is up.
 
 ### 11. Farcaster re-import sheet is usable with the keyboard up 🔲
-**▶ Ask:** "In a dev build, go to the Notifications tab, find the dashed 'Farcaster
-re-import sheet' box and tap Open. Tap the text box so the keyboard comes up. Can you still
+**▶ Ask:** "In a dev build, go to Account → Settings, find the dashed 'Farcaster re-import
+sheet' box, expand it and tap Open. Tap the text box so the keyboard comes up. Can you still
 see the text box and both buttons? Then: does pressing Return close the keyboard, and does
 tapping the dimmed area above the sheet close it too?"
 **Pass:** input + Cancel + Import all stay visible above the keyboard; Return closes the

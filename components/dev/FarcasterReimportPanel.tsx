@@ -12,9 +12,9 @@
  * not be dismissed by any means (quorum-mobile#78).
  *
  * So the point of this panel is narrow and worth stating: it does NOT simulate
- * the broken keychain state, and the surrounding screen is the notifications tab
+ * the broken keychain state, and the surrounding screen is the settings screen
  * rather than the feed. It opens the real sheet component so its KEYBOARD and
- * LAYOUT behaviour can be exercised — which is safe to test here precisely
+ * LAYOUT behaviour can be exercised — which is safe to test from here precisely
  * because the sheet is an RN <Modal>, i.e. its own window, so what is behind it
  * cannot change how it lays out.
  *
@@ -22,29 +22,36 @@
  * derivation and really writes keys to SecureStore. For a keyboard test, type
  * gibberish — the word-count check rejects it without touching the keychain.
  *
- * Only ever mounted from a `__DEV__` gate at the call site (see the
- * notifications tab); there is no separate internal gate here, matching
- * DmBurstSheet and FarcasterDismissalPanel.
+ * Lives in ProfileModal's developer section, next to QnsFakePanel: these panels
+ * sit beside the SUBJECT they instrument, and the Farcaster account controls are
+ * on that screen. (It was first put on the notifications tab merely because the
+ * other Farcaster dev panel is there — but that one belongs there because it is
+ * about notifications, which this is not.)
+ *
+ * Only ever mounted from a `__DEV__` gate at the call site; there is no separate
+ * internal gate here, matching DmBurstSheet, QnsFakePanel and
+ * FarcasterDismissalPanel.
  */
 
 import React, { useState } from 'react';
-import { StyleSheet } from 'react-native';
 import { DevButton, DevButtonRow, DevPanel, DevWarning } from '@/components/dev/DevPanel';
 import FarcasterReimportSheet from '@/components/FarcasterReimportSheet';
-import * as Skin from '@/theme/skins/geometry';
 
 export function FarcasterReimportPanel() {
   const [open, setOpen] = useState(false);
-  const styles = React.useMemo(() => createStyles(), []);
 
   return (
     <DevPanel
       title="Farcaster re-import sheet"
       hint="Opens the recovery sheet you otherwise can't reach without a broken keychain. For testing its keyboard/layout only."
-      // Collapsible (the default) like the dismissal panel above it: three rows
-      // sitting open permanently would push the real notification list down. No
-      // badge, because unlike that panel this one never changes app state.
-      style={styles.panel}
+      // No `style`: DevModeSection's container owns the horizontal padding, same
+      // as the Developer and Fake QNS panels. Passing a marginHorizontal here
+      // (copied from the notifications-tab panel, which does need its own) inset
+      // this box further than its neighbours.
+      //
+      // Collapsible (the default) — three rows sitting open permanently would
+      // push the Danger Zone down. No badge: unlike Fake QNS this never changes
+      // app state, so a folded panel cannot hide anything in effect.
     >
       <DevWarning>
         Import really writes keys to SecureStore. Type gibberish to test the
@@ -63,11 +70,3 @@ export function FarcasterReimportPanel() {
     </DevPanel>
   );
 }
-
-const createStyles = () =>
-  StyleSheet.create({
-    panel: {
-      marginHorizontal: Skin.space(12),
-      marginBottom: Skin.space(8),
-    },
-  });

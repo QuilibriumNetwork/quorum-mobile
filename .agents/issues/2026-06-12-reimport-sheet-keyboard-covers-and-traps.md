@@ -86,6 +86,11 @@ inside a Modal on Android):
 - `submitBehavior="blurAndSubmit"` + `returnKeyType="done"` on the input, so Return
   dismisses instead of inserting a newline.
 
+Also, separately from the keyboard: the Cancel/Import row was a hand-rolled `TouchableOpacity`
+pair, so it did not match the drawers around it. Replaced with the canonical
+`ConfirmActions surface="sheet"` — this sheet was one of the places that had drifted away
+from it, which is the exact thing that component's doc says it exists to stop.
+
 **Pasting is unaffected by the Return change.** Verified in RN's native source:
 `RCTBackedTextInputDelegateAdapter.mm:254-267` only applies the blur when
 `!textWasPasted`, so a pasted phrase containing newlines still goes in whole.
@@ -98,14 +103,20 @@ nothing in the app produces that state (the one function that deletes the custod
 `clearAllSecureStorage()`, also deletes the fid and the Quorum identity, landing you in
 `no-account` instead). That unreachability is how it shipped broken.
 
-So this branch adds `components/dev/FarcasterReimportPanel.tsx`, a `__DEV__`-gated opener
-in the notifications tab (require()-gated, so it's provably absent from a release bundle).
-It opens the real sheet; it does not simulate the broken keychain state, which is fine
-because a `<Modal>` is its own window and what's behind it can't change its layout.
+So this branch adds `components/dev/FarcasterReimportPanel.tsx`, a `__DEV__`-gated opener in
+ProfileModal's `DevModeSection`, next to `QnsFakePanel`. It opens the real sheet; it does not
+simulate the broken keychain state, which is fine because a `<Modal>` is its own window and
+what's behind it can't change its layout.
+
+(It went to the notifications tab first, purely because the other Farcaster dev panel lives
+there. That was proximity reasoning, not subject fit — these panels sit beside the thing they
+instrument, and `FarcasterDismissalPanel` is on that tab because it is *about* notifications.
+The Farcaster account controls live in the settings screen, so the instrument does too.)
 
 **Android pass/fail, in order:**
 
-1. Notifications tab → "Farcaster re-import sheet" panel → **Open**. The sheet slides up.
+1. Account tab → Settings pill → "Farcaster re-import sheet" panel → expand → **Open**.
+   The sheet slides up.
 2. Tap the text box. **PASS:** the input, Cancel and Import all stay visible above the
    keyboard. **FAIL:** anything is behind the keyboard.
 3. Type gibberish (do NOT paste a real phrase — Import writes to SecureStore).

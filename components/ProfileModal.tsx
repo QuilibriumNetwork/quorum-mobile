@@ -94,6 +94,7 @@ import { isDevModeLocal, setDevModeLocal, getApiConfig } from '@/services/api/co
 // notifications tab's FarcasterDismissalPanel.
 import { DevPanel, DevRow } from '@/components/dev/DevPanel';
 import { QnsFakePanel } from '@/components/dev/QnsFakePanel';
+import { FarcasterReimportPanel } from '@/components/dev/FarcasterReimportPanel';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
@@ -201,6 +202,7 @@ function DevModeSection({ theme }: { theme: AppTheme }) {
       </DevPanel>
 
       <QnsFakePanel />
+      <FarcasterReimportPanel />
     </View>
   );
 }
