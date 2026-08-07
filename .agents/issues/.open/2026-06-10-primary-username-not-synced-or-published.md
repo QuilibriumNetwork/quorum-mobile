@@ -36,7 +36,7 @@ file, that LaMat's published profile had no `primary_username` despite the name
 resolving correctly.
 
 Full reproduction:
-`issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md`.
+`issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md` (upstream: [quorum-mobile#240](https://github.com/QuilibriumNetwork/quorum-mobile/issues/240)).
 
 **Stays open** as a `type: bug` because the user-visible symptom is unchanged —
 no published profile carries a `.q` — and nothing here can be verified fixed

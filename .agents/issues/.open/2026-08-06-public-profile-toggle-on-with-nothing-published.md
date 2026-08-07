@@ -10,7 +10,7 @@ repos: quorum-mobile (check quorum-desktop for the same shape)
 source: measured 2026-08-06 on a device whose toggle had been on for weeks with a 404 behind it
 related:
   - "issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md"
-  - "issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md"
+  - "issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md (upstream: [quorum-mobile#240](https://github.com/QuilibriumNetwork/quorum-mobile/issues/240))"
 ---
 
 # The toggle is local state that never reconciles with the server

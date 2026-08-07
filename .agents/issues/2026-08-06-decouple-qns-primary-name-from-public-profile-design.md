@@ -382,7 +382,7 @@ from the same account — one unregistered, one genuinely resolvable to a
 different address — and both produced a **byte-identical** error, so the failure
 happens before the name is considered. The server's own outbound lookup URL is
 malformed. Full write-up:
-`issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md`.
+`issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md` (upstream: [quorum-mobile#240](https://github.com/QuilibriumNetwork/quorum-mobile/issues/240)).
 
 Consequences for this design:
 

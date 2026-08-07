@@ -21,7 +21,7 @@ related:
 A `primary_username` is a **self-reported field** in someone else's profile.
 Nothing today confirms the name actually resolves to the address it arrived
 with. The server intends to check it on publish and that check is broken
-(`issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md`), so
+(`issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md` (upstream: [quorum-mobile#240](https://github.com/QuilibriumNetwork/quorum-mobile/issues/240))), so
 today nothing verifies it anywhere.
 
 Two independent reasons this must be solved on the client:

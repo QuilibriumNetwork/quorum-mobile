@@ -417,6 +417,11 @@ reproducing that window on desktop.
 
 ## The blocker, restated
 
+> **Filed upstream 2026-08-07 as
+> [quorum-mobile#240](https://github.com/QuilibriumNetwork/quorum-mobile/issues/240).**
+> Nothing on the client side can move it. If someone asks "what is left for `.q`
+> names to work for real users", the answer is that issue and nothing else.
+
 `POST /users/:addr/public-profile` carrying any `primary_username` returns HTTP
 400 from a misconfigured server-side QNS lookup. Two names tried seconds apart —
 one unregistered, one genuinely resolvable — gave byte-identical errors, so the

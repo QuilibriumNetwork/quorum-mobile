@@ -15,6 +15,12 @@ related:
 
 # `POST /users/:addr/public-profile` refuses any `primary_username`
 
+**Filed upstream 2026-08-07 as
+[QuilibriumNetwork/quorum-mobile#240](https://github.com/QuilibriumNetwork/quorum-mobile/issues/240)**
+— that is where the lead dev tracks it. Keep this file as the working record
+(measurements, reasoning, the questions list); use the GitHub issue for anything
+the team needs to see or respond to.
+
 **This needs someone with server access. No client change can work around it.**
 
 ## The error
