@@ -645,8 +645,9 @@ export async function saveConfig(config: UserConfig): Promise<void> {
   const privateKey = await getPrivateKey();
   const publicKey = await getPublicKey();
 
-  // Captured before `ts` overwrites it: the refuse-to-publish branch below puts
-  // it back, so a held save does not advance this device's timestamp.
+  // Captured before `ts` overwrites it. Every path below that does NOT reach
+  // the server puts it back, so a save that was never published cannot advance
+  // this device's timestamp. See the refuse-to-publish branch for why.
   const incomingTimestamp = config.timestamp ?? 0;
   const ts = Date.now();
   config.timestamp = ts;
@@ -665,12 +666,25 @@ export async function saveConfig(config: UserConfig): Promise<void> {
     // on every save in a release build. The no-keypair branch below IS a
     // fault, and stays a warning.
     logger.debug('[ConfigSync] NOT publishing — allowSync is off; the change is local-only');
+    // Nothing reached the server, so nothing earned a newer timestamp. Without
+    // this the device drifts ahead unwitnessed on every local change: getConfig
+    // then returns local unconditionally and it silently stops applying other
+    // devices' changes, and when the user later turns sync ON that stale
+    // picture wins and is adopted verbatim by every other device.
+    // See 2026-08-07-a-device-with-sync-off-still-claims-a-newer-timestamp.md
+    config.timestamp = incomingTimestamp;
   } else if (!privateKey || !publicKey) {
     logger.warn('[ConfigSync] NOT publishing — no keypair available; the change is local-only');
+    config.timestamp = incomingTimestamp;
   }
 
   // Sync to server if allowed
   if (config.allowSync && privateKey && publicKey) {
+    // Set only once the POST has returned. A throw from the bookkeeping that
+    // follows it must not be mistaken for a failed publish — the server has
+    // already accepted `ts` at that point, and withdrawing it locally would
+    // make this device pull its own config back on the next read.
+    let published = false;
     try {
       // Promote pre-split signing keys, then collect space keys before
       // encryption (matches desktop behavior). The 'signing' entries ride
@@ -807,6 +821,7 @@ export async function saveConfig(config: UserConfig): Promise<void> {
           timestamp: ts,
           signature,
         });
+        published = true;
 
         // Clear deleted bookmark tombstones after successful sync
         clearDeletedBookmarkIds(address);
@@ -849,6 +864,11 @@ export async function saveConfig(config: UserConfig): Promise<void> {
       logger.warn(
         `[ConfigSync] settings POST FAILED — this device is NOT publishing config: ${error instanceof Error ? error.message : String(error)}`
       );
+      // ...and take back the timestamp with it. This is the "black hole" the
+      // warning above describes: a device that keeps a fresh timestamp after a
+      // failed POST stops accepting every other device's config from then on,
+      // which is why "nothing syncs" outlived the single failed request.
+      if (!published) config.timestamp = incomingTimestamp;
       // Continue to save locally even if sync fails
     }
   }
@@ -871,6 +891,41 @@ export async function updateConfig(
   const updatedConfig = { ...currentConfig, ...updates };
   await saveConfig(updatedConfig);
   return updatedConfig;
+}
+
+/**
+ * Turn sync on or off, pulling first when turning it ON.
+ *
+ * Enabling sync immediately publishes this device's whole picture, and every
+ * other device adopts it verbatim. Pull first so what we publish is reconciled
+ * with whatever they added since this device last looked, instead of erasing
+ * it. getConfig persists what it adopts, so the updateConfig below reads the
+ * reconciled copy. Turning sync OFF publishes nothing and needs no pull.
+ *
+ * The timestamp rule alone does not cover this. When the user flips the toggle
+ * the device genuinely publishes, so it genuinely earns a fresh timestamp — a
+ * correct timestamp on a stale picture, which the other devices then adopt.
+ *
+ * This lives in the service rather than in the settings screen's hook for the
+ * same reason the timestamp rule does: it is a property of the sync protocol,
+ * not of a screen. A second caller toggling allowSync through updateConfig
+ * directly would otherwise silently reintroduce the wipe — which is exactly how
+ * the timestamp rule came to cover one of its four paths.
+ * See 2026-08-07-a-device-with-sync-off-still-claims-a-newer-timestamp.md
+ */
+export async function setAllowSync(
+  address: string,
+  enabled: boolean
+): Promise<UserConfig> {
+  if (enabled) {
+    try {
+      await getConfig(address);
+    } catch {
+      // Offline. Fall through and publish the local picture — that is the
+      // pre-existing behaviour, not a new risk introduced here.
+    }
+  }
+  return updateConfig(address, { allowSync: enabled });
 }
 
 /**

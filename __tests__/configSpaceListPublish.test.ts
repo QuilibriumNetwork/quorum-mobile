@@ -95,6 +95,7 @@ import {
   getLocalUserConfig,
   saveLocalUserConfig,
   removeSpaceFromConfig,
+  setAllowSync,
 } from '../services/config/configService';
 import type { UserConfig } from '@quilibrium/quorum-shared';
 
@@ -494,5 +495,139 @@ describe('saveConfig — truncated Space lists are never published', () => {
 
     expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
     expect(getLocalUserConfig(ADDRESS)!.name).toBe('renamed');
+  });
+});
+
+/**
+ * Publishing is what earns the right to a newer timestamp.
+ *
+ * The refuse-to-publish branch already applied this rule (covered above). It is
+ * the SAME rule, and the other three non-publishing paths were missing it:
+ * sync off, no keypair, and a failed POST. Each of them advanced this device's
+ * timestamp without the server ever agreeing.
+ *
+ * Two silent consequences follow, and both are why this is worth pinning.
+ * getConfig resolves purely by timestamp and discards the losing side whole, so
+ * a drifted device stops applying every other device's changes — permanently,
+ * from its first local edit. And when it eventually does publish, that stale
+ * picture is adopted verbatim everywhere, taking with it every Space and
+ * setting the other devices had and this one did not.
+ *
+ * The control arm is load-bearing: if every arm withheld the timestamp these
+ * assertions would pass while proving nothing.
+ *
+ * See 2026-08-07-a-device-with-sync-off-still-claims-a-newer-timestamp.md
+ */
+describe('saveConfig — only a publish advances the timestamp', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    memoryStores().forEach((s) => s.clear());
+    mockGetPrivateKey.mockResolvedValue('aa'.repeat(57));
+    mockGetPublicKey.mockResolvedValue('bb'.repeat(57));
+    mockPostUserSettings.mockResolvedValue({});
+    mockGetSpaceKeys.mockReturnValue([{ keyId: 'config' }]);
+    // Everything keyable, so nothing here is held by the truncation guard —
+    // these tests must exercise the other branches, not that one.
+    mockGetAllSpaces.mockReturnValue([keyedSpace('space-1')]);
+    mockGetEncryptionStates.mockImplementation((id) => [encState(id)]);
+  });
+
+  const config = (over: Partial<UserConfig> = {}): UserConfig =>
+    ({
+      address: ADDRESS,
+      allowSync: true,
+      timestamp: 1000,
+      spaceIds: ['space-1'],
+      items: [{ type: 'space', id: 'space-1' }],
+      ...over,
+    }) as unknown as UserConfig;
+
+  it('withholds the timestamp when sync is off, but still persists the change', async () => {
+    await saveConfig(config({ allowSync: false, name: 'renamed' }));
+
+    expect(mockPostUserSettings).not.toHaveBeenCalled();
+    expect(getLocalUserConfig(ADDRESS)!.timestamp).toBe(1000);
+    // Only the claim to authority is withheld — the user's edit still landed.
+    expect(getLocalUserConfig(ADDRESS)!.name).toBe('renamed');
+  });
+
+  it('does not drift across repeated saves with sync off', async () => {
+    for (const name of ['one', 'two', 'three']) {
+      await saveConfig(config({ ...getLocalUserConfig(ADDRESS), allowSync: false, name }));
+    }
+
+    expect(getLocalUserConfig(ADDRESS)!.timestamp).toBe(1000);
+    expect(getLocalUserConfig(ADDRESS)!.name).toBe('three');
+  });
+
+  it('withholds the timestamp when there is no keypair to sign with', async () => {
+    mockGetPrivateKey.mockResolvedValue(null);
+
+    await saveConfig(config({ name: 'renamed' }));
+
+    expect(mockPostUserSettings).not.toHaveBeenCalled();
+    expect(getLocalUserConfig(ADDRESS)!.timestamp).toBe(1000);
+    expect(getLocalUserConfig(ADDRESS)!.name).toBe('renamed');
+  });
+
+  it('withholds the timestamp when the POST fails', async () => {
+    // The "nothing syncs" black hole: a device that keeps a fresh timestamp
+    // after a failed request stops accepting every other device's config from
+    // then on, so one transient 400 outlives the request that caused it.
+    mockPostUserSettings.mockRejectedValue(new Error('413 payload too large'));
+
+    await saveConfig(config({ name: 'renamed' }));
+
+    expect(getLocalUserConfig(ADDRESS)!.timestamp).toBe(1000);
+    expect(getLocalUserConfig(ADDRESS)!.name).toBe('renamed');
+  });
+
+  describe('setAllowSync — enabling pulls before it publishes', () => {
+    it('pulls before publishing when sync is turned ON', async () => {
+      saveLocalUserConfig(config({ allowSync: false }));
+
+      await setAllowSync(ADDRESS, true);
+
+      // Order is the whole point: publishing first would put this device's
+      // picture on the server before it had seen what the others added.
+      expect(mockGetUserSettings).toHaveBeenCalled();
+      expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
+      expect(mockGetUserSettings.mock.invocationCallOrder[0]).toBeLessThan(
+        mockPostUserSettings.mock.invocationCallOrder[0]
+      );
+      expect(getLocalUserConfig(ADDRESS)!.allowSync).toBe(true);
+    });
+
+    it('does not pull when sync is turned OFF', async () => {
+      saveLocalUserConfig(config({ allowSync: true }));
+
+      await setAllowSync(ADDRESS, false);
+
+      // Nothing is published, so there is nothing to reconcile against.
+      expect(mockGetUserSettings).not.toHaveBeenCalled();
+      expect(mockPostUserSettings).not.toHaveBeenCalled();
+      expect(getLocalUserConfig(ADDRESS)!.allowSync).toBe(false);
+    });
+
+    it('still enables sync when the pull fails', async () => {
+      // Offline must not leave the user unable to turn the setting on.
+      saveLocalUserConfig(config({ allowSync: false }));
+      mockGetUserSettings.mockRejectedValue(new Error('offline'));
+
+      await setAllowSync(ADDRESS, true);
+
+      expect(getLocalUserConfig(ADDRESS)!.allowSync).toBe(true);
+      expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('CONTROL ARM: a config that reaches the server does advance the timestamp', async () => {
+    await saveConfig(config({ name: 'renamed' }));
+
+    expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
+    const posted = mockPostUserSettings.mock.calls[0][1] as { timestamp: number };
+    expect(posted.timestamp).toBeGreaterThan(1000);
+    // What we kept locally must match what the server was told.
+    expect(getLocalUserConfig(ADDRESS)!.timestamp).toBe(posted.timestamp);
   });
 });

@@ -7,6 +7,7 @@ export {
   getConfig,
   saveConfig,
   updateConfig,
+  setAllowSync,
   getLocalUserConfig,
   saveLocalUserConfig,
   clearConfigStorage,
