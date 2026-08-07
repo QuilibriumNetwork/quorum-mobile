@@ -26,6 +26,7 @@ This is the main index for all documentation, bug reports, and task management.
 
 ### In Progress
 
+- 🐛 [Mobile re-publishes bookmark avatars into the config blob](issues/2026-08-07-mobile-republishes-bookmark-avatars-into-the-config-blob.md)
 - 📋 [Every in-app notification says who and what](issues/2026-08-05-rich-in-app-notifications-plan.md)
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
@@ -115,6 +116,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Non-destructive feedback: move the remaining `Alert.alert` sites off native alerts](issues/.open/2026-08-01-non-destructive-alert-alert-to-toasts.md)
 - 📋 [Three pieces the resolver adoption deliberately left](issues/.open/2026-08-04-qns-names-and-the-identity-coverage-instrument.md)
 - 📋 [Verifying a `.q` claim, without paying for it on every render](issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md)
+- 📋 [Add the global "Always sign Direct Messages" toggle to mobile settings](issues/.open/2026-08-07-no-global-always-sign-dms-toggle-on-mobile.md)
 
 ### Deferred
 
@@ -264,4 +266,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-07 10:43:27
+**Last Updated**: 2026-08-07 11:07:36
