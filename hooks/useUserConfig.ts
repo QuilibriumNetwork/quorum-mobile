@@ -15,6 +15,7 @@ import {
   saveConfig,
   getLocalUserConfig,
   updateConfig,
+  setAllowSync,
   getLocalBookmarks,
   addBookmark as addBookmarkService,
   removeBookmark as removeBookmarkService,
@@ -91,7 +92,10 @@ export function useUserConfig(): UseUserConfigReturn {
       if (!user?.address) return;
 
       try {
-        const updated = await updateConfig(user.address, { allowSync: enabled });
+        // setAllowSync, not updateConfig: enabling sync must pull before it
+        // publishes, or this device's picture overwrites the others'. The rule
+        // lives in the service so every caller gets it.
+        const updated = await setAllowSync(user.address, enabled);
         setConfig(updated);
       } catch (err) {
         throw err;
