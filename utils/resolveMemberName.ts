@@ -141,6 +141,28 @@ const present = (s?: string | null): string | undefined => {
  * Shared's helper, not a local `endsWith`, so this and the input validator can
  * never disagree — it also folds confusable Unicode dots, which a hand-rolled
  * check would miss.
+ *
+ * ## This is NOT a redundant copy of shared's guard — do not delete it
+ *
+ * `quorum-shared` ≥ 2.1.0-40 applies the same rule inside `resolveDisplayName`,
+ * so it looks like this local check became belt-and-braces. It did not, and
+ * removing it is a measured regression (two tests go red with shared's guard
+ * fully active):
+ *
+ * The gate below only calls shared when `override || qns || global` has
+ * content, precisely so shared's non-Qm-aware `slice(0,6)…slice(-4)` fallback
+ * can never reach the screen. Drop this check and a row whose ONLY name is a
+ * forged one passes that gate with a truthy string, shared then drops every
+ * tier itself, and its own truncation is returned — `QmPeer…zzzz` instead of
+ * mobile's `QmPeerAEgV…imzzzz`.
+ *
+ * Worse, `isAddressFallback` comes back **false**, because as far as this
+ * function knows shared returned a name. Call sites read that flag to decide
+ * avatar initials, search text and mention matching, so the damage is
+ * functional rather than cosmetic.
+ *
+ * Guarding here keeps the two decisions where they belong: shared decides which
+ * TIER wins, mobile decides what "we know nobody" looks like.
  */
 const presentName = (s?: string | null): string | undefined => {
   const t = present(s);
