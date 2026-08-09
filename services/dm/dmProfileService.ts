@@ -21,7 +21,7 @@
  *  - bio: `!== undefined` — empty string `''` = deliberate clear, omitted = unchanged.
  */
 
-import type { DMUpdateProfileMessage, Message } from '@quilibrium/quorum-shared';
+import { logger, type DMUpdateProfileMessage, type Message } from '@quilibrium/quorum-shared';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
 import { getDeviceKeyset } from '../onboarding/secureStorage';
@@ -252,6 +252,7 @@ export async function broadcastProfileToAllDMs(
   });
 
   const store = getStore();
+  let sent = 0;
   const { sendEncryptedMessageToAllDevices } = await import('@/hooks/chat/useSendDirectMessage');
   const { toAllDeviceInfos } = await import('@/hooks/chat/useRecipientRegistration');
   const { getQuorumClient } = await import('@/services/api/quorumClient');
@@ -311,9 +312,25 @@ export async function broadcastProfileToAllDMs(
       // Record only after a successful enqueue so a throw retries next round.
       // writeGate swallows storage errors on purpose — see its comment.
       writeGate(store, key, { sig, at: now, attempts: nextAttempts(record, sig) });
+      sent += 1;
     } catch {
       // Per-partner failure (no session, encrypt error) is non-fatal — the
       // gate stays open for this partner so the next broadcast retries.
     }
   }
+
+  // The only externally visible evidence this ran. Until this line existed the
+  // DM half of a profile broadcast was completely silent: no log, no error, no
+  // way to tell "sent to nobody because everyone was deduped" from "never
+  // called at all" — and those two have very different causes.
+  //
+  // That mattered concretely. Electing a primary name failed to broadcast for
+  // three separate reasons at once, and none of them produced a single line of
+  // output on this path. The space twin logs `[ProfileSync] broadcast sent` /
+  // `gate SKIPPED` per space, which is exactly what made the space-side failure
+  // diagnosable; this is the DM equivalent.
+  logger.log(
+    `[DMProfileSync] broadcast to ${sent}/${partners.length} partner(s)` +
+      (sent === 0 ? ' — all deduped or unreachable' : ''),
+  );
 }
