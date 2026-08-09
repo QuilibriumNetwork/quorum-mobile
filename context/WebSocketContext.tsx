@@ -6568,9 +6568,29 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       p: user.primaryUsername ?? '',
     });
     if (lastProfileRebroadcastSigRef.current === sig) return;
-    lastProfileRebroadcastSigRef.current = sig;
 
     const t = setTimeout(async () => {
+      // Claim the fingerprint HERE, not when the effect ran.
+      //
+      // This line used to sit above the `setTimeout`, and that made the whole
+      // broadcast a coin flip. Sequence, measured on device 2026-08-09:
+      //
+      //   17:18:38.196  sigChanged=true   → fingerprint recorded, 4s timer set
+      //   17:18:39.500  sigChanged=false  → re-render; cleanup cleared the timer,
+      //                                     the effect returned early, and NOTHING
+      //                                     rescheduled the work
+      //
+      // Any re-render inside the 4s window cancelled the pending broadcast, and
+      // the recorded fingerprint then made every subsequent run a no-op. The
+      // effect re-runs every few seconds in normal use, so the window rarely
+      // survived — electing a primary name reached nobody, and the same was true
+      // for a display-name or avatar change, which share this fingerprint.
+      //
+      // Claiming it inside the callback makes a cancelled attempt leave no
+      // trace: the next run still sees a changed fingerprint and schedules
+      // again, so the work is DEFERRED by churn rather than lost to it. That is
+      // also what the 4s stagger was for.
+      lastProfileRebroadcastSigRef.current = sig;
       try {
         const { maybeSendUpdateProfileMessage, runProfileBroadcastMigrations } = await import('../services/space/spaceMessageService');
         const { getAllSpaces } = await import('../services/config/spaceStorage');
