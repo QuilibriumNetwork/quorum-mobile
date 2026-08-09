@@ -335,6 +335,34 @@ regardless of what the other client does. Desktop must not take the broadcast
 transport without this, and mobile must not ship the transport before desktop
 has the check. Tracked in the parity doc.
 
+## 7a. You cannot test the receive side on one device. Do not try.
+
+MEASURED 2026-08-09. The obvious shortcut — elect a name, let your own broadcast
+come back through the space hub, and watch the receive path run on the sending
+device — **cannot work, structurally.**
+
+A sender's own echoed message is dropped before decryption is even attempted:
+
+> Check if this is our own echoed message - skip decryption
+> (Triple Ratchet participants can't decrypt their own messages)
+> — `context/WebSocketContext.tsx:2073-2075`
+
+That is a property of the ratchet, not a filter someone chose and could remove.
+Confirmed on device: electing a name logged `[ProfileSync] broadcast sent` for
+all four spaces and `[DMProfileSync] broadcast to 4/4 partner(s)`, and produced
+**zero** receive-side lines with instrumentation sitting at all three storage
+points.
+
+So the send half is verifiable solo and the receive half is not, at any effort.
+The routes that remain are a second device, or the headless two-bot harness in
+`dev/harness/` — which runs mobile's own client code in Node with real crypto
+and real networking, and is the better instrument because it is repeatable.
+
+Note the harness bot currently stubs `updateProfile`
+(`dev/harness/bot.ts:180`), so a profile-broadcast scenario needs that wired up
+first. Scenarios in that folder run 50-270 lines; this is an afternoon, not a
+rewrite.
+
 ## 8. Tests
 
 - Pure comparison function: verified / different address / missing resolveKey /

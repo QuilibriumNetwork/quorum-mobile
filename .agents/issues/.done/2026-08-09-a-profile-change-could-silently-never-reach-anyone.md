@@ -79,15 +79,38 @@ cancelled attempt then leaves no trace, so the next run still sees a changed
 fingerprint and schedules again. Churn defers the broadcast instead of
 destroying it — which is what the stagger was for.
 
+Located in `context/WebSocketContext.tsx`: the guard reads at `:6570`, the claim
+now happens at `:6593` inside the `setTimeout` body, and the cleanup that made
+this matter is the `clearTimeout` at `:6694`. The failure path at `:6690` also
+resets the fingerprint to `null`, so a thrown import/lookup retries on the next
+dep change instead of recording a failed attempt as canonical.
+
 The per-destination dedupe is unaffected: an unchanged payload still logs
 `[ProfileSync] gate SKIPPED` per space, confirmed in the same run, so this did
 not become "always send".
 
 ## Desktop
 
-Not affected. `src/components/context/MessageDB.tsx` clears and re-sets its
-profile timers on every socket event with no fingerprint guard in front, so it
-always reschedules. Different structure, no lost work. No port needed.
+Not affected, and the reason is worth stating precisely because the first
+reading of it was wrong in an instructive way.
+
+It is **not** that desktop has no signature gate. It has one:
+`dmProfileSignature` / `shouldSendDmProfile` / `claimDmProfileSend` /
+`recordDmProfileSend` in `src/utils/dmProfileGate.ts:121-155`, called from
+`src/services/MessageService.ts:714-728`. What differs is **where it is
+claimed**.
+Desktop claims it *inside the deferred send*, only once the timer has actually
+fired — which is exactly the shape this fix moved mobile to.
+
+The scheduling site (`MessageDB.tsx:625-638`, on `ws.onopen` reconnect rather
+than on every socket event) is an unconditional `clearTimeout(prev)` immediately
+followed by `setTimeout(next)` in the same synchronous block. There is no tick
+where a clear happens without an accompanying reschedule, and a cancelled timer
+never reaches the gate, so it leaves no "already sent" marker to short-circuit
+the next attempt. No lost work, no port needed.
+
+So desktop is not a different-and-luckier structure; it is the correct structure,
+and mobile was the deviation.
 
 ## The generalisable mistake
 
@@ -107,5 +130,48 @@ plus a temporary three-way diagnostic log distinguishing "effect never ran" from
 device log buffer holds roughly forty seconds of this app's output, so both
 casual routes lose the evidence before anyone looks.
 
+## What still isn't protected
+
+**Nothing would catch a regression of this.** The "710 tests pass either way"
+above is not a figure of speech: no test executes this effect. Of the three
+suites that name `WebSocketContext`, two (`dmSelfEchoGuards`, `receiptWiring`)
+read the file as *source text* and assert on unrelated regions, and the third
+(`groupDeletionGuard`) mocks the module outright. Move the claim back above the
+`setTimeout` and the suite stays green.
+
+`primaryNameBroadcastSignature.test.ts` does **not** cover this. It guards the
+sibling defect from the same branch — `primaryUsername` missing from the
+*signature* — which is a different failure with the same symptom. Having it
+green is easy to misread as this race being covered.
+
+The cheap fix follows a convention the repo already uses. `receiptWiring.test.ts`
+slices the source between two anchors and asserts ordering directly:
+
+```ts
+expect(body.indexOf('isReadAckTimestampValid')).toBeLessThan(body.indexOf('setQueryData'));
+```
+
+The same shape would pin this one: assert `lastProfileRebroadcastSigRef.current = sig`
+appears **after** `setTimeout(` within the effect. That is the whole invariant,
+and it is one assertion. Not done here — flagged rather than actioned, since the
+issue was already closed.
+
+## Where the fix currently lives
+
+Commit `bec2980`, on branch `feat/verify-a-claimed-q-name-before-rendering-it`.
+**Not on `master` as of this review** — anyone grepping `master` for the fix will
+find the broken ordering and reasonably conclude the bug is still open. It lands
+when that branch ships.
+
 ---
 *Last updated: 2026-08-09*
+
+## Review Log
+**2026-08-09 - claude-opus-5**: First review pass. Verified the fix against the code rather than the prose: claim-inside-timer is genuinely present, 710 tests pass, no type errors in the touched files. Left status done and the file in .done/. Corrected one wrong technical claim, added anchors, and recorded a coverage gap the write-up implied but did not state.
+- Desktop reasoning was wrong in substance though right in verdict: the write-up said MessageDB.tsx has 'no fingerprint guard'. It does have one (shouldSendDmProfile/claimDmProfileSend/recordDmProfileSend, src/utils/dmProfileGate.ts:121-155, called from src/services/MessageService.ts:714-728) — it is simply claimed INSIDE the deferred send, which is the same shape mobile moved to. Rewrote the section: desktop is the correct structure, not a luckier one. Also corrected 'on every socket event' to ws.onopen reconnect.
+- Verified the 'tests pass either way' claim by construction rather than assuming it: no test executes the effect. dmSelfEchoGuards and receiptWiring read WebSocketContext.tsx as source text and assert on unrelated regions; groupDeletionGuard mocks the module. Reverting the fix would leave the suite green.
+- primaryNameBroadcastSignature.test.ts covers the SIBLING bug (primaryUsername absent from the signature), not this race. Its greenness is easy to misread as coverage. Said so explicitly in a new 'What still isn't protected' section.
+- Proposed a concrete regression test using a convention already in the repo — receiptWiring.test.ts line 58 does an indexOf ordering assertion; the same shape pins claim-after-setTimeout in one assertion. Flagged, not actioned, since the issue was already closed.
+- Added file:line anchors for the fix (WebSocketContext.tsx guard :6570, claim :6593, cleanup :6694, failure-path reset :6690).
+- Recorded that the fix is only on branch feat/verify-a-claimed-q-name-before-rendering-it (commit bec2980), NOT on master — a reader grepping master finds the broken ordering and would think the bug is open.
+- Did not touch: frontmatter (type/status/folder already agree), the What was wrong account, or the on-device measurements.
