@@ -4,7 +4,7 @@ title: "A primary .q name should show to everyone, not only to people who can se
 status: in-progress
 priority: high
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-09
 area: identity resolution / QNS / wire protocol
 repos: quorum-mobile (first), quorum-desktop (same change), quorum-shared (type promotion only, not required)
 source: found 2026-08-06 while device-testing the QNS dev overlay — the operator set a primary .q, turned their public profile OFF, and asked whether the .q should still show to other people
@@ -467,6 +467,19 @@ Ordered. §6b first — it is small, needs no decision, and helps the larger gro
 - [ ] The two lead questions in §7 asked
 
 ## Status
+
+**2026-08-09 — the transport shipped on mobile in PR #245**, together with the
+§10a verification it was blocked on. `primary_username` now rides the
+`update-profile` space broadcast and the `dm-update-profile` DM control message,
+and a receiving client resolves the claim before rendering it.
+
+That closes the §10 problem for mobile↔mobile: a `.q` reaches other people
+without the server, which is the only route available while the publish endpoint
+refuses the field.
+
+**Still open:** desktop, which neither sends nor reads the wire field. Until it
+does, a mobile user's `.q` is invisible to desktop users — degraded, not
+exposed. §6a merged-Farcaster mode is also still untouched.
 
 **2026-08-06 — the render half shipped in PR #239.** Every surface now resolves
 a `.q` through the one ladder, the forged-suffix guard is in, and the join/config

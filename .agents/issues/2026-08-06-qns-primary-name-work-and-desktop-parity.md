@@ -21,6 +21,27 @@ related:
 
 ## Status
 
+**2026-08-09 — mobile is DONE end to end; every remaining item on this page is
+desktop.** PR #245 shipped receiver-side verification on all four mobile
+surfaces plus the broadcast transport, so a mobile user can elect a `.q` and
+other mobile users see it.
+
+Three defects were found and fixed on the way, none of which this document
+predicted:
+
+- electing a name reached nobody (three compounding causes)
+- **any** profile change could lose its broadcast to a re-render — a rename or
+  avatar change equally, not just `.q`; filed separately in
+  `issues/.done/2026-08-09-a-profile-change-could-silently-never-reach-anyone.md`
+- the DM header rendered an unverified claim while the message bubbles beneath
+  it were verified
+
+The receive path is now covered by a two-bot harness scenario
+(`yarn harness:qns`) rather than by argument. Note for whoever takes desktop:
+the receive side CANNOT be tested on one device — Triple Ratchet participants
+cannot decrypt their own echoed messages — so budget for the harness rather than
+planning a manual check.
+
 **2026-08-06 — mobile shipped in PR #239** (`fix: joining a space no longer
 freezes your global name, and a .q resolves on every surface`), 16 commits.
 

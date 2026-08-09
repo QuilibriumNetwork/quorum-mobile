@@ -18,6 +18,33 @@ related:
 
 ## Status
 
+**2026-08-09 — shipped on mobile in PR #245** (`feat: a primary .q name reaches
+other people, and is verified before it renders`). **Left open for desktop and
+two measurements** — see the Definition of done.
+
+What landed: the pure check, the strip/promote pass upstream of the resolver,
+all four mobile surfaces, and the broadcast transport this plan was a
+precondition for. A wire claim lands under `claimed_primary_username` and is
+promoted into the rendered field only after it resolves back to the claimant.
+
+Proven rather than argued, in `dev/harness/qns-claim-two-bot.scenario.ts`
+(`yarn harness:qns`): two processes, real crypto, production relay, mobile's own
+provider on both ends. A claim survives encrypt → wire → decrypt → merge →
+persist; it does NOT reach `primary_username`; and a claim to a name the sender
+does not own is refused against the live resolver. The test was confirmed able
+to fail — disabling the receive-side storage turns the receiving role red.
+
+**Not proven, and worth stating plainly:** that a genuinely owned `.q` renders
+AS verified. That needs a real registered name pointed at a throwaway account
+and none exists. So forged claims are demonstrably refused; honest ones are not
+yet demonstrably accepted. The failure direction is a missing `.q`, never a
+wrong one.
+
+**Still open:** desktop (§7 — it must not render the wire field without this
+check, and today it ignores the field entirely, so it is degraded rather than
+exposed), plus the two on-device cost measurements in §9.
+
+
 **2026-08-09 — measurement pass against production. Nothing here blocks the
 work; four open questions are now answered and §4 is no longer an estimate.**
 
@@ -383,12 +410,17 @@ rewrite.
 
 ## 9. Definition of done
 
-- [ ] A claim that does not resolve to the claimant's address never renders as `.q`
-- [ ] A message from such a member renders normally, with a degraded name
-- [ ] Nothing verified is ever rendered before its lookup returns
-- [ ] One request per distinct name per TTL, batched where more than one is on screen
-- [ ] Members with no claim cause no requests at all
-- [ ] Same on desktop, landing together with the transport
+- [x] A claim that does not resolve to the claimant's address never renders as `.q`
+      — proven end to end in `dev/harness/qns-claim-two-bot.scenario.ts` against
+      the live resolver, not only in unit tests
+- [x] A message from such a member renders normally, with a degraded name
+- [x] Nothing verified is ever rendered before its lookup returns
+- [x] One request per distinct name per TTL, batched where more than one is on screen
+- [x] Members with no claim cause no requests at all
+- [ ] **Same on desktop, landing together with the transport — NOT DONE.** Mobile
+      shipped the transport in #245 without it. Desktop ignores the wire field
+      today (verified in both receive paths), so its users are not exposed —
+      they simply see no `.q`. This is the open item.
 - [ ] Measured on a real space: number of requests on opening a busy channel
 - [ ] Measured: scrolling a long member list fast does not fire a request per
       virtualisation tick. This surface costs zero today (§4) and is the one
