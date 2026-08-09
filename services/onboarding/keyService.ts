@@ -14,8 +14,8 @@ import { hmac } from '@noble/hashes/hmac.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import * as multihashes from 'multihashes';
 import bs58 from 'bs58';
+import { deriveAddress } from '@/utils/deriveAddress';
 
 // Extract ed448 and decaf448 from module (decaf448 type not in declarations)
 const { ed448 } = ed448Module;
@@ -101,24 +101,17 @@ export function generateKeyPair(): KeyPair {
 }
 
 /**
- * Derive address from public key using libp2p multihash approach
- * SHA-256 hashes the public key, wraps in multihash, encodes as base58
- * Produces a "Qm..." style address
+ * Derive address from public key using libp2p multihash approach.
+ *
+ * Moved to `@/utils/deriveAddress` and re-exported here so existing importers
+ * are unaffected. It left because this module loads mnemonic generation and the
+ * native crypto module, and turning a public key into an address should not
+ * require either — see that file for the full reasoning.
+ *
+ * Imported as well as re-exported: `export … from` does NOT bind the name in
+ * this module's scope, and four functions below call it directly.
  */
-export function deriveAddress(publicKey: Uint8Array | string): string {
-  const keyBytes = typeof publicKey === 'string'
-    ? hexToBytes(publicKey.replace('0x', ''))
-    : publicKey;
-
-  // SHA-256 hash the public key
-  const hash = sha256(keyBytes);
-
-  // Wrap in multihash format (SHA-256 = 0x12)
-  const multihash = multihashes.encode(hash, 'sha2-256');
-
-  // Base58 encode to get "Qm..." address
-  return bs58.encode(multihash);
-}
+export { deriveAddress };
 
 /**
  * Generate a 24-word mnemonic and derive ed448 key pair
