@@ -4,7 +4,7 @@ title: "Every in-app notification says who and what, and goes somewhere when tap
 status: in-progress
 priority: medium
 created: 2026-08-05
-updated: 2026-08-05
+updated: 2026-08-09
 area: notifications / notifications tab UI / background message service
 runtime_test: required
 supersedes:
@@ -19,6 +19,32 @@ related:
 # Every in-app notification says who and what
 
 ## Status
+
+**2026-08-09 — follow-up shipped in PR #244** (`feat: brand the notification
+sections, and let any row be hidden`). Same surface, not part of the four slices
+below; this issue stays **in-progress** because none of the "Still open" lines
+were run by it.
+
+What landed: section headings carry each product's mark and name, tinted to a
+shade that clears WCAG AA (at `accent[500]` a 12px heading failed on five of the
+six selectable accents, and Farcaster-on-dark was a regression against the
+neutral it replaced). Farcaster activity rows lead with a glyph instead of the
+actor's face, reusing the Quorum glyph wherever the two products mean the same
+thing. The redundant per-row "Farcaster" tag is gone and every Farcaster row
+gained the trash the Quorum rows already had. Row separator dropped, padding
+tightened, trash target raised to 46px.
+
+Worth knowing for anyone touching dismissal: per-row Farcaster hiding is keyed
+on the semantic dedup key **plus the actor** for likes and recasts. The dedup
+key is cast-level on purpose so the official feed's aggregate collapses the
+per-actor copies — but when the official feed is absent, haatz aggregates
+nothing and several likers on one cast become several rows sharing one key.
+Keying dismissal the same way made one trash tap hide all of them,
+unrecoverably. Dedup asks "same event?", dismissal asks "same row?".
+
+Adds to "Still open": the new section colours, the 14px logos and the tightened
+spacing are all visual and unverified on device, as is whether the row trash is
+reachable by VoiceOver/TalkBack given the row `Pressable` wraps it.
 
 **2026-08-05 — shipped in PR #235** (`feat: every in-app notification says who
 and what, and goes somewhere when tapped`), 11 commits squashed onto master.
