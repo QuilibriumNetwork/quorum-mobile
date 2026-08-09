@@ -73,7 +73,28 @@ export const QNS_BATCH_LIMIT = 100;
  *  several queries and not all of them declare the field on their static type. */
 export interface ClaimingRow {
   address: string;
+  /**
+   * The name the resolver reads and renders with a `.q`. Treated as a claim
+   * wherever it arrives from, and removed unless it verifies.
+   */
   primary_username?: string | null;
+  /**
+   * A claim delivered over the space/DM broadcast.
+   *
+   * Stored under a DIFFERENT key from `primary_username` on purpose, and this
+   * is a security property rather than a naming preference. `resolveMemberName`
+   * reads `primary_username`, and it is reached from surfaces that do not run
+   * this verification — notification previews and conversation titles among
+   * them. Writing a wire claim straight into that field would render it,
+   * unverified, on every one of those paths.
+   *
+   * Under this key the untrusted value is inert: a surface that skips
+   * verification sees no `.q` at all, which is a degradation. Only the promotion
+   * below can move it into the field that renders, and only after it resolves
+   * back to the claimant. Fail-closed by construction rather than by everyone
+   * remembering.
+   */
+  claimed_primary_username?: string | null;
 }
 
 /**
@@ -111,11 +132,44 @@ export function claimedNamesIn(
 ): string[] {
   const seen = new Set<string>();
   for (const row of rows) {
-    const name = (row?.primary_username ?? '').trim();
+    const name = claimIn(row);
     if (name) seen.add(name);
     if (seen.size >= limit) break;
   }
   return Array.from(seen);
+}
+
+/**
+ * The name a row is claiming, from either source.
+ *
+ * A claim reaches a row two ways: read out of a published public profile into
+ * `primary_username`, or delivered over the broadcast into
+ * `claimed_primary_username`. Neither is trusted, so both are read the same way
+ * and both must survive the same check.
+ *
+ * ## The broadcast wins whenever it is PRESENT, including when it is empty
+ *
+ * An empty broadcast claim is an un-election, and it has to be able to clear a
+ * name. Preferring the profile field would mean a user who drops their primary
+ * name keeps rendering as it for everyone else — the un-election arrives and
+ * changes nothing, which is the exact failure `NO_PRIMARY_NAME` exists to
+ * prevent on the sending side. So presence is the test, not truthiness.
+ *
+ * An ABSENT broadcast field falls back to the profile, which keeps behaviour
+ * unchanged for anyone whose claim only ever arrived that way.
+ *
+ * **Known simplification, worth a second opinion.** The equivalent merge for
+ * global name/icon/bio picks whichever source is NEWER by timestamp rather than
+ * ranking the routes. This does not, because the row reaching here has no
+ * timestamps on it. The consequence is that a stale broadcast outranks a fresh
+ * public profile, which can only ever under-show or mis-show a name the user
+ * did once claim — it cannot promote a name they never claimed, because the
+ * verification below is unconditional either way.
+ */
+function claimIn(row: Partial<ClaimingRow> | undefined): string {
+  const broadcast = row?.claimed_primary_username;
+  if (broadcast !== undefined && broadcast !== null) return broadcast.trim();
+  return (row?.primary_username ?? '').trim();
 }
 
 /** The batch call, injectable so the chunking is testable without a network. */
@@ -194,21 +248,52 @@ export function stripUnverifiedNames<T extends Partial<ClaimingRow>>(
 ): readonly T[] {
   let changed = false;
   const out = rows.map((row) => {
-    const name = (row?.primary_username ?? '').trim();
-    if (!name) return row;
-
-    // A row with no address cannot be verified against anything, so its claim
-    // is stripped. Fails closed: `claimedNameBelongsTo` rejects an empty
-    // address rather than treating it as a wildcard match.
-    const address = row?.address ?? '';
-    if (isExempt?.(name, address)) return row;
-    if (claimedNameBelongsTo(records.get(name), address)) return row;
-
+    const settled = settleClaim(row, records, isExempt);
+    if (settled === row) return row;
     changed = true;
-    return { ...row, primary_username: undefined };
+    return settled;
   });
 
   return changed ? out : rows;
+}
+
+/**
+ * Decide what a single row's `primary_username` should be, and return the row
+ * unchanged when it is already right.
+ *
+ * Two directions, one rule — a verified claim renders, nothing else does:
+ *
+ * - a claim in `primary_username` that does not verify is REMOVED
+ * - a claim in `claimed_primary_username` that verifies is PROMOTED into
+ *   `primary_username`, which is the only way a broadcast claim ever renders
+ *
+ * Returning the identical row when nothing changes is what keeps the memoised
+ * member maps and the virtualised lists from churning.
+ */
+function settleClaim<T extends Partial<ClaimingRow>>(
+  row: T,
+  records: ReadonlyMap<string, NameRecord | null>,
+  isExempt: ClaimExemption | undefined,
+  addressOverride?: string,
+): T {
+  const claim = claimIn(row);
+  const current = (row?.primary_username ?? '').trim();
+
+  if (!claim) {
+    // Nothing claimed. Only rewrite if a stale value is sitting in the render
+    // field, which would otherwise keep showing after an un-election.
+    return current ? ({ ...row, primary_username: undefined } as T) : row;
+  }
+
+  // A row with no address cannot be verified against anything, so its claim is
+  // dropped. Fails closed: `claimedNameBelongsTo` rejects an empty address
+  // rather than treating it as a wildcard match.
+  const address = addressOverride || row?.address || '';
+  const verified =
+    isExempt?.(claim, address) || claimedNameBelongsTo(records.get(claim), address);
+
+  if (!verified) return current ? ({ ...row, primary_username: undefined } as T) : row;
+  return current === claim ? row : ({ ...row, primary_username: claim } as T);
 }
 
 /**
@@ -233,18 +318,9 @@ export function stripUnverifiedNamesInMap<T extends Partial<ClaimingRow>>(
   const out: Record<string, T> = {};
 
   for (const [key, row] of Object.entries(map)) {
-    const name = (row?.primary_username ?? '').trim();
-    const address = row?.address || key;
-    if (
-      !name ||
-      isExempt?.(name, address) ||
-      claimedNameBelongsTo(records.get(name), address)
-    ) {
-      out[key] = row;
-      continue;
-    }
-    changed = true;
-    out[key] = { ...row, primary_username: undefined };
+    const settled = settleClaim(row, records, isExempt, row?.address || key);
+    if (settled !== row) changed = true;
+    out[key] = settled;
   }
 
   return changed ? out : (map as Record<string, T>);

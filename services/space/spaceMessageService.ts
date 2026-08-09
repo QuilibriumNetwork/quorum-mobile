@@ -852,6 +852,28 @@ export interface SendUpdateProfileParams {
   // profile view.
   farcasterFid?: number;
   farcasterUsername?: string;
+  /**
+   * The sender's elected primary QNS name, bare (`alice`, never `alice.q`).
+   *
+   * This is the ONLY route a `.q` has to another person. The public-profile
+   * transport that was meant to carry it is refused by the server for every
+   * name, owned or not, so without this nobody sees anybody's `.q` at all.
+   * Empty string is a deliberate un-election; undefined means no change, the
+   * same rule the global slots use.
+   *
+   * ## It is a CLAIM on the wire, and the signature does not cover it
+   *
+   * `canonicalize` hashes only `type + displayName + userIcon` for an
+   * update-profile, so this field — like `globalDisplayName` and the Farcaster
+   * pair before it — rides outside the signed payload. That is what makes it
+   * additive and safe for old clients, and it means a valid signature says
+   * nothing about whether this field is true or even authored by the sender.
+   *
+   * **Receiver-side verification is therefore not a nicety here, it is the only
+   * thing standing behind the claim.** Never render a `.q` sourced from this
+   * field without resolving it back to the sender's address first.
+   */
+  primaryUsername?: string;
 }
 
 /**
@@ -865,7 +887,7 @@ export async function sendUpdateProfileMessage(
     spaceId, channelId, senderAddress,
     displayName, userIcon, bio,
     globalDisplayName, globalUserIcon, globalBio,
-    farcasterFid, farcasterUsername,
+    farcasterFid, farcasterUsername, primaryUsername,
   } = params;
 
   // displayName/userIcon use `!== undefined` (not a truthy check) so a caller
@@ -887,6 +909,10 @@ export async function sendUpdateProfileMessage(
     ...(globalBio !== undefined ? { globalBio } : {}),
     ...(farcasterFid !== undefined && farcasterFid > 0 ? { farcasterFid } : {}),
     ...(farcasterUsername ? { farcasterUsername } : {}),
+    // Presence rule, not truthiness: '' is a deliberate un-election and has to
+    // reach recipients, or dropping a primary name would never propagate and
+    // the old `.q` would keep rendering for everyone else forever.
+    ...(primaryUsername !== undefined ? { primaryUsername } : {}),
   };
 
   // Cast: global* slots are additive and not yet in shared's UpdateProfileMessage
@@ -1077,7 +1103,12 @@ export function runProfileBroadcastMigrations(): void {
   // Tag bumped whenever the update-profile wire shape gains a field.
   // Force a one-time re-broadcast on every device so peers learn the
   // new fields without the user having to manually re-save.
-  const tag = 'add-farcaster-fields-v1';
+  // Bumped for `primaryUsername`. Without this bump every existing device has
+  // the pre-`.q` payload signature recorded, the gate reads the new broadcast
+  // as "same as last time", and nobody's primary name would ever reach their
+  // spacemates — the feature would ship and silently do nothing on every device
+  // that had already announced once.
+  const tag = 'add-primary-username-v1';
   if (done[tag]) return;
 
   // Wipe every recorded signature. The next on-connect rebroadcast

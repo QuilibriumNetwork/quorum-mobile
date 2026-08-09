@@ -282,6 +282,53 @@ describe('stripUnverifiedNamesInMap', () => {
     expect(out[OTHER].primary_username).toBeUndefined();
   });
 
+  type Row = {
+    address?: string;
+    primary_username?: string;
+    claimed_primary_username?: string;
+    global_display_name?: string;
+  };
+  const asMap = (row: Row, key = row.address ?? ''): Record<string, Row> => ({ [key]: row });
+
+  it('promotes a verified broadcast claim into the field that renders', () => {
+    // A broadcast claim is stored under a different key precisely so surfaces
+    // that skip verification cannot render it. Promotion is the only route into
+    // `primary_username`, and only after the claim resolves.
+    const out = stripUnverifiedNamesInMap(
+      asMap({ address: ADDRESS, claimed_primary_username: 'alice' }),
+      verified,
+    );
+    expect(out[ADDRESS].primary_username).toBe('alice');
+  });
+
+  it('never promotes a broadcast claim that does not resolve to the claimant', () => {
+    // The impersonation, arriving by the new route rather than the old one.
+    const out = stripUnverifiedNamesInMap(
+      asMap({ address: OTHER, claimed_primary_username: 'alice' }),
+      verified,
+    );
+    expect(out[OTHER].primary_username).toBeUndefined();
+  });
+
+  it('leaves a broadcast claim inert while its lookup is in flight', () => {
+    const out = stripUnverifiedNamesInMap(
+      asMap({ address: ADDRESS, claimed_primary_username: 'alice' }),
+      new Map(),
+    );
+    expect(out[ADDRESS].primary_username).toBeUndefined();
+  });
+
+  it('clears a rendered name once the claim behind it is withdrawn', () => {
+    // Un-electing broadcasts an empty claim. Without this, a name that was
+    // promoted earlier would keep rendering for everyone else indefinitely —
+    // the un-election would reach them and change nothing.
+    const out = stripUnverifiedNamesInMap(
+      asMap({ address: ADDRESS, primary_username: 'alice', claimed_primary_username: '' }),
+      verified,
+    );
+    expect(out[ADDRESS].primary_username).toBeUndefined();
+  });
+
   it('falls back to the map key when a row carries no address field', () => {
     // Rows reach these maps from several queries and the address is not always
     // duplicated inside the row. Verifying against `undefined` would strip
