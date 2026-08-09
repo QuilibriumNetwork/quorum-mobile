@@ -35,7 +35,10 @@ import {
 } from '@/services/notifications/notificationLog';
 import {
   getFarcasterClearedBefore,
+  getFarcasterDismissedKeys,
   setFarcasterClearedBefore,
+  setFarcasterDismissedKeys,
+  type DismissedKeys,
 } from '@/services/notifications/farcasterDismissal';
 
 const storage: MMKV = createMMKV({ id: 'quorum-dev-notification-snapshot' });
@@ -47,6 +50,10 @@ interface NotificationSnapshot {
   mentions: MentionReplyEntry[];
   pings: NotificationLogEntry[];
   clearedBefore: number;
+  /** Per-item dismissals. Absent on snapshots taken before the row trash
+   *  existed, which restore as "none" — the state those snapshots were
+   *  actually taken in. */
+  dismissedKeys?: DismissedKeys;
 }
 
 export interface NotificationSnapshotInfo {
@@ -96,6 +103,7 @@ export function captureNotificationSnapshot(): void {
     mentions,
     pings,
     clearedBefore: getFarcasterClearedBefore(),
+    dismissedKeys: getFarcasterDismissedKeys(),
   };
   storage.set(KEY_SNAPSHOT, JSON.stringify(snapshot));
   emit();
@@ -108,6 +116,7 @@ export function restoreNotificationSnapshot(): boolean {
   replaceMentionReplyLog(snapshot.mentions);
   replaceNotificationLog(snapshot.pings);
   setFarcasterClearedBefore(snapshot.clearedBefore);
+  setFarcasterDismissedKeys(snapshot.dismissedKeys ?? {});
   return true;
 }
 

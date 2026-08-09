@@ -28,6 +28,7 @@ jest.mock('react-native-mmkv', () => ({
   },
 }));
 
+import { createMMKV } from 'react-native-mmkv';
 import {
   captureNotificationSnapshot,
   clearNotificationSnapshot,
@@ -47,8 +48,11 @@ import {
 } from '../services/notifications/notificationLog';
 import {
   clearFarcasterNotifications,
+  dismissFarcasterNotification,
   getFarcasterClearedBefore,
+  getFarcasterDismissedKeys,
   resetFarcasterDismissal,
+  setFarcasterDismissedKeys,
 } from '../services/notifications/farcasterDismissal';
 
 function mention(id: string): MentionReplyEntry {
@@ -61,6 +65,24 @@ function mention(id: string): MentionReplyEntry {
     preview: { kind: 'text', text: 'ping' },
     createdAt: 1_000,
   } as MentionReplyEntry;
+}
+
+/**
+ * Rewrite the stored snapshot as one taken BEFORE the per-row trash existed,
+ * i.e. with no `dismissedKeys` field at all.
+ *
+ * Reaches into the mocked MMKV store rather than constructing the JSON by hand,
+ * so the fixture stays a real captured snapshot minus one field — hand-writing
+ * the whole object would stop resembling what `captureNotificationSnapshot`
+ * actually produces the first time its shape changes.
+ */
+function stripDismissedKeysFromStoredSnapshot(): void {
+  const store = createMMKV({ id: 'quorum-dev-notification-snapshot' });
+  const raw = store.getString('dev.notificationSnapshot');
+  if (!raw) throw new Error('no snapshot stored — capture one first');
+  const parsed = JSON.parse(raw) as Record<string, unknown>;
+  delete parsed.dismissedKeys;
+  store.set('dev.notificationSnapshot', JSON.stringify(parsed));
 }
 
 beforeEach(() => {
@@ -136,5 +158,47 @@ describe('captureNotificationSnapshot / restoreNotificationSnapshot', () => {
     captureNotificationSnapshot();
 
     expect(getNotificationSnapshotInfo()?.mentionCount).toBe(2);
+  });
+
+  it('round-trips the per-row dismissals, not just the watermark', () => {
+    // Without this, `captureNotificationSnapshot` could stop recording
+    // `dismissedKeys` entirely and the whole suite stayed green — the field was
+    // added to the snapshot and to restore, and nothing checked either half.
+    appendMentionReplyLog(mention('a'));
+    dismissFarcasterNotification('like:abc:111');
+    captureNotificationSnapshot();
+
+    // A clear wipes the per-row map (the watermark subsumes it).
+    clearFarcasterNotifications();
+    expect(getFarcasterDismissedKeys()).toEqual({});
+
+    restoreNotificationSnapshot();
+    expect(Object.keys(getFarcasterDismissedKeys())).toEqual(['like:abc:111']);
+  });
+
+  it('restores a pre-feature snapshot to no dismissals, without touching the logs', () => {
+    // A snapshot taken before the row trash existed has no `dismissedKeys`.
+    // Restoring it must land on "nothing dismissed" — the state that snapshot
+    // was actually taken in — and must not quietly leave a later dismissal in
+    // place, nor drop the logs it did capture. Rows reappearing is the safe
+    // direction; rows staying hidden with no record of why is not.
+    appendMentionReplyLog(mention('a'));
+    captureNotificationSnapshot();
+    stripDismissedKeysFromStoredSnapshot();
+
+    dismissFarcasterNotification('like:abc:111');
+    restoreNotificationSnapshot();
+
+    expect(getFarcasterDismissedKeys()).toEqual({});
+    expect(getMentionReplyLog().map((e) => e.id)).toEqual(['a']);
+  });
+
+  it('a restored empty map really clears the store, rather than writing "{}"', () => {
+    // Guards the branch in setFarcasterDismissedKeys that removes the key
+    // instead of persisting an empty object — a stored "{}" parses back to the
+    // same thing, so only the raw read distinguishes them.
+    dismissFarcasterNotification('like:abc:111');
+    setFarcasterDismissedKeys({});
+    expect(getFarcasterDismissedKeys()).toEqual({});
   });
 });

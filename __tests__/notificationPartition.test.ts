@@ -34,11 +34,16 @@ import {
 } from '../services/notifications/partitionNotifications';
 import {
   clearFarcasterNotifications,
+  dismissFarcasterNotification,
   getFarcasterClearedBefore,
+  getFarcasterDismissedKeys,
   isDismissed,
+  isItemDismissed,
+  pruneDismissed,
   reachedWatermark,
   resetFarcasterDismissal,
 } from '../services/notifications/farcasterDismissal';
+import { farcasterDismissKey } from '../services/notifications/partitionNotifications';
 import type { FarcasterNotification } from '../services/farcasterClient';
 import type { NotificationLogEntry } from '../services/notifications/notificationLog';
 import type {
@@ -714,5 +719,301 @@ describe('partitionNotifications — badge count', () => {
     );
     expect(result.quorumItems).toEqual([]);
     expect(result.unreadCount).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-item dismissal (the row trash button).
+//
+// This is a SUPPRESSION path: when it misbehaves, the symptom is a notification
+// that silently never appears, which no amount of using the app would surface.
+// So the cases below deliberately include the two ways it could over-suppress
+// (hiding a newer event, or stopping pagination) rather than only proving that
+// the happy path hides a row.
+// ---------------------------------------------------------------------------
+
+describe('isItemDismissed', () => {
+  it('hides an item at or below its own dismissal instant', () => {
+    expect(isItemDismissed('like:abc', T.old, { 'like:abc': T.clear })).toBe(true);
+    expect(isItemDismissed('like:abc', T.clear, { 'like:abc': T.clear })).toBe(true);
+  });
+
+  it('lets an aggregate that gained newer activity come back', () => {
+    // The whole reason a dismissal stores an INSTANT and not a boolean. A
+    // like-group is keyed off its latest timestamp, so a new like on the same
+    // cast lifts the row above its own dismissal and it should return.
+    expect(isItemDismissed('like:abc', T.fresh, { 'like:abc': T.clear })).toBe(false);
+  });
+
+  it('ignores keys that were never dismissed', () => {
+    expect(isItemDismissed('follow:9', T.old, { 'like:abc': T.clear })).toBe(false);
+  });
+
+  it('hides nothing for an unkeyable item', () => {
+    expect(isItemDismissed(undefined, T.old, { 'like:abc': T.clear })).toBe(false);
+  });
+});
+
+describe('farcasterDismissKey', () => {
+  it('gives the same key to one event arriving from both sources', () => {
+    // Same like, same liker, seen by both feeds — one row, one key.
+    //
+    // The earlier version of this test compared the official fixture (actor
+    // fid 111) against the haatz fixture (fid 222) and asserted they matched.
+    // They are not the same event, and asserting they were is what justified a
+    // key too coarse to tell two likers apart. Pin the actor to compare like
+    // with like.
+    const sameLiker = { actor: { fid: 111 } } as Partial<FarcasterNotification>;
+    expect(farcasterDismissKey(farcasterLike(sameLiker))).toBe(
+      farcasterDismissKey(haatzLike(sameLiker)),
+    );
+  });
+
+  it('separates two people liking the same cast', () => {
+    // The property whose absence let one trash tap sweep other people's rows.
+    expect(farcasterDismissKey(haatzLike({ actor: { fid: 222 } } as Partial<FarcasterNotification>))).not.toBe(
+      farcasterDismissKey(haatzLike({ actor: { fid: 333 } } as Partial<FarcasterNotification>)),
+    );
+  });
+
+  it('still keys a like at cast level, so the prefix survives', () => {
+    // The actor is a suffix on the cast-level key, not a replacement for it.
+    // Dropping the prefix would let a like and a follow by the same person
+    // collide.
+    expect(farcasterDismissKey(farcasterLike())).toBe('like:abc:111');
+  });
+
+  it('separates a like from a recast on the same cast', () => {
+    expect(farcasterDismissKey(farcasterLike())).not.toBe(
+      farcasterDismissKey(farcasterLike({ type: 'cast-recast', reactionType: 'recast' })),
+    );
+  });
+
+  it('falls back to the id when there is nothing semantic to key on', () => {
+    // Mini-app/frame rows: no cast, no actor fid. Without the fallback their
+    // key would be empty and the trash button would silently do nothing.
+    const frame = farcasterLike({
+      id: 'frame-1',
+      type: 'frame',
+      actor: undefined,
+      content: undefined,
+    });
+    expect(farcasterDismissKey(frame)).toBe('id:frame-1');
+  });
+});
+
+describe('pruneDismissed', () => {
+  it('drops keys the watermark already covers', () => {
+    // A key dismissed at or below the watermark can only hide a subset of what
+    // the watermark hides, so keeping it is pure growth. This is what makes
+    // "Clear all" collapse the map instead of accumulating one entry per clear.
+    expect(pruneDismissed({ a: T.old, b: T.fresh }, T.clear)).toEqual({ b: T.fresh });
+  });
+
+  it('keeps everything when the user has never cleared', () => {
+    expect(pruneDismissed({ a: T.old, b: T.fresh }, 0)).toEqual({ a: T.old, b: T.fresh });
+  });
+
+  it('drops a corrupted non-finite entry rather than carrying it forward', () => {
+    expect(pruneDismissed({ a: NaN, b: T.fresh }, 0)).toEqual({ b: T.fresh });
+  });
+});
+
+describe('the per-item dismissal store', () => {
+  afterEach(() => resetFarcasterDismissal());
+
+  it('starts empty', () => {
+    expect(getFarcasterDismissedKeys()).toEqual({});
+  });
+
+  it('records the dismissal instant against the key and persists it', () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T.clear);
+    try {
+      dismissFarcasterNotification('like:abc');
+      expect(getFarcasterDismissedKeys()).toEqual({ 'like:abc': T.clear });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('is emptied by a clear-all, which subsumes it', () => {
+    dismissFarcasterNotification('like:abc');
+    clearFarcasterNotifications();
+    expect(getFarcasterDismissedKeys()).toEqual({});
+  });
+
+  it('is emptied by reset, so the dev undo covers both mechanisms', () => {
+    dismissFarcasterNotification('like:abc');
+    resetFarcasterDismissal();
+    expect(getFarcasterDismissedKeys()).toEqual({});
+  });
+});
+
+describe('partitionNotifications — per-item Farcaster dismissal', () => {
+  /**
+   * Take the dismiss key off the RENDERED row, then dismiss that row.
+   *
+   * Deliberately not a hand-written literal like `'like:abc'`. A literal stops
+   * matching the moment the keying rule changes and the assertion below it goes
+   * on passing while testing nothing — which is exactly how the cast-level
+   * over-suppression bug shipped green.
+   */
+  function dismissRow(
+    over: Partial<PartitionInput>,
+    id: string,
+    at = 5_000,
+  ): ReturnType<typeof partitionNotifications> {
+    const row = partitionNotifications(input(over)).farcasterFeedItems.find((i) => i.id === id);
+    if (!row?.dismissKey) throw new Error(`no dismissKey on row ${id}`);
+    return partitionNotifications(input({ ...over, dismissedKeys: { [row.dismissKey]: at } }));
+  }
+
+  it('hides only the dismissed row', () => {
+    const feed: Partial<PartitionInput> = {
+      officialFarcaster: [
+        farcasterLike(),
+        farcasterLike({
+          id: 'official-2',
+          content: { cast: { hash: '0xDEF', text: 'other' } },
+        } as Partial<FarcasterNotification>),
+      ],
+    };
+    const after = dismissRow(feed, 'fc:official-1');
+    expect(after.farcasterFeedItems).toHaveLength(1);
+    expect(after.farcasterFeedItems[0].id).toBe('fc:official-2');
+    expect(after.dismissedCount).toBe(1);
+  });
+
+  it('hides only the row trashed when several people liked the SAME cast', () => {
+    // THE REGRESSION THIS GUARDS.
+    //
+    // The official feed aggregates same-cast likes into one row, which is why
+    // the DEDUP key is cast-level. But when the official feed is absent — no
+    // token, an expired token, a poll gap — haatz's per-actor rows are
+    // aggregated by nothing and render as several distinct rows. Keying
+    // DISMISSAL at cast level too made one trash tap hide every one of them.
+    //
+    // Unrecoverable, which is what made it severe: haatz events are re-fetched
+    // from a capped window, so once the swept rows aged out there was nothing
+    // left to bring them back, and no signal that dismissal was the reason.
+    const likes: Partial<PartitionInput> = {
+      haatzFarcaster: [
+        haatzLike({ id: 'h:bob', actor: { fid: 222 }, timestamp: 1_000 } as Partial<FarcasterNotification>),
+        haatzLike({ id: 'h:carol', actor: { fid: 333 }, timestamp: 2_000 } as Partial<FarcasterNotification>),
+        haatzLike({ id: 'h:dave', actor: { fid: 444 }, timestamp: 3_000 } as Partial<FarcasterNotification>),
+      ],
+    };
+    expect(partitionNotifications(input(likes)).farcasterFeedItems).toHaveLength(3);
+    // Trash the OLDEST row. A cast-level key stamped with "now" sweeps the two
+    // newer ones with it, so picking the oldest is what makes the bug visible.
+    const after = dismissRow(likes, 'fc:h:bob');
+    expect(after.farcasterFeedItems.map((i) => i.id).sort()).toEqual(['fc:h:carol', 'fc:h:dave']);
+  });
+
+  it('still collapses one event that arrived from both sources', () => {
+    // The cross-source case, stated honestly. The BLEND drops the haatz copy
+    // because it shares a dedup key with the official row, so only one row is
+    // ever visible and dismissing it leaves nothing.
+    //
+    // This is all the previous version of this test ever proved. It was written
+    // as though DISMISSAL did the collapsing — it does not, and believing it did
+    // is what justified the too-coarse key.
+    const both: Partial<PartitionInput> = {
+      officialFarcaster: [farcasterLike()],
+      haatzFarcaster: [haatzLike()],
+    };
+    expect(partitionNotifications(input(both)).farcasterFeedItems).toHaveLength(1);
+    expect(dismissRow(both, 'fc:official-1').farcasterFeedItems).toEqual([]);
+  });
+
+  it('brings the row back when the cast gets newer activity', () => {
+    const key = partitionNotifications(input({ officialFarcaster: [farcasterLike()] }))
+      .farcasterFeedItems[0].dismissKey!;
+    // Dismissed at T.fresh; the group then gains a like and moves past it.
+    const result = partitionNotifications(
+      input({
+        officialFarcaster: [farcasterLike({ timestamp: T.fresh + 1 })],
+        dismissedKeys: { [key]: T.fresh },
+      }),
+    );
+    expect(result.farcasterFeedItems).toHaveLength(1);
+    expect(result.dismissedCount).toBe(0);
+  });
+
+  it('does not stop pagination', () => {
+    // The control that matters most. Per-item dismissals are scattered through
+    // the feed, so treating one as a floor the way the watermark is treated
+    // would halt infinite scroll at the first hidden row and make every older
+    // notification unreachable.
+    const after = dismissRow({ officialFarcaster: [farcasterLike()] }, 'fc:official-1');
+    expect(after.farcasterFeedItems).toEqual([]);
+    expect(after.reachedWatermark).toBe(false);
+  });
+
+  it('leaves a user who has dismissed nothing completely unaffected', () => {
+    // The control arm — same input, empty dismissal map.
+    const withNone = partitionNotifications(
+      input({ officialFarcaster: [farcasterLike()], haatzFarcaster: [haatzLike()] }),
+    );
+    expect(withNone.farcasterFeedItems).toHaveLength(1);
+    expect(withNone.dismissedCount).toBe(0);
+  });
+
+  it('carries a dismiss key on every Farcaster row, so every row can be hidden', () => {
+    const result = partitionNotifications(
+      input({
+        officialFarcaster: [
+          farcasterLike(),
+          farcasterLike({
+            id: 'frame-1',
+            type: 'frame',
+            actor: undefined,
+            content: undefined,
+          } as Partial<FarcasterNotification>),
+        ],
+      }),
+    );
+    expect(result.farcasterFeedItems.every((i) => !!i.dismissKey)).toBe(true);
+  });
+});
+
+describe('row kind, for the leading glyph', () => {
+  it('labels each Farcaster activity so the renderer picks from a closed set', () => {
+    const kinds = partitionNotifications(
+      input({
+        officialFarcaster: [
+          farcasterLike(),
+          farcasterLike({ id: 'o2', type: 'follow', content: undefined } as Partial<FarcasterNotification>),
+          farcasterLike({ id: 'o3', type: 'cast-reply' }),
+        ],
+      }),
+    )
+      .farcasterFeedItems.map((i) => i.farcasterKind)
+      .sort();
+    expect(kinds).toEqual(['follow', 'like', 'reply']);
+  });
+
+  it('flags a ping that resolved a conversation, and one that did not', () => {
+    // Drives initials-vs-glyph in the leading slot. A ping whose join missed
+    // still has a title — the generic stored copy — so drawing initials of it
+    // would render "New message" as somebody's monogram.
+    const details = new Map<string, ConversationDetail>([
+      ['conv-1', { displayName: 'Dana', preview: 'hey', avatarUrl: undefined }],
+    ]);
+    const resolved = partitionNotifications(
+      input({ chatEntries: [chatEntry()], conversationDetails: details }),
+    );
+    expect(resolved.quorumItems[0].namesConversation).toBe(true);
+
+    const missed = partitionNotifications(
+      input({
+        chatEntries: [
+          chatEntry({
+            data: { type: 'message', conversationId: 'nope', messageId: 'm1' },
+          }),
+        ],
+      }),
+    );
+    expect(missed.quorumItems[0].namesConversation).toBeFalsy();
   });
 });

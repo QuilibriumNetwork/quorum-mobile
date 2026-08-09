@@ -17,8 +17,9 @@
  *
  *     clear → pull to refresh → confirm still gone → Reset → feed rows return
  *
- * ⚠️ SCOPE OF THE UNDO — read before trusting it. Reset restores ONLY the rows
- * the watermark hid. "Clear Farcaster" ALSO calls
+ * ⚠️ SCOPE OF THE UNDO — read before trusting it. Reset restores the rows that
+ * LOCAL DISMISSAL hid: the watermark, and the per-row trash (both are wiped, so
+ * it is the undo for either). "Clear Farcaster" ALSO calls
  * `clearNotificationLogByOrigin('farcaster')`, which DELETES the Farcaster
  * direct-cast ping rows from the local notification log. Those are local
  * entries, not feed items, and Reset cannot bring them back.
@@ -58,6 +59,7 @@ import * as Skin from '@/theme/skins/geometry';
 import {
   resetFarcasterDismissal,
   useFarcasterClearedBefore,
+  useFarcasterDismissedKeys,
 } from '@/services/notifications/farcasterDismissal';
 import {
   restoreNotificationSnapshot,
@@ -84,6 +86,14 @@ export function FarcasterDismissalPanel({
   dismissedCount,
 }: FarcasterDismissalPanelProps) {
   const clearedBefore = useFarcasterClearedBefore();
+  const dismissedKeys = useFarcasterDismissedKeys();
+  const perRowCount = Object.keys(dismissedKeys).length;
+  // Two mechanisms can hide a row now, and Reset clears both — so every
+  // affordance here has to gate on both. Gating on the watermark alone would
+  // leave rows dismissed one-by-one with no visible cause and no way back,
+  // which is precisely the "rows vanished and the panel says nothing" failure
+  // this instrument exists to prevent.
+  const anyDismissal = clearedBefore > 0 || perRowCount > 0;
   const snapshot = useNotificationSnapshot();
   const styles = React.useMemo(() => createStyles(), []);
   const [checkState, setCheckState] = React.useState<
@@ -160,14 +170,15 @@ export function FarcasterDismissalPanel({
       title="Notifications"
       // Suppression stays visible while folded. A collapsed panel quietly
       // hiding notifications would read as "there are none".
-      badge={clearedBefore > 0 ? `hiding ${dismissedCount}` : undefined}
+      badge={anyDismissal ? `hiding ${dismissedCount}` : undefined}
       style={styles.panel}
     >
       <DevRow>
         <DevReadout>
-          watermark: {clearedBefore ? time(clearedBefore) : 'never'} · hiding {dismissedCount}
+          watermark: {clearedBefore ? time(clearedBefore) : 'never'} · {perRowCount} row
+          {perRowCount === 1 ? '' : 's'} trashed · hiding {dismissedCount}
         </DevReadout>
-        {clearedBefore > 0 && <DevButton label="Reset" onPress={handleReset} />}
+        {anyDismissal && <DevButton label="Reset" onPress={handleReset} />}
       </DevRow>
 
       <DevRow>

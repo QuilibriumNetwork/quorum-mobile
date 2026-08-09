@@ -150,3 +150,46 @@ export const accentThemes = {
     900: '#713f12',
   },
 } as const;
+
+/**
+ * Brand marks that are NOT ours, and therefore NOT themeable.
+ *
+ * The accent palette above re-skins with the user's chosen accent, which is
+ * right for anything that means "this app". These do the opposite job: the
+ * whole point of Farcaster purple is to say "Farcaster" at a glance, so it has
+ * to stay the same colour whatever accent the user picked. Do not route these
+ * through `theme.colors.*`.
+ *
+ * `farcaster` is Farcaster's own #855DCD. Several older call sites use #8B5CF6
+ * (Tailwind violet-500) labelled "Farcaster purple" — that is a near-miss, not
+ * the brand colour; prefer this token in new code.
+ *
+ * Quorum's own mark is `colors.accent[500]` and is the one exception that DOES
+ * follow the accent: it is our logo, so tinting it to the user's accent reads
+ * as the app agreeing with itself rather than as a wrong brand colour.
+ */
+export const brandColors = {
+  farcaster: '#855DCD',
+  quorum: colors.accent[500],
+  /**
+   * Farcaster purple corrected for LEGIBILITY, as a light/dark pair.
+   *
+   * The brand value above is a graphic colour. Used as small text it fails WCAG
+   * AA (4.5:1 — a 12px bold label is nowhere near the 18.7px "large text"
+   * threshold): measured 4.38:1 on `surface1` light and 3.42:1 on dark. The
+   * dark figure is the worse problem, because the neutral it replaced sat at
+   * 5.29:1, so painting a label brand-purple on dark makes it harder to read
+   * than it was.
+   *
+   * These two are the closest values to the brand hue that clear 4.5:1 on their
+   * respective surfaces — measured 5.20:1 (light) and 4.79:1 (dark). Still
+   * unmistakably Farcaster purple; just readable.
+   *
+   * Use `farcaster` for a mark on its own, and this pair anywhere the colour
+   * carries a word.
+   */
+  farcasterOn: {
+    light: '#7A4FC4',
+    dark: '#9B7BD9',
+  },
+} as const;

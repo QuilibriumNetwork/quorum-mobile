@@ -31,7 +31,10 @@ import {
   getQuorumTabSeenAt,
   useMentionReplyLog,
 } from '@/services/notifications/mentionReplyLog';
-import { useFarcasterClearedBefore } from '@/services/notifications/farcasterDismissal';
+import {
+  useFarcasterClearedBefore,
+  useFarcasterDismissedKeys,
+} from '@/services/notifications/farcasterDismissal';
 import { partitionNotifications } from '@/services/notifications/partitionNotifications';
 import type {
   ConversationDetail,
@@ -51,7 +54,8 @@ export interface UnifiedNotificationsResult {
   /** Farcaster activity, newest-first. */
   farcasterFeedItems: UnifiedNotification[];
   unreadCount: number;
-  /** Farcaster rows currently hidden by the dismissal watermark (dev panel). */
+  /** Farcaster rows currently hidden by dismissal — watermark and per-row
+   *  trash together (dev panel). */
   dismissedCount: number;
   isLoading: boolean;
   isFetchingMore: boolean;
@@ -93,6 +97,8 @@ export function useUnifiedNotifications(
   const { mutedConversations } = useDMMute();
   // Local dismissal watermark — Farcaster rows can't be cleared server-side.
   const clearedBefore = useFarcasterClearedBefore();
+  // …and the per-row trash, which the watermark alone can't express.
+  const dismissedKeys = useFarcasterDismissedKeys();
 
   // Render-time enrichment source for the message rows. Covers BOTH products:
   // the Farcaster direct-cast pings (whose log stores only a routing id, on
@@ -128,6 +134,7 @@ export function useUnifiedNotifications(
         officialFarcaster,
         haatzFarcaster: haatzQuery.data ?? [],
         clearedBefore,
+        dismissedKeys,
         mutedConversations,
         lastSeen: getLastSeenTimestamp(),
         quorumTabSeenAt: getQuorumTabSeenAt(),
@@ -139,6 +146,7 @@ export function useUnifiedNotifications(
       officialFarcaster,
       haatzQuery.data,
       clearedBefore,
+      dismissedKeys,
       mutedConversations,
     ],
   );
