@@ -1,5 +1,6 @@
 import React from 'react';
 import Svg, { Path } from 'react-native-svg';
+import { brandColors } from '@/theme/colors';
 
 interface FarcasterLogoIconProps {
   /** Render size in px (square). */
@@ -14,7 +15,11 @@ interface FarcasterLogoIconProps {
  * assets/icons/iconset is plain HTML SVG and won't render in RN). Path data is
  * the same arch glyph, ported into a `<Path>` with a tintable `fill`.
  */
-export function FarcasterLogoIcon({ size = 20, color = '#855DCD', opacity = 1 }: FarcasterLogoIconProps) {
+export function FarcasterLogoIcon({
+  size = 20,
+  color = brandColors.farcaster,
+  opacity = 1,
+}: FarcasterLogoIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32" fill="none" opacity={opacity}>
       <Path

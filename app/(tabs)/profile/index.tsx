@@ -18,12 +18,14 @@ import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
 import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
-import { accentThemes } from '@/theme/colors';
+import { accentThemes, brandColors } from '@/theme/colors';
 import { withAlpha } from '@/theme/skins/mergeSkin';
 import { useAuth } from '@/context/AuthContext';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
+import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
+import { QuorumLogoIcon } from '@/components/SocialFeed/content/QuorumLogoIcon';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import {
   clearNotificationLog,
@@ -36,12 +38,16 @@ import {
   markQuorumTabSeen,
   removeMentionReplyEntry,
 } from '@/services/notifications/mentionReplyLog';
-import { clearFarcasterNotifications } from '@/services/notifications/farcasterDismissal';
+import {
+  clearFarcasterNotifications,
+  dismissFarcasterNotification,
+} from '@/services/notifications/farcasterDismissal';
 import { markAllFarcasterNotificationsRead } from '@/services/farcasterClient';
 import {
   useUnifiedNotifications,
   type UnifiedNotification,
 } from '@/hooks/useUnifiedNotifications';
+import type { CanonicalType } from '@/services/notifications/partitionNotifications';
 import { FarcasterDismissalPanel } from '@/components/dev/FarcasterDismissalPanel';
 import { captureNotificationSnapshot } from '@/services/dev/notificationSnapshot';
 import * as Skin from '@/theme/skins/geometry';
@@ -62,6 +68,11 @@ const QUORUM_PREVIEW_LINES = 2;
 // other than 1, growing the line box while the compensation stays put.
 const LEADING_LINE_HEIGHT = 20;
 const AVATAR_TOP_NUDGE = 4;
+
+// Section-heading brand mark. Matches the identity switcher in the profile
+// header, which pairs the same two logos at 14px with their labels — the panel
+// should read as the same pattern, not a second interpretation of it.
+const SECTION_LOGO_SIZE = 14;
 
 // Clear-action copy, keyed by the active filter so the button and the dialog
 // both name exactly what is about to go. The wording differs per scope on
@@ -112,10 +123,60 @@ function quorumRowIcon(entry: UnifiedNotification): IconSymbolName {
   }
 }
 
+/**
+ * Leading icon for a Farcaster ACTIVITY row (like, follow, reply, …), by
+ * canonical type.
+ *
+ * These used to draw the actor's picture — or, with no picture, their
+ * initials — which made a like from someone look exactly like a message from
+ * them. The two sections sit in one scrollable list for anyone with both
+ * accounts, so a Farcaster row has to answer "what happened" the same way a
+ * Quorum row does: with a glyph.
+ *
+ * Where the two products mean the same thing, the glyph is the same one: a
+ * reply is the same arrow as a Quorum reply, a mention the same `@`. That is
+ * the whole point of running them in one list.
+ *
+ * Returns null for the rows that are NOT an actor doing something to you —
+ * mini-app/frame notifications, and anything whose type we don't recognise.
+ * Their leading slot holds the app's own icon, which is more informative than
+ * any glyph we could pick, so they keep it.
+ */
+function farcasterRowIcon(kind: CanonicalType | undefined): IconSymbolName | null {
+  switch (kind) {
+    case 'like':
+      return 'heart';
+    case 'recast':
+      return 'arrow.triangle.2.circlepath';
+    case 'mention':
+      return 'at';
+    case 'reply':
+      // Same glyph as a Quorum reply — deliberately.
+      return 'arrowshape.turn.up.left.fill';
+    case 'quote':
+      return 'quote.bubble';
+    case 'follow':
+      return 'person.badge.plus';
+    default:
+      return null;
+  }
+}
+
 /** A Quorum DM row renders like a message ping (name, then text), not like a
  *  space mention (which leads with its Space › #channel breadcrumb). */
 function isQuorumDM(entry: UnifiedNotification): boolean {
   return entry.raw?.quorum?.kind === 'dm';
+}
+
+/** Does this row's leading slot show a face rather than a glyph?
+ *
+ *  True for the rows that are about a PERSON messaging you: a Quorum DM, and a
+ *  background ping whose conversation resolved (Farcaster direct casts and
+ *  Quorum DMs alike). A ping whose join missed is excluded — its title is the
+ *  generic stored copy, and initials of "New Messages" are not a person. */
+function showsActorFace(entry: UnifiedNotification): boolean {
+  if (isQuorumDM(entry)) return true;
+  return entry.source === 'chat' && !!entry.namesConversation;
 }
 
 /**
@@ -277,10 +338,12 @@ export default function NotificationsScreen() {
     } else if (entry.source === 'quorum' && entry.raw?.quorum) {
       // Mentions, replies and DMs all live in the mention log.
       removeMentionReplyEntry(entry.raw.quorum.id);
+    } else if (entry.source === 'farcaster' && entry.dismissKey) {
+      // Hidden locally, not deleted: the row belongs to a remote feed with no
+      // per-item delete endpoint, and the underlying like/follow/reply is a
+      // record on the network. See farcasterDismissal.ts.
+      dismissFarcasterNotification(entry.dismissKey);
     }
-    // Farcaster items are read-only — server is the source of truth, we
-    // can't dismiss individual ones. Leave the trash button hidden for
-    // those (rendered branch below).
   }, []);
 
   const handleRefresh = useCallback(async () => {
@@ -294,24 +357,41 @@ export default function NotificationsScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: UnifiedNotification }) => {
-      // Every row we own, not just the ping rows. The affordance used to sit
-      // solely on the generic pings — where deleting one of several identical
-      // rows means nothing — and was missing from the precise mention rows,
-      // where it means everything. Farcaster rows stay without one: that feed
-      // is the server's, and no per-item dismiss exists for it.
-      const showTrash = item.source !== 'farcaster';
+      // Every row in the panel can now be removed. Quorum rows delete a local
+      // log entry; Farcaster feed rows hide behind a local dismissal key, which
+      // is as close to a delete as a remote feed with no delete endpoint gets.
+      // The only rows without one are Farcaster items we couldn't key at all.
+      const showTrash = item.source !== 'farcaster' || !!item.dismissKey;
       const accent = rowAccent(item, theme);
+      // Farcaster activity rows take the app accent, not their per-kind hue and
+      // not Farcaster purple: the section heading already says whose feed this
+      // is, so spending a second colour axis on it would compete with the four
+      // hues the Quorum rows use to mean four different things.
+      const farcasterGlyph =
+        item.source === 'farcaster' ? farcasterRowIcon(item.farcasterKind) : null;
       return (
         <Pressable
           style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
           onPress={() => handlePress(item)}
         >
-          {item.actorAvatarUrl ? (
+          {farcasterGlyph ? (
+            // Ahead of the avatar branch on purpose: a like from someone with a
+            // profile picture should still read as a like, so the glyph wins
+            // over the picture rather than only standing in for a missing one.
+            <View
+              style={[
+                styles.iconWrap,
+                { backgroundColor: withAlpha(theme.colors.accent, ACCENT_WASH) },
+              ]}
+            >
+              <IconSymbol name={farcasterGlyph} color={theme.colors.accent} size={18} />
+            </View>
+          ) : item.actorAvatarUrl ? (
             <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
-          ) : item.source === 'farcaster' || isQuorumDM(item) ? (
-            // A person with no profile picture — Farcaster actor or Quorum DM
-            // sender alike. Initials, not a glyph: a DM is from somebody, and
-            // the row should say who even when we have no photo of them.
+          ) : showsActorFace(item) ? (
+            // A person with no profile picture — a Quorum DM sender, or the
+            // other side of a Farcaster direct cast. Initials, not a glyph: the
+            // row is from somebody, and it should say who even with no photo.
             //
             // Same top nudge as the other branches. This one is easy to miss
             // because it takes `style` rather than wearing styles.avatar, and it
@@ -330,11 +410,12 @@ export default function NotificationsScreen() {
               <IconSymbol name={quorumRowIcon(item)} color={accent} size={18} />
             </View>
           ) : (
-            // Background message pings. An envelope, not a bell: the row is
-            // about a message that arrived, not about the notification itself,
-            // and every other row in the panel already uses an outline glyph.
-            // A DM row that resolved an avatar took the first branch above, so
-            // reaching here means we have no picture for the sender.
+            // Background message pings that never resolved to a conversation —
+            // the generic "you have new messages" rows. An envelope, not a bell:
+            // the row is about a message that arrived, not about the
+            // notification itself, and every other row here uses an outline
+            // glyph. Also catches the unkeyable Farcaster leftovers, which have
+            // neither an actor nor an app icon to show.
             <View style={[styles.iconWrap, { backgroundColor: withAlpha(accent, ACCENT_WASH) }]}>
               <IconSymbol name="envelope" color={accent} size={18} />
             </View>
@@ -368,16 +449,15 @@ export default function NotificationsScreen() {
             </View>
           ) : (
             <View style={styles.body}>
-              <View style={styles.titleRow}>
-                <Text style={styles.title} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                {item.source === 'farcaster' && (
-                  <View style={styles.sourceTag}>
-                    <Text style={styles.sourceTagLabel}>Farcaster</Text>
-                  </View>
-                )}
-              </View>
+              {/* No per-row source tag. The section heading says Farcaster once,
+                  with the logo, which is where that belongs — repeating it on
+                  every row was noise, and it only ever appeared on some of
+                  them. `title` carries the same explicit lineHeight as the
+                  Quorum section's first line, so both keep identical geometry
+                  against the avatar beside them. */}
+              <Text style={styles.title} numberOfLines={1}>
+                {item.title}
+              </Text>
               {!!item.body && (
                 <Text style={styles.subtitle} numberOfLines={2}>{item.body}</Text>
               )}
@@ -390,7 +470,15 @@ export default function NotificationsScreen() {
               hitSlop={8}
               style={styles.trashButton}
               accessibilityRole="button"
-              accessibilityLabel="Delete this notification"
+              // Says which it is. A Farcaster row is hidden on this device and
+              // the activity stays on the account; a Quorum row is gone. The
+              // clear-all copy already draws that line, so the per-row
+              // affordance shouldn't blur it back.
+              accessibilityLabel={
+                item.source === 'farcaster'
+                  ? 'Hide this notification'
+                  : 'Delete this notification'
+              }
             >
               <IconSymbol name="trash" color={theme.colors.textMuted} size={18} />
             </TouchableOpacity>
@@ -549,13 +637,48 @@ export default function NotificationsScreen() {
           sections={sections}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          renderSectionHeader={({ section }) => (
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionHeaderLabel}>{section.title}</Text>
-            </View>
-          )}
+          renderSectionHeader={({ section }) => {
+            // Each section is branded by its product: the mark, then the name,
+            // both in that product's colour. Quorum follows the user's chosen
+            // accent (it is our own logo, so it should agree with the rest of
+            // the app); Farcaster keeps its own purple, because the job of that
+            // colour is to say "Farcaster" and a re-skinned variant would not.
+            //
+            // Both take the shade that suits the surface rather than the flat
+            // mid-tone, because this colour carries a WORD and a 12px bold
+            // label needs 4.5:1. At accent[500] the heading failed AA on every
+            // accent but one, and was unreadable on the light theme for yellow
+            // (1.78:1), orange (2.60:1) and green (2.80:1) — the user picks the
+            // accent, so "it looks fine on blue" decides nothing. accentDark
+            // (700) / accentLight (200) clear AA for all six, worst case
+            // 4.56:1.
+            const isFarcaster = section.key === 'farcaster';
+            const tint = isFarcaster
+              ? isDark
+                ? brandColors.farcasterOn.dark
+                : brandColors.farcasterOn.light
+              : isDark
+                ? theme.colors.accentLight
+                : theme.colors.accentDark;
+            return (
+              <View style={styles.sectionHeader}>
+                {isFarcaster ? (
+                  <FarcasterLogoIcon size={SECTION_LOGO_SIZE} color={tint} />
+                ) : (
+                  <QuorumLogoIcon size={SECTION_LOGO_SIZE} color={tint} />
+                )}
+                <Text style={[styles.sectionHeaderLabel, { color: tint }]}>
+                  {section.title}
+                </Text>
+              </View>
+            );
+          }}
           stickySectionHeadersEnabled={false}
-          ItemSeparatorComponent={() => <View style={styles.divider} />}
+          // No ItemSeparatorComponent. The hairline was near-invisible against
+          // surface1, and the rows already separate themselves: each is a
+          // leading circle plus a two-or-three-line block with 14pt of vertical
+          // padding. The section headings do the only division that carries
+          // meaning.
           contentContainerStyle={{ paddingBottom: listPadding }}
           refreshControl={
             <RefreshControl
@@ -633,7 +756,10 @@ const createStyles = (theme: AppTheme) =>
     row: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      paddingVertical: Skin.space(14),
+      // Tightened from 14 now that there is no separator line between rows.
+      // The padding was carrying two jobs — breathing room AND clearance from
+      // the hairline — and only the first one is left.
+      paddingVertical: Skin.space(10),
       paddingHorizontal: Skin.space(16),
       gap: Skin.space(12),
     },
@@ -670,38 +796,17 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
       gap: Skin.space(2),
     },
-    titleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Skin.space(8),
-      // Pinned to one line box so this row has the SAME geometry as the Quorum
-      // section's bare-Text first line. Without it the row is as tall as its
-      // tallest child: if the source tag out-grows the title (its label has no
-      // fixed lineHeight, so that depends on platform font metrics), the title
-      // centres inside a taller row and drifts down while the avatar does not,
-      // which looks like an avatar alignment bug and is not one.
-      height: Skin.font(LEADING_LINE_HEIGHT),
-    },
     title: {
-      flex: 1,
+      // No `flex: 1`. This used to sit inside a row alongside the source tag,
+      // where flex meant "take the remaining width". `body` is a COLUMN, so the
+      // same property here would stretch the title vertically and push the
+      // preview and timestamp down.
       fontSize: Skin.font(15),
+      // Explicit, and the same value the Quorum section's first line carries,
+      // so both sections' leading text lines up with the avatar identically.
       lineHeight: Skin.font(LEADING_LINE_HEIGHT),
       fontWeight: '600',
       color: theme.colors.textMain,
-    },
-    sourceTag: {
-      paddingHorizontal: Skin.space(6),
-      paddingVertical: Skin.space(2),
-      borderRadius: Skin.radius(4),
-      backgroundColor: '#8B5CF6' + '22',
-    },
-    sourceTagLabel: {
-      fontSize: Skin.font(10),
-      // Explicit, so the tag's height is a known number rather than whatever
-      // the platform font reports — see the note on titleRow.
-      lineHeight: Skin.font(12),
-      fontWeight: '700',
-      color: '#8B5CF6',
     },
     // Quorum location-first row: loud space name, muted channel, then message.
     locationLine: {
@@ -728,6 +833,9 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '600',
     },
     sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(6),
       paddingHorizontal: Skin.space(16),
       paddingTop: Skin.space(14),
       paddingBottom: Skin.space(6),
@@ -738,6 +846,8 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
       letterSpacing: 0.5,
       textTransform: 'uppercase',
+      // Overridden per section with that product's colour. Kept as a neutral
+      // floor so a section rendered without one is still legible.
       color: theme.colors.textSubtle,
     },
     subtitle: {
@@ -751,13 +861,13 @@ const createStyles = (theme: AppTheme) =>
       marginTop: Skin.space(2),
     },
     trashButton: {
-      padding: Skin.space(4),
+      // 18px glyph + 6 padding each side = a 30px box; with hitSlop 8 the touch
+      // target is 46px, which clears the 44pt iOS minimum. At the previous 4 it
+      // was 42px and missed. Pre-existing, but this row used to be the only one
+      // with a trash and now nearly every row has one, so the undersized target
+      // went from an edge case to the common case.
+      padding: Skin.space(6),
       alignSelf: 'flex-start',
-    },
-    divider: {
-      height: StyleSheet.hairlineWidth,
-      backgroundColor: theme.colors.surface3,
-      marginLeft: Skin.space(64),
     },
     errorBanner: {
       flexDirection: 'row',
