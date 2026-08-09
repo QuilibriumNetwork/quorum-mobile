@@ -83,6 +83,28 @@ describe('claimedNamesIn', () => {
     expect(claimedNamesIn([{ address: 'QmA', primary_username: '  alice  ' }])).toEqual(['alice']);
   });
 
+  it('caps at one batch however many distinct names are on screen', () => {
+    // Structural cost bound: no surface can fan out into dozens of requests.
+    // Once the broadcast carries a claim on every roster row, a 5,000-member
+    // space would otherwise mean 50 requests just to open Settings — the fetch
+    // storm both clients already refused once, arriving by a new route.
+    const many = Array.from({ length: 500 }, (_, i) => ({
+      address: `QmPeer${i}`,
+      primary_username: `name${i}`,
+    }));
+    expect(claimedNamesIn(many)).toHaveLength(QNS_BATCH_LIMIT);
+  });
+
+  it('does not spend cap budget on duplicate claims', () => {
+    // The cap counts DISTINCT names, which is what a request costs. Counting
+    // rows would let one popular name starve the budget for everyone else.
+    const rows = Array.from({ length: 500 }, (_, i) => ({
+      address: `QmPeer${i}`,
+      primary_username: 'alice',
+    }));
+    expect(claimedNamesIn(rows)).toEqual(['alice']);
+  });
+
   it('returns nothing for a screen where nobody claims a .q', () => {
     // The common case today, and the one that must never reach the network:
     // an empty batch is a 400 from the API, not an empty result.

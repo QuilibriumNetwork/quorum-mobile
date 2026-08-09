@@ -88,12 +88,32 @@ export interface ClaimingRow {
  * Whitespace is trimmed so a padded claim cannot dodge the dedupe. Case is NOT
  * folded: the resolver is the authority on what a name matches, and quietly
  * normalising a claim here would mean verifying a name the user never claimed.
+ *
+ * ## The limit makes "one request per screen" structural
+ *
+ * Capped at a single batch by default, so no surface can fan out into dozens of
+ * requests however many distinct names are on it. Today the claim set is
+ * naturally small — a claim only exists where a public profile was already
+ * fetched — but once the broadcast carries `primary_username` on every roster
+ * row, a 5,000-member space would otherwise mean 50 requests to open Settings.
+ * That is the fetch storm both clients already refused once, arriving by a new
+ * route.
+ *
+ * **The overflow degrades safely and in the existing direction**: a name past
+ * the cap is simply never verified, so it is stripped and the member renders
+ * under their global name — exactly what a member with no cached profile does
+ * today. Under-showing a real `.q` is invisible and self-correcting; the cap
+ * cannot cause a forged one to render.
  */
-export function claimedNamesIn(rows: Iterable<Partial<ClaimingRow>>): string[] {
+export function claimedNamesIn(
+  rows: Iterable<Partial<ClaimingRow>>,
+  limit: number = QNS_BATCH_LIMIT,
+): string[] {
   const seen = new Set<string>();
   for (const row of rows) {
     const name = (row?.primary_username ?? '').trim();
     if (name) seen.add(name);
+    if (seen.size >= limit) break;
   }
   return Array.from(seen);
 }
@@ -167,7 +187,7 @@ export async function resolveClaimedNames(
  * virtualised list, so a fresh array on every render would re-render every row
  * on every tick, on the exact surface this feature most risks making expensive.
  */
-export function stripUnverifiedNames<T extends ClaimingRow>(
+export function stripUnverifiedNames<T extends Partial<ClaimingRow>>(
   rows: readonly T[],
   records: ReadonlyMap<string, NameRecord | null>,
   isExempt?: ClaimExemption,
@@ -177,8 +197,12 @@ export function stripUnverifiedNames<T extends ClaimingRow>(
     const name = (row?.primary_username ?? '').trim();
     if (!name) return row;
 
-    if (isExempt?.(name, row.address)) return row;
-    if (claimedNameBelongsTo(records.get(name), row.address)) return row;
+    // A row with no address cannot be verified against anything, so its claim
+    // is stripped. Fails closed: `claimedNameBelongsTo` rejects an empty
+    // address rather than treating it as a wildcard match.
+    const address = row?.address ?? '';
+    if (isExempt?.(name, address)) return row;
+    if (claimedNameBelongsTo(records.get(name), address)) return row;
 
     changed = true;
     return { ...row, primary_username: undefined };
@@ -286,7 +310,9 @@ function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord | null
   return data ?? NO_RECORDS;
 }
 
-export function useVerifiedQnsNames<T extends ClaimingRow>(rows: readonly T[]): readonly T[] {
+export function useVerifiedQnsNames<T extends Partial<ClaimingRow>>(
+  rows: readonly T[],
+): readonly T[] {
   const names = useMemo(() => claimedNamesIn(rows), [rows]);
   const records = useClaimRecords(names);
   return useMemo(

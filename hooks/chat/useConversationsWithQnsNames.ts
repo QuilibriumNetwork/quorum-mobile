@@ -54,6 +54,7 @@ import {
   publicProfileQueryKey,
   type PublicProfile,
 } from '@/hooks/useUserPublicProfile';
+import { useVerifiedQnsNames } from '@/hooks/useVerifiedQnsNames';
 
 /**
  * A Farcaster conversation carries the synthetic address `fid:<n>`
@@ -110,7 +111,7 @@ export function qnsLookupAddresses(
 
 export function useConversationsWithQnsNames<T extends { address?: string }>(
   conversations: T[],
-): (T & { primary_username?: string })[] {
+): readonly (T & { primary_username?: string })[] {
   const addresses = useMemo(
     () => qnsLookupAddresses(conversations, MAX_QNS_LOOKUPS),
     [conversations],
@@ -158,7 +159,7 @@ export function useConversationsWithQnsNames<T extends { address?: string }>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addresses, qnsKey]);
 
-  return useMemo(() => {
+  const withClaims = useMemo(() => {
     if (qnsByAddress.size === 0) return conversations;
     return conversations.map((c) => {
       const qns = c.address ? qnsByAddress.get(c.address) : undefined;
@@ -167,4 +168,12 @@ export function useConversationsWithQnsNames<T extends { address?: string }>(
       return qns ? { ...c, primary_username: qns } : c;
     });
   }, [conversations, qnsByAddress]);
+
+  // A `primary_username` read out of somebody's public profile is their CLAIM
+  // to a name, not proof they hold it. Drop any that does not resolve back to
+  // the partner's own address before the inbox renders it — the DM list is
+  // where an impersonated name is most persuasive, because there is no roster
+  // to cross-check against. Verified rows keep their identity, so the list memo
+  // downstream still does not churn.
+  return useVerifiedQnsNames(withClaims);
 }

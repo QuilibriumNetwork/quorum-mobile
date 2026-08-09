@@ -44,6 +44,7 @@ import { DraggableChannelGroup } from '@/components/SpaceSettings/DraggableChann
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useSpaceMembers } from '@/hooks/chat/useSpaces';
 import { useMembersWithCachedQns } from '@/hooks/useMembersWithCachedQns';
+import { useVerifiedQnsNames } from '@/hooks/useVerifiedQnsNames';
 import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
 import { useBlockUser } from '@/hooks/chat/useBlockUser';
 import { useDeleteSpace, useLeaveSpace, useUpdateSpace } from '@/hooks/chat/useSpaceSettings';
@@ -803,7 +804,15 @@ export default function SpaceSettingsModal({
   // correct all along, the field simply never arrived. Fetching a profile per
   // member is the fetch storm desktop looked at and refused, so this reads the
   // React Query cache instead and issues no requests at all.
-  const members = useMembersWithCachedQns(rosterMembers);
+  const cachedQnsMembers = useMembersWithCachedQns(rosterMembers);
+
+  // Then drop any `.q` claim that does not resolve back to the member claiming
+  // it. This is the surface where the check has to earn its cost most carefully:
+  // the read above issues no requests at all, so verification is the first thing
+  // here that costs anything. `claimedNamesIn` caps at one batch, and a name
+  // past the cap is left unverified and renders as the global name — the same
+  // outcome a member with no cached profile already gets.
+  const members = useVerifiedQnsNames(cachedQnsMembers);
 
   // The roster shows who is IN the Space. Both `leave` and `kick` blank the
   // member's inbox_address and KEEP the row, so without this a departed or
