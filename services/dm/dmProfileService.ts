@@ -37,6 +37,19 @@ export interface DMProfilePayload {
   displayName?: string;
   userIcon?: string;
   bio?: string;
+  /**
+   * The sender's elected primary QNS name, bare (`alice`, never `alice.q`).
+   *
+   * Without this a `.q` cannot reach a DM partner at all. It travels otherwise
+   * only in a published public profile, and the server refuses every publish
+   * carrying one — so a DM would keep showing the global name while the same
+   * person's `.q` rendered fine in a shared space.
+   *
+   * A CLAIM, not a fact: the recipient resolves it against QNS before rendering
+   * it. Empty string is a deliberate un-election and must be sent, or dropping
+   * a primary name would never reach the partner.
+   */
+  primaryUsername?: string;
 }
 
 export interface DMBroadcastDeps {
@@ -64,13 +77,21 @@ function buildDmProfileMessage(
   const nonce = generateNonce();
   const now = Date.now();
 
-  const content: DMUpdateProfileMessage = {
+  // Cast: `primaryUsername` is additive and not yet in shared's
+  // DMUpdateProfileMessage, the same untyped-additive-field pattern the space
+  // broadcast uses for its global* and Farcaster slots. Wire-compatible —
+  // receivers that do not know the field ignore it.
+  const content = {
     senderId: payload.selfAddress,
     type: 'dm-update-profile',
     ...(payload.displayName ? { displayName: payload.displayName } : {}),
     ...(payload.userIcon ? { userIcon: payload.userIcon } : {}),
     ...(payload.bio !== undefined ? { bio: payload.bio } : {}),
-  };
+    // Presence, not truthiness: '' is an un-election and has to travel.
+    ...(payload.primaryUsername !== undefined
+      ? { primaryUsername: payload.primaryUsername }
+      : {}),
+  } as DMUpdateProfileMessage;
 
   return {
     messageId: `dm-profile-${nonce}`,
@@ -159,6 +180,14 @@ function payloadSignature(p: DMProfilePayload): string {
   if (p.displayName) obj.displayName = p.displayName;
   if (p.userIcon) obj.userIcon = p.userIcon;
   if (p.bio !== undefined) obj.bio = p.bio;
+  // Must be part of the signature, or electing a primary name would broadcast
+  // nothing whenever the rest of the payload is unchanged — the gate would read
+  // it as "same as last time" and the partner would never learn the `.q`.
+  //
+  // Including it also doubles as the one-time migration the space path needed a
+  // tag for: every stored signature predates this field, so none of them match
+  // and the next rebroadcast goes out for every partner.
+  if (p.primaryUsername !== undefined) obj.primaryUsername = p.primaryUsername;
   const sortedKeys = Object.keys(obj).sort();
   return JSON.stringify(obj, sortedKeys);
 }

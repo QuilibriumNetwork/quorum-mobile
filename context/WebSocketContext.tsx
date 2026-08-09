@@ -727,7 +727,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const applyDmProfileUpdate = useCallback(
     async (decryptedMessage: Message, senderAddress: string): Promise<boolean> => {
       const content = decryptedMessage.content as
-        | { type?: string; senderId?: string; displayName?: string; userIcon?: string; bio?: string }
+        | {
+            type?: string;
+            senderId?: string;
+            displayName?: string;
+            userIcon?: string;
+            bio?: string;
+            // The partner's elected primary QNS name, bare. A CLAIM — stored
+            // inert and resolved before it can render. See the merge below.
+            primaryUsername?: string;
+          }
         | undefined;
       if (content?.type !== 'dm-update-profile') return false;
 
@@ -756,7 +765,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         ...(content.displayName ? { displayName: content.displayName } : {}),
         ...(content.userIcon ? { icon: content.userIcon } : {}),
         ...(content.bio !== undefined ? { bio: content.bio } : {}),
-      };
+        // Stored under `claimed_` and never as `primary_username`, so it cannot
+        // render on a surface that skips verification — the conversation title
+        // and the notification preview both resolve names without one. It
+        // becomes visible only by being promoted, after it resolves back to
+        // this partner. Presence rule: '' is an un-election and must clear.
+        ...(content.primaryUsername !== undefined
+          ? { claimed_primary_username: content.primaryUsername }
+          : {}),
+      } as Conversation;
       await storage.saveConversation(merged);
       scheduleConversationRefresh(conversationId);
       return true;
@@ -6634,6 +6651,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               selfAddress: user.address,
               displayName: displayName || undefined,
               userIcon: userIcon || undefined,
+              // Sent unconditionally, '' included: an un-election has to reach
+              // the partner or their client keeps rendering the dropped name.
+              // This is the only route a `.q` has into a DM — the publish that
+              // was meant to carry it is refused by the server.
+              primaryUsername: user.primaryUsername ?? NO_PRIMARY_NAME,
             },
             { enqueueOutbound, subscribe },
           );

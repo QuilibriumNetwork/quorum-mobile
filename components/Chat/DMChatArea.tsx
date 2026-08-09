@@ -159,6 +159,7 @@ export const DMChatArea = React.memo(function DMChatArea({
     type DmEntry = MemberMap[string] & {
       global_display_name?: string;
       global_profile_image?: string;
+      claimed_primary_username?: string;
     };
     const map: MemberMap = {};
     if (conversationData) {
@@ -166,6 +167,13 @@ export const DMChatArea = React.memo(function DMChatArea({
         address: conversationData.address ?? '',
         global_display_name: conversationData.displayName,
         global_profile_image: conversationData.icon,
+        // Carry the partner's broadcast `.q` claim through so the verification
+        // pass below can promote it. Without this the conversation row holds
+        // the claim and the message headers never see it, so a partner's `.q`
+        // would render in the inbox list and vanish inside the conversation.
+        claimed_primary_username: (
+          conversationData as { claimed_primary_username?: string }
+        ).claimed_primary_username,
       } as DmEntry;
     }
     if (user?.address) {
