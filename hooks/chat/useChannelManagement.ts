@@ -27,18 +27,8 @@ import { groupDeletionBlocker } from '@/utils/groupDeletion';
 import { useWebSocket } from '@/context/WebSocketContext';
 import { bytesToHex } from '@quilibrium/quorum-shared';
 import type { Space, Channel, Group } from '@quilibrium/quorum-shared';
-import { sha256 } from '@noble/hashes/sha2.js';
-import bs58 from 'bs58';
-import * as multihashes from 'multihashes';
+import { deriveAddress } from '@/utils/deriveAddress';
 
-/**
- * Derive address from public key using multihash
- */
-function deriveAddress(publicKeyBytes: Uint8Array): string {
-  const hash = sha256(publicKeyBytes);
-  const mhash = multihashes.encode(hash, 'sha2-256');
-  return bs58.encode(mhash);
-}
 
 interface AddChannelParams {
   spaceId: string;

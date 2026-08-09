@@ -16,6 +16,7 @@ import { queryKeys } from '@quilibrium/quorum-shared';
 import type { Conversation } from '@quilibrium/quorum-shared';
 import { useUserPublicProfile } from '@/hooks/useUserPublicProfile';
 import { resolveConversationTitle } from '@/utils/conversationTitle';
+import { useVerifiedQnsNames } from '@/hooks/useVerifiedQnsNames';
 import { useBookmarks, useReceiptSettings } from '@/hooks/useUserConfig';
 import { useCall } from '@/context';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
@@ -376,14 +377,40 @@ export default function DMChatScreen() {
   // ringing screen. Leaving it below meant their `useCallback` closed over a
   // title computed before the `.q` had arrived and, since their deps do not
   // include the public profile, never picked up the corrected one.
+  // A `primary_username` off a fetched profile is the partner's CLAIM to a
+  // name, not proof they hold it, so it goes through the same check every other
+  // surface uses before it can render with a `.q`.
+  //
+  // This screen needs its own pass because it fetches the profile itself,
+  // independently of the member map that `DMChatArea` verifies. Without it the
+  // header could show `alice.q` while the message bubbles directly beneath it
+  // showed Alice's degraded global name — a contradiction on one screen, and
+  // the header is the more prominent of the two.
+  //
+  // The title also feeds the ringing screen and the kick/mute/block
+  // confirmations, so an unverified name here reaches the destructive actions.
+  const recipientClaimRow = useMemo(
+    () =>
+      recipientAddress
+        ? [
+            {
+              address: recipientAddress,
+              primary_username: recipientPublicProfile?.primary_username,
+            },
+          ]
+        : [],
+    [recipientAddress, recipientPublicProfile?.primary_username],
+  );
+  const [verifiedRecipient] = useVerifiedQnsNames(recipientClaimRow);
+
   const title = useMemo(
     () =>
       resolveConversationTitle({
         address: conversation?.address,
         displayName: conversation?.displayName,
-        primary_username: recipientPublicProfile?.primary_username,
+        primary_username: verifiedRecipient?.primary_username,
       }),
-    [conversation?.address, conversation?.displayName, recipientPublicProfile?.primary_username],
+    [conversation?.address, conversation?.displayName, verifiedRecipient?.primary_username],
   );
 
   const { initiateCall } = useCall();

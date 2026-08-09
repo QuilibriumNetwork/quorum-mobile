@@ -94,6 +94,35 @@ export interface MobileBot {
   /** Registration as the relay currently reports it — device count included. */
   registration(): Promise<UserRegistration | null>;
   /**
+   * Broadcast a profile change to every DM partner, through mobile's REAL
+   * `broadcastProfileToAllDMs` and the provider's own outbound queue.
+   *
+   * This is the only way to exercise the identity-claim path end to end. A
+   * `.q` name reaches other people over this control message and nowhere else
+   * (the public-profile publish that was meant to carry it is refused by the
+   * server), and a sender can never observe its own: Triple Ratchet
+   * participants cannot decrypt their own echoed messages, so the receive half
+   * is invisible on a single device at any effort.
+   */
+  broadcastProfile(payload: {
+    displayName?: string;
+    userIcon?: string;
+    bio?: string;
+    primaryUsername?: string;
+  }): Promise<void>;
+  /**
+   * The stored conversation row for a partner, straight out of mobile's own
+   * storage — i.e. what the receive path actually persisted, not what a render
+   * would show.
+   *
+   * Asserting on the ROW rather than on a rendered name is deliberate: it
+   * separates "the claim survived encryption, the wire, decryption and the
+   * merge" from "the resolver then chose to display it". Those fail for
+   * completely different reasons and a test that conflates them cannot say
+   * which happened.
+   */
+  conversationWith(partnerAddress: string): Promise<Record<string, unknown> | null>;
+  /**
    * Fetch and delete everything queued on this bot's device inbox. Returns how
    * many were removed.
    *
@@ -250,6 +279,22 @@ export async function createBot(
       (await getQuorumClient().fetchUserRegistration(identity.address, {
         fresh: true,
       })) as UserRegistration | null,
+    broadcastProfile: async (payload) => {
+      if (!ws) throw new Error('[harness] ws not mounted');
+      // Imported lazily for the same reason the app does it: the module reaches
+      // storage and the send path, and pulling it at module load would run that
+      // before the provider has mounted.
+      const { broadcastProfileToAllDMs } = await import('@/services/dm/dmProfileService');
+      await broadcastProfileToAllDMs(
+        { selfAddress: identity.address, ...payload },
+        // The provider's own queue and subscribe — not a stand-in. Handing it
+        // anything else would test the harness rather than the client.
+        { enqueueOutbound: ws.enqueueOutbound, subscribe: ws.subscribe }
+      );
+    },
+    conversationWith: async (partnerAddress: string) =>
+      ((await adapter.getConversation(conversationIdFor(partnerAddress))) ??
+        null) as unknown as Record<string, unknown> | null,
     inboxDepth: async () => (await fetchInboxTimestamps(identity.inboxAddress)).length,
     drainInbox: async () => {
       const timestamps = await fetchInboxTimestamps(identity.inboxAddress);

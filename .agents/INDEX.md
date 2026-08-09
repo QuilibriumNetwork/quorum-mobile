@@ -36,7 +36,7 @@ This is the main index for all documentation, bug reports, and task management.
 #### Quorum Shared Migration
 
 - 📋 [Mobile rewire: invite helpers → shared exports](issues/quorum-shared-migration/2026-05-29-mobile-rewire-invite-helpers-to-shared.md)
-- 📋 [Dedupe `deriveAddress` to a single import from `keyService`](issues/quorum-shared-migration/2026-05-30-mobile-dedup-deriveAddress.md)
+- 📋 [Dedupe `deriveAddress` to a single import from `utils/deriveAddress`](issues/quorum-shared-migration/2026-05-30-mobile-dedup-deriveAddress.md)
 - 📋 [Cleanup: drop the dead `isSpaceOwner` param (cosmetic) + optional mobile hook dedup](issues/quorum-shared-migration/2026-06-14-cleanup-dead-isspaceowner-param.md)
 - 📋 [Mobile: adopt typed global-identity fields (retire the two-slot casts)](issues/quorum-shared-migration/2026-07-16-mobile-adopt-typed-global-identity-fields.md)
 - 📋 [Quorum Shared Migration — Mobile-side tracker](issues/quorum-shared-migration/README.md)
@@ -87,6 +87,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [This device can key 0 of 3 Spaces it imported from the config blob](issues/.open/2026-08-04-mobile-cannot-key-any-space-it-imported-from-the-config-blob.md)
 - 🐛 [The toggle is local state that never reconciles with the server](issues/.open/2026-08-06-public-profile-toggle-on-with-nothing-published.md)
 - 🐛 [`POST /users/:addr/public-profile` refuses any `primary_username`](issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md)
+- 🐛 [Somebody else can take your name away, and nothing tells you](issues/.open/2026-08-09-a-delegated-name-can-be-revoked-and-you-are-the-last-to-know.md)
 - 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
 - 📋 [Message composer — further improvements](issues/.open/2026-06-16-message-composer-further-improvements.md)
 - 📋 [Split profile header has no visible "edit" cue](issues/.open/2026-06-16-split-profile-edit-affordance-not-discoverable.md)
@@ -152,6 +153,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [Mobile publishes a narrowed Space list, emptying every desktop sidebar](issues/.done/2026-08-04-mobile-publishes-a-narrowed-space-list-and-empties-every-desktop-sidebar.md)
 - 🐛 [A mention notification shows an address where a name should be](issues/.done/2026-08-05-notification-previews-show-raw-addresses-instead-of-mention-names.md)
 - 🐛 [Mobile re-publishes bookmark avatars into the config blob](issues/.done/2026-08-07-mobile-republishes-bookmark-avatars-into-the-config-blob.md)
+- 🐛 [The broadcast marked itself done before doing anything](issues/.done/2026-08-09-a-profile-change-could-silently-never-reach-anyone.md)
 - 📋 [Channel reorder mutations should broadcast (not local-only)](issues/.done/2026-05-29-channel-reorder-mutations-should-broadcast.md)
 - 📋 [Port DM update-profile (identity sync over DM sessions) from desktop](issues/.done/2026-06-09-port-dm-update-profile-from-desktop.md)
 - 📋 [Task: make `primaryUsername` (and `isProfilePublic`) survive a device switch and reliably reach the published public profile](issues/.done/2026-06-10-primary-username-sync-and-publish.md)
@@ -266,4 +268,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-09 13:38:21
+**Last Updated**: 2026-08-09 17:27:15

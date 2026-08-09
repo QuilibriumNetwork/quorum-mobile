@@ -73,7 +73,22 @@ import { truncateAddress } from './formatAddress';
 export interface ResolvedMemberName {
   /** The name to display. Never empty. */
   name: string;
-  /** True only when `name` is the QNS username — render it with a `.q` suffix. */
+  /**
+   * True only when `name` is the QNS username — render it with a `.q` suffix.
+   *
+   * The suffix is the ONLY thing this flag may produce. No badge, no icon, no
+   * tooltip: decided 2026-06-10 and reconfirmed 2026-08-09, on the grounds that
+   * the `.q` is the signal and a second one dilutes it. This reads like a flag
+   * the UI forgot to use, and has already been mistaken for one twice, so:
+   * adding a verified badge here is a product decision that has been made, and
+   * made against.
+   *
+   * The consequence is worth understanding before touching anything nearby. The
+   * suffix carries the whole trust claim by itself, so it has to be true. That
+   * is why a stored name which would forge it is dropped below rather than
+   * merely outranked, and why a claimed QNS name must eventually be resolved
+   * against QNS before it is rendered as verified.
+   */
   isQnsVerified: boolean;
   /**
    * True when every tier missed and `name` is the truncated address, i.e. we do

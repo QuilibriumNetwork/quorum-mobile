@@ -32,6 +32,7 @@ import { useToast } from '@/context/ToastContext';
 import { useIsFocused } from '@react-navigation/native';
 import { flattenMessages, useMessages } from '@/hooks/chat/useMessages';
 import { useMembersWithPublicProfileFallback } from '@/hooks/useMembersWithPublicProfileFallback';
+import { useVerifiedQnsNamesInMap } from '@/hooks/useVerifiedQnsNames';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
 import { useSendDirectEmbedMessage } from '@/hooks/chat/useSendDirectEmbedMessage';
 import { useSendDirectReaction, useRemoveDirectReaction } from '@/hooks/chat/useSendDirectReaction';
@@ -158,6 +159,7 @@ export const DMChatArea = React.memo(function DMChatArea({
     type DmEntry = MemberMap[string] & {
       global_display_name?: string;
       global_profile_image?: string;
+      claimed_primary_username?: string;
     };
     const map: MemberMap = {};
     if (conversationData) {
@@ -165,6 +167,13 @@ export const DMChatArea = React.memo(function DMChatArea({
         address: conversationData.address ?? '',
         global_display_name: conversationData.displayName,
         global_profile_image: conversationData.icon,
+        // Carry the partner's broadcast `.q` claim through so the verification
+        // pass below can promote it. Without this the conversation row holds
+        // the claim and the message headers never see it, so a partner's `.q`
+        // would render in the inbox list and vanish inside the conversation.
+        claimed_primary_username: (
+          conversationData as { claimed_primary_username?: string }
+        ).claimed_primary_username,
       } as DmEntry;
     }
     if (user?.address) {
@@ -183,7 +192,11 @@ export const DMChatArea = React.memo(function DMChatArea({
     () => Object.keys(dmMemberMap),
     [dmMemberMap],
   );
-  const effectiveDmMemberMap = useMembersWithPublicProfileFallback(dmMemberMap, dmVisibleAddresses);
+  // Verify claimed `.q` names before anything renders them — see the matching
+  // comment in SpaceChatArea. A DM is the surface where an impersonated name is
+  // most persuasive, because there is no roster to cross-check against.
+  const fetchedDmMemberMap = useMembersWithPublicProfileFallback(dmMemberMap, dmVisibleAddresses);
+  const effectiveDmMemberMap = useVerifiedQnsNamesInMap(fetchedDmMemberMap);
 
   // Messages
   const dmMessages = useMemo(() => {

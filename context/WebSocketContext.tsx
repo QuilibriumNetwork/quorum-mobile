@@ -120,6 +120,7 @@ import { useStorageAdapter } from './StorageContext';
 import { getApiConfig } from '../services/api/config';
 
 import type { MessagesPage, InfiniteMessagesData } from '../hooks/chat/queryTypes';
+import { NO_PRIMARY_NAME } from '@/utils/primaryName';
 
 interface WebSocketContextValue {
   // Connection state
@@ -726,7 +727,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const applyDmProfileUpdate = useCallback(
     async (decryptedMessage: Message, senderAddress: string): Promise<boolean> => {
       const content = decryptedMessage.content as
-        | { type?: string; senderId?: string; displayName?: string; userIcon?: string; bio?: string }
+        | {
+            type?: string;
+            senderId?: string;
+            displayName?: string;
+            userIcon?: string;
+            bio?: string;
+            // The partner's elected primary QNS name, bare. A CLAIM — stored
+            // inert and resolved before it can render. See the merge below.
+            primaryUsername?: string;
+          }
         | undefined;
       if (content?.type !== 'dm-update-profile') return false;
 
@@ -755,7 +765,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         ...(content.displayName ? { displayName: content.displayName } : {}),
         ...(content.userIcon ? { icon: content.userIcon } : {}),
         ...(content.bio !== undefined ? { bio: content.bio } : {}),
-      };
+        // Stored under `claimed_` and never as `primary_username`, so it cannot
+        // render on a surface that skips verification — the conversation title
+        // and the notification preview both resolve names without one. It
+        // becomes visible only by being promoted, after it resolves back to
+        // this partner. Presence rule: '' is an un-election and must clear.
+        ...(content.primaryUsername !== undefined
+          ? { claimed_primary_username: content.primaryUsername }
+          : {}),
+      } as Conversation;
       await storage.saveConversation(merged);
       scheduleConversationRefresh(conversationId);
       return true;
@@ -2697,6 +2715,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 globalBio?: string;
                 farcasterFid?: number;
                 farcasterUsername?: string;
+                // The sender's elected primary QNS name, bare. A CLAIM: the
+                // signature covers only type+displayName+userIcon, so it says
+                // nothing about this field. Stored inert (see the merge below).
+                primaryUsername?: string;
               };
 
               const adapter = getMMKVAdapter();
@@ -2720,7 +2742,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               const hasGlobalFields =
                 profileContent.globalDisplayName !== undefined ||
                 profileContent.globalUserIcon !== undefined ||
-                profileContent.globalBio !== undefined;
+                profileContent.globalBio !== undefined ||
+                profileContent.primaryUsername !== undefined;
               const applyOverride =
                 hasOverrideFields &&
                 !(existingMember?.profileTimestamp && existingMember.profileTimestamp >= ts);
@@ -2761,6 +2784,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 ...(applyGlobal && profileContent.globalDisplayName !== undefined ? { global_display_name: profileContent.globalDisplayName } : {}),
                 ...(applyGlobal && profileContent.globalUserIcon !== undefined ? { global_profile_image: profileContent.globalUserIcon } : {}),
                 ...(applyGlobal && profileContent.globalBio !== undefined ? { global_bio: profileContent.globalBio } : {}),
+                // The sender's claimed `.q`, stored INERT under its own key.
+                // `resolveMemberName` reads `primary_username`, and it is
+                // reached from surfaces that do not verify — notification
+                // previews, conversation titles. Writing a wire claim there
+                // would render it unverified on every one of them. Under this
+                // key it can only reach the screen by being promoted, which
+                // happens after it resolves back to this sender. The signature
+                // does not cover this field, so verification is all there is.
+                ...(applyGlobal && profileContent.primaryUsername !== undefined
+                  ? { claimed_primary_username: profileContent.primaryUsername }
+                  : {}),
                 ...(applyGlobal ? { globalProfileTimestamp: ts } : {}),
                 ...(applyOverride && profileContent.farcasterFid !== undefined && profileContent.farcasterFid > 0
                   ? { farcasterFid: profileContent.farcasterFid }
@@ -4626,6 +4660,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               globalBio?: string;
               farcasterFid?: number;
               farcasterUsername?: string;
+              // The sender's elected primary QNS name, bare. A CLAIM: the
+              // signature covers only type+displayName+userIcon, so it says
+              // nothing about this field. Stored inert (see the merge below).
+              primaryUsername?: string;
             };
             const adapter = getMMKVAdapter();
             const existingMember = await adapter.getSpaceMember(spaceId, profileContent.senderId) as
@@ -4642,7 +4680,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             const hasGlobalFields =
               profileContent.globalDisplayName !== undefined ||
               profileContent.globalUserIcon !== undefined ||
-              profileContent.globalBio !== undefined;
+              profileContent.globalBio !== undefined ||
+              profileContent.primaryUsername !== undefined;
             const applyOverride =
               hasOverrideFields &&
               !(existingMember?.profileTimestamp && existingMember.profileTimestamp >= ts);
@@ -4668,6 +4707,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               ...(applyGlobal && profileContent.globalDisplayName !== undefined ? { global_display_name: profileContent.globalDisplayName } : {}),
               ...(applyGlobal && profileContent.globalUserIcon !== undefined ? { global_profile_image: profileContent.globalUserIcon } : {}),
               ...(applyGlobal && profileContent.globalBio !== undefined ? { global_bio: profileContent.globalBio } : {}),
+              // Claimed `.q`, stored INERT under its own key. See the JS-path
+              // handler above for why it must not be written to
+              // `primary_username`.
+              ...(applyGlobal && profileContent.primaryUsername !== undefined
+                ? { claimed_primary_username: profileContent.primaryUsername }
+                : {}),
               ...(applyGlobal ? { globalProfileTimestamp: ts } : {}),
               ...(applyOverride && profileContent.farcasterFid !== undefined && profileContent.farcasterFid > 0
                 ? { farcasterFid: profileContent.farcasterFid }
@@ -6515,11 +6560,37 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       i: userIcon ?? '',
       f: fcFid ?? 0,
       u: fcUsername ?? '',
+      // Without this the effect returns before importing the broadcast service
+      // whenever the other four are unchanged — so electing a primary name
+      // in-session would never reach anyone, while a fresh app launch (empty
+      // ref) would send it. That difference is exactly what makes the bug
+      // survive a manual "restart and check" test.
+      p: user.primaryUsername ?? '',
     });
     if (lastProfileRebroadcastSigRef.current === sig) return;
-    lastProfileRebroadcastSigRef.current = sig;
 
     const t = setTimeout(async () => {
+      // Claim the fingerprint HERE, not when the effect ran.
+      //
+      // This line used to sit above the `setTimeout`, and that made the whole
+      // broadcast a coin flip. Sequence, measured on device 2026-08-09:
+      //
+      //   17:18:38.196  sigChanged=true   → fingerprint recorded, 4s timer set
+      //   17:18:39.500  sigChanged=false  → re-render; cleanup cleared the timer,
+      //                                     the effect returned early, and NOTHING
+      //                                     rescheduled the work
+      //
+      // Any re-render inside the 4s window cancelled the pending broadcast, and
+      // the recorded fingerprint then made every subsequent run a no-op. The
+      // effect re-runs every few seconds in normal use, so the window rarely
+      // survived — electing a primary name reached nobody, and the same was true
+      // for a display-name or avatar change, which share this fingerprint.
+      //
+      // Claiming it inside the callback makes a cancelled attempt leave no
+      // trace: the next run still sees a changed fingerprint and schedules
+      // again, so the work is DEFERRED by churn rather than lost to it. That is
+      // also what the 4s stagger was for.
+      lastProfileRebroadcastSigRef.current = sig;
       try {
         const { maybeSendUpdateProfileMessage, runProfileBroadcastMigrations } = await import('../services/space/spaceMessageService');
         const { getAllSpaces } = await import('../services/config/spaceStorage');
@@ -6567,6 +6638,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // signature so this is a no-op once recorded.
               farcasterFid: user.farcaster?.fid,
               farcasterUsername: user.farcaster?.username,
+              // The elected primary `.q`, sent unconditionally rather than only
+              // when set: '' is a deliberate un-election and has to reach
+              // spacemates, or dropping a primary name would never propagate
+              // and the old name would keep rendering for everyone else. Same
+              // presence rule the global slots use, and the same reason
+              // `NO_PRIMARY_NAME` is an empty string rather than undefined.
+              //
+              // This is the only route a `.q` has to another person: the
+              // public-profile publish that was meant to carry it is refused by
+              // the server for every name. Recipients treat it as an unverified
+              // CLAIM and resolve it before rendering.
+              primaryUsername: user.primaryUsername ?? NO_PRIMARY_NAME,
             });
             if (res) {
               enqueueOutbound(async () => [res.wsEnvelope]);
@@ -6589,6 +6672,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               selfAddress: user.address,
               displayName: displayName || undefined,
               userIcon: userIcon || undefined,
+              // Sent unconditionally, '' included: an un-election has to reach
+              // the partner or their client keeps rendering the dropped name.
+              // This is the only route a `.q` has into a DM — the publish that
+              // was meant to carry it is refused by the server.
+              primaryUsername: user.primaryUsername ?? NO_PRIMARY_NAME,
             },
             { enqueueOutbound, subscribe },
           );
@@ -6612,6 +6700,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     user?.profileImage,
     user?.farcaster?.fid,
     user?.farcaster?.username,
+    // Elect or un-elect a primary name and nothing else changes, so without
+    // this the effect never re-runs and the change reaches nobody.
+    user?.primaryUsername,
     enqueueOutbound,
     subscribe,
   ]);

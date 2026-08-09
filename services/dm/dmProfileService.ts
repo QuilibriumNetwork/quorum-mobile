@@ -21,7 +21,7 @@
  *  - bio: `!== undefined` — empty string `''` = deliberate clear, omitted = unchanged.
  */
 
-import type { DMUpdateProfileMessage, Message } from '@quilibrium/quorum-shared';
+import { logger, type DMUpdateProfileMessage, type Message } from '@quilibrium/quorum-shared';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
 import { getDeviceKeyset } from '../onboarding/secureStorage';
@@ -37,6 +37,19 @@ export interface DMProfilePayload {
   displayName?: string;
   userIcon?: string;
   bio?: string;
+  /**
+   * The sender's elected primary QNS name, bare (`alice`, never `alice.q`).
+   *
+   * Without this a `.q` cannot reach a DM partner at all. It travels otherwise
+   * only in a published public profile, and the server refuses every publish
+   * carrying one — so a DM would keep showing the global name while the same
+   * person's `.q` rendered fine in a shared space.
+   *
+   * A CLAIM, not a fact: the recipient resolves it against QNS before rendering
+   * it. Empty string is a deliberate un-election and must be sent, or dropping
+   * a primary name would never reach the partner.
+   */
+  primaryUsername?: string;
 }
 
 export interface DMBroadcastDeps {
@@ -64,13 +77,21 @@ function buildDmProfileMessage(
   const nonce = generateNonce();
   const now = Date.now();
 
-  const content: DMUpdateProfileMessage = {
+  // Cast: `primaryUsername` is additive and not yet in shared's
+  // DMUpdateProfileMessage, the same untyped-additive-field pattern the space
+  // broadcast uses for its global* and Farcaster slots. Wire-compatible —
+  // receivers that do not know the field ignore it.
+  const content = {
     senderId: payload.selfAddress,
     type: 'dm-update-profile',
     ...(payload.displayName ? { displayName: payload.displayName } : {}),
     ...(payload.userIcon ? { userIcon: payload.userIcon } : {}),
     ...(payload.bio !== undefined ? { bio: payload.bio } : {}),
-  };
+    // Presence, not truthiness: '' is an un-election and has to travel.
+    ...(payload.primaryUsername !== undefined
+      ? { primaryUsername: payload.primaryUsername }
+      : {}),
+  } as DMUpdateProfileMessage;
 
   return {
     messageId: `dm-profile-${nonce}`,
@@ -154,11 +175,20 @@ function writeGate(store: MMKV, key: string, record: DmProfileGateRecord): void 
 
 // Canonical signature of the exact wire payload. Field presence matters
 // (avatar-only vs name-only have different signatures), and values matter.
-function payloadSignature(p: DMProfilePayload): string {
+// Exported for tests — see the note on the space-side twin.
+export function payloadSignature(p: DMProfilePayload): string {
   const obj: Record<string, string> = {};
   if (p.displayName) obj.displayName = p.displayName;
   if (p.userIcon) obj.userIcon = p.userIcon;
   if (p.bio !== undefined) obj.bio = p.bio;
+  // Must be part of the signature, or electing a primary name would broadcast
+  // nothing whenever the rest of the payload is unchanged — the gate would read
+  // it as "same as last time" and the partner would never learn the `.q`.
+  //
+  // Including it also doubles as the one-time migration the space path needed a
+  // tag for: every stored signature predates this field, so none of them match
+  // and the next rebroadcast goes out for every partner.
+  if (p.primaryUsername !== undefined) obj.primaryUsername = p.primaryUsername;
   const sortedKeys = Object.keys(obj).sort();
   return JSON.stringify(obj, sortedKeys);
 }
@@ -222,6 +252,7 @@ export async function broadcastProfileToAllDMs(
   });
 
   const store = getStore();
+  let sent = 0;
   const { sendEncryptedMessageToAllDevices } = await import('@/hooks/chat/useSendDirectMessage');
   const { toAllDeviceInfos } = await import('@/hooks/chat/useRecipientRegistration');
   const { getQuorumClient } = await import('@/services/api/quorumClient');
@@ -281,9 +312,25 @@ export async function broadcastProfileToAllDMs(
       // Record only after a successful enqueue so a throw retries next round.
       // writeGate swallows storage errors on purpose — see its comment.
       writeGate(store, key, { sig, at: now, attempts: nextAttempts(record, sig) });
+      sent += 1;
     } catch {
       // Per-partner failure (no session, encrypt error) is non-fatal — the
       // gate stays open for this partner so the next broadcast retries.
     }
   }
+
+  // The only externally visible evidence this ran. Until this line existed the
+  // DM half of a profile broadcast was completely silent: no log, no error, no
+  // way to tell "sent to nobody because everyone was deduped" from "never
+  // called at all" — and those two have very different causes.
+  //
+  // That mattered concretely. Electing a primary name failed to broadcast for
+  // three separate reasons at once, and none of them produced a single line of
+  // output on this path. The space twin logs `[ProfileSync] broadcast sent` /
+  // `gate SKIPPED` per space, which is exactly what made the space-side failure
+  // diagnosable; this is the DM equivalent.
+  logger.log(
+    `[DMProfileSync] broadcast to ${sent}/${partners.length} partner(s)` +
+      (sent === 0 ? ' — all deduped or unreachable' : ''),
+  );
 }

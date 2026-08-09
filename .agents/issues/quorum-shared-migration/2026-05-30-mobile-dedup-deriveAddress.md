@@ -1,24 +1,61 @@
 ---
 type: task
-title: Dedupe deriveAddress — 3 local copies → 1 import from keyService
-status: in-progress
+title: Dedupe deriveAddress — 5 local copies → 1 import from utils/deriveAddress
+status: done
 created: 2026-05-30
+updated: 2026-08-09
 shared-pr: none (mobile-internal cleanup)
 desktop-pr: none
 runtime-test: not-required
 ---
 
-# Dedupe `deriveAddress` to a single import from `keyService`
+# Dedupe `deriveAddress` to a single import from `utils/deriveAddress`
+
+## Status
+
+**2026-08-09 — done.** All five local copies replaced with an import of the
+canonical `deriveAddress` from `utils/deriveAddress.ts`. 51 lines removed, 5
+added. `git grep "function deriveAddress"` now returns exactly one result.
+
+Two things differ from what this file originally planned, both deliberate:
+
+- **The canonical copy moved.** It is `utils/deriveAddress.ts`, not
+  `services/onboarding/keyService.ts`. The old home pulls in mnemonic generation
+  and the native Rust crypto module, which is the weight that caused these
+  copies to be hand-rolled in the first place — importing it to turn a public
+  key into an address meant loading a native module. `keyService` still
+  re-exports it, so nothing that imported it from there broke.
+- **The "runtime test not required" call was not taken at face value.** The
+  algorithm is identical, so the reasoning held, but the failure mode if it had
+  not is a DIFFERENT address — messages routed to an inbox nobody reads, roster
+  rows that stop matching their members. Silent, and not something using the app
+  would reveal. `__tests__/deriveAddress.test.ts` now pins the output against
+  hard-coded expectations, so the derivation cannot drift unnoticed.
+
+Verified: 710 tests pass, `tsc --noEmit` shows only the 11 pre-existing errors
+in unrelated files, lint clean (remaining warnings in the touched files are
+pre-existing unused error handlers).
+
 
 ## What
 
-Mobile has the canonical `deriveAddress(publicKey: Uint8Array | string)` exported from `services/onboarding/keyService.ts:105`. Three other files re-declare the same logic locally as a private function:
+> **Corrected 2026-08-09 — this issue undercounted, and so did the code comment
+> that pointed at it.** The canonical copy has since MOVED: it now lives in
+> `utils/deriveAddress.ts` (still re-exported from `keyService` so no caller
+> broke), because `keyService` drags in mnemonic generation and the native Rust
+> module, which is the weight that caused these copies in the first place.
+> A repo-wide `grep "function deriveAddress"` finds **five** local copies, not
+> three. Recount before believing any list here.
+
+Mobile has the canonical `deriveAddress(publicKey: Uint8Array | string)` exported from `utils/deriveAddress.ts`. Five other files re-declare the same logic locally as a private function:
 
 1. `services/space/spaceService.ts:61` — `function deriveAddress(publicKeyBytes: Uint8Array)`
-2. `hooks/chat/useChannelManagement.ts:29` — `function deriveAddress(publicKeyBytes: Uint8Array)`
+2. `hooks/chat/useChannelManagement.ts:37` — `function deriveAddress(publicKeyBytes: Uint8Array)`
 3. `hooks/chat/useSpaceActions.ts:81` — `function deriveAddress(publicKeyBytes: Uint8Array)`
+4. `services/config/spaceSyncService.ts:63` — `function deriveAddress(publicKeyBytes: Uint8Array)`
+5. `services/crypto/space-session.ts:17` — `function deriveAddress(publicKeyBytes: Uint8Array)`
 
-All three are byte-for-byte identical:
+All five are byte-for-byte identical:
 ```ts
 const hash = sha256(publicKeyBytes);
 const mhash = multihashes.encode(hash, 'sha2-256');

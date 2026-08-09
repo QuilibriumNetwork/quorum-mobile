@@ -4,7 +4,7 @@ title: "QNS primary .q names: everything done, everything left, and how to bring
 status: in-progress
 priority: high
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-09
 area: identity resolution / QNS / cross-client parity
 repos: quorum-mobile (ahead), quorum-desktop (behind), quorum-shared (validator only)
 source: consolidation of a day's work on 2026-08-06, written because the work spans two repos and five issue files and nobody should have to reassemble it
@@ -34,9 +34,16 @@ instruments shipped with it: a test that runs the real join output through every
 name path, and a guard that fails on any new raw override read in `components/`
 or `app/`. 608 tests, verified on device with the fake-QNS sweep switch.
 
+**2026-08-09 — two desktop items below have since landed and are marked so
+inline.** Desktop shipped the forged-`.q` guard (`06c38370d`, 2026-08-06) and a
+fake-QNS dev page (`9a76045f7`, #315, 2026-08-06). Everything else in the
+desktop list is still open. Verified by reading desktop source, not from the
+commit subjects.
+
 **This file stays open.** It is the index for work that is mostly NOT done:
 
-- Desktop parity — none of it started
+- Desktop parity — the security guard and the test harness landed; the feature
+  work (elect-primary, un-elect, the sentinel, the placeholder) has not started
 - The two `quorum-shared` moves
 - Receiver-side verification, and the broadcast transport that depends on it
 - The server blocker (#9), which is not ours and which keeps a `.q` invisible to
@@ -83,10 +90,12 @@ the wrong thing:**
 first — build or use the harness. Mobile's dev panel (`services/dev/fakeQns.ts`)
 injects synthetic public profiles at `QuorumClient.getPublicProfile`, the single
 seam every profile read passes through, and its "give everyone a `.q`" switch
-makes every name surface in the app testable on one device. **Desktop has no
-equivalent and should get one before the render work**, for the reason mobile's
-module docstring gives: desktop already tried the hook-level version, and it
-failed silently because all the public-profile hooks share one React Query key.
+makes every name surface in the app testable on one device. **Desktop now has
+its own** (`src/dev/fake-qns/`, PR #315, 2026-08-06) — this line previously said
+it did not. Note the reason mobile's module docstring gives for injecting at the
+client seam rather than the hook: desktop already tried the hook-level version,
+and it failed silently because all the public-profile hooks share one React
+Query key.
 
 **Two standing rules for this work**, both learned the hard way here:
 
@@ -122,8 +131,34 @@ is not ours. One is client work still to do. **Desktop has none of the fixes.**
 | 9 | The server refuses every publish carrying a `primary_username` | **BLOCKED — not ours** |
 
 Plus one security issue found on the way, filed in `.secret/`: a display name
-ending in `.q` renders identically to a verified one. Mitigated on mobile at the
-resolver (same branch); **desktop is still exposed**.
+ending in `.q` renders identically to a verified one. Mitigated at the resolver
+on mobile (same branch) and on desktop (`06c38370d`) — **both clients now drop a
+forged suffix.** What remains there is receiver-side verification: neither
+client checks that a claim arriving in the proper `primary_username` field
+actually belongs to the sender.
+
+**Two standing product rules for anything touching `.q` display**, both stated
+by the operator and both cheap to violate by accident:
+
+1. **The `.q` suffix is the only signal.** No badge, no icon, no tooltip — see
+   the note below, which has now been re-proposed twice.
+2. **The user explicitly chooses which `.q` to show.** Electing is a button
+   press on one specific name. Nothing may elect on their behalf: not on
+   registration, not when they hold exactly one eligible name, not when a name
+   is delegated to them. Holding a name with no primary elected is a legitimate
+   state. Un-electing automatically is allowed (and exists) when a name stops
+   pointing at them; promoting a replacement is not. Recorded at the choke point
+   in `services/profile/primaryNameChange.ts`, and in
+   `issues/.open/2026-08-09-a-delegated-name-can-be-revoked-and-you-are-the-last-to-know.md`.
+
+**Do not propose a verified badge as the fix.** "No badge — the suffix is the
+signal" is a settled design decision from 2026-06-10
+(`quorum-desktop/.agents/issues/port-from-mobile/.done/2026-06-10-qns-username-display-design.md:66`,
+restated in that plan at :778). The `.secret/` issue was written without it and
+listed a badge as fix direction (2); that direction is rejected and the file now
+says so. The consequence is that the suffix carries the whole trust claim alone,
+which makes receiver-side verification the only remaining defence rather than
+one option among three.
 
 ## Measured on device, 2026-08-06
 
