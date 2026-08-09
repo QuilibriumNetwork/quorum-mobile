@@ -87,6 +87,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [This device can key 0 of 3 Spaces it imported from the config blob](issues/.open/2026-08-04-mobile-cannot-key-any-space-it-imported-from-the-config-blob.md)
 - 🐛 [The toggle is local state that never reconciles with the server](issues/.open/2026-08-06-public-profile-toggle-on-with-nothing-published.md)
 - 🐛 [`POST /users/:addr/public-profile` refuses any `primary_username`](issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md)
+- 🐛 [Somebody else can take your name away, and nothing tells you](issues/.open/2026-08-09-a-delegated-name-can-be-revoked-and-you-are-the-last-to-know.md)
 - 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
 - 📋 [Message composer — further improvements](issues/.open/2026-06-16-message-composer-further-improvements.md)
 - 📋 [Split profile header has no visible "edit" cue](issues/.open/2026-06-16-split-profile-edit-affordance-not-discoverable.md)
@@ -266,4 +267,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-09 13:38:21
+**Last Updated**: 2026-08-09 14:26:00

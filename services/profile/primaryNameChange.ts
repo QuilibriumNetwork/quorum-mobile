@@ -15,6 +15,24 @@
  * and it means the message text is reachable from a test — which matters more
  * than it sounds, because "@name is now your primary username" was literally
  * true and completely misleading, and no type or lint rule catches that.
+ *
+ * ## Electing is ALWAYS an explicit user action. Never elect on their behalf.
+ *
+ * A `.q` is a public identity claim, so which one to show — or whether to show
+ * one at all — is the user's decision and nobody else's. Every path that sets a
+ * primary name must be a button the user pressed on one specific name.
+ *
+ * This rules out the convenience that will eventually look obvious: electing
+ * someone's only eligible name for them, or auto-electing a name the moment it
+ * is registered or delegated to them. Both are forbidden, however tidy. A user
+ * holding exactly one name and no primary is a legitimate state, not a gap to
+ * be filled in.
+ *
+ * Un-electing on the user's behalf IS allowed, and exists — `shouldReleasePrimary`
+ * drops a name the moment it stops pointing at them. Note the asymmetry is
+ * deliberate: removing a claim that has become false protects them, adding one
+ * they never made does not. A removal must also stop there and must NOT promote
+ * some other name into the vacancy.
  */
 
 import { NO_PRIMARY_NAME } from '@/utils/primaryName';
