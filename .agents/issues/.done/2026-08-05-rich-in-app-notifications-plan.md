@@ -1,7 +1,7 @@
 ---
 type: task
 title: "Every in-app notification says who and what, and goes somewhere when tapped"
-status: in-progress
+status: done
 priority: medium
 created: 2026-08-05
 updated: 2026-08-09
@@ -20,10 +20,23 @@ related:
 
 ## Status
 
+**2026-08-09 — closed by the operator, with the runtime checks never run.**
+
+The four slices shipped in #235 and the follow-up in #244. Closed on the
+operator's instruction rather than because the Verify list was completed, so
+`runtime_test: required` in the frontmatter above was never satisfied.
+
+The five lines under "Still open — not yet run" below are the honest residue.
+They are recorded here rather than dropped, because two of them (muted-DM
+suppression, and trash removing only the row it was tapped on) cover behaviour
+that fails SILENTLY — the symptom is a notification that never appears, which
+using the app does not reveal. If any of this surfaces later as a bug, start
+there. Nothing below has been retested since #235 beyond what the automated
+suite covers.
+
 **2026-08-09 — follow-up shipped in PR #244** (`feat: brand the notification
 sections, and let any row be hidden`). Same surface, not part of the four slices
-below; this issue stays **in-progress** because none of the "Still open" lines
-were run by it.
+below.
 
 What landed: section headings carry each product's mark and name, tinted to a
 shade that clears WCAG AA (at `accent[500]` a 12px heading failed on five of the

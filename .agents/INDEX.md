@@ -26,7 +26,6 @@ This is the main index for all documentation, bug reports, and task management.
 
 ### In Progress
 
-- 📋 [Every in-app notification says who and what](issues/2026-08-05-rich-in-app-notifications-plan.md)
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
 
@@ -232,6 +231,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Mobile never piggybacks receipt acks on outgoing DMs](issues/.done/2026-07-27-mobile-piggyback-receipt-acks-on-outgoing-dms.md)
 - 📋 [Adopt iOS 26 Liquid Glass before Xcode 27 removes the opt-out](issues/.done/2026-08-01-adopt-ios26-liquid-glass.md)
 - 📋 [The same member renders differently depending on which screen you are on](issues/.done/2026-08-04-one-identity-resolver-so-names-and-avatars-match-everywhere.md)
+- 📋 [Every in-app notification says who and what](issues/.done/2026-08-05-rich-in-app-notifications-plan.md)
 - 📋 [Scoped "Clear" in the Notifications tab, including Farcaster](issues/.done/2026-08-05-scoped-clear-notifications-including-farcaster.md)
 
 ### 2026 06 21 Mute And Block Overhaul
@@ -266,4 +266,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-09 13:36:03
+**Last Updated**: 2026-08-09 13:38:21
