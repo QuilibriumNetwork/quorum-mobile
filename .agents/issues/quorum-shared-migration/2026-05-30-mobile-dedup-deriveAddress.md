@@ -1,14 +1,41 @@
 ---
 type: task
 title: Dedupe deriveAddress — 5 local copies → 1 import from utils/deriveAddress
-status: in-progress
+status: done
 created: 2026-05-30
+updated: 2026-08-09
 shared-pr: none (mobile-internal cleanup)
 desktop-pr: none
 runtime-test: not-required
 ---
 
-# Dedupe `deriveAddress` to a single import from `keyService`
+# Dedupe `deriveAddress` to a single import from `utils/deriveAddress`
+
+## Status
+
+**2026-08-09 — done.** All five local copies replaced with an import of the
+canonical `deriveAddress` from `utils/deriveAddress.ts`. 51 lines removed, 5
+added. `git grep "function deriveAddress"` now returns exactly one result.
+
+Two things differ from what this file originally planned, both deliberate:
+
+- **The canonical copy moved.** It is `utils/deriveAddress.ts`, not
+  `services/onboarding/keyService.ts`. The old home pulls in mnemonic generation
+  and the native Rust crypto module, which is the weight that caused these
+  copies to be hand-rolled in the first place — importing it to turn a public
+  key into an address meant loading a native module. `keyService` still
+  re-exports it, so nothing that imported it from there broke.
+- **The "runtime test not required" call was not taken at face value.** The
+  algorithm is identical, so the reasoning held, but the failure mode if it had
+  not is a DIFFERENT address — messages routed to an inbox nobody reads, roster
+  rows that stop matching their members. Silent, and not something using the app
+  would reveal. `__tests__/deriveAddress.test.ts` now pins the output against
+  hard-coded expectations, so the derivation cannot drift unnoticed.
+
+Verified: 710 tests pass, `tsc --noEmit` shows only the 11 pre-existing errors
+in unrelated files, lint clean (remaining warnings in the touched files are
+pre-existing unused error handlers).
+
 
 ## What
 

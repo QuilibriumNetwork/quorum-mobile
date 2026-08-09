@@ -11,9 +11,6 @@
  */
 
 import { base64ToHex, numberArrayToBase64 } from '@/utils/encoding';
-import { sha256 } from '@noble/hashes/sha2.js';
-import bs58 from 'bs58';
-import * as multihashes from 'multihashes';
 import { getQuorumClient } from '../api/quorumClient';
 import { NativeCryptoProvider } from '../crypto/native-provider';
 import { encryptionStateStorage } from '../crypto/encryption-state-storage';
@@ -27,6 +24,7 @@ import {
 import { type Space, type SpaceMember } from '@quilibrium/quorum-shared';
 import { hexToBytes, bytesToHex } from '@quilibrium/quorum-shared';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
+import { deriveAddress } from '@/utils/deriveAddress';
 
 /**
  * Space key info from UserConfig.spaceKeys
@@ -57,14 +55,6 @@ export interface SyncUserInfo {
   profileImage?: string;
 }
 
-/**
- * Derive address from public key using multihash (same as Quorum address derivation)
- */
-function deriveAddress(publicKeyBytes: Uint8Array): string {
-  const hash = sha256(publicKeyBytes);
-  const multihash = multihashes.encode(hash, 'sha2-256');
-  return bs58.encode(multihash);
-}
 
 /**
  * Sync a space from config to local storage

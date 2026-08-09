@@ -7,18 +7,11 @@
  * Ported from desktop's EstablishTripleRatchetSessionForSpace
  */
 
-import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@quilibrium/quorum-shared';
-import bs58 from 'bs58';
-import * as multihashes from 'multihashes';
 import { NativeCryptoProvider } from './native-provider';
 import { arrayToBase64, base64ToArray } from '@/utils/encoding';
+import { deriveAddress } from '@/utils/deriveAddress';
 
-function deriveAddress(publicKeyBytes: Uint8Array): string {
-  const hash = sha256(publicKeyBytes);
-  const mhash = multihashes.encode(hash, 'sha2-256');
-  return bs58.encode(mhash);
-}
 
 // Types matching desktop SDK
 export interface Ed448Keypair {

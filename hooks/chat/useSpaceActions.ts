@@ -15,12 +15,10 @@ import { encryptionStateStorage } from '@/services/crypto/encryption-state-stora
 import { NativeCryptoProvider } from '@/services/crypto/native-provider';
 import { getDeviceKeyset } from '@/services/onboarding/secureStorage';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
-import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, type Space, type SpaceMember } from '@quilibrium/quorum-shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import bs58 from 'bs58';
-import * as multihashes from 'multihashes';
 import { useEffect, useState } from 'react';
+import { deriveAddress } from '@/utils/deriveAddress';
 
 // Valid invite link prefixes
 const VALID_INVITE_PREFIXES = [
@@ -75,14 +73,6 @@ interface JoinSpaceResult {
   joinMessageEnvelope?: string; // Optional join control message to send via WebSocket
 }
 
-/**
- * Derive address from public key using multihash
- */
-function deriveAddress(publicKeyBytes: Uint8Array): string {
-  const hash = sha256(publicKeyBytes);
-  const mhash = multihashes.encode(hash, 'sha2-256');
-  return bs58.encode(mhash);
-}
 
 /**
  * Parse invite link to extract space info

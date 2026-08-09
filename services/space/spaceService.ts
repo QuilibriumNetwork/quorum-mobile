@@ -15,8 +15,6 @@
 import { base64ToHex, numberArrayToBase64 } from '@/utils/encoding';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, int64ToBytes, type KickMessage, type Message, type NavItem, type Space } from '@quilibrium/quorum-shared';
-import bs58 from 'bs58';
-import * as multihashes from 'multihashes';
 import { getQuorumClient } from '../api/quorumClient';
 import { getLocalUserConfig, saveConfig } from '../config/configService';
 import {
@@ -36,6 +34,7 @@ import {
   type UserKeyset
 } from '../crypto/space-session';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
+import { deriveAddress } from '@/utils/deriveAddress';
 
 export interface CreateSpaceParams {
   name: string;
@@ -55,14 +54,6 @@ export interface CreateSpaceResult {
   inboxAddress: string;
 }
 
-/**
- * Derive address from public key using multihash (same as Quorum address derivation)
- */
-function deriveAddress(publicKeyBytes: Uint8Array): string {
-  const hash = sha256(publicKeyBytes);
-  const mhash = multihashes.encode(hash, 'sha2-256');
-  return bs58.encode(mhash);
-}
 
 /**
  * Create a new space with full API registration

@@ -36,7 +36,7 @@ This is the main index for all documentation, bug reports, and task management.
 #### Quorum Shared Migration
 
 - 📋 [Mobile rewire: invite helpers → shared exports](issues/quorum-shared-migration/2026-05-29-mobile-rewire-invite-helpers-to-shared.md)
-- 📋 [Dedupe `deriveAddress` to a single import from `keyService`](issues/quorum-shared-migration/2026-05-30-mobile-dedup-deriveAddress.md)
+- 📋 [Dedupe `deriveAddress` to a single import from `utils/deriveAddress`](issues/quorum-shared-migration/2026-05-30-mobile-dedup-deriveAddress.md)
 - 📋 [Cleanup: drop the dead `isSpaceOwner` param (cosmetic) + optional mobile hook dedup](issues/quorum-shared-migration/2026-06-14-cleanup-dead-isspaceowner-param.md)
 - 📋 [Mobile: adopt typed global-identity fields (retire the two-slot casts)](issues/quorum-shared-migration/2026-07-16-mobile-adopt-typed-global-identity-fields.md)
 - 📋 [Quorum Shared Migration — Mobile-side tracker](issues/quorum-shared-migration/README.md)
@@ -267,4 +267,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-09 14:26:00
+**Last Updated**: 2026-08-09 16:30:54
