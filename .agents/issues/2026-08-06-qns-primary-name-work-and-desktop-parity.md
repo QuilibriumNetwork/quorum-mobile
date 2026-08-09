@@ -73,6 +73,77 @@ commit subjects.
 **Read this first.** The work touches two repos and is spread across five other
 issue files. This is the index and the parity plan; the others hold detail.
 
+## HANDOFF — the whole `.q` effort in one table (2026-08-09)
+
+**Point a fresh agent at THIS FILE and nothing else.** It is the index; the
+others are detail you read only when you reach them. The effort spans nine issue
+files across two repos, which is why this section exists.
+
+### State
+
+| Piece | Mobile | Desktop |
+|---|---|---|
+| Forged-suffix guard (a name ending `.q` is dropped) | ✅ #239 | ✅ `06c38370d` |
+| Elect / un-elect a primary name | ✅ #238 | ❌ no UI at all |
+| `.q` renders on every name surface | ✅ #239 | ✅ (its own earlier work) |
+| Receiver-side verification | ✅ **#245** | ❌ |
+| Broadcast transport (the only working delivery route) | ✅ **#245** | ❌ neither sends nor reads |
+| Two-bot harness proving the receive path | ✅ `yarn harness:qns` | ❌ |
+
+### What is actually left, and it is NOT all desktop
+
+**Desktop — the large one.** Everything in the ❌ column. Read the desktop
+sections further down this file; they are still accurate. The binding rule:
+**desktop must not start reading `primary_username` off the broadcast without
+shipping verification in the same release.** Today it ignores the field, so its
+users are degraded (no `.q` shows), not exposed — and that is the only thing
+making the current split safe.
+
+**Mobile — five smaller items, all real:**
+
+1. Two on-device cost measurements — §9 of
+   `issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md`:
+   requests on opening a busy channel, and that a fast member-list scroll does
+   not fire one per virtualisation tick. That surface cost zero before #245.
+2. A revoked delegated name still shows to its holder —
+   `issues/.open/2026-08-09-a-delegated-name-can-be-revoked-and-you-are-the-last-to-know.md`.
+   Decided and specified, not built. Preferred fix is to fold it into the
+   verification work, which now exists.
+3. §6a merged-Farcaster mode —
+   `issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md`.
+4. `issues/.open/2026-08-04-qns-names-and-the-identity-coverage-instrument.md`
+   has items deliberately left open.
+5. `issues/.open/2026-08-06-public-profile-toggle-on-with-nothing-published.md`.
+
+**Not ours, and not blocking:** the server refuses every `primary_username`
+publish (`issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md`,
+upstream #240). The broadcast routes around it entirely, which is why #245 was
+worth shipping while it is still broken. It also makes
+`issues/.open/2026-06-10-primary-username-not-synced-or-published.md` a
+waiting-on-server file rather than a client one.
+
+### Two things that will waste a day if you do not know them
+
+- **The receive side cannot be tested on one device, at any effort.** Triple
+  Ratchet participants cannot decrypt their own echoed messages, so a sender
+  never sees its own broadcast arrive. Use `yarn harness:qns` (two processes,
+  real crypto, production relay). Do not plan a manual check.
+- **Metro's output is unusable for verification** and the Android log buffer
+  holds about forty seconds of this app. Use `.agents/scripts/qlog.sh`, which
+  starts a filtered `adb` capture BEFORE the action. Its output stays outside the
+  repo on purpose — device logs carry real addresses.
+
+### Reading order for a fresh agent
+
+1. This file, whole.
+2. `issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md` — the
+   design that shipped, including the rules (fail closed, never render
+   optimistically) that any desktop port must also honour.
+3. `issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md` —
+   why the broadcast exists at all.
+4. `issues/.secret/` — the threat model. Not indexed; ask for the path.
+5. The rest only as this file points at them.
+
 ## START HERE if you are picking up the desktop work cold
 
 You are working in **`quorum-desktop`**, with `quorum-mobile` as the reference
