@@ -63,9 +63,14 @@ case "${1:-}" in
     # Clear the ring buffer so the capture starts from a known-empty state and
     # nothing from a previous run is mistaken for this one.
     adb logcat -c 2>/dev/null || true
-    ( adb logcat -s ReactNativeJS 2>/dev/null \
-        | grep --line-buffered -aE "$pattern" >> "$OUT" ) &
+    # Fully detached, or the caller's shell blocks waiting on the pipeline and
+    # `start` never returns — which makes the tool useless to an agent driving
+    # it from a command runner. nohup + closed stdio + disown is what actually
+    # lets it survive independently here.
+    nohup bash -c "adb logcat -s ReactNativeJS 2>/dev/null \
+        | grep --line-buffered -aE '$pattern' >> '$OUT'" >/dev/null 2>&1 &
     echo $! > "$PID_FILE"
+    disown 2>/dev/null || true
     echo "qlog: capturing /$pattern/ -> $OUT"
     echo "qlog: do the action on the phone now, then: qlog.sh read"
     ;;
