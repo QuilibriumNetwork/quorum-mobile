@@ -13,10 +13,30 @@
  * which needs a renderer to observe.
  */
 
+// The module gates the dev fake-QNS overlay at the require() itself, so
+// importing it here loads that overlay, which reaches native storage. Stub the
+// storage — same call the inbox-lookup test makes, and for the same reason.
+// The exemption behaviour below is asserted by INJECTING a predicate, so none
+// of these assertions depend on what the overlay would actually answer.
+jest.mock('react-native-mmkv', () => ({
+  createMMKV: () => {
+    const store = new Map<string, string>();
+    return {
+      getString: (k: string) => store.get(k),
+      set: (k: string, v: string) => store.set(k, v),
+      remove: (k: string) => store.delete(k),
+      getAllKeys: () => Array.from(store.keys()),
+      clearAll: () => store.clear(),
+      contains: (k: string) => store.has(k),
+    };
+  },
+}));
+
 import {
   claimedNamesIn,
   resolveClaimedNames,
   stripUnverifiedNames,
+  stripUnverifiedNamesInMap,
   QNS_BATCH_LIMIT,
 } from '../hooks/useVerifiedQnsNames';
 
@@ -183,5 +203,70 @@ describe('stripUnverifiedNames', () => {
     // most at risk of making expensive.
     const rows = [{ address: ADDRESS, primary_username: 'alice' }];
     expect(stripUnverifiedNames(rows, verified)).toBe(rows);
+  });
+});
+
+describe('stripUnverifiedNamesInMap', () => {
+  // The chat surfaces carry members as a keyed record rather than an array —
+  // messages, mentions, reactions and the call screens all read that one map,
+  // so this is the shape that covers the most ground.
+  const verified = new Map([['alice', rec()]]);
+
+  it('strips a claim belonging to somebody else, keeping the key', () => {
+    const map: Record<
+      string,
+      { address: string; primary_username?: string; global_display_name?: string }
+    > = {
+      [ADDRESS]: { address: ADDRESS, primary_username: 'alice' },
+      [OTHER]: { address: OTHER, primary_username: 'alice', global_display_name: 'Mallory' },
+    };
+    const out = stripUnverifiedNamesInMap(map, verified);
+    expect(out[ADDRESS].primary_username).toBe('alice');
+    expect(out[OTHER].primary_username).toBeUndefined();
+    expect(out[OTHER].global_display_name).toBe('Mallory');
+  });
+
+  it('returns the SAME map when nothing needed stripping', () => {
+    // Same reason as the array case, and it matters more here: this map's
+    // identity gates the memoised message list, the search index and the
+    // FlashList data. A fresh object every render recomputes all of them.
+    const map = { [ADDRESS]: { address: ADDRESS, primary_username: 'alice' } };
+    expect(stripUnverifiedNamesInMap(map, verified)).toBe(map);
+  });
+
+  it('returns the SAME map when nobody claims anything', () => {
+    const map = { [ADDRESS]: { address: ADDRESS } };
+    expect(stripUnverifiedNamesInMap(map, new Map())).toBe(map);
+  });
+
+  it('lets an exemption keep a claim the real resolver would reject', () => {
+    // The dev fake-QNS overlay synthesizes names that are registered nowhere,
+    // so they can NEVER pass the genuine check — faking a passing record would
+    // mean finding a public key that hashes to a chosen address. Without this
+    // seam the instrument would inject names, verification would strip every
+    // one, and the panel would look broken while reporting success.
+    const map = { [OTHER]: { address: OTHER, primary_username: 'qafake' } };
+    const out = stripUnverifiedNamesInMap(map, new Map(), (n, a) => n === 'qafake' && a === OTHER);
+    expect(out[OTHER].primary_username).toBe('qafake');
+  });
+
+  it('does not let an exemption cover a name it did not synthesize', () => {
+    // The exemption is per-name, not a global "verification off" switch. A real
+    // registration — and an impersonation of one — must still face the real
+    // comparison while the panel is on, or the instrument would hide the exact
+    // case it exists to help observe.
+    const map = { [OTHER]: { address: OTHER, primary_username: 'alice' } };
+    const out = stripUnverifiedNamesInMap(map, verified, (n) => n === 'qafake');
+    expect(out[OTHER].primary_username).toBeUndefined();
+  });
+
+  it('falls back to the map key when a row carries no address field', () => {
+    // Rows reach these maps from several queries and the address is not always
+    // duplicated inside the row. Verifying against `undefined` would strip
+    // every claim on the surface — the feature silently doing nothing, which
+    // looks identical to it not being built.
+    const map = { [ADDRESS]: { primary_username: 'alice' } };
+    const out = stripUnverifiedNamesInMap(map, verified);
+    expect(out[ADDRESS].primary_username).toBe('alice');
   });
 });

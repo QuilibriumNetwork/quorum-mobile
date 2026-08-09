@@ -89,7 +89,7 @@ export interface ClaimingRow {
  * folded: the resolver is the authority on what a name matches, and quietly
  * normalising a claim here would mean verifying a name the user never claimed.
  */
-export function claimedNamesIn(rows: readonly ClaimingRow[]): string[] {
+export function claimedNamesIn(rows: Iterable<Partial<ClaimingRow>>): string[] {
   const seen = new Set<string>();
   for (const row of rows) {
     const name = (row?.primary_username ?? '').trim();
@@ -100,6 +100,23 @@ export function claimedNamesIn(rows: readonly ClaimingRow[]): string[] {
 
 /** The batch call, injectable so the chunking is testable without a network. */
 export type ResolveBatchFn = (names: string[]) => Promise<(NameRecord | null)[]>;
+
+/**
+ * An escape hatch for claims that cannot be verified against the real resolver
+ * because nothing real is behind them.
+ *
+ * Exists for exactly one caller: the dev-build fake-QNS overlay, whose
+ * synthesized names are registered nowhere and so can never pass the genuine
+ * check. Without it the instrument would inject names, verification would strip
+ * all of them, and every QNS surface would render exactly as it did before the
+ * instrument existed — the panel looking broken while reporting success.
+ *
+ * Injected rather than imported so these functions stay pure and the exemption
+ * is visible at the call site. **There is no production implementation, and
+ * adding one would be a way to render an unverified `.q`** — which is the whole
+ * thing this file exists to prevent.
+ */
+export type ClaimExemption = (name: string, address: string) => boolean;
 
 /**
  * Resolve every claimed name, in as few requests as the API allows.
@@ -153,12 +170,14 @@ export async function resolveClaimedNames(
 export function stripUnverifiedNames<T extends ClaimingRow>(
   rows: readonly T[],
   records: ReadonlyMap<string, NameRecord | null>,
+  isExempt?: ClaimExemption,
 ): readonly T[] {
   let changed = false;
   const out = rows.map((row) => {
     const name = (row?.primary_username ?? '').trim();
     if (!name) return row;
 
+    if (isExempt?.(name, row.address)) return row;
     if (claimedNameBelongsTo(records.get(name), row.address)) return row;
 
     changed = true;
@@ -169,21 +188,87 @@ export function stripUnverifiedNames<T extends ClaimingRow>(
 }
 
 /**
+ * The keyed-record form of {@link stripUnverifiedNames}.
+ *
+ * The chat surfaces carry members as `Record<address, member>` rather than an
+ * array, and that one map feeds messages, mentions, reactions and the call
+ * screens — so this shape covers the most ground of the two.
+ *
+ * The row's own `address` is preferred, falling back to the MAP KEY when the
+ * row does not carry one. Rows reach these maps from several queries and do not
+ * all duplicate the address inside the row; verifying against `undefined` would
+ * strip every claim on the surface, which looks exactly like the feature not
+ * being built rather than like a bug.
+ */
+export function stripUnverifiedNamesInMap<T extends Partial<ClaimingRow>>(
+  map: Readonly<Record<string, T>>,
+  records: ReadonlyMap<string, NameRecord | null>,
+  isExempt?: ClaimExemption,
+): Record<string, T> {
+  let changed = false;
+  const out: Record<string, T> = {};
+
+  for (const [key, row] of Object.entries(map)) {
+    const name = (row?.primary_username ?? '').trim();
+    const address = row?.address || key;
+    if (
+      !name ||
+      isExempt?.(name, address) ||
+      claimedNameBelongsTo(records.get(name), address)
+    ) {
+      out[key] = row;
+      continue;
+    }
+    changed = true;
+    out[key] = { ...row, primary_username: undefined };
+  }
+
+  return changed ? out : (map as Record<string, T>);
+}
+
+/**
  * Strip unverified `.q` claims from a set of rows before anything renders them.
  *
  * Pass the rows a surface is about to display — not a whole roster. Cost is
  * bounded by what is on screen, and handing this the full membership of a large
  * space would reintroduce the fetch storm both clients deliberately refused.
  */
-export function useVerifiedQnsNames<T extends ClaimingRow>(rows: readonly T[]): readonly T[] {
-  const names = useMemo(() => claimedNamesIn(rows), [rows]);
+/** Stable identity, so a screen with no claims does not churn every memo below
+ *  it by handing them a fresh empty map on each render. */
+const NO_RECORDS: ReadonlyMap<string, NameRecord | null> = new Map();
 
-  // Keyed on the name SET, so two surfaces showing the same claimants share one
-  // entry. A growing set (scrolling loads more senders) does re-resolve the
-  // whole set rather than only the new names — accepted deliberately, because
-  // the measurement above says a bigger batch is not a more expensive one. If
-  // this ever shows up as a real cost, seed per-name entries instead of
-  // shrinking the TTL.
+/**
+ * The dev-only exemption for names the fake-QNS overlay synthesized.
+ *
+ * Gated at the `require()` itself rather than only at the call site, so neither
+ * the overlay nor its storage reaches a release bundle — the same shape as the
+ * gate in `quorumClient`. In production this is `undefined`, and the strip
+ * functions take the genuine path with no exemption to consult.
+ *
+ * Held at module scope because the identity must be STABLE: a fresh closure per
+ * render would invalidate the memos below on every tick, on the surface whose
+ * entire cost argument is that it does not re-render per tick.
+ */
+const FakeQnsModule = __DEV__
+  ? (require('@/services/dev/fakeQns') as typeof import('@/services/dev/fakeQns'))
+  : null;
+
+const DEV_CLAIM_EXEMPTION: ClaimExemption | undefined = FakeQnsModule
+  ? (name, address) => FakeQnsModule.isFakeClaimFor(name, address)
+  : undefined;
+
+/**
+ * Resolve a set of claimed names, shared by both public hooks.
+ *
+ * Keyed on the name SET, so two surfaces showing the same claimants share one
+ * entry. A growing set — scrolling loads more senders — re-resolves the whole
+ * set rather than only the new names. That is deliberate: the measurement says
+ * a bigger batch is not a more expensive one, so one request for everything
+ * beats bookkeeping to save part of it. If it ever does show up as a real cost,
+ * seed per-name cache entries; do not shrink the TTL, which is a security
+ * parameter.
+ */
+function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord | null> {
   const namesKey = names.join('|');
 
   const { data } = useQuery({
@@ -198,5 +283,28 @@ export function useVerifiedQnsNames<T extends ClaimingRow>(rows: readonly T[]): 
     retry: false,
   });
 
-  return useMemo(() => stripUnverifiedNames(rows, data ?? new Map()), [rows, data]);
+  return data ?? NO_RECORDS;
+}
+
+export function useVerifiedQnsNames<T extends ClaimingRow>(rows: readonly T[]): readonly T[] {
+  const names = useMemo(() => claimedNamesIn(rows), [rows]);
+  const records = useClaimRecords(names);
+  return useMemo(
+    () => stripUnverifiedNames(rows, records, DEV_CLAIM_EXEMPTION),
+    [rows, records],
+  );
+}
+
+/**
+ * Keyed-record form of {@link useVerifiedQnsNames}, for the chat member maps.
+ */
+export function useVerifiedQnsNamesInMap<T extends Partial<ClaimingRow>>(
+  map: Readonly<Record<string, T>>,
+): Record<string, T> {
+  const names = useMemo(() => claimedNamesIn(Object.values(map)), [map]);
+  const records = useClaimRecords(names);
+  return useMemo(
+    () => stripUnverifiedNamesInMap(map, records, DEV_CLAIM_EXEMPTION),
+    [map, records],
+  );
 }

@@ -32,6 +32,7 @@ import { useToast } from '@/context/ToastContext';
 import { useIsFocused } from '@react-navigation/native';
 import { flattenMessages, useMessages } from '@/hooks/chat/useMessages';
 import { useMembersWithPublicProfileFallback } from '@/hooks/useMembersWithPublicProfileFallback';
+import { useVerifiedQnsNamesInMap } from '@/hooks/useVerifiedQnsNames';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
 import { useSendDirectEmbedMessage } from '@/hooks/chat/useSendDirectEmbedMessage';
 import { useSendDirectReaction, useRemoveDirectReaction } from '@/hooks/chat/useSendDirectReaction';
@@ -183,7 +184,11 @@ export const DMChatArea = React.memo(function DMChatArea({
     () => Object.keys(dmMemberMap),
     [dmMemberMap],
   );
-  const effectiveDmMemberMap = useMembersWithPublicProfileFallback(dmMemberMap, dmVisibleAddresses);
+  // Verify claimed `.q` names before anything renders them — see the matching
+  // comment in SpaceChatArea. A DM is the surface where an impersonated name is
+  // most persuasive, because there is no roster to cross-check against.
+  const fetchedDmMemberMap = useMembersWithPublicProfileFallback(dmMemberMap, dmVisibleAddresses);
+  const effectiveDmMemberMap = useVerifiedQnsNamesInMap(fetchedDmMemberMap);
 
   // Messages
   const dmMessages = useMemo(() => {

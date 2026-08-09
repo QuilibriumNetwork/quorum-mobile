@@ -40,6 +40,7 @@ import {
   membersWithEffectiveIdentity,
   useMembersWithPublicProfileFallback,
 } from '@/hooks/useMembersWithPublicProfileFallback';
+import { useVerifiedQnsNamesInMap } from '@/hooks/useVerifiedQnsNames';
 import { useSendSpaceMessage } from '@/hooks/chat/useSendSpaceMessage';
 import { useSendEmbedMessage } from '@/hooks/chat/useSendEmbedMessage';
 import { useAddSpaceReaction, useRemoveSpaceReaction } from '@/hooks/chat/useSpaceReactions';
@@ -245,7 +246,14 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
     }
     return Array.from(set);
   }, [messagesPages]);
-  const effectiveMemberMap = useMembersWithPublicProfileFallback(memberMap, senderAddresses);
+  // A `primary_username` arriving from a public profile is a CLAIM, signed by
+  // the person making it — which proves who sent it, not that it is true. The
+  // verification pass drops any claim that does not resolve back to the address
+  // it came with, BEFORE the map reaches anything that renders. Everything
+  // downstream — message headers, mentions, reactions, the call screens — reads
+  // this one map, so the check lands on all of them at once.
+  const fetchedMemberMap = useMembersWithPublicProfileFallback(memberMap, senderAddresses);
+  const effectiveMemberMap = useVerifiedQnsNamesInMap(fetchedMemberMap);
 
   // Mentions — both the `@` autocomplete and the rendered pill — resolve names
   // from this array. It used to be `membersData`, the raw roster, and a roster

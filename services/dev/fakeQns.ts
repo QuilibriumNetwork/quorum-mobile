@@ -152,6 +152,52 @@ export function deriveFakeQName(address: string): string {
 }
 
 /**
+ * Is this `.q` claim one THIS module synthesized for THIS address?
+ *
+ * ## Why a verification bypass has to exist at all
+ *
+ * Receiver-side verification resolves a claimed name against QNS and checks it
+ * derives back to the claimant's address. A synthesized name is not registered
+ * anywhere, so it can never pass that check — and no amount of cleverness here
+ * can make it, because faking a passing record would mean finding a public key
+ * whose hash is a chosen address. That is a preimage attack, not a dev tool.
+ *
+ * Without this seam the overlay would still inject names and verification would
+ * strip every one of them, so every QNS surface would render blank exactly as
+ * it did before the instrument existed — and the panel would look broken while
+ * reporting success.
+ *
+ * ## Why it is per-name and not a global "verification off" switch
+ *
+ * A real registration must still face the real check while the panel is on.
+ * Same reasoning as `applyFakeQns` refusing to fake over a real `primary_username`:
+ * if the instrument disabled the very check it is meant to help observe, the one
+ * case worth watching would be the one case it hid.
+ *
+ * Returns false for every name it did not synthesize, so a real claim — and an
+ * impersonated one — both fall through to the genuine comparison.
+ *
+ * Unreachable in production: the module is only required under `__DEV__`, so
+ * this cannot weaken a shipped build. Do not add a non-dev caller.
+ */
+export function isFakeClaimFor(name: string, address: string): boolean {
+  const claimed = (name ?? '').trim();
+  if (!claimed || !address) return false;
+
+  const state = getFakeQnsState();
+  if (!state.enabled || state.allProfilesPrivate) return false;
+
+  const entry = state.entries[address.toLowerCase()];
+  if (entry?.private) return false;
+
+  const synthesized =
+    entry?.primaryUsername ||
+    (entry ? undefined : state.giveEveryoneAName ? deriveFakeQName(address) : undefined);
+
+  return !!synthesized && synthesized === claimed;
+}
+
+/**
  * The seam. Called from `QuorumClient.getPublicProfile` with whatever the
  * server actually returned (including `null` for a 404).
  *
