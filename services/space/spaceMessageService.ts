@@ -954,7 +954,10 @@ function profileBroadcastKey(spaceId: string, senderAddress: string): string {
 // Canonical signature of the exact payload that will go on the wire.
 // Field presence matters (avatar-only vs name-only sends have different
 // signatures), and field values matter. Stable JSON: keys sorted.
-function profileBroadcastSignature(p: SendUpdateProfileParams): string {
+// Exported for tests. A field missing from this signature is silently
+// undeliverable — the gate reads the payload as a duplicate and suppresses it —
+// so the field list needs an assertion, not just review.
+export function profileBroadcastSignature(p: SendUpdateProfileParams): string {
   const obj: Record<string, string> = {};
   // `!== undefined` (not truthy) so an explicit clear ('') produces a distinct
   // signature and isn't deduped away — matches the wire builder above.
@@ -968,6 +971,13 @@ function profileBroadcastSignature(p: SendUpdateProfileParams): string {
     obj.farcasterFid = String(p.farcasterFid);
   }
   if (p.farcasterUsername) obj.farcasterUsername = p.farcasterUsername;
+  // Must be in the signature, or electing a primary name broadcasts NOTHING
+  // whenever the rest of the payload is unchanged — which is the ordinary case,
+  // since electing a name touches no other profile field. The gate would read
+  // the payload as a duplicate of the last announce and suppress it. The DM
+  // twin (`payloadSignature` in services/dm/dmProfileService.ts) includes it for
+  // exactly this reason; this omission was the space-side half of the same bug.
+  if (p.primaryUsername !== undefined) obj.primaryUsername = p.primaryUsername;
   const sortedKeys = Object.keys(obj).sort();
   return JSON.stringify(obj, sortedKeys);
 }

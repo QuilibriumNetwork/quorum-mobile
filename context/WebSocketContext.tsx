@@ -4707,17 +4707,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               ...(applyGlobal && profileContent.globalDisplayName !== undefined ? { global_display_name: profileContent.globalDisplayName } : {}),
               ...(applyGlobal && profileContent.globalUserIcon !== undefined ? { global_profile_image: profileContent.globalUserIcon } : {}),
               ...(applyGlobal && profileContent.globalBio !== undefined ? { global_bio: profileContent.globalBio } : {}),
-                // The sender's claimed `.q`, stored INERT under its own key.
-                // `resolveMemberName` reads `primary_username`, and it is
-                // reached from surfaces that do not verify — notification
-                // previews, conversation titles. Writing a wire claim there
-                // would render it unverified on every one of them. Under this
-                // key it can only reach the screen by being promoted, which
-                // happens after it resolves back to this sender. The signature
-                // does not cover this field, so verification is all there is.
-                ...(applyGlobal && profileContent.primaryUsername !== undefined
-                  ? { claimed_primary_username: profileContent.primaryUsername }
-                  : {}),
+              // Claimed `.q`, stored INERT under its own key. See the JS-path
+              // handler above for why it must not be written to
+              // `primary_username`.
+              ...(applyGlobal && profileContent.primaryUsername !== undefined
+                ? { claimed_primary_username: profileContent.primaryUsername }
+                : {}),
               ...(applyGlobal ? { globalProfileTimestamp: ts } : {}),
               ...(applyOverride && profileContent.farcasterFid !== undefined && profileContent.farcasterFid > 0
                 ? { farcasterFid: profileContent.farcasterFid }
@@ -6565,6 +6560,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       i: userIcon ?? '',
       f: fcFid ?? 0,
       u: fcUsername ?? '',
+      // Without this the effect returns before importing the broadcast service
+      // whenever the other four are unchanged — so electing a primary name
+      // in-session would never reach anyone, while a fresh app launch (empty
+      // ref) would send it. That difference is exactly what makes the bug
+      // survive a manual "restart and check" test.
+      p: user.primaryUsername ?? '',
     });
     if (lastProfileRebroadcastSigRef.current === sig) return;
     lastProfileRebroadcastSigRef.current = sig;
@@ -6679,6 +6680,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     user?.profileImage,
     user?.farcaster?.fid,
     user?.farcaster?.username,
+    // Elect or un-elect a primary name and nothing else changes, so without
+    // this the effect never re-runs and the change reaches nobody.
+    user?.primaryUsername,
     enqueueOutbound,
     subscribe,
   ]);

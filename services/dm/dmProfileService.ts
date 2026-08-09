@@ -175,7 +175,8 @@ function writeGate(store: MMKV, key: string, record: DmProfileGateRecord): void 
 
 // Canonical signature of the exact wire payload. Field presence matters
 // (avatar-only vs name-only have different signatures), and values matter.
-function payloadSignature(p: DMProfilePayload): string {
+// Exported for tests — see the note on the space-side twin.
+export function payloadSignature(p: DMProfilePayload): string {
   const obj: Record<string, string> = {};
   if (p.displayName) obj.displayName = p.displayName;
   if (p.userIcon) obj.userIcon = p.userIcon;

@@ -326,13 +326,6 @@ export function stripUnverifiedNamesInMap<T extends Partial<ClaimingRow>>(
   return changed ? out : (map as Record<string, T>);
 }
 
-/**
- * Strip unverified `.q` claims from a set of rows before anything renders them.
- *
- * Pass the rows a surface is about to display — not a whole roster. Cost is
- * bounded by what is on screen, and handing this the full membership of a large
- * space would reintroduce the fetch storm both clients deliberately refused.
- */
 /** Stable identity, so a screen with no claims does not churn every memo below
  *  it by handing them a fresh empty map on each render. */
 const NO_RECORDS: ReadonlyMap<string, NameRecord | null> = new Map();
@@ -381,11 +374,30 @@ function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord | null
     // degrade to the global name meanwhile, which is correct but invisible, so
     // prefer settling quickly and refreshing on the next natural cache miss.
     retry: false,
+    // Carry the previous answer while a wider set resolves, or every name on
+    // screen flickers whenever a new one appears. Scrolling a channel grows the
+    // sender set, which changes the key; without this the query returns
+    // undefined for that render and EVERY already-verified `.q` reverts to the
+    // global name for ~200ms before coming back.
+    //
+    // Safe in the fail-closed direction, which is why it is allowed here: the
+    // carried map is keyed by name and holds the same records this key would
+    // fetch, so no verdict changes. A name that is NEW in the wider set is
+    // simply absent from it, and absent means unverified — the addition can
+    // only ever under-show, never promote something unchecked.
+    placeholderData: (previous) => previous,
   });
 
   return data ?? NO_RECORDS;
 }
 
+/**
+ * Strip unverified `.q` claims from a set of rows before anything renders them.
+ *
+ * Pass the rows a surface is about to display — not a whole roster. Cost is
+ * bounded by what is on screen, and handing this the full membership of a large
+ * space would reintroduce the fetch storm both clients deliberately refused.
+ */
 export function useVerifiedQnsNames<T extends Partial<ClaimingRow>>(
   rows: readonly T[],
 ): readonly T[] {

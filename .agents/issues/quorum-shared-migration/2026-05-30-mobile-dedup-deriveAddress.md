@@ -1,6 +1,6 @@
 ---
 type: task
-title: Dedupe deriveAddress — 3 local copies → 1 import from keyService
+title: Dedupe deriveAddress — 5 local copies → 1 import from utils/deriveAddress
 status: in-progress
 created: 2026-05-30
 shared-pr: none (mobile-internal cleanup)
@@ -12,13 +12,23 @@ runtime-test: not-required
 
 ## What
 
-Mobile has the canonical `deriveAddress(publicKey: Uint8Array | string)` exported from `services/onboarding/keyService.ts:105`. Three other files re-declare the same logic locally as a private function:
+> **Corrected 2026-08-09 — this issue undercounted, and so did the code comment
+> that pointed at it.** The canonical copy has since MOVED: it now lives in
+> `utils/deriveAddress.ts` (still re-exported from `keyService` so no caller
+> broke), because `keyService` drags in mnemonic generation and the native Rust
+> module, which is the weight that caused these copies in the first place.
+> A repo-wide `grep "function deriveAddress"` finds **five** local copies, not
+> three. Recount before believing any list here.
+
+Mobile has the canonical `deriveAddress(publicKey: Uint8Array | string)` exported from `utils/deriveAddress.ts`. Five other files re-declare the same logic locally as a private function:
 
 1. `services/space/spaceService.ts:61` — `function deriveAddress(publicKeyBytes: Uint8Array)`
-2. `hooks/chat/useChannelManagement.ts:29` — `function deriveAddress(publicKeyBytes: Uint8Array)`
+2. `hooks/chat/useChannelManagement.ts:37` — `function deriveAddress(publicKeyBytes: Uint8Array)`
 3. `hooks/chat/useSpaceActions.ts:81` — `function deriveAddress(publicKeyBytes: Uint8Array)`
+4. `services/config/spaceSyncService.ts:63` — `function deriveAddress(publicKeyBytes: Uint8Array)`
+5. `services/crypto/space-session.ts:17` — `function deriveAddress(publicKeyBytes: Uint8Array)`
 
-All three are byte-for-byte identical:
+All five are byte-for-byte identical:
 ```ts
 const hash = sha256(publicKeyBytes);
 const mhash = multihashes.encode(hash, 'sha2-256');
