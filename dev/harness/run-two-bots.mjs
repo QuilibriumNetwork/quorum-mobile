@@ -31,10 +31,21 @@ if (existsSync(RENDEZVOUS_ROOT)) {
   }
 }
 
+// Which two-bot scenario to run. Defaults to the DM loss measurement this
+// runner was written for; `HARNESS_SCENARIO=qns-claim-two-bot` runs the
+// identity-claim round trip instead. Both need the same thing from here — two
+// processes, paired by run id — so they share the launcher rather than each
+// growing a near-identical copy of it.
+// Taken from argv rather than an env var so the npm script needs no cross-env
+// (which this repo does not depend on, and adding a dependency to choose a
+// filename would be a poor trade). `HARNESS_SCENARIO` still works for anyone
+// invoking node directly.
+const SCENARIO = process.argv[2] ?? process.env.HARNESS_SCENARIO ?? 'dm-two-bot';
+
 function startRole(role) {
   const child = spawn(
     'npx',
-    ['jest', '--config', 'jest.harness.config.js', 'dm-two-bot'],
+    ['jest', '--config', 'jest.harness.config.js', SCENARIO],
     {
       cwd: REPO,
       env: { ...process.env, HARNESS_ROLE: role, HARNESS_RUN_ID: runId },
@@ -63,6 +74,24 @@ const outcomes = await Promise.all([startRole('a'), startRole('b')]);
 
 for (const { role, code } of outcomes) {
   if (code !== 0) console.log(`[dm] role ${role} exited ${code}`);
+}
+
+// Only the DM scenario publishes the per-message result files the loss verdict
+// below is computed from. Every other scenario states its own verdict through
+// jest assertions, so for those the child exit codes ARE the result — running
+// the DM arithmetic over absent files would report "nothing was sent" and fail
+// a run that actually passed.
+if (SCENARIO !== 'dm-two-bot') {
+  const failed = outcomes.filter((o) => o.code !== 0);
+  if (failed.length) {
+    console.error(
+      `[${SCENARIO}] FAIL — role(s) ${failed.map((f) => f.role).join(', ')} exited non-zero. ` +
+        `Read that role's output above.`
+    );
+    process.exit(1);
+  }
+  console.log(`[${SCENARIO}] both roles passed.`);
+  process.exit(0);
 }
 
 const readResult = (role) => {

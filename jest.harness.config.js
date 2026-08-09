@@ -87,6 +87,9 @@ module.exports = {
     // messagesDb imports the /legacy entrypoint; same module either way.
     '^expo-file-system/legacy$': '<rootDir>/dev/harness/filesystem-shim.ts',
     '^expo-file-system$': '<rootDir>/dev/harness/filesystem-shim.ts',
+    // Reached only via services/api/qnsClient, which reads an optional API URL
+    // and falls back to production. See the shim for why it stays empty.
+    '^expo-constants$': '<rootDir>/dev/harness/expo-constants-shim.ts',
     // ---- UI cut ----
     // The harness renders WebSocketProvider (mobile's DM receive path lives
     // inside it) but never renders UI. StorageContext — needed only for its
