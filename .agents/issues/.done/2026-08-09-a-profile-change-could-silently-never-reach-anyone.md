@@ -4,7 +4,7 @@ title: "A profile change could silently never reach anyone, depending on a re-re
 status: done
 priority: high
 created: 2026-08-09
-updated: 2026-08-09
+updated: 2026-08-10
 area: profile sync / identity broadcast
 repos: quorum-mobile (desktop checked — not affected)
 source: found 2026-08-09 while device-testing whether electing a primary .q name broadcasts; the primary-name case was the symptom, not the bug
@@ -16,6 +16,14 @@ source: found 2026-08-09 while device-testing whether electing a primary .q name
 
 **Fixed and verified on device**, in the same branch as the `.q` verification
 work. Desktop was checked and does not share the defect.
+
+**2026-08-09 — fix shipped in PR #245** (`feat: a primary .q name reaches other
+people, and is verified before it renders`), squashed to `e93cd26`.
+
+**2026-08-10 — regression coverage shipped in PR #246** (`test: pin the
+broadcast claim so the re-render race cannot come back`). The fix had none until
+then; see "How this is protected now" below for what the test pins and how it
+was shown to fail without the fix.
 
 ## What was wrong
 
@@ -170,7 +178,7 @@ Shipped to `master` in `e93cd26` (PR #245), squashed from `bec2980` on
 appear on `master` because the merge was a squash.
 
 ---
-*Last updated: 2026-08-09*
+*Last updated: 2026-08-10*
 
 ## Review Log
 **2026-08-09 - claude-opus-5**: First review pass. Verified the fix against the code rather than the prose: claim-inside-timer is genuinely present, 710 tests pass, no type errors in the touched files. Left status done and the file in .done/. Corrected one wrong technical claim, added anchors, and recorded a coverage gap the write-up implied but did not state.
