@@ -106,7 +106,6 @@ quorum-mobile/
 │   │   ├── profile/
 │   │   └── account/
 │   ├── apps.tsx               # Mini-apps screen
-│   ├── browser.tsx            # In-app browser
 │   ├── chat.tsx, explore.tsx, feed.tsx, settings.tsx, wallet.tsx
 │   └── _layout.tsx            # Root layout with providers
 │
@@ -203,7 +202,16 @@ File-based routing in `app/`:
 - `app/_layout.tsx` — root layout, provider stack (Theme → Query → Storage → Auth → API → WebSocket → Call/SpaceCall → Toast)
 - `app/(onboarding)/` — grouped onboarding flow
 - `app/(tabs)/` — main tab navigator (messages, spaces, feed, wallet, profile, account)
-- Top-level screens: `chat`, `browser`, `apps`, `explore`, `settings`, `wallet`, `feed`
+- Top-level screens: `chat`, `apps`, `explore`, `settings`, `wallet`, `feed`
+
+**The in-app browser is not a route.** A single `BrowserModal` is mounted by
+`MiniappOverlayProvider` (`app/(tabs)/_layout.tsx`) and opened via
+`useMiniappOverlay()`, which keeps one WebView alive across navigation and
+minimize. It takes `mode: 'link' | 'miniapp'` — `'link'` is a plain browser with
+no SDK bridge and no wallet; `'miniapp'` is the Farcaster/Q app host. Open links
+through `useOpenLink()` rather than either directly, so YouTube hand-off and
+failure toasts stay consistent. (A duplicate `app/browser.tsx` route was deleted
+on 2026-08-10; do not reintroduce one.)
 
 ### State Management (3-tier)
 1. **React Context** (`context/`) — auth state, WebSocket, API client, calls, storage, toasts, onboarding

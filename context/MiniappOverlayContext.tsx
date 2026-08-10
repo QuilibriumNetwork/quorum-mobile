@@ -17,8 +17,19 @@ import BrowserModal from '@/components/BrowserModal';
 import { MinimizedMiniappChip } from '@/components/MinimizedMiniappChip';
 import { recordMiniappUse } from '@/services/miniapp/recentMiniapps';
 
+/**
+ * What the overlay is hosting.
+ *
+ * - `miniapp` — a Farcaster/Q mini app. Gets the SDK bridge, the wallet chip and
+ *   the signing modals, and is recorded in the launcher's recents.
+ * - `link` — an arbitrary website someone sent in chat. Gets none of that: it is
+ *   a browser, not an app host.
+ */
+export type MiniappOverlayMode = 'link' | 'miniapp';
+
 export interface MiniappOverlayEntry {
   url: string;
+  mode: MiniappOverlayMode;
   isQNative: boolean;
   allowInsecureLAN?: boolean;
   /** Bump to force-remount of BrowserModal when reopening the same URL
@@ -34,6 +45,9 @@ interface MiniappOverlayContextValue {
   entry: MiniappOverlayEntry | null;
   minimized: boolean;
   openMiniapp: (opts: { url: string; isQNative?: boolean; allowInsecureLAN?: boolean; name?: string; iconUrl?: string }) => void;
+  /** Open a plain web link. Prefer `useOpenLink()` at call sites — it also
+   *  handles the URLs that should leave the app entirely. */
+  openUrl: (opts: { url: string; allowInsecureLAN?: boolean }) => void;
   closeMiniapp: () => void;
   minimizeMiniapp: () => void;
   restoreMiniapp: () => void;
@@ -49,8 +63,10 @@ export function useMiniappOverlay(): MiniappOverlayContextValue {
       entry: null,
       minimized: false,
       openMiniapp: () => {
-        // eslint-disable-next-line no-console
         console.warn('[MiniappOverlay] openMiniapp called outside provider');
+      },
+      openUrl: () => {
+        console.warn('[MiniappOverlay] openUrl called outside provider');
       },
       closeMiniapp: () => {},
       minimizeMiniapp: () => {},
@@ -73,6 +89,7 @@ export function MiniappOverlayProvider({ children }: { children: React.ReactNode
   }) => {
     setEntry({
       url: opts.url,
+      mode: 'miniapp',
       isQNative: opts.isQNative ?? false,
       allowInsecureLAN: opts.allowInsecureLAN,
       timestamp: Date.now(),
@@ -82,6 +99,23 @@ export function MiniappOverlayProvider({ children }: { children: React.ReactNode
     setMinimized(false);
     // Record for the launcher's "Recently used" tab (device-local).
     recordMiniappUse({ url: opts.url, name: opts.name, iconUrl: opts.iconUrl });
+  }, []);
+
+  /**
+   * Open a plain web link. Deliberately NOT `openMiniapp` with a flag: a link
+   * from a stranger in a Space is not an app the user chose to run, so it must
+   * not reach `recordMiniappUse` — chat links were previously landing in the
+   * launcher's "Recently used" shelf alongside the user's actual mini apps.
+   */
+  const openUrl = React.useCallback((opts: { url: string; allowInsecureLAN?: boolean }) => {
+    setEntry({
+      url: opts.url,
+      mode: 'link',
+      isQNative: false,
+      allowInsecureLAN: opts.allowInsecureLAN,
+      timestamp: Date.now(),
+    });
+    setMinimized(false);
   }, []);
 
   const closeMiniapp = React.useCallback(() => {
@@ -98,8 +132,8 @@ export function MiniappOverlayProvider({ children }: { children: React.ReactNode
   }, []);
 
   const value = React.useMemo<MiniappOverlayContextValue>(
-    () => ({ entry, minimized, openMiniapp, closeMiniapp, minimizeMiniapp, restoreMiniapp }),
-    [entry, minimized, openMiniapp, closeMiniapp, minimizeMiniapp, restoreMiniapp],
+    () => ({ entry, minimized, openMiniapp, openUrl, closeMiniapp, minimizeMiniapp, restoreMiniapp }),
+    [entry, minimized, openMiniapp, openUrl, closeMiniapp, minimizeMiniapp, restoreMiniapp],
   );
 
   return (
@@ -114,6 +148,7 @@ export function MiniappOverlayProvider({ children }: { children: React.ReactNode
           visible={true}
           minimized={minimized}
           url={entry.url}
+          mode={entry.mode}
           isQNative={entry.isQNative}
           allowInsecureLAN={entry.allowInsecureLAN ?? false}
           timestamp={entry.timestamp}

@@ -323,6 +323,45 @@ keyboard; a tap on the dim area closes the keyboard (a second tap closes the she
   frame). If Return still inserts a newline, `submitBehavior` isn't reaching the native
   view — check the Fabric path in `RCTTextInputComponentView.mm` (`getSubmitBehavior`).
 
+### 12. In-app browser link mode: chrome, native hand-off, and the mini app regression arm 🔲
+**▶ Ask:** "Tap a normal web link (a news article) in a Space chat. (a) Is there an ETH
+wallet address in the bar at the top? There should NOT be. (b) Tap 'Open in browser' at the
+bottom right — does your normal browser open on that same page? (c) Go back into the app,
+tap a YouTube link in a chat — does the YouTube app itself open, not a browser inside
+Quorum? Try both a video link and a plain `youtube.com` homepage link — both should leave
+the app. (d) Now open a mini app from the Apps launcher — is the wallet address back in the
+top bar, and does signing still work?"
+**Pass:** (a) no address, (b) real browser opens the same page, (c) YouTube app opens,
+(d) address present and signing works.
+**Fail:** note which of a–d, and whether the sheet closed without anything happening.
+
+**Context (agent):**
+- **What:** split `BrowserModal` into `mode: 'link' | 'miniapp'`, added YouTube hand-off,
+  rebuilt the link-mode chrome, deleted the duplicate `app/browser.tsx` route. Plan:
+  `.agents/issues/.open/2026-08-10-in-app-browser-link-handling-plan.md`.
+- **(d) is the regression arm and must not be skipped.** Everything mini-app-shaped is now
+  behind an `isLink` gate; the whole design rests on those gates being no-ops in miniapp
+  mode. If the wallet chip is missing or signing breaks in a mini app, a gate is inverted.
+- **Why iOS may differ:**
+  - **`Platform.select` branch (new):** `LINK_MODE_USER_AGENT` in `components/BrowserModal.tsx`
+    sends a Safari string on iOS and a Chrome string on Android. **The Android run exercises
+    only the Android branch** — the iOS UA string has never been sent by anything. If a site
+    renders oddly *only* on iPhone, suspect this first.
+  - **Safe-area insets:** the new link-mode footer (`styles.navigationBarLink`) applies
+    `insets.bottom` the same way the mini app footer does, but it is a different layout
+    (`space-between` with a pill button, not `space-around` icons). Home-indicator geometry
+    differs from Android's nav bar.
+  - **Hand-off mechanics differ by construction:** (c) resolves through **iOS Universal
+    Links**, Android through **verified App Links**. These are different OS subsystems, so
+    an Android pass is no evidence for iOS. If YouTube opens in Safari instead of the app,
+    that is the Universal Link not resolving, not our code — check the YouTube app is
+    installed and that the user has not previously chosen "open in browser" for that domain.
+- **JS-only** — ships over OTA once verified.
+- **If (b) FAILS silently** (sheet closes, nothing opens): that is the *old* bug returning.
+  `handleOpenInBrowser` deliberately no longer calls `Linking.canOpenURL` and now returns
+  early (leaving the sheet open) with a toast on rejection. A silent close means something
+  restored the `canOpenURL` gate.
+
 > **Cross-cutting note for #6–#9:** all four are the same shape — a native iOS surface
 > behaving differently from its Android counterpart, invisible from this dev loop. Before
 > writing any new navigation-header, chrome or composer code, read
@@ -336,4 +375,4 @@ _(none yet — move ✅ items here with the date + tester)_
 
 ---
 
-*Last updated: 2026-08-07*
+*Last updated: 2026-08-10*

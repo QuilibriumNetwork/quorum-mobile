@@ -4,7 +4,7 @@
 
 import { ChannelHeader, SpaceChatArea, type MemberMap, type MessageUserInfo } from '@/components/Chat';
 import { useAuth } from '@/context/AuthContext';
-import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
+import { useOpenLink } from '@/hooks/useOpenLink';
 import { useChannels } from '@/hooks/chat/useChannels';
 import { useHasPermission, useRoles } from '@/hooks/chat/useRoleManagement';
 import { setActiveChannel, clearActiveChannel } from '@/hooks/chat/useReplyTracking';
@@ -161,10 +161,9 @@ export default function SpaceChannelChat() {
     })();
   }, [spaceId, enqueueOutbound]);
 
-  // Overlay state — miniapps go through the global overlay (a single
+  // Overlay state — links and miniapps go through the global overlay (a single
   // BrowserModal lives at the tabs layout, preserving WebView state
   // across minimize/restore).
-  const { openMiniapp } = useMiniappOverlay();
   const [selectedUserProfile, setSelectedUserProfile] = useState<MessageUserInfo | null>(null);
   const [inviteVisible, setInviteVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -187,11 +186,9 @@ export default function SpaceChannelChat() {
     setSelectedUserProfile(info);
   }, []);
 
-  const handleLinkPress = useCallback((url: string) => {
-    // Chat-link URLs are user-provided and may target LAN dev hosts, so
-    // pass through `allowInsecureLAN` for SSL bypass.
-    openMiniapp({ url, isQNative: false, allowInsecureLAN: true });
-  }, [openMiniapp]);
+  // Routes YouTube out to the native app and everything else into the in-app
+  // browser in link mode. Shared with DMs so the two cannot drift apart.
+  const handleLinkPress = useOpenLink();
 
   const handleOpenFarcasterCast = useCallback((username: string, castHashPrefix: string) => {
     // Open the cast's thread inline as a modal instead of routing to the feed

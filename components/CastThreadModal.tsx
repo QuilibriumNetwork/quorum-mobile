@@ -9,6 +9,7 @@ import { ThreadDetailView } from '@/components/SocialFeed/views/ThreadDetailView
 import { BaseModal } from '@/components/shared';
 import { ReportModal } from '@/components/ReportModal';
 import { useAuth } from '@/context/AuthContext';
+import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { useTheme } from '@/theme';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -29,6 +30,7 @@ export default function CastThreadModal({
 }: CastThreadModalProps) {
   const { theme } = useTheme();
   const { user, farcasterAuthToken } = useAuth();
+  const { openMiniapp } = useMiniappOverlay();
   const [likeStates] = useState(() => new Map<string, { liked: boolean; count: number }>());
   const [followStates] = useState(() => new Map<number, boolean>());
   const [reportTarget, setReportTarget] = useState<
@@ -45,7 +47,7 @@ export default function CastThreadModal({
           currentUserFid={user?.farcaster?.fid}
           theme={theme}
           onClose={onClose}
-          onOpenMiniApp={(url) => router.push({ pathname: '/browser', params: { url } })}
+          onOpenMiniApp={(url) => openMiniapp({ url })}
           onOpenProfile={() => router.push('/(tabs)/feed')}
           onOpenChannel={(channelKey) => router.push({ pathname: '/feed', params: { channelKey } })}
           likeStates={likeStates}

@@ -25,6 +25,8 @@ import { fetchFarcasterUser } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { getFarcasterAuthToken } from '@/services/onboarding/secureStorage';
 import { useTheme, type AppTheme } from '@/theme';
+import { useToast } from '@/context/ToastContext';
+import { shouldOpenExternally } from '@/utils/linkRouting';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { getErrorMessage } from '@/utils/error';
 import MiniAppApprovalModal, { ApprovalRequest } from '@/components/MiniAppApprovalModal';
@@ -43,6 +45,15 @@ interface BrowserModalProps {
   visible: boolean;
   url: string;
   onClose: () => void;
+  /**
+   * What this WebView is hosting. Defaults to `'miniapp'` so every existing
+   * caller keeps its current behaviour exactly.
+   *
+   * `'link'` is for arbitrary websites someone sent in chat. It is a browser,
+   * not an app host: no SDK bridge, no wallet, no signing modals, no splash,
+   * and a real browser user agent.
+   */
+  mode?: 'link' | 'miniapp';
   isQNative?: boolean;
   onShowTransactionWarning?: (warningType: 'simulation-failed' | 'no-entitlements' | 'not-declared' | 'ok') => void;
   /** Timestamp for cache busting - pass Date.now() when launching to force refresh */
@@ -81,10 +92,48 @@ function isLanUrl(url: string): boolean {
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export default function BrowserModal({ visible, url, onClose, isQNative = false, onShowTransactionWarning, timestamp = 0, allowInsecureLAN = false, minimized = false, onMinimize }: BrowserModalProps) {
+/**
+ * User agent for link mode.
+ *
+ * Not the system WebView default on purpose: Android's default UA carries a
+ * `; wv)` token that marks the request as an embedded WebView, and Google
+ * refuses sign-in to those. A plain mobile Chrome/Safari string is what the
+ * overwhelming majority of real users send, so it is the least surprising thing
+ * an arbitrary site can receive from us.
+ *
+ * NOT MEASURED: that the old `"warpcast"` UA is what triggers YouTube's
+ * "confirm you're not a bot" wall is a strong hypothesis, not an observation.
+ * It is recorded as such in the issue and needs a device to confirm. Either way
+ * this string is an improvement on a seven-character token no site can place.
+ *
+ * Version numbers here will age. They only need to stay plausible, not current.
+ */
+const LINK_MODE_USER_AGENT = Platform.select({
+  ios: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+  default:
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
+}) as string;
+
+/**
+ * Schemes the WebView should keep for itself. Everything else belongs to some
+ * other app (`mailto:`, `tel:`, `sms:`, `intent:`, `whatsapp:` …) and is handed
+ * to the OS. Framed as an allowlist because the set of app schemes is open-ended
+ * and unknowable, whereas the set the WebView can actually load is not.
+ */
+const WEBVIEW_OWNED_SCHEMES = /^(?:https?|about|blob|data|file):/i;
+
+/** Module-level so the WebView's prop identity is stable across renders. */
+const ALL_ORIGINS = ['*'];
+
+export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', isQNative = false, onShowTransactionWarning, timestamp = 0, allowInsecureLAN = false, minimized = false, onMinimize }: BrowserModalProps) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const webViewRef = useRef<WebView>(null);
+  const { showToast } = useToast();
+
+  // Read as "this is a plain website, not an app the user launched". Everything
+  // mini-app-shaped below is gated on it.
+  const isLink = mode === 'link';
 
   const shouldBypassSsl = allowInsecureLAN && isLanUrl(url);
 
@@ -96,7 +145,10 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
   const [warningType, setWarningType] = useState<'simulation-failed' | 'no-entitlements' | 'not-declared' | 'ok'>('ok');
-  const [showSplash, setShowSplash] = useState(true);
+  // The splash exists to cover a mini app's boot until it calls `ready()`.
+  // A website never will, so in link mode it would just be a 2-second
+  // "Loading app..." card in front of a page that is already painting.
+  const [showSplash, setShowSplash] = useState(!isLink);
   const [showFarcasterPrompt, setShowFarcasterPrompt] = useState(false);
 
   // Compose modal state
@@ -382,10 +434,10 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
   useLayoutEffect(() => {
     if (visible && url) {
       setCurrentUrl(url);
-      setShowSplash(true); // Reset splash when opening new URL
+      setShowSplash(!isLink); // Reset splash when opening new URL (never in link mode)
       setShowFarcasterPrompt(false); // Reset prompt when opening new URL
     }
-  }, [visible, url]);
+  }, [visible, url, isLink]);
 
   // Handle mini app close
   const handleMiniAppClose = useCallback(() => {
@@ -749,6 +801,11 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
     domain,
     url: currentUrl,
     visible,
+    // SECURITY: a website someone linked in chat must not be able to reach the
+    // mini app SDK or the wallet provider. The bridge's origin check authorises
+    // the opened page's own hostname, so "it's a stranger's site" is exactly the
+    // case the origin check cannot catch. See `enabled` in useMiniAppBridge.
+    enabled: !isLink,
     walletInfo,
     onReady: handleMiniAppReady,
     onClose: handleMiniAppClose,
@@ -847,8 +904,9 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
   };
 
   const handleGoBack = () => {
-    // If mini app has back enabled, trigger that first
-    if (backEnabled) {
+    // If mini app has back enabled, trigger that first. Skipped in link mode:
+    // there is no SDK to hand the gesture to, so back means WebView history.
+    if (!isLink && backEnabled) {
       triggerBack();
       return;
     }
@@ -869,6 +927,81 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
     }
   };
 
+  /**
+   * Hand a URL to the OS, telling the user when nothing can take it. Shared by
+   * the in-page interceptors below and used instead of a bare `openURL` so a
+   * failed hand-off is never silent.
+   */
+  const openExternally = useCallback(
+    (target: string) => {
+      Linking.openURL(target).catch(() => {
+        showToast({
+          type: 'error',
+          title: 'Could not open link',
+          message: 'No app on this device can handle it.',
+        });
+      });
+    },
+    [showToast],
+  );
+
+  /**
+   * Governs every navigation the page attempts. Link mode only — mini apps keep
+   * their existing behaviour untouched (they return true unconditionally, which
+   * is what having no handler at all used to do).
+   */
+  const handleShouldStartLoadWithRequest = useCallback(
+    (request: { url: string }): boolean => {
+      if (!isLink) return true;
+
+      const target = request.url;
+
+      // A scheme another app owns (`mailto:`, `tel:`, `intent:`, a deep link).
+      // react-native-webview does handle these itself when they fail its
+      // `originWhitelist` — but via `canOpenURL` with nothing more than a
+      // `console.warn` if that returns false, which is invisible to the user.
+      // Link mode therefore widens the whitelist to `['*']` so these arrive
+      // here instead, and a refusal produces a toast like every other failed
+      // hand-off in this component.
+      if (!WEBVIEW_OWNED_SCHEMES.test(target)) {
+        openExternally(target);
+        return false;
+      }
+
+      // A YouTube link followed *inside* the browser should behave like one
+      // tapped in chat. Excluding the URL we were opened with matters: if this
+      // sheet was ever handed a YouTube URL directly, bouncing out on the
+      // initial load would leave an empty sheet behind.
+      if (target !== url && shouldOpenExternally(target)) {
+        openExternally(target);
+        return false;
+      }
+
+      return true;
+    },
+    [isLink, url, openExternally],
+  );
+
+  /**
+   * `target="_blank"` and `window.open()`. Android drops these on the floor
+   * unless they are handled; load them in this WebView instead so the link at
+   * least goes somewhere.
+   */
+  const handleOpenWindow = useCallback(
+    (event: { nativeEvent: { targetUrl: string } }) => {
+      const targetUrl = event.nativeEvent?.targetUrl;
+      if (!targetUrl) return;
+      if (shouldOpenExternally(targetUrl)) {
+        openExternally(targetUrl);
+        return;
+      }
+      // Driving navigation through `currentUrl` (which feeds `source`) is how
+      // this component already navigates; no JS injection needed.
+      setCurrentUrl(targetUrl);
+    },
+    [openExternally],
+  );
+
   const handleShare = async () => {
     try {
       await Share.share({
@@ -879,14 +1012,33 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
     }
   };
 
+  /**
+   * Open the current page outside the app.
+   *
+   * DELIBERATELY NOT gated on `isLink` — this is shared with the mini app
+   * footer's compass button, and the fix applies to both. The old version was
+   * silent by construction: `canOpenURL` returned false, there was no else
+   * branch, the empty catch swallowed anything thrown, and `onClose()` ran
+   * unconditionally — so a total no-op was indistinguishable from success.
+   *
+   * The behaviour change on the mini app path is therefore intentional and is
+   * the one place this work does not leave that path untouched: a failed open
+   * now keeps the sheet open and says so, instead of closing as if it worked.
+   * Preserving the old silence there would have meant keeping a known bug for
+   * symmetry with itself.
+   */
   const handleOpenInBrowser = async () => {
     try {
-      const canOpen = await Linking.canOpenURL(currentUrl);
-      if (canOpen) {
-        await Linking.openURL(currentUrl);
-      }
+      await Linking.openURL(currentUrl);
     } catch {
-      // Ignore open failures
+      showToast({
+        type: 'error',
+        title: 'Could not open in browser',
+        message: 'No app on this device can handle this link.',
+      });
+      // Deliberately stay open — closing on failure is what made this look
+      // like it had worked.
+      return;
     }
     onClose();
   };
@@ -996,14 +1148,21 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
             <Text style={styles.domainText} numberOfLines={1}>
               {getDomain(currentUrl, isQNative)}
             </Text>
-            {title && (
+            {/* The page title gets a second row only for mini apps. In link
+                mode the header is one row: the domain is the thing that tells
+                the user where they are, and a second row costs page height on
+                every site for a string the page already shows. */}
+            {!isLink && title && (
               <Text style={styles.pageTitle} numberOfLines={1}>
                 {title}
               </Text>
             )}
           </View>
-          {/* Wallet Indicator - shows which wallet is connected to the mini app */}
-          {activeWallet && (
+          {/* Wallet Indicator - which wallet is connected to the mini app.
+              Never in link mode: on a news article it implies a wallet is
+              connected to a site that never asked for one, and after the
+              bridge gating above that would be untrue as well as noisy. */}
+          {!isLink && activeWallet && (
             <TouchableOpacity style={styles.walletIndicator} onPress={() => setShowWalletSelector(true)}>
               <View style={[styles.walletDot, activeType === 'warpcast' && styles.walletDotWarpcast]} />
               <Text style={styles.walletIndicatorText}>
@@ -1011,7 +1170,25 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
               </Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+          {/* Reload sits in the header in link mode, next to the URL it acts
+              on — matching the pattern the older browser route already used —
+              which frees the footer for the one control that is a decision. */}
+          {isLink && (
+            <TouchableOpacity
+              onPress={handleRefresh}
+              style={styles.headerButton}
+              accessibilityRole="button"
+              accessibilityLabel="Reload page"
+            >
+              <IconSymbol name="arrow.clockwise" size={18} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeButton}
+            accessibilityRole="button"
+            accessibilityLabel="Close browser"
+          >
             <IconSymbol name="xmark.circle.fill" size={24} color={theme.colors.textMuted} />
           </TouchableOpacity>
         </View>
@@ -1056,8 +1233,23 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
               </View>
             )}
             style={styles.webView}
-            // User agent - use "warpcast" for Farcaster mini app compatibility
-            userAgent="warpcast"
+            // "warpcast" is a seven-character token, not a browser UA string —
+            // Farcaster mini apps sniff for it. Sending it to an ordinary
+            // website is how a normal page ends up being served a fallback or a
+            // bot challenge, so link mode gets a real mobile browser UA.
+            userAgent={isLink ? LINK_MODE_USER_AGENT : 'warpcast'}
+            onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+            // Link mode only. The library checks `originWhitelist` BEFORE
+            // calling the handler above and swallows anything that fails it, so
+            // without widening this the non-http branch there would never run.
+            // `undefined` leaves mini apps on the library default
+            // (`['http://*','https://*']`) exactly as before.
+            originWhitelist={isLink ? ALL_ORIGINS : undefined}
+            // `target="_blank"` does nothing on Android unless the resulting
+            // window-open is handled. `setSupportMultipleWindows` already
+            // defaults to true, so it is deliberately NOT set here — passing it
+            // would flip miniapp mode away from the default it runs on today.
+            onOpenWindow={isLink ? handleOpenWindow : undefined}
             // Enable back/forward gestures based on mini app state
             allowsBackForwardNavigationGestures={!backEnabled}
             // Security settings
@@ -1110,8 +1302,69 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
         </View>
       )}
 
-      {/* Navigation Bar */}
+      {/* Navigation Bar — link mode gets its own, deliberately. The mini app
+          footer below is left exactly as it was so that path cannot regress. */}
       {/* Bottom inset so the nav buttons clear the system nav bar. */}
+      {isLink ? (
+        <View style={[styles.navigationBarLink, { paddingBottom: Skin.space(12) + insets.bottom }]}>
+          <View style={styles.navGroup}>
+            <TouchableOpacity
+              onPress={handleGoBack}
+              disabled={!canGoBack}
+              style={styles.navButton}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+              accessibilityState={{ disabled: !canGoBack }}
+            >
+              <IconSymbol
+                name="chevron.left"
+                size={24}
+                color={canGoBack ? theme.colors.textMain : theme.colors.textMuted}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleGoForward}
+              disabled={!canGoForward}
+              style={styles.navButton}
+              accessibilityRole="button"
+              accessibilityLabel="Go forward"
+              accessibilityState={{ disabled: !canGoForward }}
+            >
+              <IconSymbol
+                name="chevron.right"
+                size={24}
+                color={canGoForward ? theme.colors.textMain : theme.colors.textMuted}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleShare}
+              style={styles.navButton}
+              accessibilityRole="button"
+              accessibilityLabel="Share link"
+            >
+              <IconSymbol name="square.and.arrow.up" size={20} color={theme.colors.textMain} />
+            </TouchableOpacity>
+          </View>
+
+          {/* The one footer item that is a decision rather than a nudge, so it
+              carries a label and visual weight. A bare compass glyph reads as
+              nothing here: Telegram gets away with one on iOS only because
+              Safari's compass is a system-recognised app icon, and we can
+              neither ship that on Android nor name the user's browser. Same
+              control, same place, same label on both platforms. */}
+          <TouchableOpacity
+            onPress={handleOpenInBrowser}
+            style={styles.openExternalButton}
+            accessibilityRole="button"
+            accessibilityLabel="Open in browser"
+          >
+            <Text style={styles.openExternalText}>Open in browser</Text>
+            <IconSymbol name="arrow.up.right.square" size={16} color={theme.colors.primary} />
+          </TouchableOpacity>
+        </View>
+      ) : (
       <View style={[styles.navigationBar, { paddingBottom: Skin.space(12) + insets.bottom }]}>
         <TouchableOpacity
           onPress={handleGoBack}
@@ -1166,6 +1419,7 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
           <IconSymbol name="safari" size={20} color={theme.colors.textMain} />
         </TouchableOpacity>
       </View>
+      )}
 
       {/* Farcaster Required Modal */}
       <Modal
@@ -1233,7 +1487,7 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
       </Modal>
 
       {/* Compose Cast Overlay - renders inside BaseModal to avoid modal stacking issues */}
-      {composeVisible && (
+      {!isLink && composeVisible && (
         <KeyboardAvoidingView
           style={styles.composeOverlay}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1320,7 +1574,7 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
       )}
 
       {/* Profile Overlay - shows when viewProfile is called from mini app */}
-      {profileOverlay && (
+      {!isLink && profileOverlay && (
         <View style={styles.overlayContainer}>
           <ProfileView
             fid={profileOverlay.fid}
@@ -1338,7 +1592,7 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
       )}
 
       {/* Cast/Thread Overlay - shows when viewCast is called from mini app */}
-      {castOverlay && (
+      {!isLink && castOverlay && (
         <View style={styles.overlayContainer}>
           <ThreadDetailView
             username={castOverlay.username}
@@ -1358,7 +1612,7 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
       )}
 
       {/* Wallet Selector Sheet */}
-      {showWalletSelector && (
+      {!isLink && showWalletSelector && (
         <TouchableOpacity
           style={styles.walletSelectorBackdrop}
           activeOpacity={1}
@@ -1402,38 +1656,45 @@ export default function BrowserModal({ visible, url, onClose, isQNative = false,
         </TouchableOpacity>
       )}
 
-      {/* Mini App Approval Modal - for wallet transaction/signing approvals */}
-      <MiniAppApprovalModal
-        visible={showApprovalModal}
-        request={approvalRequest}
-        onClose={handleApprovalModalClose}
-      />
+      {/* Wallet surfaces. Never mounted in link mode: with the bridge disabled
+          nothing can open them, and a browser showing someone's link has no
+          business carrying a transaction approval sheet in its tree. */}
+      {!isLink && (
+        <>
+          {/* Mini App Approval Modal - for wallet transaction/signing approvals */}
+          <MiniAppApprovalModal
+            visible={showApprovalModal}
+            request={approvalRequest}
+            onClose={handleApprovalModalClose}
+          />
 
-      {/* Swap Modal - opened by mini apps requesting token swap */}
-      <SwapModal
-        visible={showSwapModal}
-        onClose={() => {
-          setShowSwapModal(false);
-          setSwapInitialBuyToken(undefined);
-        }}
-        initialBuyToken={swapInitialBuyToken}
-      />
+          {/* Swap Modal - opened by mini apps requesting token swap */}
+          <SwapModal
+            visible={showSwapModal}
+            onClose={() => {
+              setShowSwapModal(false);
+              setSwapInitialBuyToken(undefined);
+            }}
+            initialBuyToken={swapInitialBuyToken}
+          />
 
-      {/* Send Modal - opened by mini apps requesting the send-token flow */}
-      <SendModal
-        visible={showSendModal}
-        onClose={() => {
-          setShowSendModal(false);
-          // Clear the prefill so the next open from a different
-          // surface (or no miniapp at all) starts fresh.
-          setSendInitialAsset(null);
-          setSendInitialRecipient(undefined);
-          setSendInitialAmount(undefined);
-        }}
-        preselectedAsset={sendInitialAsset}
-        initialRecipient={sendInitialRecipient}
-        initialAmount={sendInitialAmount}
-      />
+          {/* Send Modal - opened by mini apps requesting the send-token flow */}
+          <SendModal
+            visible={showSendModal}
+            onClose={() => {
+              setShowSendModal(false);
+              // Clear the prefill so the next open from a different
+              // surface (or no miniapp at all) starts fresh.
+              setSendInitialAsset(null);
+              setSendInitialRecipient(undefined);
+              setSendInitialAmount(undefined);
+            }}
+            preselectedAsset={sendInitialAsset}
+            initialRecipient={sendInitialRecipient}
+            initialAmount={sendInitialAmount}
+          />
+        </>
+      )}
       </Animated.View>
     </View>
   );
@@ -1480,6 +1741,11 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     },
     closeButton: {
       marginLeft: Skin.space(8),
+    },
+    // Reload, in the header next to the URL it acts on (link mode only).
+    headerButton: {
+      marginLeft: Skin.space(8),
+      padding: Skin.space(4),
     },
     loadingBar: {
       height: 2,
@@ -1591,6 +1857,39 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets, isQN
     },
     navButton: {
       padding: Skin.space(8),
+    },
+    // Link-mode footer: navigation grouped left, the external-open decision
+    // pushed right so it reads as a separate kind of thing, not a fifth nudge.
+    navigationBarLink: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingTop: Skin.space(12),
+      paddingHorizontal: Skin.space(12),
+      // paddingBottom applied inline = Skin.space(12) + insets.bottom.
+      borderTopWidth: Skin.border(1),
+      borderTopColor: theme.colors.border,
+      backgroundColor: theme.colors.background,
+    },
+    navGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(4),
+    },
+    openExternalButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Skin.space(6),
+      backgroundColor: theme.colors.surface2,
+      borderRadius: Skin.radius(999),
+      paddingHorizontal: Skin.space(14),
+      paddingVertical: Skin.space(10),
+    },
+    openExternalText: {
+      fontSize: Skin.font(14),
+      fontFamily: theme.fonts.medium.fontFamily,
+      fontWeight: theme.fonts.medium.fontWeight,
+      color: theme.colors.primary,
     },
     farcasterModalOverlay: {
       flex: 1,
