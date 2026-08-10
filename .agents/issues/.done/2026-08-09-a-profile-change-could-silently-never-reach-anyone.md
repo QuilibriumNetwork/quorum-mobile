@@ -130,38 +130,44 @@ plus a temporary three-way diagnostic log distinguishing "effect never ran" from
 device log buffer holds roughly forty seconds of this app's output, so both
 casual routes lose the evidence before anyone looks.
 
-## What still isn't protected
+## How this is protected now
 
-**Nothing would catch a regression of this.** The "710 tests pass either way"
-above is not a figure of speech: no test executes this effect. Of the three
-suites that name `WebSocketContext`, two (`dmSelfEchoGuards`, `receiptWiring`)
-read the file as *source text* and assert on unrelated regions, and the third
-(`groupDeletionGuard`) mocks the module outright. Move the claim back above the
-`setTimeout` and the suite stays green.
+It was unprotected when this file was first written: "710 tests pass either way"
+was literal, because no test executed the effect. Of the three suites naming
+`WebSocketContext`, two (`dmSelfEchoGuards`, `receiptWiring`) read the file as
+*source text* and assert on unrelated regions, and the third
+(`groupDeletionGuard`) mocks the module outright.
 
-`primaryNameBroadcastSignature.test.ts` does **not** cover this. It guards the
-sibling defect from the same branch — `primaryUsername` missing from the
-*signature* — which is a different failure with the same symptom. Having it
-green is easy to misread as this race being covered.
+`__tests__/profileRebroadcastClaimOrdering.test.ts` now pins it, following the
+source-slicing convention `receiptWiring.test.ts` already uses. Five assertions:
+the claim sits **after** `setTimeout(`; the early return on an unchanged
+fingerprint still exists **before** it (so the fix cannot be "achieved" by
+deleting the dedupe and always sending); the failure path still resets the
+fingerprint to `null`; and `primaryUsername` remains in both the fingerprint and
+the dep array.
 
-The cheap fix follows a convention the repo already uses. `receiptWiring.test.ts`
-slices the source between two anchors and asserts ordering directly:
+**It was verified by reverting.** Moving the claim back above the `setTimeout`
+turns the ordering assertion red — and only that one, the other four stay green,
+so it is sensitive to this specific ordering rather than to something incidental.
+That check is the point; an assertion that passes either way would have been
+worse than nothing here, given this bug shipped past a green suite once already.
 
-```ts
-expect(body.indexOf('isReadAckTimestampValid')).toBeLessThan(body.indexOf('setQueryData'));
-```
+Note `primaryNameBroadcastSignature.test.ts` does **not** cover this race. It
+guards the sibling defect from the same branch — `primaryUsername` missing from
+the *signature* — a different failure with the same symptom. Its greenness is
+easy to misread as coverage for this.
 
-The same shape would pin this one: assert `lastProfileRebroadcastSigRef.current = sig`
-appears **after** `setTimeout(` within the effect. That is the whole invariant,
-and it is one assertion. Not done here — flagged rather than actioned, since the
-issue was already closed.
+**Known limitation:** a source-text test pins the shipped *shape*, not the
+runtime behaviour. Refactoring the effect (extracting it into a hook, renaming
+the ref) will break it for reasons that are not regressions. When that happens
+the anchors need updating, not the test deleting — the invariant it encodes is
+still real.
 
-## Where the fix currently lives
+## Where the fix lives
 
-Commit `bec2980`, on branch `feat/verify-a-claimed-q-name-before-rendering-it`.
-**Not on `master` as of this review** — anyone grepping `master` for the fix will
-find the broken ordering and reasonably conclude the bug is still open. It lands
-when that branch ships.
+Shipped to `master` in `e93cd26` (PR #245), squashed from `bec2980` on
+`feat/verify-a-claimed-q-name-before-rendering-it`. The original hash will not
+appear on `master` because the merge was a squash.
 
 ---
 *Last updated: 2026-08-09*
@@ -175,3 +181,10 @@ when that branch ships.
 - Added file:line anchors for the fix (WebSocketContext.tsx guard :6570, claim :6593, cleanup :6694, failure-path reset :6690).
 - Recorded that the fix is only on branch feat/verify-a-claimed-q-name-before-rendering-it (commit bec2980), NOT on master — a reader grepping master finds the broken ordering and would think the bug is open.
 - Did not touch: frontmatter (type/status/folder already agree), the What was wrong account, or the on-device measurements.
+
+**2026-08-10 - claude-opus-5**: Second pass: actioned the regression-test gap the first pass only flagged. Status stays done; the fix itself was already shipped in e93cd26.
+- Added __tests__/profileRebroadcastClaimOrdering.test.ts — 5 assertions pinning the claim-after-setTimeout ordering, the surviving early-return dedupe, the failure-path reset, and primaryUsername in both fingerprint and dep array. Follows the source-slicing convention from receiptWiring.test.ts.
+- VERIFIED BY REVERTING, not by reading: moved the claim back above the setTimeout and the ordering assertion went red (claim index 1348 vs timer 1409), while the other four stayed green. Restored the file via git checkout and re-confirmed the claim is back at :6593. Suite is 715 passed / 56 suites, up from 710 / 55. Lint clean on the new file.
+- Rewrote the 'What still isn't protected' section, which my own first pass had left factually stale the moment the test landed. It now records what protects this, that it was red/green verified, and the honest limitation: a source-text test pins the shipped shape, so a legitimate refactor breaks it and the anchors should be updated rather than the test deleted.
+- Corrected the branch note from the first pass: the fix IS on master, as squash commit e93cd26 (PR #245). The first pass reported it as unmerged, which was true at the time but read as a standing fact.
+- Did not touch the What was wrong account, the on-device measurements, or the frontmatter.
