@@ -195,8 +195,20 @@ historical banners → expect "unavailable/ended" rendering. Pass/fail only.
 
 ## Status
 
-**2026-08-10 — F1, F2 and F3 implemented on `fix/space-call-stale-banner`.**
-Root cause established first (both layers measured/read, none inferred-only).
+**2026-08-10 — shipped in PR #248** (`fix: a call that never started no longer
+leaves a permanent join banner`). F1, F2 and F3 landed; **F4 and F5 remain
+open**, so this issue stays in progress. Root cause was established first (both
+layers measured/read, none inferred-only).
+
+Layer 2 (the client-side zombie banner) is fixed. **Layer 1 is not and cannot be
+fixed here** — production still serves no call routes, so space calls and DM
+calls alike still do not work. What changed is that failing now costs a toast
+instead of a permanent artifact.
+
+Device-confirmed by Kyn on 2026-08-10: starting a voice/video call in a channel
+shows the error toast and leaves **no banner**. Not yet confirmed on device: that
+pre-existing zombie banners in channel history now render as "call ended" (the
+retroactive half of F3), and the offline behaviour.
 
 Shipped in this branch:
 
@@ -226,13 +238,20 @@ row-recycling flicker, the untested cache, the 404-vs-F5 coupling, and this
 section, which the first version of the commit left saying "no code changes
 yet").
 
-**Not verified on a device.** Nothing here can be: production serves no call
-routes, so the only observable behaviour today is the failure path. See
-Verification below.
+Still open, and why this file is not in `.done/`:
 
-Still open: **F4** (end-announcement semantics) and **F5** (server routes)
-both need the Lead Dev. The 404 → `gone` mapping in `probeRoomLiveness` is
-correct only while F5 is unshipped and carries an explicit revisit note.
+- **F5 — the server does not serve the call routes.** Nothing in this repo can
+  fix it, and until it ships no call of any kind works. Needs the Lead Dev.
+- **F4 — end-announcement semantics.** Any participant leaving still announces
+  the call's end for everyone. Protocol decision, needs the Lead Dev.
+- **The 404 → `gone` mapping** in `probeRoomLiveness` is correct only while F5
+  is unshipped; it carries an explicit revisit note at the call site.
+- **DM calls are broken by the same missing routes** (`CallContext.tsx:395`
+  allocates from `/relay/circuit`). Untouched here, and they leave no stale
+  artifact — a DM call announces its END as a `call-event`, so a failure renders
+  as a static "failed" row. That asymmetry is exactly why the zombie banner was
+  a space-call-only bug.
+- **iOS**: the header busy state is Android-only so far, checklist item #13.
 
 ## Verification
 
