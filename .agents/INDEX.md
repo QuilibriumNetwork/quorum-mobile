@@ -26,6 +26,7 @@ This is the main index for all documentation, bug reports, and task management.
 
 ### In Progress
 
+- 🐛 [Space calls never start, and every failed start leaves a permanent banner](issues/2026-08-10-space-calls-dead-endpoints-and-stale-banner.md)
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
 
@@ -88,6 +89,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [The toggle is local state that never reconciles with the server](issues/.open/2026-08-06-public-profile-toggle-on-with-nothing-published.md)
 - 🐛 [`POST /users/:addr/public-profile` refuses any `primary_username`](issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md)
 - 🐛 [Somebody else can take your name away, and nothing tells you](issues/.open/2026-08-09-a-delegated-name-can-be-revoked-and-you-are-the-last-to-know.md)
+- 🐛 [The invite contact picker renders an unresolved name](issues/.open/2026-08-10-invite-contact-picker-renders-an-unresolved-name.md)
 - 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
 - 📋 [Message composer — further improvements](issues/.open/2026-06-16-message-composer-further-improvements.md)
 - 📋 [Split profile header has no visible "edit" cue](issues/.open/2026-06-16-split-profile-edit-affordance-not-discoverable.md)
@@ -235,6 +237,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [The same member renders differently depending on which screen you are on](issues/.done/2026-08-04-one-identity-resolver-so-names-and-avatars-match-everywhere.md)
 - 📋 [Every in-app notification says who and what](issues/.done/2026-08-05-rich-in-app-notifications-plan.md)
 - 📋 [Scoped "Clear" in the Notifications tab, including Farcaster](issues/.done/2026-08-05-scoped-clear-notifications-including-farcaster.md)
+- 📋 [In-app browser: link mode, native app handoff, chrome rebuild](issues/.done/2026-08-10-in-app-browser-link-handling-plan.md)
 
 ### 2026 06 21 Mute And Block Overhaul
 
@@ -268,4 +271,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-10 09:06:44
+**Last Updated**: 2026-08-10 16:34:16
