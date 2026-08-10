@@ -1,5 +1,5 @@
 /**
- * SpaceCallBubble - Renders a joinable space call indicator inline in the message list.
+ * SpaceCallBubble - Renders a space call indicator inline in the message list.
  *
  * Active call:
  *   Shows who started the call, a live elapsed timer, and a "Join" button.
@@ -7,6 +7,14 @@
  *
  * Ended call:
  *   Shows a static summary with duration.
+ *
+ * Unavailable call:
+ *   A start message whose call is demonstrably over, but whose `space-call-end`
+ *   never arrived — a join that failed, a last participant who crashed, an SFU
+ *   that dropped the room. Shown as a static summary WITHOUT a duration,
+ *   because we know it is over but not when it ended. Before this existed
+ *   those bubbles claimed "call in progress" with a running timer forever.
+ *   Which of the three applies is decided by `useSpaceCallStatus`.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -14,6 +22,8 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useSpaceCall } from '@/context/SpaceCallContext';
+import { useToast } from '@/context/ToastContext';
+import { useSpaceCallStatus } from '@/hooks/chat/useSpaceCallStatus';
 import type { AppTheme } from '@/theme';
 import type { DisplayMessage } from './types';
 import { logger } from '@quilibrium/quorum-shared';
@@ -54,42 +64,63 @@ export function SpaceCallBubble({
   const callId = message.spaceCallId;
 
   const { state: spaceCallState, joinCall, setOverlayMinimized } = useSpaceCall();
+  const { showToast } = useToast();
 
   // Whether we are currently in THIS call
   const isInThisCall = spaceCallState.activeRoomId === callId;
   const isJoining = useRef(false);
   const [joining, setJoining] = useState(false);
 
-  // Live elapsed timer (only when active)
-  const [elapsed, setElapsed] = useState(0);
+  // The clock the whole bubble reads: it drives the visible timer AND the
+  // staleness/grace branches in the status, so the two can never disagree.
+  const [now, setNow] = useState(() => Date.now());
+
+  // `isEnded` is the caller's verdict (it holds the whole message list and
+  // matched the end message); `endedAt` is only the timestamp for the
+  // duration. Keep them agreeing here so an end without a timestamp still
+  // reads as ended rather than falling through to the liveness branches.
+  const endedAtMs = isEnded ? (endedAt ?? message.timestamp) : undefined;
+
+  const status = useSpaceCallStatus({
+    callId,
+    startedAt: message.timestamp,
+    endedAt: endedAtMs,
+    selfInCall: isInThisCall,
+    now,
+  });
 
   useEffect(() => {
-    if (isEnded) {
-      // Show final duration
-      if (endedAt && message.timestamp) {
-        setElapsed(Math.max(0, Math.floor((endedAt - message.timestamp) / 1000)));
-      }
-      return;
-    }
-
-    // Start live timer
-    const startTime = message.timestamp;
-    const tick = () => {
-      setElapsed(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
-    };
+    // Only a live call needs a ticking clock. Once the bubble settles into
+    // ended or unavailable, `now` freezes \u2014 which is also what keeps the
+    // status stable instead of re-deciding every second forever.
+    if (status.state !== 'live') return;
+    const tick = () => setNow(Date.now());
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [isEnded, endedAt, message.timestamp]);
+  }, [status.state]);
+
+  const elapsed =
+    status.state === 'ended' && endedAtMs != null
+      ? Math.max(0, Math.floor((endedAtMs - message.timestamp) / 1000))
+      : Math.max(0, Math.floor((now - message.timestamp) / 1000));
 
   const handleJoin = async () => {
     if (!callId || !spaceId || !channelId || isJoining.current) return;
     isJoining.current = true;
     setJoining(true);
     try {
+      // A `false` return means the join was declined as a duplicate (we are
+      // already joining or still tearing down a previous call) \u2014 a no-op, not
+      // a failure, so it gets no toast.
       await joinCall(callId, spaceId, channelId, isVideo);
     } catch (e) {
       logger.debug('[SpaceCallBubble] Failed to join:', e);
+      showToast({
+        type: 'error',
+        title: 'Could not join the call',
+        message: 'The call service could not be reached. Please try again.',
+      });
     } finally {
       isJoining.current = false;
       setJoining(false);
@@ -98,7 +129,7 @@ export function SpaceCallBubble({
 
   const styles = createStyles(theme);
 
-  if (isEnded) {
+  if (status.state === 'ended') {
     // Static ended summary
     return (
       <View style={styles.container}>
@@ -107,6 +138,19 @@ export function SpaceCallBubble({
           <Text style={styles.endedText}>
             {label} call {'\u00B7'} {formatElapsed(elapsed)}
           </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (status.state === 'unavailable') {
+    // Over, but nobody told the channel when. Saying "ended" without inventing
+    // a duration is the honest version of what we know.
+    return (
+      <View style={styles.container}>
+        <View style={styles.endedRow}>
+          <IconSymbol name={iconName} size={16} color={theme.colors.textMuted} />
+          <Text style={styles.endedText}>{label} call ended</Text>
         </View>
       </View>
     );
@@ -172,7 +216,7 @@ export function SpaceCallBubble({
                 <Text style={[styles.expandButtonText, { color: theme.colors.textMain }]}>Expand</Text>
               </TouchableOpacity>
             </View>
-          ) : (
+          ) : status.joinable ? (
             <TouchableOpacity
               style={styles.joinButton}
               onPress={handleJoin}
@@ -185,7 +229,7 @@ export function SpaceCallBubble({
                 <Text style={styles.joinButtonText}>Join</Text>
               )}
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
       </View>
     </View>

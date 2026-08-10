@@ -8,6 +8,7 @@
 
 import { getApiConfig } from '../api/config';
 import { logger } from '@quilibrium/quorum-shared';
+import type { SpaceCallLiveness } from './spaceCallStatus';
 export interface SFUJoinParams {
   roomId: string;
   spaceId: string;
@@ -106,6 +107,47 @@ export class SFUClient {
     } catch {
       // Best-effort — the SFU will detect the disconnect via PeerConnection state
       logger.debug('[SFUClient] leave request failed (best-effort)');
+    }
+  }
+
+  /**
+   * Is this room live right now?
+   *
+   * Deliberately NOT expressed as `getRoomInfo() != null`. That helper folds
+   * "the server says there is no such room" together with "the request never
+   * completed" into a single `null`, and the two must not be confused by the
+   * caller that decides whether to show a channel a joinable call: treating an
+   * offline probe as a dead room would hide a real call from anyone with a
+   * flaky connection.
+   *
+   * - `live`    — the room exists and is active.
+   * - `gone`    — the server answered, and there is nothing to join. A 404 is
+   *               included here: today it also covers the call routes being
+   *               absent from the deployment entirely, which likewise means no
+   *               call can be live.
+   * - `unknown` — we failed to ask (offline, timeout, 5xx). Says nothing about
+   *               the room.
+   */
+  async probeRoomLiveness(
+    roomId: string,
+    opts: { timeoutMs?: number } = {},
+  ): Promise<SpaceCallLiveness> {
+    const url = `${this.getBaseUrl()}/sfu/room/${encodeURIComponent(roomId)}`;
+    const controller = new AbortController();
+    // A probe that never settles would leave the banner permanently
+    // "unknown", which renders as live — the exact stuck state this replaced.
+    const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 8000);
+
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (response.status === 404) return 'gone';
+      if (!response.ok) return 'unknown';
+      const data = await response.json();
+      return data?.active ? 'live' : 'gone';
+    } catch {
+      return 'unknown';
+    } finally {
+      clearTimeout(timer);
     }
   }
 

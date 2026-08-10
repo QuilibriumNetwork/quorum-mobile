@@ -162,32 +162,32 @@ both are Lead Dev territory (see [[quorum-mobile-architecture-caution]]).
 - **F5 — server: register the call routes.** Report to Lead Dev with the
   MEASURED section above. Nothing in this repo can fix a missing route.
 
-## Automated tests (the harness angle)
+## Automated tests
 
-The repo has a headless harness (`dev/harness/`, plain-Node Jest, real
-networking, mobile's own modules with device leaves shimmed) and currently
-**zero app-level unit tests**. Two instruments are worth building:
+> **Correction (2026-08-10):** an earlier revision of this doc claimed the
+> repo had "zero app-level unit tests". That was wrong — there are **57**
+> tracked suites in `__tests__/`, run by `yarn test` (jest-expo preset,
+> configured in `jest.config.js`). The error came from a glob that returned
+> only `node_modules` hits and was truncated before reaching the real ones.
+> The conventions below follow those existing suites.
 
-1. **`call-infra.scenario.ts` — signaling-plane probe (networked).**
-   Imports mobile's own `RelayClient`/`SFUClient` and asserts the
-   signaling plane is reachable: route-exists checks (anything but the
-   bare-404 not-registered response) and, with a harness identity's Ed448
-   signer, a real `allocateCircuit` + `sfu/join` with a synthetic SDP
-   offer. Runs as its own script (`yarn harness:call-infra`), NOT in the
-   default suite — today it fails by design; it is the instrument that
-   proves calls cannot work, documents the exact failure, and goes green
-   the day the server ships the routes. Honest scope limit: Node cannot
-   run `react-native-webrtc`, so the media plane (ICE/DTLS/RTP through
-   TURN) stays untestable cold; this covers everything up to and including
-   the SDP answer.
-2. **Pure banner-state derivation + unit tests.** Extract the
-   MessagesList/SpaceCallBubble logic into a pure function —
-   `deriveSpaceCallStatus({ startMsg, endMsgs, roomInfo, now })` →
-   `live | ended | stale | unknown` — and give it the repo's first app
-   unit tests (`yarn test` is configured with jest-expo and collects
-   nothing today). Covers: end-message wins, grace window, liveness
-   verdicts, offline fallback, F1/F3 regressions. Green/red is readable
-   without touching a device.
+**Doing: unit tests on the extracted derivation function.** The F3 logic is
+genuinely branchy (end-message precedence, grace window, room-gone vs
+probe-unreachable, staleness cutoff) and every branch is invisible from the
+UI — the exact "silently wrong for months" shape. Extracted as a pure
+`deriveSpaceCallStatus({ startedAt, endedAt, liveness, now })` in
+`services/calling/spaceCallStatus.ts`, tested in
+`__tests__/spaceCallStatus.test.ts`.
+
+**Not doing (deliberately): the `call-infra` harness scenario.** Proposed in
+an earlier revision, dropped on review. Its pass branch cannot be validated
+against anything while the endpoints 404, so it would be a test whose green
+path is guesswork — the kind that manufactures false confidence. Its
+diagnostic value is already delivered by the curl probe recorded above. The
+right time to build it is the day the routes ship, when it can be validated
+against a working server. Standing scope limit either way: Node cannot run
+`react-native-webrtc`, so the media plane (ICE/DTLS/RTP through TURN) is not
+cold-testable at any effort.
 
 Manual UI residue (one short scripted pass, after fixes): start a call on
 the phone → expect a toast and **no** banner in the channel; existing

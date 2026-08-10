@@ -123,7 +123,17 @@ export interface SpaceCallContextValue {
   /** Whether the full-screen call view is minimized to PiP */
   isOverlayMinimized: boolean;
   setOverlayMinimized: (minimized: boolean) => void;
-  joinCall: (roomId: string, spaceId: string, channelId: string, withVideo?: boolean) => Promise<void>;
+  /**
+   * Join (or create) a room.
+   *
+   * Resolves `true` when this device is in the call, and `false` when the
+   * request was declined as a duplicate — already joining, or still tearing
+   * down a previous call. Callers MUST NOT treat `false` as success: the
+   * channel-level "call started" announcement is gated on it, and announcing a
+   * call nobody joined is exactly how a permanent unjoinable banner is minted.
+   * A genuine failure (no circuit, SFU refused, no microphone) throws.
+   */
+  joinCall: (roomId: string, spaceId: string, channelId: string, withVideo?: boolean) => Promise<boolean>;
   leaveCall: () => Promise<void>;
   toggleMute: () => void;
   toggleVideo: () => void;
@@ -597,7 +607,7 @@ export function SpaceCallProvider({ children }: { children: React.ReactNode }) {
   // the current implementation even after re-renders.
   enterEndingRef.current = enterEnding;
 
-  const joinCall = useCallback(async (roomId: string, spaceId: string, channelId: string, withVideo: boolean = false) => {
+  const joinCall = useCallback(async (roomId: string, spaceId: string, channelId: string, withVideo: boolean = false): Promise<boolean> => {
     if (!user?.address || !signForRelay) {
       throw new Error('Not authenticated');
     }
@@ -606,7 +616,7 @@ export function SpaceCallProvider({ children }: { children: React.ReactNode }) {
     // before starting a new one — otherwise we'd race the cleanup.
     if (phaseRef.current === 'ending') {
       callDiag.pushEvent('call.duplicate_join_blocked', { reason: 'ending' });
-      return;
+      return false;
     }
     // If we're already in a call (connected/recovering), leave first.
     if (phaseRef.current === 'connected' || phaseRef.current === 'recovering') {
@@ -614,7 +624,7 @@ export function SpaceCallProvider({ children }: { children: React.ReactNode }) {
     }
     if (!transition('joining', 'user_join')) {
       callDiag.pushEvent('call.duplicate_join_blocked', { reason: 'already_joining' });
-      return;
+      return false;
     }
 
     try {
@@ -933,6 +943,7 @@ export function SpaceCallProvider({ children }: { children: React.ReactNode }) {
       }
 
       logger.debug(`[SpaceCall] Joined room ${roomId} with ${result.participants.length} participant(s)`);
+      return true;
     } catch (e) {
       callDiag.pushEvent('call.join.error', {
         err: (e instanceof Error && e.name) ? e.name : 'Error',

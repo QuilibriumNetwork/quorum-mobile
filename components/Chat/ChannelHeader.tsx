@@ -10,6 +10,7 @@ import type { AppTheme } from '@/theme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ScreenHeader, headerIconHitSlop } from '@/components/ui/ScreenHeader';
 import React from 'react';
+import { ActivityIndicator } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 
 interface ChannelHeaderProps {
@@ -19,6 +20,12 @@ interface ChannelHeaderProps {
   onBack: () => void;
   onStartVideoCall: () => void;
   onStartAudioCall: () => void;
+  /**
+   * A call start is in flight. Joining the room happens BEFORE the call is
+   * announced, and takes seconds with no UI of its own, so both buttons show a
+   * spinner and stop accepting taps until it resolves.
+   */
+  startingCall?: boolean;
   /** Invite is owner-only, mirroring the space settings entry point. */
   onInvite?: () => void;
   onOpenSettings: () => void;
@@ -31,6 +38,7 @@ export const ChannelHeader = React.memo(function ChannelHeader({
   onBack,
   onStartVideoCall,
   onStartAudioCall,
+  startingCall = false,
   onInvite,
   onOpenSettings,
   theme,
@@ -44,22 +52,32 @@ export const ChannelHeader = React.memo(function ChannelHeader({
       theme={theme}
       right={
         <>
-          <TouchableOpacity
-            onPress={onStartVideoCall}
-            hitSlop={headerIconHitSlop}
-            accessibilityRole="button"
-            accessibilityLabel="Start a video call"
-          >
-            <IconSymbol name="video" color={theme.colors.primary} size={20} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={onStartAudioCall}
-            hitSlop={headerIconHitSlop}
-            accessibilityRole="button"
-            accessibilityLabel="Start a voice call"
-          >
-            <IconSymbol name="phone" color={theme.colors.primary} size={20} />
-          </TouchableOpacity>
+          {startingCall ? (
+            <ActivityIndicator
+              size="small"
+              color={theme.colors.primary}
+              accessibilityLabel="Starting the call"
+            />
+          ) : (
+            <>
+              <TouchableOpacity
+                onPress={onStartVideoCall}
+                hitSlop={headerIconHitSlop}
+                accessibilityRole="button"
+                accessibilityLabel="Start a video call"
+              >
+                <IconSymbol name="video" color={theme.colors.primary} size={20} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={onStartAudioCall}
+                hitSlop={headerIconHitSlop}
+                accessibilityRole="button"
+                accessibilityLabel="Start a voice call"
+              >
+                <IconSymbol name="phone" color={theme.colors.primary} size={20} />
+              </TouchableOpacity>
+            </>
+          )}
           {onInvite && (
             <TouchableOpacity
               onPress={onInvite}
