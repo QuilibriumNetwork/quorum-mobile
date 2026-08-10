@@ -19,18 +19,23 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWebSocket, useSpaceCall } from '@/context';
 import { useQueryClient } from '@tanstack/react-query';
-import { canManageReadOnlyChannel, queryKeys, type Message } from '@quilibrium/quorum-shared';
-import { sendSpaceCallStartMessage } from '@/services/space/spaceMessageService';
+import { canManageReadOnlyChannel, logger, queryKeys, type Message } from '@quilibrium/quorum-shared';
+import { createSpaceCallId, sendSpaceCallStartMessage } from '@/services/space/spaceMessageService';
+import { useToast } from '@/context/ToastContext';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 // Prefetch helpers: warm the lazy chunks in the background after the screen
 // mounts so the first tap on the gear / invite / a profile opens instantly
 // instead of waiting on the on-demand import. SpaceSettingsModal in particular
 // is a large component, so warming it removes a noticeable first-open delay.
+/** Upper bound on how long the header's call buttons may stay hidden behind
+ *  the "starting a call" spinner. See the watchdog in `startSpaceCall`. */
+const CALL_START_BUSY_TIMEOUT_MS = 60_000;
+
 const importUserProfileModal = () => import('@/components/UserProfileModal');
 const importInviteModal = () => import('@/components/InviteModal');
 const importSpaceSettingsModal = () => import('@/components/SpaceSettingsModal');
@@ -168,6 +173,12 @@ export default function SpaceChannelChat() {
   const [inviteVisible, setInviteVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [castThread, setCastThread] = useState<{ username: string; castHashPrefix: string } | null>(null);
+  // Starting a call now blocks on the join, which takes seconds (relay circuit,
+  // SFU round trip, microphone permission) and shows no UI of its own until the
+  // call screen appears. Without this the header buttons look dead and invite
+  // exactly the repeat taps the duplicate-join guard then has to absorb.
+  const [startingCall, setStartingCall] = useState(false);
+  const startingCallRef = useRef(false);
 
   const handleShowSidebars = useCallback(() => {
     // Normally this pops back to the space's channel list. The fallback matters:
@@ -216,16 +227,70 @@ export default function SpaceChannelChat() {
 
   const queryClient = useQueryClient();
   const { joinCall: joinSpaceCall } = useSpaceCall();
+  const { showToast } = useToast();
 
+  /**
+   * Start a call: JOIN FIRST, announce second.
+   *
+   * The `space-call-start` message is not a notification about the call, it IS
+   * the channel's call banner — every member renders a joinable "call in
+   * progress" from it. Sending it before knowing the room came up (which is
+   * what this did) meant a failed join left a banner with no matching
+   * `space-call-end`, live-looking and unjoinable, for everyone, forever.
+   * Announcing only after the join succeeds makes a failure cost nothing but a
+   * toast.
+   */
   const startSpaceCall = useCallback(async (mediaType: 'audio' | 'video') => {
     if (!spaceId || !channelId || !user?.address) return;
     if (!isConnected) {
-      Alert.alert('Not connected', 'Please wait for the connection to be established.');
+      showToast({
+        type: 'error',
+        title: 'Not connected',
+        message: 'Please wait for the connection to be established.',
+      });
       return;
     }
+    if (startingCallRef.current) return;
+    startingCallRef.current = true;
+    setStartingCall(true);
+
+    // The join has no timeout of its own: the relay and SFU requests behind it
+    // use plain fetch, which on a network that accepts the connection and then
+    // never answers can hang for a very long time. Since the busy state
+    // REPLACES both call buttons, a hang would hide them until the user
+    // navigated away. Generous enough never to fire on a real failure (which
+    // comes back in well under a second) — this only bounds the stuck case.
+    // The join itself is left running; if it does eventually succeed the call
+    // is announced as normal.
+    const releaseBusy = () => {
+      startingCallRef.current = false;
+      setStartingCall(false);
+    };
+    const busyWatchdog = setTimeout(releaseBusy, CALL_START_BUSY_TIMEOUT_MS);
+
+    const callId = createSpaceCallId(user.address);
+    try {
+      const joined = await joinSpaceCall(callId, spaceId, channelId, mediaType === 'video');
+      // `false` means the join was declined as a duplicate, so there is no
+      // call under this id — announcing it would mint exactly the orphan
+      // banner this ordering exists to prevent.
+      if (!joined) return;
+    } catch (e) {
+      logger.debug('[SpaceCall] start failed:', e);
+      showToast({
+        type: 'error',
+        title: 'Could not start the call',
+        message: 'The call service could not be reached. Please try again.',
+      });
+      return;
+    } finally {
+      clearTimeout(busyWatchdog);
+      releaseBusy();
+    }
+
     try {
       const result = await sendSpaceCallStartMessage({
-        spaceId, channelId, senderAddress: user.address, mediaType,
+        spaceId, channelId, senderAddress: user.address, mediaType, callId,
       });
 
       // Optimistic insert — self-echoes are skipped by the batch processor
@@ -245,16 +310,18 @@ export default function SpaceChannelChat() {
       });
 
       enqueueOutbound(async () => [result.wsEnvelope]);
-
-      // Auto-join the call we just started
-      const callId = (result.message.content as any).callId;
-      if (callId) {
-        joinSpaceCall(callId, spaceId, channelId, mediaType === 'video');
-      }
-    } catch {
-      Alert.alert('Error', 'Failed to start call.');
+    } catch (e) {
+      // We are in the call, but the channel was never told. Non-destructive on
+      // purpose: hanging up a working call because its announcement failed
+      // would be a worse outcome than a call others cannot see.
+      logger.debug('[SpaceCall] start announcement failed:', e);
+      showToast({
+        type: 'info',
+        title: 'You are in the call',
+        message: 'Others may not see it in the channel.',
+      });
     }
-  }, [spaceId, channelId, user?.address, isConnected, enqueueOutbound, queryClient, joinSpaceCall]);
+  }, [spaceId, channelId, user?.address, isConnected, enqueueOutbound, queryClient, joinSpaceCall, showToast]);
 
   const handleStartVideoCall = useCallback(() => { void startSpaceCall('video'); }, [startSpaceCall]);
   const handleStartAudioCall = useCallback(() => { void startSpaceCall('audio'); }, [startSpaceCall]);
@@ -292,6 +359,7 @@ export default function SpaceChannelChat() {
         onBack={handleShowSidebars}
         onStartVideoCall={handleStartVideoCall}
         onStartAudioCall={handleStartAudioCall}
+        startingCall={startingCall}
         onInvite={isSpaceOwner ? handleOpenInviteModal : undefined}
         onOpenSettings={handleOpenSpaceSettings}
         theme={theme}

@@ -1257,6 +1257,25 @@ export interface SendSpaceCallStartParams {
   channelId: string;
   senderAddress: string;
   mediaType: 'audio' | 'video';
+  /**
+   * Room id for the call. Callers should mint this with
+   * {@link createSpaceCallId} and JOIN THE ROOM FIRST, announcing only once
+   * the join succeeded — this message is what renders the channel's call
+   * banner, so sending it for a call that never came up leaves a banner
+   * nothing can ever clear. Omitted only for callers that have no join step.
+   */
+  callId?: string;
+}
+
+/**
+ * Mint a room id for a new space call.
+ *
+ * Separate from the send so the id can exist before the announcement does:
+ * the caller needs it to join, and the join has to succeed before the channel
+ * is told anything.
+ */
+export function createSpaceCallId(senderAddress: string): string {
+  return `${senderAddress}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /**
@@ -1266,7 +1285,7 @@ export async function sendSpaceCallStartMessage(
   params: SendSpaceCallStartParams
 ): Promise<SendGenericMessageResult> {
   const { spaceId, channelId, senderAddress, mediaType } = params;
-  const callId = `${senderAddress}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const callId = params.callId ?? createSpaceCallId(senderAddress);
 
   const content: SpaceCallStartMessage = {
     type: 'space-call-start',

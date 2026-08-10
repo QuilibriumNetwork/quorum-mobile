@@ -8,6 +8,7 @@
 
 import { getApiConfig } from '../api/config';
 import { logger } from '@quilibrium/quorum-shared';
+import type { SpaceCallLiveness } from './spaceCallStatus';
 export interface SFUJoinParams {
   roomId: string;
   spaceId: string;
@@ -106,6 +107,54 @@ export class SFUClient {
     } catch {
       // Best-effort — the SFU will detect the disconnect via PeerConnection state
       logger.debug('[SFUClient] leave request failed (best-effort)');
+    }
+  }
+
+  /**
+   * Is this room live right now?
+   *
+   * Deliberately NOT expressed as `getRoomInfo() != null`. That helper folds
+   * "the server says there is no such room" together with "the request never
+   * completed" into a single `null`, and the two must not be confused by the
+   * caller that decides whether to show a channel a joinable call: treating an
+   * offline probe as a dead room would hide a real call from anyone with a
+   * flaky connection.
+   *
+   * - `live`    — the room exists and is active.
+   * - `gone`    — the server answered, and there is nothing to join.
+   * - `unknown` — we failed to ask (offline, timeout, 5xx). Says nothing about
+   *               the room.
+   *
+   * ⚠️ REVISIT WHEN THE CALL ROUTES SHIP (issue 2026-08-10-space-calls-dead-
+   * endpoints-and-stale-banner, fix F5). Mapping 404 → `gone` is truthful only
+   * while production serves no `/sfu/*` route at all: every probe 404s, no call
+   * can be live, and "nothing to join" is the correct answer. Once the routes
+   * exist, a 404 from a rolling deploy or a canary without the route becomes
+   * indistinguishable from "that room is over", and a caller treating `gone` as
+   * authoritative would hide a genuinely joinable call from everyone not
+   * already in it. At that point distinguish the two — by response shape, or by
+   * demanding a second confirming probe — rather than by status code alone.
+   */
+  async probeRoomLiveness(
+    roomId: string,
+    opts: { timeoutMs?: number } = {},
+  ): Promise<SpaceCallLiveness> {
+    const url = `${this.getBaseUrl()}/sfu/room/${encodeURIComponent(roomId)}`;
+    const controller = new AbortController();
+    // A probe that never settles would leave the banner permanently
+    // "unknown", which renders as live — the exact stuck state this replaced.
+    const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 8000);
+
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (response.status === 404) return 'gone';
+      if (!response.ok) return 'unknown';
+      const data = await response.json();
+      return data?.active ? 'live' : 'gone';
+    } catch {
+      return 'unknown';
+    } finally {
+      clearTimeout(timer);
     }
   }
 
