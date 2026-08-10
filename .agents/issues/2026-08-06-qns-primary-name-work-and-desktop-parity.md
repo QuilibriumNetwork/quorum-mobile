@@ -4,7 +4,7 @@ title: "QNS primary .q names: everything done, everything left, and how to bring
 status: in-progress
 priority: high
 created: 2026-08-06
-updated: 2026-08-09
+updated: 2026-08-10
 area: identity resolution / QNS / cross-client parity
 repos: quorum-mobile (ahead), quorum-desktop (behind), quorum-shared (validator only)
 source: consolidation of a day's work on 2026-08-06, written because the work spans two repos and five issue files and nobody should have to reassemble it
@@ -135,6 +135,13 @@ waiting-on-server file rather than a client one.
 
 ### Reading order for a fresh agent
 
+0. **If your task is name RESOLUTION or rendering — anything about which name
+   shows on screen — read
+   `quorum-desktop/.agents/issues/.open/2026-08-10-identity-resolution-architecture-design.md`
+   first and treat it as authoritative over this file.** It supersedes the
+   shared-code section below (see the note under item 1 there). This file
+   remains the index for everything else: the elect/un-elect feature, the server
+   blocker, receiver-side verification.
 1. This file, whole.
 2. `issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md` — the
    design that shipped, including the rules (fail closed, never render
@@ -440,6 +447,32 @@ will disagree with itself:**
 
    Treat this as a design task with its own short spec, not as a port. It is
    also why it must not gate the security item below.
+
+   > ### ✅ 2026-08-10 — that spec now exists, and ABSORBS this item
+   >
+   > **`quorum-desktop/.agents/issues/.open/2026-08-10-identity-resolution-architecture-design.md`**
+   >
+   > Do not implement this item on its own. The spec settles the blocker named
+   > above — it names the contract explicitly (`spaceName` / `globalName`, so
+   > "the same parameter means different things in the two clients" cannot
+   > recur) and unifies desktop's two resolvers as a consequence rather than as
+   > a separate job.
+   >
+   > It goes considerably further, because the echo demotion turned out to be
+   > one symptom of a larger defect: the resolver takes three optional fields
+   > that must travel together, and omitting one does not degrade the answer, it
+   > INVERTS it. 45 files across the two repos pass those fields by hand. The
+   > spec makes a partial identity impossible to express.
+   >
+   > **Sequencing: desktop first, mobile second, and mobile is not blocked
+   > meanwhile.** Desktop consumes shared via a local symlink and mobile via
+   > pinned npm `2.1.0-40`, so desktop can land the breaking shared change
+   > without mobile noticing. ⚠️ The corollary: do NOT bump mobile's shared
+   > version onto a build carrying the new required fields until mobile migrates
+   > in the same stroke.
+   >
+   > Mobile's own step is step 6 of that document. Read it there rather than
+   > planning from here.
 2. **The forged-`.q` guard — DONE on all three repos, 2026-08-06.** Shared
    `#77`, desktop `06c38370d` on `main`. Mobile already had it. The history
    below is kept because the gap it describes is the argument for item 1.
