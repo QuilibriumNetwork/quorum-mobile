@@ -19,7 +19,7 @@ import { resolveConversationTitle } from '@/utils/conversationTitle';
 import { useVerifiedQnsNames } from '@/hooks/useVerifiedQnsNames';
 import { useBookmarks, useReceiptSettings } from '@/hooks/useUserConfig';
 import { useCall } from '@/context';
-import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
+import { useOpenLink } from '@/hooks/useOpenLink';
 import { useTheme } from '@/theme';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useComposerPanelVisible } from '@/services/ui/composerPanelVisible';
@@ -172,7 +172,6 @@ export default function DMChatScreen() {
 
   const draftsRef = useRef<Map<string, string>>(new Map());
 
-  const { openMiniapp } = useMiniappOverlay();
   const [selectedUserProfile, setSelectedUserProfile] = useState<MessageUserInfo | null>(null);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [burstVisible, setBurstVisible] = useState(false);
@@ -212,11 +211,8 @@ export default function DMChatScreen() {
     setSelectedUserProfile(info);
   }, [conversation]);
 
-  const handleLinkPress = useCallback((url: string) => {
-    // Chat-link URLs are user-provided and may target LAN dev hosts, so
-    // pass `allowInsecureLAN` to keep dev-time previews working.
-    openMiniapp({ url, isQNative: false, allowInsecureLAN: true });
-  }, [openMiniapp]);
+  // Shared with Space chat — see the note there.
+  const handleLinkPress = useOpenLink();
 
   const handleOpenFarcasterCast = useCallback((username: string, castHashPrefix: string) => {
     router.push({ pathname: '/feed', params: { username, castHashPrefix } });

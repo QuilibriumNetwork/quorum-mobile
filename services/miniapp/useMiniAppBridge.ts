@@ -60,6 +60,22 @@ export interface UseMiniAppBridgeOptions {
   domain: string;
   url: string;
   visible?: boolean;
+  /**
+   * Whether the mini app SDK is exposed to the page at all. Defaults to true.
+   *
+   * Set false when the WebView is showing an ordinary website (a link someone
+   * sent in chat) rather than a mini app the user chose to launch. This is not
+   * cosmetic: the RPC endpoint authorises messages by comparing the page's
+   * hostname against the hostname of the URL that was opened, so the site being
+   * browsed is *always* an allowed origin. A hostile page could therefore speak
+   * the Comlink protocol and reach `wallet.getEthereumProvider()` — leaking the
+   * user's address and raising signing prompts — purely because the user tapped
+   * its link. When disabled, no provider is built and nothing is exposed.
+   *
+   * React's rules of hooks make "just don't call the hook" impossible without
+   * splitting the host component, so the switch lives here instead.
+   */
+  enabled?: boolean;
   walletInfo?: WalletInfo | null;
   onReady?: (options?: { disableNativeGestures?: boolean }) => void;
   onClose?: () => void;
@@ -110,6 +126,7 @@ export function useMiniAppBridge(options: UseMiniAppBridgeOptions): MiniAppBridg
     domain,
     url,
     visible = true,
+    enabled = true,
     walletInfo,
     onReady,
     onClose,
@@ -256,6 +273,11 @@ export function useMiniAppBridge(options: UseMiniAppBridgeOptions): MiniAppBridg
    * display/verification. All signing operations use the secure callbacks.
    */
   const ethereumProviderService = useMemo(() => {
+    // SECURITY: an ordinary website must never get a wallet provider, however
+    // well-behaved it looks. See `enabled` on UseMiniAppBridgeOptions.
+    if (!enabled) {
+      return null;
+    }
     if (!visible) {
       return null;
     }
@@ -293,7 +315,7 @@ export function useMiniAppBridge(options: UseMiniAppBridgeOptions): MiniAppBridg
         return { success: false, error: 'Typed data signing not configured' };
       },
     });
-  }, [visible, walletInfo?.address]);
+  }, [enabled, visible, walletInfo?.address]);
 
   // Wrap provider in a plain object with bound methods (required for Comlink serialization)
   const ethereumProvider = useMemo(() => {
@@ -688,8 +710,11 @@ export function useMiniAppBridge(options: UseMiniAppBridgeOptions): MiniAppBridg
   // Always expose SDK so non-wallet features work immediately
   // Wallet requests will gracefully fail until provider is ready
   // Cast to any since our SDK has minor type differences but is compatible at runtime
+  //
+  // When disabled we pass no endpoint: `useExposeToEndpoint` early-returns on a
+  // falsy endpoint, so nothing is ever exposed to an ordinary website.
   useExposeWebViewToEndpoint({
-    endpoint,
+    endpoint: enabled ? endpoint : undefined,
     sdk: sdk as any,
     // Pass the ethereum provider for wallet integration (may be null initially)
     ethProvider: ethereumProvider as any,
@@ -707,11 +732,23 @@ export function useMiniAppBridge(options: UseMiniAppBridgeOptions): MiniAppBridg
     emit('back_navigation_triggered');
   }, [emit]);
 
-  // Bridge is ready when endpoint is available
-  const bridgeReady = !!endpoint;
+  // Bridge is ready when endpoint is available. When disabled there is no
+  // bridge to wait for, so hosts are free to render immediately.
+  const bridgeReady = !enabled || !!endpoint;
+
+  // Second cut, at the transport rather than the exposure: with the SDK
+  // unexposed a page's RPC calls would go unanswered anyway, but dropping the
+  // messages means a disabled bridge never even parses input from the page.
+  const gatedOnMessage = useCallback(
+    (e: any) => {
+      if (!enabled) return;
+      onMessage(e);
+    },
+    [enabled, onMessage],
+  );
 
   return {
-    onMessage,
+    onMessage: gatedOnMessage,
     emit,
     primaryButton,
     isReady,

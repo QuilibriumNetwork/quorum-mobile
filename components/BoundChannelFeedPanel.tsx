@@ -10,6 +10,7 @@ import { ThreadDetailView } from '@/components/SocialFeed/views/ThreadDetailView
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context/AuthContext';
+import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { useFarcasterChannel } from '@/hooks/useFarcasterChannel';
 import { useTheme, type AppTheme } from '@/theme';
 import { router } from 'expo-router';
@@ -39,6 +40,7 @@ export default function BoundChannelFeedPanel({
   const { theme: themeFromCtx } = useTheme();
   const theme = themeOverride ?? themeFromCtx;
   const { user, farcasterAuthToken } = useAuth();
+  const { openMiniapp } = useMiniappOverlay();
   const currentUserFid = user?.farcaster?.fid;
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [activeKey, setActiveKey] = useState<string>(channelKeys[0] ?? '');
@@ -138,7 +140,7 @@ export default function BoundChannelFeedPanel({
             currentUserFid={currentUserFid}
             theme={theme}
             onClose={() => setActiveThread(null)}
-            onOpenMiniApp={(url) => router.push({ pathname: '/browser', params: { url } })}
+            onOpenMiniApp={(url) => openMiniapp({ url })}
             onOpenProfile={(fid, username) => {
               if (username) {
                 router.push({ pathname: '/feed', params: { username, castHashPrefix: '' } });
