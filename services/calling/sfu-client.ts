@@ -121,12 +121,19 @@ export class SFUClient {
    * flaky connection.
    *
    * - `live`    — the room exists and is active.
-   * - `gone`    — the server answered, and there is nothing to join. A 404 is
-   *               included here: today it also covers the call routes being
-   *               absent from the deployment entirely, which likewise means no
-   *               call can be live.
+   * - `gone`    — the server answered, and there is nothing to join.
    * - `unknown` — we failed to ask (offline, timeout, 5xx). Says nothing about
    *               the room.
+   *
+   * ⚠️ REVISIT WHEN THE CALL ROUTES SHIP (issue 2026-08-10-space-calls-dead-
+   * endpoints-and-stale-banner, fix F5). Mapping 404 → `gone` is truthful only
+   * while production serves no `/sfu/*` route at all: every probe 404s, no call
+   * can be live, and "nothing to join" is the correct answer. Once the routes
+   * exist, a 404 from a rolling deploy or a canary without the route becomes
+   * indistinguishable from "that room is over", and a caller treating `gone` as
+   * authoritative would hide a genuinely joinable call from everyone not
+   * already in it. At that point distinguish the two — by response shape, or by
+   * demanding a second confirming probe — rather than by status code alone.
    */
   async probeRoomLiveness(
     roomId: string,

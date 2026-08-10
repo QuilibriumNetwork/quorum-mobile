@@ -195,9 +195,62 @@ historical banners → expect "unavailable/ended" rendering. Pass/fail only.
 
 ## Status
 
-Root cause established (both layers measured/read, none inferred-only).
-Branch `fix/space-call-stale-banner` created. No code changes yet — fixes
-F1-F3 + tests await Kyn's go-ahead; F4/F5 need the Lead Dev.
+**2026-08-10 — F1, F2 and F3 implemented on `fix/space-call-stale-banner`.**
+Root cause established first (both layers measured/read, none inferred-only).
+
+Shipped in this branch:
+
+- **F1** — `startSpaceCall` joins the room before announcing anything
+  (`[channelId].tsx`). `joinCall` now returns `Promise<boolean>` so a join
+  declined as a duplicate cannot announce a call that does not exist;
+  `createSpaceCallId` was split out of `sendSpaceCallStartMessage` so the
+  caller can hold the id across both steps.
+- **F2** — start and join failures raise toasts instead of a `logger.debug`
+  that is a no-op in production. The header's call buttons show a spinner
+  while the join is in flight, since that now blocks for seconds.
+- **F3** — the banner is derived from a liveness probe and the clock, not
+  from messages alone: `deriveSpaceCallStatus` (pure) +
+  `livenessCache` (memo) + `useSpaceCallStatus` (hook) +
+  `SFUClient.probeRoomLiveness`. Calls that died without an end message now
+  read as ended, **including the ones already in channel history**.
+
+33 unit tests across `__tests__/spaceCallStatus.test.ts` and
+`__tests__/spaceCallLivenessCache.test.ts`; full suite 59 suites / 790 tests
+green; `tsc --noEmit` unchanged at the pre-existing 11 errors (none in these
+files); eslint clean. Every rule was mutation-checked — the implementation
+was deliberately broken to confirm the relevant test goes red, because a
+suite that cannot fail is worse than none.
+
+Reviewed by an independent agent; all four findings addressed (the
+row-recycling flicker, the untested cache, the 404-vs-F5 coupling, and this
+section, which the first version of the commit left saying "no code changes
+yet").
+
+**Not verified on a device.** Nothing here can be: production serves no call
+routes, so the only observable behaviour today is the failure path. See
+Verification below.
+
+Still open: **F4** (end-announcement semantics) and **F5** (server routes)
+both need the Lead Dev. The 404 → `gone` mapping in `probeRoomLiveness` is
+correct only while F5 is unshipped and carries an explicit revisit note.
+
+## Verification
+
+What a device pass can and cannot show, given the server side is dead:
+
+1. **Start a call in a channel.** Expect: spinner in the header, then a
+   "Could not start the call" toast, and **no banner in the channel**. This
+   is the reported bug, gone. (Before: a permanent "call in progress"
+   banner.)
+2. **Look at an existing zombie banner** from before this fix. Expect: "Voice
+   call ended" / "Video call ended", static, no timer, no Join button.
+3. **Airplane mode, then open a channel with a recent zombie.** Expect: it
+   still shows as in progress rather than being declared dead on a guess.
+   This is the deliberate asymmetry — unknown is not dead.
+
+A real joinable call cannot be exercised until F5 ships. The media plane
+(ICE/DTLS/RTP through TURN) has never been observed working in production
+and remains unverifiable from here.
 
 ## Open questions
 

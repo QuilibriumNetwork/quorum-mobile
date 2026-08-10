@@ -362,9 +362,36 @@ top bar, and does signing still work?"
   early (leaving the sheet open) with a toast on rejection. A silent close means something
   restored the `canOpenURL` gate.
 
-> **Cross-cutting note for #6–#9:** all four are the same shape — a native iOS surface
-> behaving differently from its Android counterpart, invisible from this dev loop. Before
-> writing any new navigation-header, chrome or composer code, read
+### 13. Channel header call buttons: the "starting a call" spinner 🔲
+**▶ Ask:** "Open a Space channel and tap the video call icon in the top bar. While it is
+starting, do the two call icons cleanly swap to a single spinner without the header jumping,
+shifting the title, or leaving a gap? When it fails and the error toast appears, do both
+icons come back exactly as they were?"
+**Pass:** header geometry is identical before, during and after; both icons return.
+**Fail:** note whether the bar changed height, the title moved, or the icons did not return.
+
+**Context (agent):**
+- **What/when:** shipped with the space-call banner fix (branch
+  `fix/space-call-stale-banner`, 2026-08-10). Android-only so far.
+- **The change:** [ChannelHeader.tsx](../../components/Chat/ChannelHeader.tsx) now renders
+  a single `ActivityIndicator` in place of the video + phone `TouchableOpacity` pair while
+  `startingCall` is true. Starting a call blocks on the room join first (that reorder is the
+  actual bug fix), which takes seconds, so the buttons needed a busy state.
+- **Why iOS may differ:** two icon buttons are replaced by one spinner, so the header's
+  right-hand slot changes intrinsic width mid-interaction. `ScreenHeader` is drawn in React
+  Native, not by UIKit, so this should behave — but iOS 26 Liquid Glass treats header
+  controls specially (see #8) and `ActivityIndicator` has a different intrinsic size on iOS
+  than on Android, which is exactly the class of difference this dev loop cannot see.
+- **Expected in production today:** the spinner will always end in the "Could not start the
+  call" toast, because the server serves no call routes
+  (`.agents/issues/2026-08-10-space-calls-dead-endpoints-and-stale-banner.md`). That is the
+  correct behaviour to observe here — this item is about the header's geometry, not the call.
+- **If it FAILS:** give the spinner a fixed-width wrapper matching the two icons' combined
+  width rather than swapping the subtree, so the slot's width never changes.
+
+> **Cross-cutting note for #6–#9 and #13:** all of them are the same shape — a native iOS
+> surface behaving differently from its Android counterpart, invisible from this dev loop.
+> Before writing any new navigation-header, chrome or composer code, read
 > `.agents/docs/ios-ui-pitfalls-android-only-testing.md`.
 
 ---
