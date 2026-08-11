@@ -264,6 +264,7 @@ This is the main index for all documentation, bug reports, and task management.
 - [Should mobile adopt quorum-shared UI primitives?](reports/2026-06-28-shared-primitives-on-mobile-analysis.md)
 - [UI touchable audit findings](reports/2026-06-28-ui-touchable-audit-findings.md)
 - [TypeScript error inventory](reports/2026-07-31-typescript-error-inventory.md)
+- [Mobile identity migration: survey](reports/2026-08-11-mobile-identity-migration-survey.md)
 
 ## 📊 Completed Reports
 
@@ -271,4 +272,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-10 18:05:58
+**Last Updated**: 2026-08-11 10:05:51
