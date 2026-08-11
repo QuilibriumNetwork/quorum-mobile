@@ -7,13 +7,14 @@ created: 2026-08-11
 updated: 2026-08-11
 area: identity resolution / QNS / cross-client architecture
 repos: quorum-mobile (this), quorum-desktop (the plan), quorum-shared (the rule)
-source: read-only survey run before writing the mobile plan, while desktop's Phase D/E was still finishing
+source: read-only survey run before writing the mobile plan, then updated against desktop's final handoff once its branch shipped
 related:
-  - "quorum-desktop/.agents/issues/.open/2026-08-10-identity-resolution-architecture-design.md (THE DESIGN)"
-  - "quorum-desktop/.agents/issues/.open/2026-08-10-identity-resolution-architecture-plan.md (Phase F Task 9 is the mobile part)"
-  - "quorum-desktop/.superpowers/sdd/2026-08-10-identity-resolution-architecture-plan/progress.md (the live deviation ledger)"
+  - "quorum-desktop/.agents/issues/2026-08-10-identity-resolution-architecture-design.md (THE DESIGN)"
+  - "quorum-desktop/.agents/issues/2026-08-10-identity-resolution-architecture-plan.md (its 'What actually happened' section IS the handoff — read it)"
+  - "quorum-desktop/.superpowers/sdd/2026-08-10-identity-resolution-architecture-plan/progress.md (the full deviation ledger)"
   - "issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md (the parity index)"
   - "issues/.open/2026-08-10-invite-contact-picker-renders-an-unresolved-name.md (an instance of finding 3)"
+  - "issues/.open/2026-08-11-profile-modal-bio-is-read-raw-so-it-vanishes-for-any-unmerged-member.md (mobile's instance of desktop bug 5)"
 ---
 
 # Mobile identity migration: survey
@@ -436,8 +437,171 @@ resolver" class stays invisible exactly as it did for `ShareInviteSheet`.
   is (plan Phase F: "verify with `yarn harness:qns`"). It stays valuable for the
   receive path, and it explicitly does not cover the positive case (a genuinely
   owned name rendering as verified) because no test account owns a real name.
-- Desktop's branch was still open at the time of writing; its final whole-branch
-  review had not landed.
+- Desktop's branch was still open when §1-§5 were written. §7 closes that gap.
+
+---
+
+## 7. Delta from desktop's final handoff
+
+Desktop's branch shipped on 2026-08-11 with a ~250-line handoff written into its
+plan under "What actually happened". **Read that section before writing the
+mobile plan.** This records only what changes for mobile.
+
+The headline is that desktop's branch was declared ready by two reviewers, and
+the operator then drove the real app and found **eight more bugs the 1300-test
+suite could not see**.
+
+### 7.1 What this confirms
+
+Four survey findings are independently confirmed, and are now the handoff's own
+advice: mount ONE root provider first (§2.2), add a locally-known-names source
+or DM names vanish (§2.4), `useMemberIdentity` returns raw tiers and bypasses
+the forged-suffix guard (§2.3 — desktop shipped an actual forgery through it),
+and an import-derived call-site list is incomplete (§4 — desktop found roughly
+**40% more surfaces** than its table listed).
+
+Two findings desktop's handoff does NOT mention, which confirms they are
+mobile-only and still stand: mobile's claim-verification layer (§3.1) and the
+non-React WebSocket receive path (§3.2). Desktop's `useNameResolver` is the
+answer to "resolve N addresses", but it is still a **hook**, so it does not
+solve §3.2. Mobile still needs a genuinely pure imperative entry point.
+
+### 7.2 The render-test instrument is necessary but NOT sufficient
+
+This is the most important correction to this survey, and it lands on work
+already done here.
+
+Desktop's diagnosis of why 1300 tests missed eight bugs:
+
+> Every component test mounts its own `IdentityScopeProvider` with its own data.
+> The component then passes — correctly — because in that test the data is
+> present. But every one of these bugs was about *where the component sits in the
+> real tree* and *what the provider above it actually contains at runtime*. A test
+> that constructs its own provider is blind to that by construction.
+
+The render instrument added here (`jest/renderWithProviders.tsx`, RTL 13.x) has
+exactly that shape. It is still worth having — it is the only thing that catches
+"this screen never calls the resolver", which is `ShareInviteSheet` — but it must
+not be mistaken for coverage of provider wiring. **Plan for both classes
+explicitly.**
+
+### 7.3 Six architectural findings to port deliberately
+
+1. **A nested provider must MERGE with its parent, not replace it.** Four desktop
+   surfaces shipped mounting a provider with strictly LESS data than the root,
+   each rendering members as raw addresses, each found by hand hours apart.
+   `rostersBySpace` merges two-level (per space, then per address, so a
+   still-loading child cannot blank an ancestor's loaded roster).
+2. **`defaultSpaceId` is deliberately NOT merged.** It is always the provider's
+   own prop. This is what stops a DM inheriting a nickname from an unrelated
+   space now that the root carries every space's rosters. Invisible to anyone
+   without a nickname set, which is most testing.
+3. **The root provider must carry REAL data**, not empty rosters as a crash
+   backstop. Anything rendered from an app-level host inherits it and can
+   otherwise resolve nothing.
+4. **React context resolves where an element is RENDERED, not created.** An
+   element built eagerly inside one provider and handed to a modal host renders
+   under the HOST's context. Mobile builds elements this way too; check every
+   `preview:`-style prop.
+5. **`spaceId === channelId === peerAddress` for DMs.** Passing a DM's `spaceId`
+   into an identity scope queries a space that does not exist, gets an empty
+   roster, and forces the space ladder where the global one is correct. Detect
+   with `spaceId === channelId`. It bit six desktop surfaces.
+6. **A stored name is sometimes a placeholder.** A conversation's `displayName`
+   can hold the peer's raw address, its truncated form, or a literal placeholder.
+   Fed into locally-known names, the resolver treats it as a real name and
+   renders a FULL raw address — worse than the truncated fallback it would have
+   produced itself. **Mobile has this today**: `components/Chat/DirectMessagesList.tsx:92`
+   does `displayName = displayName || 'Unknown'`. Desktop's guard originally
+   checked only the literal, and the test meant to catch that asserted before an
+   async query settled, so it passed against the bug.
+
+Finding 6 also refines decision 5.4: desktop added the **device display name as
+the LAST `globalName` source** (below the published profile, never able to supply
+a `.q`), because removing the auth record as a name source left users with no
+published profile rendering as their own address. Mobile's live `user` object is
+its equivalent and must keep that rung.
+
+### 7.4 Enrichment: final policy is narrower than first recorded
+
+§2.1 recorded "list surfaces do not enrich". Desktop revised that with numbers in
+front of the operator. **The member sidebar is now the ONLY surface that never
+enriches**, because its cardinality is genuinely unbounded. The mention
+autocomplete (capped at 50 candidates) and the invite picker (the user's own DM
+contacts) both DO enrich — bundling them with the sidebar produced a visible
+inconsistency where a dropdown showed a plain name and the posted message showed
+`alice.q` for the same person.
+
+Note for mobile: enrichment is owned by the RENDERING component, never by the
+filtering hook, so filtering and display cannot disagree.
+
+### 7.5 Two instruments desktop says must exist BEFORE migration
+
+- **A raw-field audit.** `src/dev/tests/identity/rawNameFieldAudit.test.ts` fails
+  when a file references any of five raw name fields (`displayName`,
+  `primaryUsername`, `globalDisplayName`, `display_name`, `primary_username`)
+  without importing the identity module, with a one-line reason per exception.
+  It is the only thing that finds surfaces an import-derived list cannot see.
+
+  **Mobile half-has this already, and the half it is missing is the one that
+  matters.** `__tests__/noRawOverrideReadsInUi.test.ts` matches only
+  `/(?<!global_)display_name/` — snake_case. `ShareInviteSheet`'s
+  `conv.displayName` is camelCase, so mobile's own instrument was blind to the
+  bug mobile actually shipped. Widening the pattern to desktop's five fields and
+  adding the identity-import condition is cheap and high-value.
+
+- **Runtime degradation diagnostics.** `src/identity/diagnostics.ts` reports, in
+  dev builds, any resolution that falls through to the truncated address: the
+  address, the scope, and which sources were missing, behind a live counter.
+  "0 degraded resolutions this session" is a readable positive signal instead of
+  a manual per-surface pass. Mobile has an open task for an identity-coverage
+  instrument (`issues/.open/2026-08-04-qns-names-and-the-identity-coverage-instrument.md`)
+  which should be reconciled with this rather than built twice.
+
+  Desktop's known blind spot, inherited if ported verbatim: it cannot tell
+  "nobody knows this person" from "this provider was never fed local names",
+  because an absent prop and an empty one both arrive as `{}`.
+
+### 7.6 Inherited directly by name
+
+- **`MessageComposer.native.tsx`'s reply preview carries the same forgery
+  exposure as desktop's bug 1** (a stored name ending in `.q` rendered without
+  the guard). Desktop labelled it "mobile-only, so squarely mobile's problem".
+  **Careful: the file lives in `quorum-desktop/src/components/message/`, not in
+  this repo** — MEASURED. Confirm which client actually renders it before
+  scheduling, and whether mobile's `components/Chat/MessageInput.tsx` reply
+  preview has the same shape.
+- **The profile-modal bio** is mobile's instance of desktop's bug 5 (a narrowed
+  payload dropping non-name fields), already filed with a full source trace and a
+  three-step repro. Its `resolveMemberBio` fix mirrors `resolveMemberAvatar`.
+- **Self identity from the device auth record recurred in FOUR separate desktop
+  places.** Expect the same recurrence rather than treating it as one site.
+
+### 7.7 What desktop left unfinished
+
+- **The systematic `/dev/fake-qns` sweep with a control arm was never run.** Live
+  operator testing substituted for it and found five bugs, but the controlled
+  pass does not exist on either client. Mobile has its own fake-QNS overlay
+  (`services/dev/fakeQns.ts`, `components/dev/QnsFakePanel.tsx`), so mobile can
+  run the sweep desktop skipped.
+- The member sidebar's `.q` gap has no fix short of the **batch profile
+  endpoint**, requested of the lead dev and not promised. No policy tuning helps.
+- A deliberate asymmetry in mention rendering between the notification path and
+  the message list; making it symmetric means changing `processMentions` in
+  `quorum-shared`.
+
+### 7.8 Process, from someone who just did it
+
+- A per-task reviewer caught two of the five headline bugs, and roughly doubles
+  wall-clock. The operator switched to a lighter loop partway (no per-row
+  reviewer, full suite once per batch) and desktop records that as the right
+  trade for mechanical rows.
+- Every fix was required to show a RED test first. Three test-quality traps were
+  hit and are worth watching for: a **vacuous assertion** (against a module with
+  no code path that could produce the string), a test that **raced** the query it
+  depended on and asserted on empty state, and a test that **re-proved a
+  mechanism it already covered**. All three were caught by the same discipline:
+  revert the fix, watch it go red with real numbers, put it back.
 
 ---
 
