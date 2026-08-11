@@ -333,6 +333,41 @@ sites" is the wrong unit of work. Desktop's ledger says the same thing from the
 other side: its 24-row table missed three production importers and the entire app
 shell.
 
+### 4.1 The bypass class, now MEASURED
+
+Built as `__tests__/rawNameFieldAudit.test.ts` (2026-08-11) rather than left as
+an argument. It flags any file under `components/` or `app/` that references a
+raw name field in either casing AND imports no resolver. **42 files matched**,
+triaged by reading every flagged line:
+
+- **23 permanent exceptions** — Farcaster identities (§3.5, a separate namespace
+  with no address and no `.q`), ROLE names which share the field name, and write
+  paths where you are editing your own profile rather than rendering anybody's.
+- **19 real defects**, none of which appear in §4's import-derived table because
+  none of them import a resolver at all.
+
+So the surface count is **~32 (19 + the ~13 importers), roughly double the plan's
+17.** That ratio matches desktop's own late discovery almost exactly.
+
+Four of the 19 were not on anyone's list, in any repo:
+
+- `components/ui/DefaultAvatar.tsx:37` — `displayName || address` derives avatar
+  initials from a wallet address. This is desktop's bug 2, except it sits in the
+  shared primitive here, so **every caller inherits it**.
+- `components/ui/AppTabBar.tsx:54` — `user.displayName || user.primaryUsername`
+  ranks the global name above the `.q` for SELF: the exact inversion
+  `resolveSelfName` was written to fix, in a file that does not call it.
+- **All three call screens** (`Call/InCallScreen`, `IncomingCallScreen`,
+  `OutgoingCallScreen`) render a raw name straight off the call payload. Calls
+  are a mobile surface family absent from every migration table.
+- `components/SocialFeed/content/QuorumIdentityBadge.tsx:33` — appends `.q`
+  itself from a raw `primaryUsername`, **bypassing the forged-suffix guard**.
+  Same class as desktop's bug 1, and the suffix is the only verification signal
+  a viewer gets.
+
+The ratchet in that file is the migration work-list. It shrinking to empty is
+what "done" means.
+
 ---
 
 ## 5. Decisions — settled with the operator 2026-08-11
