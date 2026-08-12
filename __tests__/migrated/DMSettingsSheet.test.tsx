@@ -12,11 +12,18 @@
  * name they cannot independently verify — the confirmation copy is the
  * surface that actually matters here, not just the header text above it.
  *
- * This test never supplies a `displayName` at all (the prop no longer
- * exists): it renders the sheet from an `address` only, opens the delete
- * confirmation, and proves the message names the partner under their
- * verified `.q` — pulled from `@/identity`, not from anything the caller
- * handed in.
+ * Neither test supplies a `displayName` at all (the prop no longer exists):
+ * both render the sheet from an `address` only. Two separate `it` blocks,
+ * deliberately not one — an earlier version of this file gated the
+ * confirmation-copy test on the header's `alice.q` text appearing first, as
+ * a "wait for the fetch to settle" signal. Against pre-migration code that
+ * signal never fires at all (no `displayName` was ever passed, so `alice.q`
+ * never renders anywhere), which meant the test failed on that unrelated
+ * precondition and never actually reached the confirmation-copy assertion —
+ * pinning nothing about the row's actual defect. Splitting the two apart, and
+ * having the confirmation-copy test retry the press itself instead of
+ * waiting on the header, is what makes each test fail for the reason it
+ * claims to.
  *
  * No per-space-nickname case: a DM has no space of its own, and the
  * migration passes `global: true` explicitly, which bypasses the roster tier
@@ -69,7 +76,7 @@ import { DMSettingsSheet } from '@/components/Chat/DMSettingsSheet';
 
 let queryClient: QueryClient;
 
-function renderSheet() {
+function renderSheet(opts: { showRecipientHeader?: boolean } = {}) {
   return renderWithProviders(
     <QueryClientProvider client={queryClient}>
       <IdentityScopeProvider rostersBySpace={{}} selfAddress={null}>
@@ -78,16 +85,7 @@ function renderSheet() {
           onClose={() => {}}
           conversationId="conv-1"
           address={PARTNER}
-          // Shows the header's name text too, so the test has an on-screen
-          // signal that the async enrich fetch has settled before it presses
-          // "Delete Conversation" — the confirm dialog snapshots its message
-          // at press time, so pressing before the fetch resolves would (like
-          // the OLD caller-supplied-prop code) show a still-resolving name.
-          // That is a real, pre-existing property of a confirm dialog
-          // capturing state at open time, not something this migration
-          // introduces or is meant to fix, so the test waits it out rather
-          // than racing it.
-          showRecipientHeader
+          showRecipientHeader={opts.showRecipientHeader}
           theme={require('@/theme').DarkTheme}
         />
       </IdentityScopeProvider>
@@ -121,20 +119,48 @@ describe('DMSettingsSheet — resolves its own name, including confirmation copy
     queryClient.clear();
   });
 
+  it('renders the partner under their verified .q in the recipient header, when shown', async () => {
+    renderSheet({ showRecipientHeader: true });
+
+    await waitFor(() => expect(screen.getAllByText('alice.q').length).toBeGreaterThan(0));
+    expect(screen.queryByText('Alice Smith')).toBeNull();
+  });
+
   it('names the partner under their verified .q in the delete-confirmation copy', async () => {
+    // Deliberately does NOT gate on the header (or on anything else) settling
+    // first. `useConfirmDialog`'s `confirm()` snapshots its `message` into
+    // React state at the moment "Delete Conversation" is pressed — it is not
+    // reactive, so a press before the enrich fetch resolves would freeze in
+    // a stale name forever, no matter how long a `waitFor` afterward runs.
+    // The only reliable way to observe the RESOLVED value in the confirm
+    // copy is to keep re-opening the dialog until a press catches the
+    // fetch already settled: `waitFor` here retries the press itself, not
+    // just the assertion, so each attempt re-reads whatever `recipientName`
+    // the CURRENT render closes over. This also means the test needs no
+    // signal that pre-migration code might never produce (the header used
+    // to gate on `alice.q` appearing, which pre-migration code — given no
+    // `displayName` prop — never renders at all, hiding this row's actual
+    // defect behind an unrelated timeout instead of exercising it).
+    //
+    // IMPORTANT: if this retry-press pattern is ever changed, the RED must
+    // be re-captured. A `waitFor` gating on an unrelated precondition can
+    // make the test fail for the WRONG reason (the precondition never
+    // settling) while looking, from the failure output alone, similar to
+    // the right one (a wrong name in the confirm copy) — that exact
+    // confusion is why this test was rewritten.
     renderSheet();
 
-    // Wait for the enrich fetch to settle (visible via the header's own
-    // resolved name) before pressing Delete — see renderSheet()'s comment.
-    await waitFor(() => expect(screen.getAllByText('alice.q').length).toBeGreaterThan(0));
-
-    fireEvent.press(screen.getByText('Delete Conversation'));
-
-    await waitFor(() =>
+    await waitFor(() => {
+      // Once the dialog is open, ITS OWN title is also "Delete Conversation"
+      // (the `confirm({ title: ... })` call below), so a second press must
+      // target the ActionRow specifically — it renders first in the tree,
+      // ahead of `{confirmDialog}`, so index 0 is always the row.
+      fireEvent.press(screen.getAllByText('Delete Conversation')[0]);
       expect(
         screen.getByText(/This will delete the conversation with alice\.q from your device only/),
-      ).toBeTruthy(),
-    );
+      ).toBeTruthy();
+    });
+
     expect(
       screen.queryByText(/This will delete the conversation with Alice Smith from your device only/),
     ).toBeNull();
