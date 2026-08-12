@@ -171,7 +171,7 @@ export function ReactionDetailsModal({
                   {row.avatar ? (
                     <CachedAvatar source={{ uri: row.avatar }} style={styles.avatar} />
                   ) : (
-                    <DefaultAvatar displayName={row.displayName} address={row.address} size={36} style={styles.avatar} />
+                    <DefaultAvatar resolvedName={row.displayName} address={row.address} size={36} style={styles.avatar} />
                   )}
                   <Text style={styles.rowName} numberOfLines={1}>
                     {row.displayName}

@@ -64,7 +64,7 @@ export function CachedAvatar({ source, style, fallback = DEFAULT_FALLBACK, fallb
     const size = (typeof flat.width === 'number' ? flat.width : undefined)
       ?? (typeof flat.height === 'number' ? flat.height : undefined)
       ?? 40;
-    return <DefaultAvatar displayName={fallbackName} size={size} style={flat} />;
+    return <DefaultAvatar resolvedName={fallbackName} size={size} style={flat} />;
   }
 
   // Key the underlying view to the source so a recycled FlashList row rebinds

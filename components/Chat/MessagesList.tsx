@@ -740,7 +740,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
           {avatarSource ? (
             <CachedAvatar source={avatarSource} style={styles.messageAvatar} />
           ) : (
-            <DefaultAvatar displayName={item.userName} address={item.userId} size={40} style={styles.messageAvatar} />
+            <DefaultAvatar resolvedName={item.userName} address={item.userId} size={40} style={styles.messageAvatar} />
           )}
         </ApexAvatarRing>
       );

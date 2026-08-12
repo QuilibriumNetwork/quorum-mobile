@@ -398,7 +398,7 @@ export default function NotificationsScreen() {
             // only shows for actors with no profile picture — so the row beside
             // a real photo looks right while its neighbours do not.
             <DefaultAvatar
-              displayName={item.title}
+              resolvedName={item.title}
               // Seeds the gradient. The sender's address for a DM, so the same
               // person keeps the same colour across rows; the row id otherwise.
               address={item.raw?.quorum?.senderId ?? item.id}

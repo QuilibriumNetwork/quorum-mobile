@@ -110,7 +110,7 @@ export function MuteUserModal({
           {userIcon ? (
             <Image source={{ uri: userIcon }} style={styles.avatar} />
           ) : (
-            <DefaultAvatar displayName={userName} address={userAddress} size={40} />
+            <DefaultAvatar resolvedName={userName} address={userAddress} size={40} />
           )}
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>

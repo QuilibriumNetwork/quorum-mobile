@@ -90,7 +90,7 @@ const InboxRow = React.memo(function InboxRow({ item, styles, theme, onPress, on
         {isValidAvatarUri(item.icon) ? (
           <Image source={{ uri: item.icon }} style={styles.dmAvatar} />
         ) : (
-          <DefaultAvatar displayName={item.title} address={item.id} size={48} style={styles.dmAvatar} />
+          <DefaultAvatar resolvedName={item.title} address={item.id} size={48} style={styles.dmAvatar} />
         )}
         {item.isFarcaster && (
           <View style={styles.farcasterBadge}>

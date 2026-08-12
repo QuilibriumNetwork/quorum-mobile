@@ -39,7 +39,7 @@ export function OutgoingCallScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 60, paddingBottom: Skin.space(80) + insets.bottom, backgroundColor: theme.colors.background }]}>
       <View style={styles.callerInfo}>
-        <DefaultAvatar displayName={activeCall.recipientDisplayName} address={activeCall.recipientAddress} size={96} />
+        <DefaultAvatar resolvedName={activeCall.recipientDisplayName} address={activeCall.recipientAddress} size={96} />
         <Text style={[styles.callerName, { color: theme.colors.text }]}>
           {activeCall.recipientDisplayName}
         </Text>

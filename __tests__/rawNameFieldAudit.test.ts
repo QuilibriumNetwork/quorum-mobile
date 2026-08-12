@@ -65,9 +65,15 @@ const SCAN_ROOTS = ['components', 'app'];
  * even though it is the GLOBAL slot and safe to read inside the resolver: read
  * raw at a render site it still bypasses the QNS tier ranked above it. Same
  * defect, one rung down.
+ *
+ * `recipientDisplayName`/`callerDisplayName` are the call-payload spellings —
+ * camelCase concatenation means the plain `displayName` alternative above
+ * cannot see them (no `\b` boundary inside one unbroken word token), so they
+ * are listed by name. Confirmed by grep to appear nowhere else under the scan
+ * roots except the three Call screens already tracked below.
  */
 const RAW_FIELD =
-  /\b(displayName|primaryUsername|globalDisplayName|display_name|primary_username|global_display_name)\b/;
+  /\b(displayName|primaryUsername|globalDisplayName|display_name|primary_username|global_display_name|recipientDisplayName|callerDisplayName)\b/;
 
 const RESOLVER_IMPORT =
   /from\s+['"](@\/utils\/|\.{1,2}\/[\w/]*)(resolveMemberName|resolveSelfName|conversationTitle)['"]/;
@@ -137,8 +143,6 @@ const EXCEPTIONS: Record<string, string> = {
     'Onboarding collects and writes your own display name; there is no member to resolve yet.',
 
   // ── Not a member-name read at all ───────────────────────────────────────
-  'app/(tabs)/profile/index.tsx':
-    'Passes a list item TITLE into DefaultAvatar’s `displayName` prop. Matches on the prop name, not on a member field.',
   'components/NewConversationModal.tsx':
     'Builds a placeholder label `@<typed username>` for a conversation being created, before any member exists to resolve.',
 };
@@ -148,16 +152,6 @@ const EXCEPTIONS: Record<string, string> = {
  * it; never add one.
  */
 const TO_MIGRATE: Record<string, string> = {
-  // ── The avatar primitives: initials derived from an ADDRESS ─────────────
-  // Desktop shipped and fixed this exact bug: a member with no per-space
-  // nickname got initials from their wallet address beside a correctly
-  // resolved label. The fallback lives in the shared primitive here, so every
-  // caller inherits it.
-  'components/ui/DefaultAvatar.tsx':
-    'DEFECT: `displayName || address` derives initials from a wallet address. Must take the BARE resolved name from the same resolution as the label.',
-  'components/ui/CachedAvatar.tsx':
-    'DEFECT: forwards an unresolved `fallbackName` into DefaultAvatar, inheriting the address-initials bug.',
-
   // ── Self, with the ladder INVERTED ──────────────────────────────────────
   'components/ui/AppTabBar.tsx':
     'DEFECT: `user.displayName || user.primaryUsername` ranks the global name ABOVE the `.q`, the exact inversion resolveSelfName exists to fix.',
@@ -170,21 +164,11 @@ const TO_MIGRATE: Record<string, string> = {
   'components/Call/OutgoingCallScreen.tsx':
     'DEFECT: renders `activeCall.recipientDisplayName` raw off the call payload.',
 
-  // ── Moderation modals; desktop found the identical trio ─────────────────
-  'components/BlockUserModal.tsx':
-    'DEFECT: feeds an unresolved `userName` to the avatar, so initials can disagree with the name shown.',
-  'components/KickUserModal.tsx':
-    'DEFECT: feeds an unresolved `userName` to the avatar.',
-  'components/MuteUserModal.tsx':
-    'DEFECT: feeds an unresolved `userName` to the avatar.',
-
   // ── DM surfaces, including the PLACEHOLDER class ────────────────────────
   'components/Chat/DirectMessagesList.tsx':
     'DEFECT: hand-rolls truncation then `|| "Unknown"`. A stored placeholder rendered verbatim is worse than the resolver’s own fallback.',
   'components/Chat/DMChatArea.tsx':
     'DEFECT: builds identity rows from raw conversation fields and hand-truncates with `address.slice(0, 8)`.',
-  'components/Chat/DMChatHeader.tsx':
-    'DEFECT: passes an unresolved title into the avatar.',
   'components/Chat/DMSettingsSheet.tsx':
     'DEFECT: renders an unresolved `displayName` in the header AND inside destructive-action confirmation copy.',
   'components/Chat/FarcasterDirectMessageView.tsx':

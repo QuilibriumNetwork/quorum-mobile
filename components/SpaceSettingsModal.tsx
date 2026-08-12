@@ -1916,7 +1916,7 @@ export default function SpaceSettingsModal({
                       {b.avatar ? (
                         <Image source={{ uri: b.avatar }} style={styles.memberAvatarImage} />
                       ) : (
-                        <DefaultAvatar displayName={b.name} address={b.address} size={44} />
+                        <DefaultAvatar resolvedName={b.name} address={b.address} size={44} />
                       )}
                     </View>
                     <View style={styles.memberInfo}>
@@ -1965,7 +1965,7 @@ export default function SpaceSettingsModal({
                   <Image source={{ uri: identity.avatar }} style={styles.memberAvatarImage} />
                 ) : (
                   <DefaultAvatar
-                    displayName={identity.name}
+                    resolvedName={identity.name}
                     address={member.address}
                     size={44}
                   />

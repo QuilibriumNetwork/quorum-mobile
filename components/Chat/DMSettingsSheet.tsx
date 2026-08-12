@@ -151,7 +151,7 @@ export function DMSettingsSheet({
             isValidAvatarUri(avatarUri) ? (
               <Image source={{ uri: avatarUri }} style={styles.headerAvatar} />
             ) : (
-              <DefaultAvatar displayName={displayName} address={address} size={56} style={styles.headerAvatar} />
+              <DefaultAvatar resolvedName={displayName} address={address} size={56} style={styles.headerAvatar} />
             )
           )}
           {address != null && (

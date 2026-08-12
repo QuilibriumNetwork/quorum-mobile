@@ -76,7 +76,7 @@ export const DMChatHeader = React.memo(function DMChatHeader({
           {icon ? (
             <Image source={{ uri: icon }} style={styles.avatar} />
           ) : (
-            <DefaultAvatar displayName={title} address={address} size={28} />
+            <DefaultAvatar resolvedName={title} address={address} size={28} />
           )}
           <Text style={styles.name} numberOfLines={1}>
             {title}
