@@ -1,9 +1,7 @@
 import * as React from 'react';
-import { resolveIdentity } from '@quilibrium/quorum-shared';
 import { identityFromMaps } from './identityFromMaps';
 import { useIdentityContext } from './identityProvider';
-import { truncateAddress } from '@/utils/formatAddress';
-import type { ResolvedMemberName, UseResolvedNameOptions } from './useResolvedName';
+import { resolveWithFallback, type ResolvedMemberName, type UseResolvedNameOptions } from './useResolvedName';
 
 export interface NameResolver {
   /** Resolve one address synchronously from the maps the surrounding provider
@@ -20,10 +18,12 @@ export interface NameResolver {
  * where N is not known until the data is parsed — a `.map()` over reactors, a
  * search filter, a sort key. A hook cannot be called per address in that shape.
  *
- * `resolve` is a pure read of `identityFromMaps` + `resolveIdentity`, the same
- * ladder `<MemberName>` uses, so a pill and a header can never disagree about
- * the same member. Its identity changes only when the provider's sources or
- * default scope change, so it is safe in a dependency array.
+ * `resolve` is a pure read of `identityFromMaps` followed by
+ * `resolveWithFallback` — the exact same gate `useResolvedMemberName` calls,
+ * imported rather than re-implemented, so a pill and a header can never
+ * disagree about the same member because one of the two copies drifted. Its
+ * identity changes only when the provider's sources or default scope change,
+ * so it is safe in a dependency array.
  *
  * A single-address surface should use `<MemberName>` instead.
  */
@@ -35,10 +35,9 @@ export function useNameResolver(): NameResolver {
       const effectiveSpaceId = opts.spaceId ?? defaultSpaceId;
       const identity = identityFromMaps(address, effectiveSpaceId, sources);
       const scope = opts.global || !effectiveSpaceId ? 'global' : 'space';
-      if (!identity.spaceName && !identity.qnsName && !identity.globalName) {
-        return { name: truncateAddress(identity.address), isQnsVerified: false };
-      }
-      return resolveIdentity(identity, { scope });
+      // Same gate `useResolvedMemberName` uses, imported rather than
+      // re-implemented — see resolveWithFallback's docstring.
+      return resolveWithFallback(identity, scope);
     },
     [sources, defaultSpaceId],
   );

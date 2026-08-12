@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { resolveIdentity, type MemberIdentity } from '@quilibrium/quorum-shared';
+import { resolveIdentity, type IdentityScope, type MemberIdentity } from '@quilibrium/quorum-shared';
 import { identityFromMaps, type IdentitySources } from './identityFromMaps';
 import { useIdentityContext } from './identityProvider';
 import { truncateAddress } from '@/utils/formatAddress';
@@ -28,6 +28,34 @@ export interface UseResolvedNameOptions {
    * Bounded surfaces should enrich.
    */
   enrich?: boolean;
+}
+
+/**
+ * The has-any-tier gate and the truncate fallback, pure and hook-free, so
+ * `useResolvedMemberName` (a hook, memoised per render) and `useNameResolver`
+ * (an imperative per-call resolver with no hook of its own to memoise in)
+ * can both call the exact same gate rather than carrying two hand-written
+ * copies that can drift apart on a dropped check.
+ *
+ * Shared's own fallback is a naive slice(0,6)…slice(-4), which is not
+ * Qm-aware. Mobile's truncateAddress counts entropy characters AFTER the
+ * constant `Qm` prefix and is parity-matched with desktop, so the last rung
+ * stays local — handing it to shared would regress every address label in
+ * the app. That is what the gate below exists to prevent: `resolveIdentity`
+ * is only ever called once at least one tier has content.
+ */
+export function resolveWithFallback(identity: MemberIdentity, scope: IdentityScope): ResolvedMemberName {
+  if (!identity.spaceName && !identity.qnsName && !identity.globalName) {
+    return { name: truncateAddress(identity.address), isQnsVerified: false };
+  }
+  return resolveIdentity(identity, { scope });
+}
+
+/** Flatten a resolved name to a plain string, appending `.q` when it is the
+ *  verified QNS username. The one place that suffix is spelled out, shared by
+ *  `useResolvedName` and `<MemberName>` so they can never disagree. */
+export function formatResolvedName(resolved: ResolvedMemberName): string {
+  return resolved.isQnsVerified ? `${resolved.name}.q` : resolved.name;
 }
 
 function useIdentityAndScope(
@@ -67,23 +95,12 @@ export function useResolvedMemberName(
 ): ResolvedMemberName {
   const { identity, effectiveSpaceId } = useIdentityAndScope(address, spaceId, enrich);
   const scope = global || !effectiveSpaceId ? 'global' : 'space';
-  return React.useMemo(() => {
-    const resolved = resolveIdentity(identity, { scope });
-    // Shared's own fallback is a naive slice(0,6)…slice(-4), which is not
-    // Qm-aware. Mobile's truncateAddress counts entropy characters AFTER the
-    // constant `Qm` prefix and is parity-matched with desktop, so the last
-    // rung stays local — handing it to shared would regress every address
-    // label in the app.
-    if (!identity.spaceName && !identity.qnsName && !identity.globalName) {
-      return { name: truncateAddress(identity.address), isQnsVerified: false };
-    }
-    return resolved;
-  }, [identity, scope]);
+  return React.useMemo(() => resolveWithFallback(identity, scope), [identity, scope]);
 }
 
 /** The resolved name as a plain string, with `.q` when verified. For
  *  accessibility labels, notification bodies, search text and modal payloads. */
 export function useResolvedName(address: string, opts: UseResolvedNameOptions = {}): string {
   const r = useResolvedMemberName(address, opts);
-  return r.isQnsVerified ? `${r.name}.q` : r.name;
+  return formatResolvedName(r);
 }

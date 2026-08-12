@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Text, type StyleProp, type TextStyle } from 'react-native';
-import { useResolvedMemberName, type UseResolvedNameOptions } from './useResolvedName';
+import { formatResolvedName, useResolvedMemberName, type UseResolvedNameOptions } from './useResolvedName';
 
 interface MemberNameProps extends UseResolvedNameOptions {
   address: string;
@@ -31,7 +31,7 @@ export const MemberName: React.FunctionComponent<MemberNameProps> = ({
   const resolved = useResolvedMemberName(address, opts);
   return (
     <Text style={style} numberOfLines={numberOfLines}>
-      {resolved.isQnsVerified ? `${resolved.name}.q` : resolved.name}
+      {formatResolvedName(resolved)}
     </Text>
   );
 };
