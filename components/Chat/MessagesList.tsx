@@ -1258,6 +1258,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   enableTranslate
                   customEmojis={customEmojis}
                   members={members}
+                  spaceId={spaceId}
                   channels={channels}
                   roles={roles}
                   everyoneAuthorized={isEveryoneAuthorized(item)}
@@ -1281,7 +1282,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, renderAvatar, renderUnsignedWarning, renderCompactIndicators, renderReceipt, renderMediaReceipt, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, compactMessageIds, resolveDisplayName]
+    [styles, renderReactions, renderAvatar, renderUnsignedWarning, renderCompactIndicators, renderReceipt, renderMediaReceipt, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, spaceId, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, compactMessageIds, resolveDisplayName]
   );
 
   // Render sticker message
@@ -1465,6 +1466,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                     enableTranslate
                     customEmojis={customEmojis}
                     members={members}
+                    spaceId={spaceId}
                     channels={channels}
                     roles={roles}
                     everyoneAuthorized={isEveryoneAuthorized(item)}
@@ -1485,6 +1487,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   enableTranslate
                   customEmojis={customEmojis}
                   members={members}
+                  spaceId={spaceId}
                   channels={channels}
                   roles={roles}
                   everyoneAuthorized={isEveryoneAuthorized(item)}
@@ -1542,7 +1545,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedInline, renderCompactIndicators, renderReceipt, receiptRead, showUnsignedToast, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds, resolveDisplayName]
+    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedInline, renderCompactIndicators, renderReceipt, receiptRead, showUnsignedToast, scrollToMessageWithHighlight, customEmojis, members, spaceId, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds, resolveDisplayName]
   );
 
   const renderCast = useCallback(

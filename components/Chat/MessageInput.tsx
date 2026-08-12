@@ -8,11 +8,10 @@ import type { ProcessedAttachment } from '@/services/media/imageAttachment';
 import type { Channel, Emoji, SpaceMember, Sticker, Role, Space } from '@quilibrium/quorum-shared';
 import { hasPermission, getRoleColorHex } from '@quilibrium/quorum-shared';
 import { searchEmojis } from '@/data/emojiData';
-import {
-  resolveMemberName,
-  resolveMemberAvatar,
-  formatResolvedName,
-} from '@/utils/resolveMemberName';
+import { resolveMemberAvatar } from '@/utils/resolveMemberName';
+import { useNameResolver } from '@/identity';
+import { formatResolvedName } from '@/identity/useResolvedName';
+import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, useWindowDimensions, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, Text, TextInput, TextInputSubmitEditingEventData, TouchableOpacity as RNTouchableOpacity, View } from 'react-native';
 import Reanimated, { useAnimatedStyle, useDerivedValue, withTiming, interpolate, interpolateColor, Easing } from 'react-native-reanimated';
@@ -72,6 +71,11 @@ interface MessageInputProps {
   onSendSticker?: (stickerId: string) => void;
   /** Members for @mention autocomplete */
   members?: SpaceMember[];
+  /** The Space this composer lives in, if any — passed through to
+   *  `@/identity` so a candidate's per-space nickname outranks their `.q`
+   *  here the same way it does everywhere else. Omitting it silently falls
+   *  back to the global ladder. */
+  spaceId?: string;
   /** Channels for #channel autocomplete */
   channels?: Channel[];
   /** Roles for @role autocomplete */
@@ -258,6 +262,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
   stickers = [],
   onSendSticker,
   members = [],
+  spaceId,
   channels = [],
   roles = [],
   currentUserId,
@@ -274,6 +279,10 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
 }, ref) {
   const { width: screenWidth } = useWindowDimensions();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  // A candidate's name resolution: `resolve` is a plain function, safe to
+  // call from the filter/render code below. Only the `useNameResolver()`
+  // hook call itself lives here, at the top — never a hook per candidate.
+  const { resolve, requestNames } = useNameResolver();
   // Keyboard/inset/rotation-driven values applied inline so the whole
   // stylesheet isn't rebuilt every time the insets or screen width change.
   const containerDynamicStyle = useMemo(() => ({
@@ -513,7 +522,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     // member on the follow-global default (the default) could not be found by
     // typing the name everyone sees them under.
     for (const m of members) {
-      const rendered = formatResolvedName(resolveMemberName(m)).toLowerCase();
+      const rendered = formatResolvedName(resolve(m.address, { spaceId })).toLowerCase();
       const displayName = (m.display_name || '').toLowerCase();
       const name = (m.name || '').toLowerCase();
       const address = (m.address || '').toLowerCase();
@@ -528,7 +537,28 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
     }
 
     return out.slice(0, 8);
-  }, [autocompleteType, debouncedAutocompleteQuery, canMentionEveryone, roles, members]);
+  }, [autocompleteType, debouncedAutocompleteQuery, canMentionEveryone, roles, members, resolve, spaceId]);
+
+  // Enrich the up-to-8 member candidates actually shown, so a candidate can
+  // show a verified `.q` on first view. Enrichment is owned by this
+  // RENDERING row, never the filtering loop above — so a candidate found by
+  // typing their `.q` and the row that then displays it can never disagree
+  // about who matched. Bounded to what's rendered (already capped at 8
+  // above); `MAX_QNS_LOOKUPS`/`qnsLookupAddresses` is reused only for its
+  // dedup, not because 8 is anywhere near that cap.
+  const enrichableMentionAddresses = useMemo(
+    () =>
+      qnsLookupAddresses(
+        mentionSuggestions
+          .filter((s): s is Extract<MentionSuggestion, { kind: 'member' }> => s.kind === 'member')
+          .map((s) => ({ address: s.member.address })),
+        MAX_QNS_LOOKUPS,
+      ),
+    [mentionSuggestions],
+  );
+  useEffect(() => {
+    requestNames(enrichableMentionAddresses);
+  }, [enrichableMentionAddresses, requestNames]);
 
   // Filter channels for channel autocomplete - match from start of name
   const filteredChannels = useMemo(() => {
@@ -1119,7 +1149,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
                 );
               }
               const member = s.member;
-              const memberLabel = formatResolvedName(resolveMemberName(member));
+              const memberLabel = formatResolvedName(resolve(member.address, { spaceId }));
               const avatarUri =
                 resolveMemberAvatar(member) || member.user_icon;
               return (

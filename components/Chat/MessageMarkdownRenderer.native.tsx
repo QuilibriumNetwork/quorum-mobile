@@ -19,7 +19,7 @@
  */
 
 import type { AppTheme } from '@/theme';
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Text, View, Image, ScrollView, StyleSheet, TextStyle } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import type { Emoji, SpaceMember, Channel } from '@quilibrium/quorum-shared';
@@ -28,7 +28,9 @@ import {
   shouldUseScrollContainer,
 } from '@quilibrium/quorum-shared';
 import { getEmojiByName } from '@/data/emojiNames';
-import { resolveMemberName, formatResolvedName } from '@/utils/resolveMemberName';
+import { useNameResolver } from '@/identity';
+import { formatResolvedName } from '@/identity/useResolvedName';
+import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { haptics } from '@/utils/haptics';
 import * as Skin from '@/theme/skins/geometry';
@@ -38,6 +40,11 @@ export interface MessageMarkdownRendererProps {
   content: string;
   customEmojis: Emoji[];
   members?: SpaceMember[];
+  /** The Space this content lives in, if any — passed through to
+   *  `@/identity` so a mentioned member's per-space nickname outranks their
+   *  `.q` here the same way it does everywhere else. Omitting it silently
+   *  falls back to the global ladder. */
+  spaceId?: string;
   theme: AppTheme;
   style?: TextStyle;
   onMentionPress?: (userId: string) => void;
@@ -173,7 +180,11 @@ type InlineNode =
   | { type: 'spoiler'; content: string }
   | { type: 'mention_user'; address: string }
   | { type: 'mention_everyone' }
-  | { type: 'mention_role'; roleTag: string; displayName: string }
+  // `label` — not `displayName` — deliberately: a role has no ladder and no
+  // QNS tier, but naming this field like a raw member field would falsely
+  // resemble the exact pattern the raw-name-field audit
+  // (`__tests__/rawNameFieldAudit.test.ts`) exists to catch.
+  | { type: 'mention_role'; roleTag: string; label: string }
   | { type: 'mention_channel'; channelId: string; channelName: string }
   | { type: 'custom_emoji'; emoji: Emoji }
   | { type: 'standard_emoji'; char: string }
@@ -186,7 +197,7 @@ const INLINE_RE = new RegExp(
   [
     '<<<MENTION_EVERYONE>>>', // 0
     '<<<MENTION_USER:([^>]+)>>>', // 1: address
-    '<<<MENTION_ROLE:([^:]+):([^>]*)>>>', // 2,3: roleTag, displayName
+    '<<<MENTION_ROLE:([^:]+):([^>]*)>>>', // 2,3: roleTag, label
     '<<<MENTION_CHANNEL:([^:]+):([^>]*)>>>', // 4,5: channelId, channelName
     '\\|\\|([^|]+)\\|\\|', // 6: spoiler
     '`([^`]+)`', // 7: inline code
@@ -217,7 +228,7 @@ function parseInline(
     } else if (m[1] !== undefined) {
       nodes.push({ type: 'mention_user', address: m[1] });
     } else if (m[2] !== undefined) {
-      nodes.push({ type: 'mention_role', roleTag: m[2], displayName: m[3] ?? m[2] });
+      nodes.push({ type: 'mention_role', roleTag: m[2], label: m[3] ?? m[2] });
     } else if (m[4] !== undefined) {
       nodes.push({ type: 'mention_channel', channelId: m[4], channelName: m[5] ?? '' });
     } else if (m[6] !== undefined) {
@@ -286,7 +297,7 @@ function parseEmphasis(
 function MessageMarkdownRendererBase({
   content,
   customEmojis,
-  members = [],
+  spaceId,
   theme,
   style,
   onMentionPress,
@@ -304,15 +315,31 @@ function MessageMarkdownRendererBase({
     return map;
   }, [customEmojis]);
 
-  const memberByAddress = useMemo(() => {
-    const map: Record<string, SpaceMember> = {};
-    members.forEach((m) => {
-      if (m.address) map[m.address] = m;
-    });
-    return map;
-  }, [members]);
+  // A pill's name resolution: `resolve` is a plain function, safe to call
+  // inside `renderInline` below. Only the `useNameResolver()` hook call
+  // itself lives here, at the top — never a hook per mention.
+  const { resolve, requestNames } = useNameResolver();
 
   const blocks = useMemo(() => parseBlocks(content), [content]);
+
+  // Enrich the addresses actually @mentioned in THIS message content, so a
+  // pill can show a verified `.q` on first view rather than only after some
+  // other surface happened to enrich the same address first. Bounded to
+  // what fits in one message (a handful in the common case), capped
+  // defensively at `MAX_QNS_LOOKUPS` — the exact twin of `MentionableText`'s
+  // own version of this effect, which the two render paths must agree with
+  // (see the file header on why a mention cannot render differently here
+  // than in the plain-text path).
+  const mentionedMemberAddresses = useMemo(() => {
+    const seen = new Set<string>();
+    const mentionUserRe = /<<<MENTION_USER:([^>]+)>>>/g;
+    let m: RegExpExecArray | null;
+    while ((m = mentionUserRe.exec(content)) !== null) seen.add(m[1]);
+    return qnsLookupAddresses(Array.from(seen, (address) => ({ address })), MAX_QNS_LOOKUPS);
+  }, [content]);
+  useEffect(() => {
+    requestNames(mentionedMemberAddresses);
+  }, [mentionedMemberAddresses, requestNames]);
 
   const baseTextStyle: TextStyle = { ...styles.text, ...style };
 
@@ -358,14 +385,11 @@ function MessageMarkdownRendererBase({
           case 'spoiler':
             return <Spoiler key={key} content={node.content} styles={styles} />;
           case 'mention_user': {
-            const member = memberByAddress[node.address];
             // Same resolver as the plain-text path in MentionableText. A message
             // containing markdown routes here instead, so a private ladder here
             // meant the same member rendered one way in a plain message and
             // another in a formatted one.
-            const display = formatResolvedName(
-              resolveMemberName(member ?? { address: node.address }),
-            );
+            const display = formatResolvedName(resolve(node.address, { spaceId }));
             if (onMentionPress) {
               return (
                 <Text
@@ -395,7 +419,7 @@ function MessageMarkdownRendererBase({
             // not the role's own color.
             return (
               <Text key={key} style={mentionStyle}>
-                @{node.displayName}
+                @{node.label}
               </Text>
             );
           case 'mention_channel':
@@ -449,7 +473,7 @@ function MessageMarkdownRendererBase({
         }
       });
     },
-    [emojiMap, memberByAddress, onMentionPress, onChannelPress, onLinkPress, styles, theme, mentionStyle, channelStyle, linkStyle]
+    [emojiMap, resolve, spaceId, onMentionPress, onChannelPress, onLinkPress, styles, theme, mentionStyle, channelStyle, linkStyle]
   );
 
   // Inline the receipt after the last block's text so it trails the last word

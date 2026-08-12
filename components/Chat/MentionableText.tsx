@@ -10,11 +10,13 @@
  */
 
 import type { AppTheme } from '@/theme';
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { Text, Image, StyleSheet, TextStyle, View } from 'react-native';
 import type { Emoji, SpaceMember, Channel, Role } from '@quilibrium/quorum-shared';
 import { getEmojiByName } from '@/data/emojiNames';
-import { resolveMemberName, formatResolvedName } from '@/utils/resolveMemberName';
+import { useNameResolver } from '@/identity';
+import { formatResolvedName } from '@/identity/useResolvedName';
+import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import { findMentionTokens } from '@/utils/mentionTokens';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
@@ -25,6 +27,11 @@ interface MentionableTextProps {
   text: string;
   customEmojis: Emoji[];
   members?: SpaceMember[];
+  /** The Space this text lives in, if any — passed through to `@/identity`
+   *  so a mentioned member's per-space nickname outranks their `.q` here the
+   *  same way it does everywhere else. Omitting it silently falls back to
+   *  the global ladder. */
+  spaceId?: string;
   /** Space roles, so a plain (non-markdown) message resolves `@roleTag` to a
    *  styled mention pill instead of leaving it as raw text. */
   roles?: Role[];
@@ -73,9 +80,14 @@ type PartType = 'text' | 'mention' | 'channel' | 'emoji' | 'standard_emoji' | 'l
 interface TextPart {
   type: PartType;
   content: string;
-  // For mentions
+  // For mentions. `label` — not `displayName` — deliberately: this already
+  // holds the text to render after `@` (a member resolved through
+  // `@/identity`, a role's own tag, or the literal "everyone"), and naming
+  // it like a raw member field would falsely resemble the exact pattern the
+  // raw-name-field audit (`__tests__/rawNameFieldAudit.test.ts`) exists to
+  // catch.
   userId?: string;
-  displayName?: string;
+  label?: string;
   isSelf?: boolean;
   // For channels
   channelId?: string;
@@ -127,6 +139,7 @@ function MentionableTextBase({
   text: rawText,
   customEmojis,
   members = [],
+  spaceId,
   roles = [],
   everyoneAuthorized = false,
   channels = [],
@@ -151,6 +164,11 @@ function MentionableTextBase({
     enableTranslate
   );
   const text = displayText;
+
+  // A pill's name resolution: `resolve` is a plain function, safe to call
+  // inside the `parts` useMemo's loop below. Only the `useNameResolver()`
+  // hook call itself lives here, at the top — never a hook per mention.
+  const { resolve, requestNames } = useNameResolver();
 
   // Wrap a rendered text node with the translation toggle when applicable.
   // Requires a theme to style the toggle; without one we render text only.
@@ -233,7 +251,7 @@ function MentionableTextBase({
       content: string;
       data?: {
         userId?: string;
-        displayName?: string;
+        label?: string;
         isSelf?: boolean;
         channelId?: string;
         channelName?: string;
@@ -260,7 +278,7 @@ function MentionableTextBase({
             start: token.start,
             end: token.end,
             content: token.raw,
-            data: { userId: 'everyone', displayName: 'everyone', isSelf: false },
+            data: { userId: 'everyone', label: 'everyone', isSelf: false },
           });
         }
         continue;
@@ -275,7 +293,7 @@ function MentionableTextBase({
           content: token.raw,
           data: {
             userId: member.address,
-            displayName: formatResolvedName(resolveMemberName(member)),
+            label: formatResolvedName(resolve(member.address, { spaceId })),
             isSelf: member.address === currentUserId,
           },
         });
@@ -292,7 +310,7 @@ function MentionableTextBase({
           start: token.start,
           end: token.end,
           content: token.raw,
-          data: { userId: `role:${role.roleId}`, displayName: role.roleTag, isSelf: false },
+          data: { userId: `role:${role.roleId}`, label: role.roleTag, isSelf: false },
         });
       }
     }
@@ -429,7 +447,7 @@ function MentionableTextBase({
           type: 'mention',
           content: m.content,
           userId: m.data!.userId,
-          displayName: m.data!.displayName,
+          label: m.data!.label,
           isSelf: m.data!.isSelf,
         });
       } else if (m.type === 'channel') {
@@ -475,7 +493,25 @@ function MentionableTextBase({
     }
 
     return result;
-  }, [text, emojiMap, memberMap, roleMap, everyoneAuthorized, sortedChannels, currentUserId]);
+  }, [text, emojiMap, memberMap, roleMap, everyoneAuthorized, sortedChannels, currentUserId, resolve, spaceId]);
+
+  // Enrich the addresses actually @mentioned in THIS message, so a pill can
+  // show a verified `.q` on first view rather than only after some other
+  // surface happened to enrich the same address first. Bounded to what fits
+  // in one message (a handful of real mentions in the common case), unlike a
+  // list surface — but still capped at `MAX_QNS_LOOKUPS` for defense against
+  // a message engineered to name-drop the whole roster; `requestNames`
+  // dedupes against addresses already requested, so re-rendering the same
+  // message (or mentioning the same person again elsewhere) costs nothing.
+  const mentionedMemberAddresses = useMemo(() => {
+    const addresses = parts
+      .filter((p) => p.type === 'mention' && !!p.userId && p.userId !== 'everyone' && !p.userId.startsWith('role:'))
+      .map((p) => ({ address: p.userId! }));
+    return qnsLookupAddresses(addresses, MAX_QNS_LOOKUPS);
+  }, [parts]);
+  useEffect(() => {
+    requestNames(mentionedMemberAddresses);
+  }, [mentionedMemberAddresses, requestNames]);
 
   // Check if we have any special content
   const hasSpecialContent = parts.some(
@@ -584,13 +620,13 @@ function MentionableTextBase({
                 style={[mStyle, mentionStyle]}
                 onPress={() => onMentionPress(part.userId!)}
               >
-                @{part.displayName}
+                @{part.label}
               </Text>
             );
           }
           return (
             <Text key={`mention-${index}`} style={[mStyle, mentionStyle]}>
-              @{part.displayName}
+              @{part.label}
             </Text>
           );
         }

@@ -849,6 +849,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             stickers={spaceData?.stickers}
             onSendSticker={handleSendSticker}
             members={membersWithIdentity}
+            spaceId={spaceId}
             channels={channelsData}
             roles={spaceData?.roles}
             currentUserId={user?.address}
