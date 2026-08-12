@@ -58,6 +58,35 @@ export function FarcasterDirectMessageView({
   tabBarHeight = 0,
   restingChromeHeight = 0,
 }: FarcasterDirectMessageViewProps) {
+  // `conversation.displayName` below is read RAW, deliberately — it is
+  // rendered here as if it were the ladder's resolved answer, which is
+  // legitimate ONLY because this component is Farcaster-only: its caller
+  // (`app/(tabs)/messages/dm/[id].tsx`) mounts it exclusively behind
+  // `isFarcasterConversation`, and every Farcaster conversation this app
+  // produces (`hooks/chat/useFarcasterDirectCasts.ts`'s `toUnifiedConversation`,
+  // and that same screen's synthetic first-time-DM fallback) hardcodes
+  // `address: 'fid:' + fid` — never a genuine Quorum address. See this
+  // file's entry in `__tests__/rawNameFieldAudit.test.ts`'s `EXCEPTIONS` list
+  // for the full trace. That invariant is the ENTIRE justification for not
+  // routing this screen through `@/identity` — if it ever stops holding
+  // (some future caller hands this component a real Quorum-addressed
+  // conversation), `conversation.displayName` becomes a genuine defect
+  // again, silently, because nothing else here would catch it. Checked here
+  // rather than left as prose alone, and __DEV__-gated so a release build
+  // pays nothing for it (same pattern `app/(tabs)/messages/dm/[id].tsx` uses
+  // for its dev-only burst-test tooling — `__DEV__` inlines to `false` in a
+  // release build, so this whole branch is dead code there).
+  if (__DEV__ && conversation.address && !conversation.address.startsWith('fid:')) {
+    throw new Error(
+      `FarcasterDirectMessageView received a conversation whose address ` +
+      `("${conversation.address}") is not a synthetic fid:<n> string. This ` +
+      `component renders conversation.displayName raw on the assumption that ` +
+      `every conversation it receives is Farcaster-sourced; a real Quorum ` +
+      `address here means that assumption broke and conversation.displayName ` +
+      `now needs to resolve through @/identity instead.`
+    );
+  }
+
   const { user, farcasterAuthToken } = useAuth();
   const currentUserFid = user?.farcaster?.fid;
   const [messageText, setMessageText] = useState('');
