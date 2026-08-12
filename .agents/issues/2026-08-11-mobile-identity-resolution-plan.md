@@ -1585,6 +1585,21 @@ Rows 1-3 first and separately: they are the classes with a security or correctne
 | 25 | `components/Chat/BookmarksPanel.tsx:111` | bookmark sender | `spaceId={bookmark.spaceId}` | **FROZEN NAME.** Renders `cachedPreview?.senderName ?? 'Unknown'` — a name frozen at bookmark time, so it never learns a rename or a `.q`. Resolve from `cachedPreview.senderAddress` + the stored `spaceId` instead, and delete the `'Unknown'`. **Leave the write side alone** (decision 5.3): rows written by older builds must keep loading. First check whether `bookmarks` reaches the panel filtered to the current space — if not, the panel needs `useMultiSpaceRosters` like the root does. |
 | 26 | `hooks/useUnifiedNotifications.ts:116`, `hooks/chat/useSpaceActivity.ts:19` | notification + activity sender | `spaceId={row.spaceId}` | **FROZEN NAME.** Same shape as row 25 over `senderName` / `lastMessageSenderName`. These surfaces are global (they span spaces), so they need a multi-space roster map. Stop reading the stored field; keep writing it. |
 
+**`components/Call/SpaceCallScreen.tsx` was a hole in this table**, found by the
+Task 6 review rather than by the table. Rows 7-9 cover the DM call screens only.
+Its three `DefaultAvatar` sites passed an address and no name at all, which
+`tsc` cannot see because the prop is optional. Fixed in Task 6 (commit
+`70bac8c`) via `useNameResolver` once at the top of the grid, so it needs no row
+of its own — but if you are looking for surfaces this table missed, look for
+avatars, not labels.
+
+**The ratchet has a SECOND blind spot, distinct from the frozen-name one below.**
+It greps for raw name-field *reads*. A surface that reads no name field at all
+and simply renders an address — or renders nothing where a name belongs — matches
+nothing and is invisible to it. That is exactly how `SpaceCallScreen` escaped.
+Neither blind spot has an instrument; both are why Task 9's manual sweep is not
+optional.
+
 **Rows 25-26 were NOT found by the audit ratchet, and that is worth knowing.**
 `rawNameFieldAudit` matches five spellings of a *name field* (`displayName`,
 `primary_username`, …). A frozen `senderName` on a cached preview matches none of
