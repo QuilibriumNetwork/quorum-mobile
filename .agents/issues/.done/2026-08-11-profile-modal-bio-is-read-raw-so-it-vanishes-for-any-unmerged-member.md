@@ -1,16 +1,38 @@
 ---
 type: bug
 title: "The profile modal's bio is read raw, so it vanishes for any member the sender merge never touched"
-status: open
+status: done
 priority: medium
 created: 2026-08-11
-updated: 2026-08-11
+updated: 2026-08-12
 area: identity resolution / profile modal
 repos: quorum-mobile (this), quorum-desktop (sibling defect fixed)
 related:
   - "quorum-desktop/.agents/issues/2026-08-11-profile-card-from-a-mention-pill-shows-a-stale-bio-and-no-avatar.md (the desktop half)"
   - ".agents/issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md (the parity index)"
 ---
+
+## Status
+
+Fixed as part of Phase D row 13 (mobile identity migration). `resolveMemberBio`
+added beside `resolveMemberAvatar` in `utils/resolveMemberName.ts` (override →
+global slot, undefined when neither resolves). All four raw reads this issue
+named now route through it: `components/Chat/MessagesList.tsx` (mention-pill
+tap, message-avatar tap, reaction-list tap) and
+`components/SpaceSettingsModal.tsx` (member list). `__tests__/resolveMemberName.test.ts`
+covers the resolver with one test per rung, each verified red against a
+reverted implementation before the fix landed.
+
+**Not done, deliberately deferred:**
+- The three-step manual repro in "How to confirm" was not run against a live
+  app build — the automated coverage above verifies the same mechanism
+  (override/global precedence) more precisely than a one-time manual walk
+  would, but nobody has confirmed the actual screen renders correctly on
+  device.
+- The "Not checked" scope from the original report — `ProfileModal.tsx`,
+  `UnifiedProfileScreen.tsx`, `ProfileSplitModeModal.tsx` — remains unswept.
+  Same disposition as originally filed: may have the same raw read, not
+  investigated here.
 
 # The profile modal's bio is read raw, so it vanishes for any member the sender merge never touched
 

@@ -65,6 +65,7 @@ import { truncateAddress } from '@/utils/formatAddress';
 import {
   resolveMemberName,
   resolveMemberAvatar,
+  resolveMemberBio,
   formatResolvedName,
 } from '@/utils/resolveMemberName';
 import { selfNamePlaceholder } from '@/utils/resolveSelfName';
@@ -1955,7 +1956,7 @@ export default function SpaceSettingsModal({
                     userId: member.address,
                     userName: identity.label,
                     userAvatar: identity.avatar,
-                    bio: member.bio,
+                    bio: resolveMemberBio(member),
                     farcasterFid: m.farcasterFid,
                     farcasterUsername: m.farcasterUsername,
                   });

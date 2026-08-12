@@ -118,6 +118,10 @@ export interface ResolvableMember {
   global_profile_image?: string | null;
   /** QNS `.q` name. Travels only with the public profile, never in messages. */
   primary_username?: string | null;
+  /** Per-space OVERRIDE bio. */
+  bio?: string | null;
+  /** GLOBAL slot bio. */
+  global_bio?: string | null;
 }
 
 /** The viewer's own live profile, used only for the viewer's own row. */
@@ -277,6 +281,28 @@ export function resolveMemberAvatar(
   if (isSelf(member, opts.self)) return present(opts.self?.profileImage);
 
   return undefined;
+}
+
+/**
+ * Resolve the bio for a space or DM member.
+ *
+ * `override → global slot`, mirroring `resolveMemberAvatar` — no QNS step (a
+ * `.q` carries no bio, same reasoning as the avatar) and no self tier (a
+ * viewer's own row already carries their bio in the global slot the moment
+ * they've broadcast a profile; there is no separate "live" bio source the
+ * way there is a live display name).
+ *
+ * The per-space override slot is empty for most members (follow-global is
+ * the default), so a caller that reads `member.bio` raw sees no bio at all
+ * for anyone who has not set one specifically for this space — even though
+ * their global bio is sitting one field over. That gap is what this exists
+ * to close.
+ *
+ * Returns `undefined` when nothing resolves, so callers render no bio
+ * section rather than an empty one.
+ */
+export function resolveMemberBio(member: ResolvableMember): string | undefined {
+  return present(member.bio) ?? present(member.global_bio);
 }
 
 /**

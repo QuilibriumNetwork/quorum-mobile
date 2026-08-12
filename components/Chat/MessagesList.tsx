@@ -11,6 +11,7 @@ import { haptics } from '@/utils/haptics';
 import {
   resolveMemberName,
   resolveMemberAvatar,
+  resolveMemberBio,
   formatResolvedName,
 } from '@/utils/resolveMemberName';
 import { useToast } from '@/context/ToastContext';
@@ -690,7 +691,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         userId,
         userName: formatResolvedName(resolveMemberName(member)),
         userAvatar: resolveMemberAvatar(member),
-        bio: member.bio,
+        bio: resolveMemberBio(member),
         farcasterFid: member.farcasterFid,
         farcasterUsername: member.farcasterUsername,
       });
@@ -724,7 +725,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               userId: item.userId,
               userName: item.userName,
               userAvatar: typeof item.userAvatar === 'string' ? item.userAvatar : undefined,
-              bio: member?.bio,
+              bio: member ? resolveMemberBio(member) : undefined,
               farcasterFid: member?.farcasterFid,
               farcasterUsername: member?.farcasterUsername,
             });
@@ -1706,7 +1707,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   userId: address,
                   userName: formatResolvedName(resolveMemberName(member)),
                   userAvatar: resolveMemberAvatar(member),
-                  bio: member.bio,
+                  bio: resolveMemberBio(member),
                   farcasterFid: member.farcasterFid,
                   farcasterUsername: member.farcasterUsername,
                 });

@@ -1,6 +1,7 @@
 import {
   resolveMemberName,
   resolveMemberAvatar,
+  resolveMemberBio,
   formatResolvedName,
   type ResolvableMember,
   type SelfIdentity,
@@ -220,6 +221,45 @@ describe('resolveMemberAvatar — a separate ladder with no QNS step', () => {
     expect(
       resolveMemberAvatar(member({ global_profile_image: 'stored-global' }), { self }),
     ).toBe('stored-global');
+  });
+});
+
+describe('resolveMemberBio — mirrors the avatar ladder, no QNS step', () => {
+  // The bug this pins: a per-space override bio is empty for most members
+  // (follow-global is the default), so a caller reading `member.bio` raw sees
+  // no bio at all for anyone who has not set one specifically for this space
+  // — the profile modal's bio section vanishing for any such member.
+
+  it('prefers the per-space override bio', () => {
+    expect(
+      resolveMemberBio(member({ bio: 'Override bio', global_bio: 'Global bio' })),
+    ).toBe('Override bio');
+  });
+
+  it('falls to the global slot bio when there is no override', () => {
+    expect(resolveMemberBio(member({ global_bio: 'Global bio' }))).toBe('Global bio');
+  });
+
+  it('returns undefined when nothing resolves, so callers render no bio section', () => {
+    expect(resolveMemberBio(member())).toBeUndefined();
+  });
+
+  it('treats an empty override bio as unset', () => {
+    expect(resolveMemberBio(member({ bio: '', global_bio: 'Global bio' }))).toBe(
+      'Global bio',
+    );
+  });
+
+  it('treats a whitespace-only override bio as unset', () => {
+    expect(resolveMemberBio(member({ bio: '   ', global_bio: 'Global bio' }))).toBe(
+      'Global bio',
+    );
+  });
+
+  it('ignores the QNS name entirely — a .q handle carries no bio', () => {
+    expect(
+      resolveMemberBio(member({ primary_username: 'qnsname', global_bio: 'Global bio' })),
+    ).toBe('Global bio');
   });
 });
 

@@ -129,6 +129,12 @@ const EXCEPTIONS: Record<string, string> = {
     'Renders `role.displayName` — a channel ROLE’s name, which has no ladder and no QNS tier.',
   'components/Chat/ChannelSettingsSheet.tsx':
     'Maps role ids to `role.displayName`. Roles, not members.',
+  'components/UserProfileModal.tsx':
+    'MIGRATED: the header now renders one name resolved via `@/identity`’s `useResolvedName` instead of hand-composing `user.userName` next to a separate, unverified `@user.primaryUsername` line (also used for the role-removal confirmation copy). The remaining hits are legitimate: `role.displayName` is a channel ROLE’s name (same as `ChannelManagerRolePickerSheet.tsx`/`ChannelSettingsSheet.tsx` above), and `styles.displayName` is a StyleSheet key literally named `displayName` (same class as `FarcasterCastCard.tsx`).',
+
+  // ── A resolved value threaded through a local parameter of the same name ─
+  'components/wallet/TipModal.tsx':
+    'MIGRATED: the post-tip DM’s stored conversation title now resolves `quorumIdentity.address` via `@/identity`’s `useResolvedName` instead of trusting `recipientQuorumIdentity.displayName` — an unverified claim off a public-profile fetch that `useQuorumIdentityForFid` never checks. The remaining hits are the resolved value flowing through `sendTipNotification`’s own `displayName` parameter/local (declared, destructured, and passed through), not a second raw read.',
 
   // ── WRITE paths: the raw field is the thing being edited ────────────────
   'components/ProfileModal.tsx':
@@ -165,12 +171,6 @@ const TO_MIGRATE: Record<string, string> = {
     'MIXED: Farcaster authors are fine, but `conversation.displayName` is read raw for the conversation title.',
   'components/SocialFeedModal.tsx':
     'MIXED: cast authors are Farcaster, but `conv.displayName` is a Quorum conversation name read raw.',
-
-  // ── Hand-composed identity, including a hand-rolled `.q` ────────────────
-  'components/UserProfileModal.tsx':
-    'DEFECT: renders `user.userName` and `user.primaryUsername` as separate hand-composed pieces instead of one resolved name.',
-  'components/wallet/TipModal.tsx':
-    'DEFECT: `recipientQuorumIdentity.displayName` is read raw when labelling a tip recipient.',
 };
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
