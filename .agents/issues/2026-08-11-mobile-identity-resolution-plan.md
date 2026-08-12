@@ -848,7 +848,7 @@ RED proof: a shallow rostersBySpace merge turns the still-loading test red."
   - `useResolvedMemberName(address, opts?): { name: string; isQnsVerified: boolean }`
   - `useResolvedName(address, opts?): string` — with `.q` appended when verified
   - `useMemberIdentity(address, opts?): MemberIdentity`
-  - `<MemberName address spaceId? global? enrich? withAvatar? avatarSize? userIcon? style? />`
+  - `<MemberName address spaceId? global? enrich? style? />` — no avatar props. Unlike desktop's, this one does not render the avatar: mobile has a separate `resolveMemberAvatar` ladder with no QNS step, and Task 6 makes the initials agree by giving `DefaultAvatar` a `resolvedName` prop instead.
   - `useNameResolver(): { resolve(address, opts?): ResolvedMemberName; requestNames(addresses: Iterable<string>): void }`
   - `UseResolvedNameOptions = { spaceId?: string; global?: boolean; enrich?: boolean }`
 
