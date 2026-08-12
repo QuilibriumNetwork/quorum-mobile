@@ -24,16 +24,21 @@
  * `.q` outranks a global display name everywhere else in the app; this surface
  * is the exception, and it should not be.
  *
- * The conversation row is mocked as ALREADY carrying the QNS name — `alice` on
- * `primary_username` — because `useConversationsWithQnsNames` is mocked as an
- * identity passthrough below; that hook's own job (attaching a partner's claim
- * to the row at all) has its own coverage elsewhere. What this file pins is
- * the SECOND half: the screen now resolves through `identity/`
+ * The conversation row's `primary_username` field ('alice') is never actually
+ * read by the screen — it comes along on the mock conversation only because
+ * that is what a real row looks like, and the screen's own resolution is
+ * entirely independent of it (see `ShareInviteSheet.tsx`'s comment on why
+ * `useConversationsWithQnsNames`'s claim output is discarded). What this file
+ * pins is: the screen resolves through `identity/`
  * (`useResolvedName`, `enrich: true`), which re-verifies the claim for itself
  * via a real `IdentityScopeProvider` rather than trusting the row's claim
- * directly — so the network seams that provider depends on are mocked too, the
+ * directly. The two NETWORK seams that provider depends on are mocked, the
  * same way `identityProviderVerification.test.tsx` and `useNameResolver.test.tsx`
- * already do it.
+ * already do it — but the CRYPTO predicate that turns a claim into a `.q`
+ * (`claimedNameBelongsTo`) is deliberately left real. A test that stubbed that
+ * predicate too would only prove the screen renders whatever
+ * `verifiedQnsNames` already contains, not that a verified claim is what
+ * lands there. See the second test below for the negative half of that proof.
  */
 
 import React from 'react';
@@ -41,17 +46,32 @@ import { screen, waitFor, cleanup } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderWithProviders } from '@/jest/renderWithProviders';
 
-const PARTNER = 'QmPeerAEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imzzzz';
+// A genuine ed448 key/address pair, reused verbatim from
+// `identityProviderVerification.test.tsx` rather than generated fresh —
+// `deriveAddress(KEY) === PARTNER`, real math, not a placeholder. Needed
+// because `claimedNameBelongsTo` (`utils/verifyQnsClaim.ts`) is the ONE
+// predicate that turns a claim into a `.q`, and it runs for real here (no
+// mock on it below): a non-derivable placeholder address would make every
+// claim fail verification, which is a different, wrong test.
+const PARTNER = 'QmRxwsciKWz7fvph4PobmabjChKPZtvkBcE4oALnogXDYW';
+const KEY =
+  '030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b';
+// An impersonator address, unrelated to KEY — never anything but a fixed
+// placeholder in this file, same convention as `identityProviderVerification.test.tsx`'s
+// `OTHER`. Used only by the mismatched-claim RED proof below.
+const IMPOSTOR = 'QmThemThemThemThemThemThemThemThemThemThemThem';
 
 /**
  * The partner as the picker will see them: an older global name on the row, and
  * an elected `.q` that must outrank it.
  *
- * `mock`-prefixed because `jest.mock` factories are hoisted above every other
- * statement in the file, so they may only close over variables jest recognises
- * as test doubles by that naming convention.
+ * `let`, not `const`, and `mock`-prefixed: `jest.mock` factories are hoisted
+ * above every other statement in the file, so they may only close over
+ * variables jest recognises as test doubles by that naming convention — and
+ * the impersonation test below reassigns this to a row claiming the same name
+ * from a DIFFERENT address, read fresh by the mock on each render.
  */
-const mockConversation = {
+let mockConversation = {
   conversationId: 'conv-1',
   address: PARTNER,
   displayName: 'Alice Smith',
@@ -69,14 +89,12 @@ jest.mock('@/hooks/chat/useConversations', () => ({
   }),
 }));
 
-// Identity passthrough: the picker now routes conversations through this
-// hook, but ITS job (attaching a partner's claim to the row) is covered by
-// its own tests. Mocked here so this file stays about the SECOND half —
-// rendering an already-claimed row through the resolver — regardless of how
-// the first half is implemented.
-jest.mock('@/hooks/chat/useConversationsWithQnsNames', () => ({
-  useConversationsWithQnsNames: (rows: unknown[]) => rows,
-}));
+// `@/hooks/chat/useConversationsWithQnsNames` is NOT mocked: `ShareInviteSheet`
+// only imports its pure, React-free `qnsLookupAddresses` export and the
+// `MAX_QNS_LOOKUPS` constant (to bound `enrich` fan-out) — never the hook
+// itself, which is never called from this screen. The real module's own
+// dependencies (`getQuorumClient`, `resolveBatch`) are already mocked above,
+// so importing it for real here is safe and needs no stub of its own.
 
 jest.mock('@/hooks/chat/useInviteManagement', () => ({
   useShareInvite: () => ({ mutateAsync: jest.fn() }),
@@ -116,25 +134,50 @@ jest.mock('@/services/api/qnsClient', () => ({
   resolveBatch: (names: string[]) => mockResolveBatch(names),
 }));
 
-// `claimedNameBelongsTo` compares an address DERIVED from a real ed448 key
-// against the claimant's address (`utils/verifyQnsClaim.ts`). PARTNER above is
-// a repo-convention placeholder with no real keypair behind it — by design,
-// per the identity-guard rule against writing a genuinely derivable
-// address/key pair into a fixture for an invented person. The derivation
-// itself is exercised for real elsewhere (`identityProviderVerification.test.tsx`,
-// `verifyQnsClaim.test.ts`); this test is about the SCREEN wiring a verified
-// claim through to the right text, not about re-proving the crypto.
-jest.mock('@/utils/verifyQnsClaim', () => ({
-  claimedNameBelongsTo: (_record: unknown, address: string) => address === PARTNER,
-}));
+// `@/utils/verifyQnsClaim` is deliberately NOT mocked. `claimedNameBelongsTo`
+// is the ONE predicate (`identity/identityProvider.tsx`'s `verifiedQnsNames`
+// computation) that decides whether a claim becomes a `.q`, and letting it run
+// for real — against the genuine KEY/PARTNER pair above — is what makes this
+// test prove a VERIFIED claim renders `alice.q`, rather than merely proving
+// the screen renders whatever `verifiedQnsNames` already contains. Mocking
+// this predicate would make the test blind to a wrong comparison, the wrong
+// argument order, or a dropped check at that exact call site.
 
 import { IdentityScopeProvider } from '@/identity/identityProvider';
 import ShareInviteSheet from '@/components/ShareInviteSheet';
 
 let queryClient: QueryClient;
 
+function renderSheet() {
+  return renderWithProviders(
+    <QueryClientProvider client={queryClient}>
+      <IdentityScopeProvider rostersBySpace={{}} selfAddress={null}>
+        <ShareInviteSheet
+          visible
+          onClose={() => {}}
+          inviteLink="https://example.invalid/invite/abc"
+          spaceName="Test Space"
+        />
+      </IdentityScopeProvider>
+    </QueryClientProvider>,
+  );
+}
+
 describe('ShareInviteSheet — the contact picker resolves names', () => {
   beforeEach(() => {
+    // Reset to the baseline row before every test; the impersonation test
+    // below overrides this locally, and without a reset that override would
+    // leak into whichever test runs next.
+    mockConversation = {
+      conversationId: 'conv-1',
+      address: PARTNER,
+      displayName: 'Alice Smith',
+      primary_username: 'alice',
+      type: 'direct',
+      source: 'quorum',
+      timestamp: 1_700_000_000_000,
+      icon: undefined,
+    };
     mockGetPublicProfile = jest.fn().mockResolvedValue({
       display_name: 'Alice Smith',
       primary_username: 'alice',
@@ -143,11 +186,16 @@ describe('ShareInviteSheet — the contact picker resolves names', () => {
       timestamp: 0,
       signature: '',
     });
+    // `resolveKey: KEY` — the genuine key, so `claimedNameBelongsTo` (running
+    // for real, unmocked) derives PARTNER and the claim verifies. The
+    // impersonation test reuses this SAME record: KEY derives to PARTNER only,
+    // so the identical record fails to verify against IMPOSTOR without any
+    // change to this mock.
     mockResolveBatch = jest.fn().mockResolvedValue([
       {
         header: { authorityKey: '0xabc', name: 'alice', parent: null, createdAt: 0, updatedAt: 0 },
         address: '0xrecord',
-        resolveKey: 'deadbeef',
+        resolveKey: KEY,
         metadata: null,
       },
     ]);
@@ -160,20 +208,24 @@ describe('ShareInviteSheet — the contact picker resolves names', () => {
   });
 
   it('lists a partner under their .q, not their older global name', async () => {
-    renderWithProviders(
-      <QueryClientProvider client={queryClient}>
-        <IdentityScopeProvider rostersBySpace={{}} selfAddress={null}>
-          <ShareInviteSheet
-            visible
-            onClose={() => {}}
-            inviteLink="https://example.invalid/invite/abc"
-            spaceName="Test Space"
-          />
-        </IdentityScopeProvider>
-      </QueryClientProvider>,
-    );
+    renderSheet();
 
     await waitFor(() => expect(screen.getByText('alice.q')).toBeTruthy());
     expect(screen.queryByText('Alice Smith')).toBeNull();
+  });
+
+  it('does not grant a .q to an impersonator whose claim resolves to someone else', async () => {
+    // IMPOSTOR claims 'alice' too, but the resolver's record for 'alice'
+    // (unchanged from the mock above) derives back to PARTNER via KEY, not
+    // IMPOSTOR — the exact forgery `claimedNameBelongsTo` exists to catch.
+    // This is the CRITICAL-finding proof: with the crypto genuinely running
+    // (no mock on `@/utils/verifyQnsClaim`), a claim that resolves to the
+    // wrong address must render the global name, never a `.q`.
+    mockConversation = { ...mockConversation, conversationId: 'conv-2', address: IMPOSTOR };
+
+    renderSheet();
+
+    await waitFor(() => expect(screen.getByText('Alice Smith')).toBeTruthy());
+    expect(screen.queryByText('alice.q')).toBeNull();
   });
 });

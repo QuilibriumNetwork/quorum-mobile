@@ -78,8 +78,13 @@ const isQuorumAddress = (address: string | undefined): address is string =>
  * their global name. Nothing renders wrong, a name is simply less specific than
  * it could be — the same trade the space member list already takes for a member
  * who has never posted.
+ *
+ * Exported so other surfaces reading this same conversation list (e.g. the
+ * invite contact picker) can bound their OWN `enrich` fan-out to the identical
+ * cap, rather than each carrying its own copy of `50` that can silently drift
+ * from this one.
  */
-const MAX_QNS_LOOKUPS = 50;
+export const MAX_QNS_LOOKUPS = 50;
 
 /**
  * The distinct Quorum partner addresses worth looking up, newest first, capped.

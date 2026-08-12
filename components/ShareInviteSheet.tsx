@@ -18,7 +18,16 @@ import { truncateAddress } from '@/utils/formatAddress';
 import { ActionRow, ActionRowGroup } from '@/components/shared';
 import { useToast } from '@/context/ToastContext';
 import { useConversations } from '@/hooks/chat/useConversations';
-import { useConversationsWithQnsNames } from '@/hooks/chat/useConversationsWithQnsNames';
+// Only the pure address-capping helper is used, not the hook itself. The hook
+// attaches an UNVERIFIED `primary_username` claim to each row for a caller
+// that trusts it after its own `useVerifiedQnsNames` pass; this screen instead
+// re-resolves every row through `identity/`'s own verification (`enrich`
+// below), so the hook's `primary_username` output would never be read — it
+// would just be a second, wasted network round trip. `MAX_QNS_LOOKUPS` is
+// still worth sharing: it is the SAME conversation list, so the same bound
+// on "how many partners is it worth looking up" applies here too, and a
+// second, independent magic number is exactly how the two would drift apart.
+import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import { useShareInvite } from '@/hooks/chat/useInviteManagement';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
 import { useResolvedName, useNameResolver } from '@/identity';
@@ -58,6 +67,10 @@ interface ConversationRowProps {
   avatarStyle: StyleProp<ImageStyle>;
   sending: boolean;
   accentColor: string;
+  /** Whether THIS row is inside the bounded set worth a profile fetch. See
+   *  `enrichableAddresses` below — every row renders regardless (the list is
+   *  a plain, non-windowed `ScrollView`), but only a capped subset fetches. */
+  enrich: boolean;
   onPress: () => void;
 }
 
@@ -73,8 +86,8 @@ interface ConversationRowProps {
  * partner is never that Space's roster member, so this stays `global: true`
  * defensively rather than relying on today's absence of a nested scope.
  */
-function ConversationRow({ address, icon, avatarStyle, sending, accentColor, onPress }: ConversationRowProps) {
-  const label = useResolvedName(address, { enrich: true, global: true });
+function ConversationRow({ address, icon, avatarStyle, sending, accentColor, enrich, onPress }: ConversationRowProps) {
+  const label = useResolvedName(address, { enrich, global: true });
   return (
     <ActionRow
       leading={<CachedAvatar source={icon ? { uri: icon } : null} style={avatarStyle} />}
@@ -121,8 +134,10 @@ export default function ShareInviteSheet({
 
   // Flatten paginated conversations and keep only Quorum-native DMs (we
   // can't reliably round-trip a Farcaster DM send through this hook;
-  // those go via a separate path). Sort by most recent first.
-  const rawConversations = useMemo(() => {
+  // those go via a separate path). Sort by most recent first — most-recent-
+  // first order is what `qnsLookupAddresses` below relies on to decide WHICH
+  // partners are worth a request when the list is longer than the cap.
+  const directConversations = useMemo(() => {
     if (!conversationsData) return [];
     const flat = conversationsData.pages.flatMap((p) => p.conversations);
     return flat
@@ -130,11 +145,21 @@ export default function ShareInviteSheet({
       .sort((a, b) => b.timestamp - a.timestamp);
   }, [conversationsData]);
 
-  // Attaches each partner's verified QNS `.q` claim, the same hook the
-  // Messages tab uses. The addresses here are DM partners the conversation
-  // list has already fetched under the same query key with a 1h cache, so
-  // this is a cache read, not a fresh fetch storm.
-  const directConversations = useConversationsWithQnsNames(rawConversations);
+  // This ScrollView is NOT windowed/virtualized (see below), so every cached
+  // conversation mounts a `ConversationRow` at once — and `useConversations`
+  // shares its query key with the Messages tab, so "every cached conversation"
+  // can be every page the user has ever scrolled through this session, not
+  // just what fits on screen. Bounding WHICH rows enrich, the same way
+  // `useConversationsWithQnsNames` bounds its own lookups, keeps a long
+  // inbox from turning one open of this sheet into one profile fetch per
+  // partner ever seen. Rows past the cap still render (from whatever the
+  // identity ladder already knows in memory); they simply do not trigger a
+  // fresh request, the same degradation `MAX_QNS_LOOKUPS`'s own docstring
+  // describes.
+  const enrichableAddresses = useMemo(
+    () => new Set(qnsLookupAddresses(directConversations, MAX_QNS_LOOKUPS)),
+    [directConversations],
+  );
 
   const handleSendToDM = async (conversationId: string, recipientAddress: string) => {
     if (sendingTo) return; // guard against double-taps
@@ -237,6 +262,7 @@ export default function ShareInviteSheet({
                     avatarStyle={styles.avatar}
                     sending={sending}
                     accentColor={theme.colors.accent}
+                    enrich={enrichableAddresses.has(conv.address)}
                     onPress={() => handleSendToDM(conv.conversationId, conv.address)}
                   />
                 );
