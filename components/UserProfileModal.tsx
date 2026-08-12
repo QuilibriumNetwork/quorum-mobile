@@ -235,6 +235,14 @@ export default function UserProfileModal({
   // Space owners can kick any member other than themselves
   const canKick = !!(isSpaceOwner && spaceId && !isSelf && !targetIsFormerMember);
 
+  // Personal block (viewer-side hide), gated on `spaceId` the same way
+  // Kick/Mute below are — `BlockUserModal` resolves the target's name
+  // scoped to this space, so rendering it without one would fall through to
+  // the global ladder silently rather than failing loudly. `onBlockUser` is,
+  // in practice, only ever passed by Space-context callers, but that is a
+  // caller convention, not something the type system enforces.
+  const canBlock = !!(onBlockUser && !isSelf && spaceId);
+
   // Moderation mute: gated on the VIEWER holding the `user:mute` role permission
   // (NOT isSpaceOwner — receivers can't verify ownership, so owners need a role
   // too; matches the receive-side check). Requires a channel to broadcast on.
@@ -390,7 +398,7 @@ export default function UserProfileModal({
         )}
 
         {/* Actions - styled as tappable rows */}
-        {((onStartDM && !isSelf) || (onBlockUser && !isSelf) || canModMute || canKick) && (
+        {((onStartDM && !isSelf) || canBlock || canModMute || canKick) && (
           <View style={styles.actionsContainer}>
             <ActionRowGroup>
               {onStartDM && !isSelf && (
@@ -406,7 +414,7 @@ export default function UserProfileModal({
               {/* Personal block (viewer-side hide). Hides this user's messages
                   from your own stream, only for you, only in this space.
                   Distinct from the moderation mute below. */}
-              {onBlockUser && !isSelf && (
+              {canBlock && (
                 <ActionRow
                   icon={isUserBlocked ? 'hand.raised.slash.fill' : 'hand.raised.fill'}
                   label={isUserBlocked ? 'Unblock' : 'Block'}
@@ -456,12 +464,12 @@ export default function UserProfileModal({
           isUnmuting={targetIsModMuted}
         />
       )}
-      {onBlockUser && !isSelf && (
+      {canBlock && (
         <BlockUserModal
           visible={blockVisible}
           onClose={() => setBlockVisible(false)}
           onConfirm={() => {
-            onBlockUser(user.userId);
+            onBlockUser!(user.userId);
             onClose();
           }}
           userIcon={hasValidAvatar ? user.userAvatar : undefined}

@@ -109,6 +109,7 @@ let queryClient: QueryClient;
 function renderModal(
   user: UserProfileInfo,
   rostersBySpace: Record<string, Record<string, { display_name?: string; global_display_name?: string }>> = {},
+  opts: { spaceId?: string; onBlockUser?: (userId: string) => void } = {},
 ) {
   return renderWithProviders(
     <QueryClientProvider client={queryClient}>
@@ -117,7 +118,8 @@ function renderModal(
           visible
           onClose={() => {}}
           user={user}
-          spaceId={SPACE_ID}
+          spaceId={'spaceId' in opts ? opts.spaceId : SPACE_ID}
+          onBlockUser={opts.onBlockUser}
         />
       </IdentityScopeProvider>
     </QueryClientProvider>,
@@ -177,5 +179,38 @@ describe('UserProfileModal — renders one resolved name, not two hand-composed 
     await waitFor(() => expect(screen.getByText('Bob Nickname')).toBeTruthy());
     expect(screen.queryByText(/alice\.q/)).toBeNull();
     expect(screen.queryByText('@alice')).toBeNull();
+  });
+});
+
+describe('UserProfileModal — the Block action is gated on spaceId, like Kick/Mute', () => {
+  // `BlockUserModal` resolves the target's name SCOPED to a space
+  // (`useResolvedName(userAddress, { spaceId, enrich: true })` inside it).
+  // Without a `spaceId` that scoping silently falls back to the global
+  // ladder instead of failing loudly — the same class of gap `canKick`/
+  // `canModMute` already close by requiring `spaceId` truthy. This pins the
+  // fix: `onBlockUser` alone must not be enough to show the row or mount
+  // the modal.
+  it('does not render the Block row when onBlockUser is passed but spaceId is not', async () => {
+    renderModal(
+      { userId: TARGET, userName: 'Alice Smith' },
+      {},
+      { spaceId: undefined, onBlockUser: jest.fn() },
+    );
+
+    // Let resolution settle (no spaceId -> global scope -> the same verified
+    // .q the other tests see) before asserting the row's absence.
+    await waitFor(() => expect(screen.getByText('alice.q')).toBeTruthy());
+    expect(screen.queryByText('Block')).toBeNull();
+    expect(screen.queryByText('Unblock')).toBeNull();
+  });
+
+  it('renders the Block row when both onBlockUser and spaceId are passed', async () => {
+    renderModal(
+      { userId: TARGET, userName: 'Alice Smith' },
+      {},
+      { spaceId: SPACE_ID, onBlockUser: jest.fn() },
+    );
+
+    await waitFor(() => expect(screen.getByText('Block')).toBeTruthy());
   });
 });
