@@ -14,6 +14,16 @@
  * inline in `app/_layout.tsx` specifically so it CAN be imported here:
  * importing `app/_layout.tsx` pulls in `components/Call` -> `react-native-webrtc`,
  * which throws `NativeEventEmitter requires a non-null argument` under jest.
+ *
+ * It imports `useAuth`/`useSpaces` from the SPECIFIC files
+ * (`@/context/AuthContext`, `@/hooks/chat/useSpaces`), not the `@/context` /
+ * `@/hooks/chat` barrels — both barrels transitively reach real
+ * AuthContext/StorageContext code that needs a native crypto module jest
+ * cannot satisfy (`Cannot find native module 'QuorumCrypto'`, via
+ * `services/offline/storage.ts` -> `services/config` ->
+ * `services/crypto/native-provider.ts`). It is also why `identity/index.ts`
+ * does NOT re-export `RootIdentityScope` — see `identityBarrelSafety.test.tsx`.
+ * The mocks below target those same specific files for that reason.
  */
 import React from 'react';
 import { render, screen, cleanup } from '@testing-library/react-native';
@@ -27,10 +37,17 @@ let mockUser: MockUser;
 let mockSpaces: Array<{ spaceId: string }>;
 let mockRosters: Record<string, Record<string, { display_name?: string; global_display_name?: string }>>;
 
-jest.mock('@/context', () => ({
+// Mocked at the SPECIFIC file `RootIdentityScope.tsx` imports, not the
+// `@/context` / `@/hooks/chat` barrels — those barrels transitively reach
+// real AuthContext/StorageContext code that needs a native crypto module
+// jest cannot satisfy (see identityBarrelSafety.test.tsx). Mocking the
+// barrel here would silently stop intercepting the moment the import
+// narrows, and this file would start failing at import time instead of at
+// an assertion — worth the specificity.
+jest.mock('@/context/AuthContext', () => ({
   useAuth: () => ({ user: mockUser }),
 }));
-jest.mock('@/hooks/chat', () => ({
+jest.mock('@/hooks/chat/useSpaces', () => ({
   useSpaces: () => ({ data: mockSpaces }),
 }));
 jest.mock('@/hooks/useMultiSpaceRosters', () => ({

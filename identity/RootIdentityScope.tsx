@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { useAuth } from '@/context';
-import { useSpaces } from '@/hooks/chat';
+import { useAuth } from '@/context/AuthContext';
+import { useSpaces } from '@/hooks/chat/useSpaces';
 import { useMultiSpaceRosters } from '@/hooks/useMultiSpaceRosters';
 import { IdentityScopeProvider } from './identityProvider';
 import { selfLocalNameEntry } from './identityFromMaps';
@@ -23,6 +23,16 @@ import { selfLocalNameEntry } from './identityFromMaps';
  * in `react-native-webrtc` (via `components/Call`), which throws a native
  * `NativeEventEmitter` invariant under jest. Extracting this component is
  * what makes it possible to render and test in isolation.
+ *
+ * Imports `useAuth`/`useSpaces` from their specific files, not the
+ * `@/context` / `@/hooks/chat` barrels — those barrels also reach a
+ * different, unmockable native module (`Cannot find native module
+ * 'QuorumCrypto'`, via real AuthContext/StorageContext code) — AND is
+ * deliberately NOT re-exported from `identity/index.ts`, the barrel every
+ * other name-resolution call site imports from. It is mounted exactly once,
+ * at the app root; nothing else needs it via `@/identity`, and re-exporting
+ * it there would make importing `MemberName` alone execute this file's full
+ * import graph too. See `identityBarrelSafety.test.tsx`.
  */
 export function RootIdentityScope({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();

@@ -63,7 +63,7 @@ import { CallOverlay, SpaceCallOverlay } from '@/components/Call';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { queryConfig } from '@/services/api';
 import { queryPersister } from '@/services/offline';
-import { RootIdentityScope } from '@/identity';
+import { RootIdentityScope } from '@/identity/RootIdentityScope';
 import {
   initializeNotifications,
   registerBackgroundFetch,
