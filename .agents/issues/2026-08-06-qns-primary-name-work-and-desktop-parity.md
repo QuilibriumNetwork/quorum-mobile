@@ -4,9 +4,9 @@ title: "QNS primary .q names: everything done, everything left, and how to bring
 status: in-progress
 priority: high
 created: 2026-08-06
-updated: 2026-08-10
+updated: 2026-08-11
 area: identity resolution / QNS / cross-client parity
-repos: quorum-mobile (ahead), quorum-desktop (behind), quorum-shared (validator only)
+repos: quorum-desktop (ahead as of 2026-08-11 — it now has the provider/component layer), quorum-mobile (behind on that layer, still ahead on elect/un-elect), quorum-shared (owns the rule: resolveIdentity)
 source: consolidation of a day's work on 2026-08-06, written because the work spans two repos and five issue files and nobody should have to reassemble it
 related:
   - "issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md (the design, incl. §10 and §10a)"
@@ -420,7 +420,20 @@ lives twice.
 **Move to shared — these are rules, and a rule that exists twice is a rule that
 will disagree with itself:**
 
-1. **The echo demotion.** An override equal to the global name is the join echo,
+1. **The echo demotion — ✅ DONE IN SHARED, 2026-08-10. Absorbed; do not plan
+   this item.** It shipped as part of a larger change rather than on its own, so
+   the analysis below is kept only as the argument that produced it. Read the
+   ✅ box after it, then stop.
+
+   MEASURED 2026-08-11: `resolveIdentity` in `quorum-shared` applies the demotion
+   (`if (space && space !== global) return …`, i.e. an override equal to the
+   global name falls through to the QNS tier), and it is published — npm
+   `@quilibrium/quorum-shared@2.1.0-42`, 2026-08-10 21:02Z, exports
+   `MemberIdentity` and `resolveIdentity` from
+   `dist/utils/resolveDisplayName.d.ts`. **Mobile pins `2.1.0-40`, so mobile does
+   not have it yet; that is a bump, not a blocker.**
+
+   An override equal to the global name is the join echo,
    not a per-space name. Mobile applies it INSIDE its one resolver; desktop
    exposes it as a separate `resolveSpaceMemberName` you have to remember to
    call instead of `resolveMemberName`. Desktop's shape is the fragile one —
@@ -448,7 +461,7 @@ will disagree with itself:**
    Treat this as a design task with its own short spec, not as a port. It is
    also why it must not gate the security item below.
 
-   > ### ✅ 2026-08-10 — that spec now exists, and ABSORBS this item
+   > ### ✅ 2026-08-10 — that spec now exists, SHIPPED, and ABSORBS this item
    >
    > **`quorum-desktop/.agents/issues/.open/2026-08-10-identity-resolution-architecture-design.md`**
    >
@@ -473,6 +486,19 @@ will disagree with itself:**
    >
    > Mobile's own step is step 6 of that document. Read it there rather than
    > planning from here.
+   >
+   > **2026-08-11 update — desktop's side is done and mobile is unblocked.**
+   > Shared merged (`2efd307`) and published (`2.1.0-42`). Desktop migrated all
+   > ~24 call sites plus a second tranche the plan's table never saw (search,
+   > moderation modals, the app shell), deleted `resolveMemberName.ts`,
+   > `resolveSelfName.ts`, `resolveGlobalSender.ts`, `conversationSearch.ts`,
+   > `profileCardIdentity.ts` and `ResolvedName.tsx`, and turned the lint rule
+   > from an allowlist ratchet into a live guard restricting `resolveIdentity`
+   > and `identityFromMaps` to `src/identity/`.
+   >
+   > So mobile's step is now: bump `2.1.0-40` → `2.1.0-42` **and** migrate its
+   > one shared-importing file in the same PR (the change is breaking by
+   > design), then port the provider/component layer across its 17 call sites.
 2. **The forged-`.q` guard — DONE on all three repos, 2026-08-06.** Shared
    `#77`, desktop `06c38370d` on `main`. Mobile already had it. The history
    below is kept because the gap it describes is the argument for item 1.
@@ -547,8 +573,9 @@ most-called function and wants its own test pass.
 **Ready to implement straight from this document:** items 4, 6 and 7. They are
 small, self-contained, and every fact they rest on is cited with a file:line.
 
-**Needs a short design spec first:** the shared echo-demotion move, for the two
-reasons given above. Do not hand that to an agent as a port.
+~~**Needs a short design spec first:** the shared echo-demotion move.~~ **Done —
+the spec was written, implemented and published (2026-08-10). See the ✅ box in
+item 1.** Nothing here is waiting on a spec any more.
 
 **Blocked on the server:** items 1, 2 and 3 (elect-primary and un-elect) cannot
 be tested end to end until #9 is fixed, because nothing can be published.
@@ -566,7 +593,9 @@ be tested end to end until #9 is fixed, because nothing can be published.
 4. Build desktop's fake-profile harness (see START HERE) before any further
    render work, so the rest can actually be verified.
 5. The join/config-sync write change, if desktop has equivalent paths
-6. The shared echo-demotion move, after its spec exists
+6. ~~The shared echo-demotion move, after its spec exists~~ — ✅ done
+   2026-08-10 in `resolveIdentity`; mobile's remaining share is the version bump
+   + migration in one PR (item 1's ✅ box)
 7. (1)+(2)+(3) elect-primary, once the server (#9) is fixed and it can work
 8. (5) receiver-side verification, in lockstep with mobile
 
@@ -598,9 +627,19 @@ This is why the broadcast transport moved from last to first in the design doc.
 - [ ] All of the above re-measured on device with switch 2 on (one device is
       enough — see above)
 - [ ] The user profile modal's dead `@handle` line resolved either way
-- [ ] The echo demotion and the forged-`.q` guard live in `quorum-shared`
+- [x] The echo demotion and the forged-`.q` guard live in `quorum-shared` —
+      both inside `resolveIdentity`, published as `2.1.0-42` (MEASURED
+      2026-08-11). Mobile still pins `2.1.0-40`, so consuming them is the
+      outstanding half, tracked as the next item.
+- [ ] Mobile bumped to a shared version carrying `resolveIdentity` **and**
+      migrated in the same PR (Phase F of
+      `quorum-desktop/.agents/issues/.open/2026-08-10-identity-resolution-architecture-plan.md`)
 - [ ] Desktop items (4) and (6) done
 - [ ] Desktop reaches feature parity on electing and un-electing
 - [ ] Receiver-side verification on BOTH clients, or on neither
 - [ ] #9 fixed server-side and re-measured, or the broadcast transport ships
       and makes it unnecessary for spacemates
+
+---
+
+*Last updated: 2026-08-11*

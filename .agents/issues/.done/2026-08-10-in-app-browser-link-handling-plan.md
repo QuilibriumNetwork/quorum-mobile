@@ -1,7 +1,7 @@
 ---
 type: task
 title: "In-app browser: split link mode from miniapp mode, hand off YouTube to the native app, rebuild the chrome"
-status: in-progress
+status: done
 priority: high
 created: 2026-08-10
 updated: 2026-08-10
@@ -13,9 +13,23 @@ blocks: []
 
 ## Status
 
-Slices 1–5 are implemented on `feat/in-app-browser-link-mode`. Awaiting the
-device pass in [Verification](#verification) — until that runs, nothing here is
-confirmed on real hardware.
+**2026-08-10 — shipped in PR #247** (`feat: a tapped link opens a browser, not
+the miniapp host`)
+
+All five slices landed. `BrowserModal` takes `mode: 'link' | 'miniapp'` and link
+mode runs with the SDK bridge disabled, no wallet chrome, a real browser user
+agent and a rebuilt footer; any YouTube host hands off to the native app; the
+external-open button works and reports failure; the duplicate `app/browser.tsx`
+route is deleted and its three callers repointed at the overlay; non-http schemes
+and `target="_blank"` are handled.
+
+**Device pass: PASSED.** Confirmed by the operator on Android, including the mini
+app regression arm (wallet chip present, signing still works).
+
+**iOS is still unverified** and is tracked as item 12 in
+`.agents/docs/ios-verification-checklist.md`, not here. This work adds a
+`Platform.select` branch (the link-mode user agent) that an Android run does not
+exercise at all.
 
 **Automated checks (MEASURED):** `tsc --noEmit` 11 errors, identical to the
 master baseline of 11 (all in untouched files). ESLint on touched files 17
