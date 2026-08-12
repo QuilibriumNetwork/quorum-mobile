@@ -1,4 +1,5 @@
 export { IdentityScopeProvider, useIdentityContext } from './identityProvider';
+export { RootIdentityScope } from './RootIdentityScope';
 export {
   identityFromMaps,
   selfLocalNameEntry,
