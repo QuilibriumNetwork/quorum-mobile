@@ -177,8 +177,6 @@ const TO_MIGRATE: Record<string, string> = {
     'MIXED: cast authors are Farcaster, but `conv.displayName` is a Quorum conversation name read raw.',
 
   // ── Hand-composed identity, including a hand-rolled `.q` ────────────────
-  'components/SocialFeed/content/QuorumIdentityBadge.tsx':
-    'DEFECT: appends `.q` itself from a raw `primaryUsername`, bypassing the forged-suffix guard. The suffix is the ONLY verification signal a viewer gets.',
   'components/UserProfileModal.tsx':
     'DEFECT: renders `user.userName` and `user.primaryUsername` as separate hand-composed pieces instead of one resolved name.',
   'components/wallet/TipModal.tsx':
