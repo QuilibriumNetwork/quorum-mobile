@@ -45,3 +45,11 @@ jest.mock(
   'react-native-keyboard-controller',
   () => require('react-native-keyboard-controller/jest'),
 );
+
+// `GestureHandlerRootView` calls a native `.install()` at mount time
+// (`TypeError: _RNGestureHandlerModule.default.install is not a function`),
+// so any render test that mounts `BaseModal` — the shared bottom-sheet shell
+// behind most modals/settings sheets — dies on that, not on anything the
+// test is actually about. The package's own jest setup, same
+// prefer-the-maintainer's-mock reasoning as the two entries above.
+require('react-native-gesture-handler/jestSetup');

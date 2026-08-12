@@ -400,10 +400,10 @@ export default function MessagesInbox() {
             visible
             onClose={() => setSettingsItem(null)}
             conversationId={settingsItem.id}
-            displayName={settingsItem.title}
             theme={theme}
             avatarUri={settingsItem.icon}
             address={settingsItem.address ?? settingsItem.id.split('/')[0]}
+            showRecipientHeader
             isMuted={isMuted(settingsItem.id)}
             onToggleMute={handleToggleMuteFromSheet}
             onDeleteConversation={handleDeleteFromSheet}

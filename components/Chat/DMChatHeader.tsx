@@ -12,17 +12,20 @@ import type { AppTheme } from '@/theme';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ScreenHeader, headerIconHitSlop } from '@/components/ui/ScreenHeader';
+import { useResolvedName } from '@/identity';
 import React from 'react';
 import { Image, StyleSheet, Text } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
 
 interface DMChatHeaderProps {
-  /** Resolved display name — the caller already falls back to a short address. */
-  title: string;
   /** Avatar URL, if the conversation has one. */
   icon?: string;
-  /** Counterparty address, for the deterministic initials avatar fallback. */
+  /** Counterparty address. The header resolves its own display name from this
+   *  (global scope — a DM has no per-space nickname) rather than trusting a
+   *  name string the caller already computed, so the title text and the
+   *  avatar's initials can never disagree about who this conversation is
+   *  with. Also feeds the deterministic initials avatar fallback. */
   address: string;
   /** Safe-area top inset — the bar paints into the status bar area itself. */
   insetTop: number;
@@ -43,7 +46,6 @@ interface DMChatHeaderProps {
 }
 
 export const DMChatHeader = React.memo(function DMChatHeader({
-  title,
   icon,
   address,
   insetTop,
@@ -57,6 +59,10 @@ export const DMChatHeader = React.memo(function DMChatHeader({
   theme,
 }: DMChatHeaderProps) {
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+  // `global`: a DM has no per-space nickname. `enrich`: bounded to exactly one
+  // address per mount (this header renders one conversation at a time), so
+  // the profile fetch that makes a `.q` possible here is affordable.
+  const title = useResolvedName(address, { global: true, enrich: true });
 
   return (
     <ScreenHeader

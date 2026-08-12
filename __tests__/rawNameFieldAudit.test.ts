@@ -164,9 +164,7 @@ const TO_MIGRATE: Record<string, string> = {
 
   // ── DM surfaces, including the PLACEHOLDER class ────────────────────────
   'components/Chat/DMChatArea.tsx':
-    'DEFECT: builds identity rows from raw conversation fields and hand-truncates with `address.slice(0, 8)`.',
-  'components/Chat/DMSettingsSheet.tsx':
-    'DEFECT: renders an unresolved `displayName` in the header AND inside destructive-action confirmation copy.',
+    'PARTIALLY MIGRATED: the composer channel-name hand-truncation (`address.slice(0, 8)`) now resolves via `@/identity`’s `useResolvedName`. Two things remain raw and are NOT this file’s row: the `dmMemberMap` build block (`global_display_name`/`claimed_primary_username` keys, lines ~160-187) is a separate, already-verified mechanism (`useVerifiedQnsNamesInMap`) feeding per-message sender names, out of this migration’s scope; and `cachedPreview.sourceName` (line ~498) is a genuine, newly-found DEFECT — a hand-rolled `conversationData?.displayName || \'DM\'` baked into a bookmark’s stored preview with no `.q` support — left unfixed here because it has no covering test in this pass. Flagged for a follow-up row.',
   'components/Chat/FarcasterDirectMessageView.tsx':
     'MIXED: Farcaster authors are fine, but `conversation.displayName` is read raw for the conversation title.',
   'components/SocialFeedModal.tsx':

@@ -461,7 +461,6 @@ export default function DMChatScreen() {
   // renders it.
   const dmHeader = conversation ? (
     <DMChatHeader
-      title={title}
       icon={conversation.icon}
       address={conversation.address || ''}
       insetTop={insets.top}
@@ -573,7 +572,7 @@ export default function DMChatScreen() {
             visible
             onClose={() => setSettingsVisible(false)}
             conversationId={conversationId}
-            displayName={title}
+            address={conversation.address || recipientAddress || ''}
             theme={theme}
             onDeleteConversation={handleDeleteConversation}
             isRepudiable={effectiveIsRepudiable}
