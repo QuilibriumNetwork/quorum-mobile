@@ -176,10 +176,6 @@ const TO_MIGRATE: Record<string, string> = {
   'components/SocialFeedModal.tsx':
     'MIXED: cast authors are Farcaster, but `conv.displayName` is a Quorum conversation name read raw.',
 
-  // ── Known, filed, and the reason the render-test instrument exists ──────
-  'components/ShareInviteSheet.tsx':
-    'DEFECT: `conv.displayName || truncateAddress(...)` never reaches the resolver, and re-derives a fallback the resolver owns. Pinned by shareInviteSheetName.test.tsx.',
-
   // ── Hand-composed identity, including a hand-rolled `.q` ────────────────
   'components/SocialFeed/content/QuorumIdentityBadge.tsx':
     'DEFECT: appends `.q` itself from a raw `primaryUsername`, bypassing the forged-suffix guard. The suffix is the ONLY verification signal a viewer gets.',

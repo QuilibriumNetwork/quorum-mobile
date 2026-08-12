@@ -18,11 +18,29 @@ import { truncateAddress } from '@/utils/formatAddress';
 import { ActionRow, ActionRowGroup } from '@/components/shared';
 import { useToast } from '@/context/ToastContext';
 import { useConversations } from '@/hooks/chat/useConversations';
+import { useConversationsWithQnsNames } from '@/hooks/chat/useConversationsWithQnsNames';
 import { useShareInvite } from '@/hooks/chat/useInviteManagement';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
+import { useResolvedName, useNameResolver } from '@/identity';
+// `formatResolvedName` is not re-exported from the `@/identity` barrel (only
+// the hooks and `<MemberName>` are), so it is imported from its owning module
+// directly. It stays the ONLY place a `.q` suffix is spelled out — this just
+// reaches it by a longer path, for the one call site (a toast, not a render)
+// that needs the formatted string outside of `<MemberName>`/`useResolvedName`.
+import { formatResolvedName } from '@/identity/useResolvedName';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  type ImageStyle,
+  Pressable,
+  ScrollView,
+  StyleProp,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
@@ -32,6 +50,46 @@ interface ShareInviteSheetProps {
   onClose: () => void;
   inviteLink: string;
   spaceName: string;
+}
+
+interface ConversationRowProps {
+  address: string;
+  icon?: string;
+  avatarStyle: StyleProp<ImageStyle>;
+  sending: boolean;
+  accentColor: string;
+  onPress: () => void;
+}
+
+/**
+ * Own component, not an inline `.map()` body: `useResolvedName` is a hook, and
+ * the number of conversations is not known until data loads, so it can only be
+ * called once per row-COMPONENT-INSTANCE, never inside a loop in one component.
+ *
+ * Global ladder, not the ambient scope: this sheet is opened from
+ * `SpaceSettingsModal` and `InviteModal`, and `SpaceSettingsModal` is a Space
+ * surface. Only one `IdentityScopeProvider` exists today (the global root in
+ * `app/_layout.tsx`), so there is no per-space nickname to leak yet — but a DM
+ * partner is never that Space's roster member, so this stays `global: true`
+ * defensively rather than relying on today's absence of a nested scope.
+ */
+function ConversationRow({ address, icon, avatarStyle, sending, accentColor, onPress }: ConversationRowProps) {
+  const label = useResolvedName(address, { enrich: true, global: true });
+  return (
+    <ActionRow
+      leading={<CachedAvatar source={icon ? { uri: icon } : null} style={avatarStyle} />}
+      label={label}
+      sublabel={truncateAddress(address, 'medium')}
+      trailing={
+        sending ? (
+          <ActivityIndicator size="small" color={accentColor} />
+        ) : (
+          <IconSymbol name="paperplane.fill" size={16} color={accentColor} />
+        )
+      }
+      onPress={onPress}
+    />
+  );
 }
 
 export default function ShareInviteSheet({
@@ -47,6 +105,7 @@ export default function ShareInviteSheet({
   const { data: conversationsData, isLoading } = useConversations({ type: 'direct' });
   const sendDirectMessage = useSendDirectMessage();
   const shareInvite = useShareInvite();
+  const nameResolver = useNameResolver();
   const [sendingTo, setSendingTo] = useState<string | null>(null);
 
   // Slide-up animation. Mirrors what BaseModal does internally, but as
@@ -63,7 +122,7 @@ export default function ShareInviteSheet({
   // Flatten paginated conversations and keep only Quorum-native DMs (we
   // can't reliably round-trip a Farcaster DM send through this hook;
   // those go via a separate path). Sort by most recent first.
-  const directConversations = useMemo(() => {
+  const rawConversations = useMemo(() => {
     if (!conversationsData) return [];
     const flat = conversationsData.pages.flatMap((p) => p.conversations);
     return flat
@@ -71,7 +130,13 @@ export default function ShareInviteSheet({
       .sort((a, b) => b.timestamp - a.timestamp);
   }, [conversationsData]);
 
-  const handleSendToDM = async (conversationId: string, recipientAddress: string, displayName: string) => {
+  // Attaches each partner's verified QNS `.q` claim, the same hook the
+  // Messages tab uses. The addresses here are DM partners the conversation
+  // list has already fetched under the same query key with a 1h cache, so
+  // this is a cache read, not a fresh fetch storm.
+  const directConversations = useConversationsWithQnsNames(rawConversations);
+
+  const handleSendToDM = async (conversationId: string, recipientAddress: string) => {
     if (sendingTo) return; // guard against double-taps
     setSendingTo(conversationId);
     try {
@@ -81,10 +146,13 @@ export default function ShareInviteSheet({
         recipientAddress,
         text: message,
       });
+      // Global ladder: a DM partner's name must never leak a per-space
+      // nickname from whichever Space this sheet happens to be opened from.
+      const resolved = nameResolver.resolve(recipientAddress, { global: true });
       showToast({
         type: 'success',
         title: 'Invite sent',
-        message: `Sent to ${displayName || 'recipient'}`,
+        message: `Sent to ${formatResolvedName(resolved)}`,
       });
       onClose();
     } catch (e) {
@@ -162,24 +230,14 @@ export default function ShareInviteSheet({
               {directConversations.map((conv) => {
                 const sending = sendingTo === conv.conversationId;
                 return (
-                  <ActionRow
+                  <ConversationRow
                     key={conv.conversationId}
-                    leading={
-                      <CachedAvatar
-                        source={conv.icon ? { uri: conv.icon } : null}
-                        style={styles.avatar}
-                      />
-                    }
-                    label={conv.displayName || truncateAddress(conv.address)}
-                    sublabel={truncateAddress(conv.address, 'medium')}
-                    trailing={
-                      sending ? (
-                        <ActivityIndicator size="small" color={theme.colors.accent} />
-                      ) : (
-                        <IconSymbol name="paperplane.fill" size={16} color={theme.colors.accent} />
-                      )
-                    }
-                    onPress={() => handleSendToDM(conv.conversationId, conv.address, conv.displayName)}
+                    address={conv.address}
+                    icon={conv.icon}
+                    avatarStyle={styles.avatar}
+                    sending={sending}
+                    accentColor={theme.colors.accent}
+                    onPress={() => handleSendToDM(conv.conversationId, conv.address)}
                   />
                 );
               })}
