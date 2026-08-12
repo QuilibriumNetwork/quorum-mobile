@@ -10,6 +10,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 import { useCall } from '@/context';
+import { useResolvedName } from '@/identity';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import * as Skin from '@/theme/skins/geometry';
@@ -29,14 +30,23 @@ export function IncomingCallScreen() {
     transform: [{ scale: pulseScale.value }],
   }));
 
+  // The call payload carries the caller's real address
+  // (`incomingCall.callerAddress`), not just a display-name string, so the
+  // screen resolves its own name instead of trusting whatever the sender
+  // stamped onto the offer. `global`: a call has no per-space nickname.
+  // `enrich`: bounded to exactly one address per call. Called unconditionally
+  // (before the `!incomingCall` early return below) — hooks run every render
+  // regardless of call state.
+  const callerName = useResolvedName(incomingCall?.callerAddress ?? '', { global: true, enrich: true });
+
   if (!incomingCall) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 60, paddingBottom: Skin.space(80) + insets.bottom, backgroundColor: theme.colors.background }]}>
       <View style={styles.callerInfo}>
-        <DefaultAvatar resolvedName={incomingCall.callerDisplayName} address={incomingCall.callerAddress} size={96} />
+        <DefaultAvatar resolvedName={callerName} address={incomingCall.callerAddress} size={96} />
         <Text style={[styles.callerName, { color: theme.colors.text }]}>
-          {incomingCall.callerDisplayName}
+          {callerName}
         </Text>
         <Text style={[styles.callType, { color: theme.colors.textSubtle }]}>
           Incoming {incomingCall.mediaType} call

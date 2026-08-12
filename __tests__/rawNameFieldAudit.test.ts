@@ -69,8 +69,12 @@ const SCAN_ROOTS = ['components', 'app'];
  * `recipientDisplayName`/`callerDisplayName` are the call-payload spellings —
  * camelCase concatenation means the plain `displayName` alternative above
  * cannot see them (no `\b` boundary inside one unbroken word token), so they
- * are listed by name. Confirmed by grep to appear nowhere else under the scan
- * roots except the three Call screens already tracked below.
+ * are listed by name. The three Call screens that used to read these raw are
+ * now migrated (see `__tests__/migrated/CallScreens.test.tsx`) and carry zero
+ * matches; both spellings stay in the pattern so a regression at that exact
+ * call site — reading the payload field again instead of resolving from its
+ * address — is caught rather than going invisible to the plain `displayName`
+ * alternative.
  */
 const RAW_FIELD =
   /\b(displayName|primaryUsername|globalDisplayName|display_name|primary_username|global_display_name|recipientDisplayName|callerDisplayName)\b/;
@@ -154,14 +158,6 @@ const EXCEPTIONS: Record<string, string> = {
  * it; never add one.
  */
 const TO_MIGRATE: Record<string, string> = {
-  // ── Calls: a whole surface family no migration table listed ─────────────
-  'components/Call/InCallScreen.tsx':
-    'DEFECT: renders `activeCall.recipientDisplayName` raw off the call payload; never resolved, so no `.q` and no per-space name.',
-  'components/Call/IncomingCallScreen.tsx':
-    'DEFECT: renders `incomingCall.callerDisplayName` raw off the call payload.',
-  'components/Call/OutgoingCallScreen.tsx':
-    'DEFECT: renders `activeCall.recipientDisplayName` raw off the call payload.',
-
   // ── DM surfaces, including the PLACEHOLDER class ────────────────────────
   'components/Chat/DMChatArea.tsx':
     'PARTIALLY MIGRATED: the composer channel-name hand-truncation (`address.slice(0, 8)`) now resolves via `@/identity`’s `useResolvedName`. Two things remain raw and are NOT this file’s row: the `dmMemberMap` build block (`global_display_name`/`claimed_primary_username` keys, lines ~160-187) is a separate, already-verified mechanism (`useVerifiedQnsNamesInMap`) feeding per-message sender names, out of this migration’s scope; and `cachedPreview.sourceName` (line ~498) is a genuine, newly-found DEFECT — a hand-rolled `conversationData?.displayName || \'DM\'` baked into a bookmark’s stored preview with no `.q` support — left unfixed here because it has no covering test in this pass. Flagged for a follow-up row.',

@@ -11,6 +11,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 import { useCall } from '@/context';
+import { useResolvedName } from '@/identity';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import * as Skin from '@/theme/skins/geometry';
@@ -34,14 +35,23 @@ export function OutgoingCallScreen() {
 
   const dotStyle = useAnimatedStyle(() => ({ opacity: dotOpacity.value }));
 
+  // The call payload carries the counterparty's real address
+  // (`activeCall.recipientAddress`), not just a display-name string, so the
+  // screen resolves its own name instead of trusting whatever the caller
+  // stamped onto the payload at dial time. `global`: a call has no per-space
+  // nickname. `enrich`: bounded to exactly one address per call. Called
+  // unconditionally (before the `!activeCall` early return below) — hooks run
+  // every render regardless of call state.
+  const recipientName = useResolvedName(activeCall?.recipientAddress ?? '', { global: true, enrich: true });
+
   if (!activeCall) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 60, paddingBottom: Skin.space(80) + insets.bottom, backgroundColor: theme.colors.background }]}>
       <View style={styles.callerInfo}>
-        <DefaultAvatar resolvedName={activeCall.recipientDisplayName} address={activeCall.recipientAddress} size={96} />
+        <DefaultAvatar resolvedName={recipientName} address={activeCall.recipientAddress} size={96} />
         <Text style={[styles.callerName, { color: theme.colors.text }]}>
-          {activeCall.recipientDisplayName}
+          {recipientName}
         </Text>
         <Animated.Text style={[styles.statusText, { color: theme.colors.textSubtle }, dotStyle]}>
           {activeCall.state === 'offering' ? 'Connecting...' : 'Ringing...'}
