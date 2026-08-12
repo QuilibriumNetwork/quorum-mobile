@@ -1,5 +1,5 @@
 /**
- * Mobile adapter over the shared `resolveDisplayName` rule.
+ * Mobile adapter over the shared `resolveIdentity` rule.
  *
  * There is ONE rule for which name a member shows, it lives in
  * `@quilibrium/quorum-shared`, and every mobile surface goes through this file
@@ -67,7 +67,7 @@
  * name carries no picture. Do not merge the two.
  */
 
-import { hasReservedQnsSuffix, resolveDisplayName } from '@quilibrium/quorum-shared';
+import { hasReservedQnsSuffix, resolveIdentity } from '@quilibrium/quorum-shared';
 import { truncateAddress } from './formatAddress';
 
 export interface ResolvedMemberName {
@@ -159,7 +159,7 @@ const present = (s?: string | null): string | undefined => {
  *
  * ## This is NOT a redundant copy of shared's guard — do not delete it
  *
- * `quorum-shared` ≥ 2.1.0-40 applies the same rule inside `resolveDisplayName`,
+ * `quorum-shared` ≥ 2.1.0-40 applies the same rule inside `resolveIdentity`,
  * so it looks like this local check became belt-and-braces. It did not, and
  * removing it is a measured regression (two tests go red with shared's guard
  * fully active):
@@ -223,13 +223,22 @@ export function resolveMemberName(
   // them actually has content, so shared's non-Qm-aware address fallback can
   // never reach the screen.
   if (override || qns || global) {
-    const resolved = resolveDisplayName(
+    // `null`, never `undefined`: shared's `MemberIdentity` requires every tier
+    // explicitly, so "I didn't look this up" cannot be spelled at all. The
+    // conversion happens here because the `present*` helpers above return
+    // `undefined` for an absent tier, which is the shape the local gate reads
+    // most naturally.
+    const resolved = resolveIdentity(
       {
         address: member.address,
-        display_name: global,
-        primary_username: qns,
+        spaceName: override ?? null,
+        qnsName: qns ?? null,
+        globalName: global ?? null,
       },
-      { spaceOverrideName: override },
+      // Always the space ladder. A DM row carries no per-space override, so
+      // `spaceName` is null there and both scopes return the same answer —
+      // this is not a claim that every caller is inside a Space.
+      { scope: 'space' },
     );
     return {
       name: resolved.name,
