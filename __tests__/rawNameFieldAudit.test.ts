@@ -123,6 +123,10 @@ const EXCEPTIONS: Record<string, string> = {
     'Renders a Farcaster profile and that author’s casts; the remaining hits are StyleSheet keys.',
   'components/SocialFeed/views/ThreadDetailView.tsx':
     'Renders Farcaster cast authors in a thread; the remaining hits are StyleSheet keys.',
+  'components/Chat/FarcasterDirectMessageView.tsx':
+    'RECLASSIFIED, not migrated: this component only ever renders when `isFarcasterConversation` is true (`app/(tabs)/messages/dm/[id].tsx:500-518`), and every Farcaster conversation — real or the synthetic one built for a first-time DM — carries a synthetic `fid:<n>` address (`hooks/chat/useFarcasterDirectCasts.ts:73`; the synthetic branch at `app/(tabs)/messages/dm/[id].tsx:126`). So `conversation.displayName` here is Farcaster’s OWN conversation-title field (`fc.name ?? counterParty?.displayName ?? counterParty?.username`, same hook, line 75), never a Quorum name — routing it through `@/identity` would treat that `fid:<n>` string as a member address and, per the identity module’s own warning, could render somebody else’s name. Per-message sender names (this file’s other Farcaster reads) go through `directCastToDisplayMessage` unchanged, out of this file.',
+  'components/SocialFeedModal.tsx':
+    'MIGRATED: the "Share to chat" picker’s Quorum DM rows now resolve via `@/identity`’s `useResolvedName` (global, enrich — bounded the same way `ShareInviteSheet.tsx` bounds its own fan-out), in their own `QuorumShareRow` component. Every remaining hit is legitimate Farcaster data: `cast.author`/`pending.author`/`resolvedCast.author` fields throughout this file’s (large) cast-rendering code, and the sibling `FarcasterShareRow` component’s own `conv.displayName`/`conv.farcasterUsername` — a Farcaster conversation’s own fields, deliberately left unrouted through the member resolver for the same `fid:<n>` reason as `FarcasterDirectMessageView.tsx` above.',
 
   // ── ROLE names are a different entity that shares the field name ────────
   'components/Chat/ChannelManagerRolePickerSheet.tsx':
@@ -167,10 +171,6 @@ const TO_MIGRATE: Record<string, string> = {
   // ── DM surfaces, including the PLACEHOLDER class ────────────────────────
   'components/Chat/DMChatArea.tsx':
     'PARTIALLY MIGRATED: the composer channel-name hand-truncation (`address.slice(0, 8)`) now resolves via `@/identity`’s `useResolvedName`. Two things remain raw and are NOT this file’s row: the `dmMemberMap` build block (`global_display_name`/`claimed_primary_username` keys, lines ~160-187) is a separate, already-verified mechanism (`useVerifiedQnsNamesInMap`) feeding per-message sender names, out of this migration’s scope; and `cachedPreview.sourceName` (line ~498) is a genuine, newly-found DEFECT — a hand-rolled `conversationData?.displayName || \'DM\'` baked into a bookmark’s stored preview with no `.q` support — left unfixed here because it has no covering test in this pass. Flagged for a follow-up row.',
-  'components/Chat/FarcasterDirectMessageView.tsx':
-    'MIXED: Farcaster authors are fine, but `conversation.displayName` is read raw for the conversation title.',
-  'components/SocialFeedModal.tsx':
-    'MIXED: cast authors are Farcaster, but `conv.displayName` is a Quorum conversation name read raw.',
 };
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
