@@ -1,10 +1,9 @@
 import * as React from 'react';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import { getQuorumClient } from '@/services/api/quorumClient';
 import { publicProfileQueryKey, type PublicProfile } from '@/hooks/useUserPublicProfile';
-import { resolveClaimedNames, QNS_BATCH_LIMIT } from '@/hooks/useVerifiedQnsNames';
+import { claimedNamesIn, useClaimRecords } from '@/hooks/useVerifiedQnsNames';
 import { claimedNameBelongsTo } from '@/utils/verifyQnsClaim';
-import { resolveBatch } from '@/services/api/qnsClient';
 import {
   EMPTY_LOCAL_NAMES,
   type IdentitySources,
@@ -144,37 +143,22 @@ export const IdentityScopeProvider: React.FunctionComponent<{
   // because there is no other way in. Unproven includes NOT-YET-KNOWN — a
   // lookup in flight yields no entry, so the name simply is not there. A `.q`
   // shown for even the instant before a lookup lands is the whole attack.
-  const claimedNames = React.useMemo(() => {
-    const seen = new Set<string>();
-    for (const profile of Object.values(profiles)) {
-      const claim = (profile?.primary_username ?? '').trim();
-      if (claim) seen.add(claim);
-      if (seen.size >= QNS_BATCH_LIMIT) break;
-    }
-    return Array.from(seen);
-  }, [profiles]);
+  //
+  // The dedup/cap (`claimedNamesIn`) and the resolve-and-cache query
+  // (`useClaimRecords`) are the SAME functions `useVerifiedQnsNames` uses for
+  // the broadcast/roster path, imported rather than re-implemented. That
+  // hook's `staleTime` is a documented security parameter — the window a
+  // transferred-away name keeps verifying under its previous owner — and a
+  // second copy of that number here would be a second place for it to drift.
+  const claimedNames = React.useMemo(
+    () => claimedNamesIn(Object.values(profiles).filter((p): p is PublicProfile => p !== null)),
+    [profiles],
+  );
 
-  const namesKey = claimedNames.join('|');
-  const { data: claimRecords } = useQuery({
-    queryKey: ['qns-verify-claims', namesKey],
-    queryFn: () => resolveClaimedNames(claimedNames, resolveBatch),
-    enabled: claimedNames.length > 0,
-    staleTime: 60 * 60 * 1000,
-    gcTime: 24 * 60 * 60 * 1000,
-    // A retry would extend the window in which claims are unresolved. They
-    // degrade to the global name meanwhile, which is correct but invisible.
-    retry: false,
-    // Carry the previous answer while a wider set resolves, or every name on
-    // screen reverts to its global form for ~200ms whenever a new claimant
-    // appears. Safe in the fail-closed direction: a name that is NEW in the
-    // wider set is simply absent from the carried map, and absent means
-    // unverified, so this can only ever under-show.
-    placeholderData: (previous) => previous,
-  });
+  const claimRecords = useClaimRecords(claimedNames);
 
   const verifiedQnsNames = React.useMemo(() => {
     const map: Record<string, string> = {};
-    if (!claimRecords) return map;
     for (const [address, profile] of Object.entries(profiles)) {
       const claim = (profile?.primary_username ?? '').trim();
       if (!claim) continue;

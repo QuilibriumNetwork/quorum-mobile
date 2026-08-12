@@ -360,8 +360,14 @@ const DEV_CLAIM_EXEMPTION: ClaimExemption | undefined = FakeQnsModule
  * beats bookkeeping to save part of it. If it ever does show up as a real cost,
  * seed per-name cache entries; do not shrink the TTL, which is a security
  * parameter.
+ *
+ * Exported so `IdentityScopeProvider` consumes this exact query rather than
+ * keeping its own copy. `staleTime` here is a SECURITY parameter, not a
+ * performance one (see above) — two copies of that policy would drift, and
+ * a shorter one in a duplicate would quietly widen the impersonation window
+ * without either copy's history explaining why.
  */
-function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord | null> {
+export function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord | null> {
   const namesKey = names.join('|');
 
   const { data } = useQuery({
