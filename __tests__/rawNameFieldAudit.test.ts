@@ -136,6 +136,10 @@ const EXCEPTIONS: Record<string, string> = {
   'app/(onboarding)/profile-setup.tsx':
     'Onboarding collects and writes your own display name; there is no member to resolve yet.',
 
+  // ── Feeds the identity ladder itself, not a render bypass ───────────────
+  'app/_layout.tsx':
+    'The root identity scope reads your OWN `user.displayName` to seed `locallyKnownNames` via `selfLocalNameEntry` — this is the device-name tier\'s data source, not a raw render of a name.',
+
   // ── Not a member-name read at all ───────────────────────────────────────
   'app/(tabs)/profile/index.tsx':
     'Passes a list item TITLE into DefaultAvatar’s `displayName` prop. Matches on the prop name, not on a member field.',
