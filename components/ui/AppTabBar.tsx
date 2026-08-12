@@ -4,6 +4,7 @@ import { QnsIcon } from '@/components/ui/QnsIcon';
 import { useAuth } from '@/context';
 import { useUnifiedNotifications } from '@/hooks/useUnifiedNotifications';
 import { feedActiveTabBus } from '@/services/ui/feedActiveTab';
+import { resolveSelfName } from '@/utils/resolveSelfName';
 import { useTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -45,13 +46,32 @@ const ACCOUNT_PATH = '/account';
 
 // ─── Avatar button ────────────────────────────────────────────────────────────
 
-function AvatarButton() {
+// Exported (only) so a render test can mount it directly rather than the
+// whole tab bar, which needs a BottomTabBarProps navigation state and several
+// unrelated providers this surface's own defect has nothing to do with.
+export function AvatarButton() {
   const { user } = useAuth();
   const { theme } = useTheme();
   const pathname = usePathname();
 
   const uri = user?.profileImage || user?.farcaster?.pfpUrl || undefined;
-  const fallbackName = user?.displayName || user?.primaryUsername || '';
+  // Through `resolveSelfName` rather than `displayName || primaryUsername`,
+  // which had the ladder upside down: a `.q` REPLACES the global name, so the
+  // global name winning here meant your own avatar was derived from the name
+  // you no longer go by — the one identity in the app that disagreed with
+  // itself about who you are. Same fix, same reasoning, as `HeaderAvatar.tsx`.
+  //
+  // The empty-name case stays empty rather than taking the resolver's
+  // "Unnamed": `CachedAvatar` treats any defined string as a request for
+  // initials, so passing "Unnamed" through would put a "U" on the avatar of
+  // every user who has set no name at all.
+  const hasSelfName = !!(user?.primaryUsername?.trim() || user?.displayName?.trim());
+  const fallbackName = hasSelfName
+    ? resolveSelfName({
+        primaryUsername: user?.primaryUsername,
+        displayName: user?.displayName,
+      }).initialsSource
+    : '';
 
   const onAccount = pathname === ACCOUNT_PATH || pathname.startsWith(`${ACCOUNT_PATH}/`);
 

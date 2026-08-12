@@ -154,10 +154,6 @@ const EXCEPTIONS: Record<string, string> = {
  * it; never add one.
  */
 const TO_MIGRATE: Record<string, string> = {
-  // ── Self, with the ladder INVERTED ──────────────────────────────────────
-  'components/ui/AppTabBar.tsx':
-    'DEFECT: `user.displayName || user.primaryUsername` ranks the global name ABOVE the `.q`, the exact inversion resolveSelfName exists to fix.',
-
   // ── Calls: a whole surface family no migration table listed ─────────────
   'components/Call/InCallScreen.tsx':
     'DEFECT: renders `activeCall.recipientDisplayName` raw off the call payload; never resolved, so no `.q` and no per-space name.',
