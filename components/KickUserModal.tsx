@@ -14,6 +14,7 @@ import { View, Text, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { BaseModal } from '@/components/shared/BaseModal';
 import { ConfirmActions } from '@/components/shared/ConfirmActions';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
+import { useResolvedName } from '@/identity';
 import { useTheme, type AppTheme } from '@/theme';
 import { useUserKicking } from '@/hooks/chat/useUserKicking';
 import * as Skin from '@/theme/skins/geometry';
@@ -22,7 +23,6 @@ interface KickUserModalProps {
   visible: boolean;
   onClose: () => void;
   spaceId: string;
-  userName: string;
   userIcon?: string;
   userAddress: string;
 }
@@ -31,7 +31,6 @@ export function KickUserModal({
   visible,
   onClose,
   spaceId,
-  userName,
   userIcon,
   userAddress,
 }: KickUserModalProps) {
@@ -42,6 +41,11 @@ export function KickUserModal({
     kicking,
     kickUserFromSpace,
   } = useUserKicking({ spaceId });
+
+  // Resolved here, not trusted from the caller — see BlockUserModal's
+  // identical comment. Kick is space-scoped, so a per-space nickname (if any)
+  // ranks above the target's `.q`. `enrich`: bounded to one address per mount.
+  const userName = useResolvedName(userAddress, { spaceId, enrich: true });
 
   // Reset the saving overlay when the modal closes.
   useEffect(() => {

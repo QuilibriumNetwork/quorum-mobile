@@ -427,7 +427,6 @@ export default function UserProfileModal({
           visible={kickVisible}
           onClose={() => setKickVisible(false)}
           spaceId={spaceId!}
-          userName={user.userName}
           userIcon={hasValidAvatar ? user.userAvatar : undefined}
           userAddress={user.userId}
         />
@@ -438,7 +437,6 @@ export default function UserProfileModal({
           onClose={() => setMuteVisible(false)}
           spaceId={spaceId!}
           channelId={channelId!}
-          userName={user.userName}
           userIcon={hasValidAvatar ? user.userAvatar : undefined}
           userAddress={user.userId}
           isUnmuting={targetIsModMuted}
@@ -452,9 +450,9 @@ export default function UserProfileModal({
             onBlockUser(user.userId);
             onClose();
           }}
-          userName={user.userName}
           userIcon={hasValidAvatar ? user.userAvatar : undefined}
           userAddress={user.userId}
+          spaceId={spaceId!}
           isUnblocking={!!isUserBlocked}
         />
       )}

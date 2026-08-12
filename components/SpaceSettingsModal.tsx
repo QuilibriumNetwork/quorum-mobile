@@ -941,10 +941,10 @@ export default function SpaceSettingsModal({
   // Delete/Leave confirmation
   const { confirm, confirmDialog } = useConfirmDialog();
 
-  // Kick modal state
+  // Kick modal state. No name field — KickUserModal now resolves the
+  // target's name itself from `address` + `spaceId`.
   const [kickTarget, setKickTarget] = useState<{
     address: string;
-    displayName: string;
     userIcon?: string;
   } | null>(null);
 
@@ -1994,7 +1994,6 @@ export default function SpaceSettingsModal({
                     style={styles.kickButton}
                     onPress={() => setKickTarget({
                       address: member.address,
-                      displayName: identity.label,
                       userIcon: identity.avatar,
                     })}
                   >
@@ -2679,7 +2678,6 @@ export default function SpaceSettingsModal({
           visible={true}
           onClose={() => setKickTarget(null)}
           spaceId={spaceId}
-          userName={kickTarget.displayName}
           userIcon={kickTarget.userIcon}
           userAddress={kickTarget.address}
         />

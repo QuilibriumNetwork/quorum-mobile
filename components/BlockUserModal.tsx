@@ -15,6 +15,7 @@ import { View, Text, StyleSheet, Image } from 'react-native';
 import { BaseModal } from '@/components/shared/BaseModal';
 import { ConfirmActions } from '@/components/shared/ConfirmActions';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
+import { useResolvedName } from '@/identity';
 import { useTheme, type AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -23,9 +24,13 @@ interface BlockUserModalProps {
   onClose: () => void;
   /** Performs the block/unblock toggle. Synchronous local config write. */
   onConfirm: () => void;
-  userName: string;
   userIcon?: string;
   userAddress: string;
+  /** Block is per-space, so the target's name resolves through the SPACE
+   *  ladder (a per-space nickname, if the target has one, ranks above their
+   *  `.q`) — matching what the sole caller (`UserProfileModal`) already
+   *  scopes every other action to. */
+  spaceId: string;
   /** When true the sheet confirms an UNblock instead of a block. */
   isUnblocking?: boolean;
 }
@@ -34,13 +39,21 @@ export function BlockUserModal({
   visible,
   onClose,
   onConfirm,
-  userName,
   userIcon,
   userAddress,
+  spaceId,
   isUnblocking = false,
 }: BlockUserModalProps) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
+
+  // Resolved here rather than trusted from the caller: the confirmation copy
+  // below ("You won't see any of <name>'s messages...") is what the user
+  // reads before approving a block, so it must be a name this component can
+  // vouch for itself rather than one a future caller could hand in raw.
+  // `enrich`: bounded to exactly one address per mount (the modal opens for a
+  // single target), the same justification `DMSettingsSheet` uses.
+  const userName = useResolvedName(userAddress, { spaceId, enrich: true });
 
   const handleConfirm = useCallback(() => {
     onConfirm();
