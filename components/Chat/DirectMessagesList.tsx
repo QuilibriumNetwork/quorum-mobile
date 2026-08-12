@@ -9,8 +9,8 @@ import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import type { Conversation } from '@/hooks/chat';
 import { coerceMessagePreview, previewKindIcon } from '@/utils/messagePreview';
-import { truncateAddress } from '@/utils/formatAddress';
 import { formatRowTime } from '@/utils/dateFormat';
+import { useResolvedName } from '@/identity';
 import React, { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Alert, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
@@ -85,13 +85,17 @@ const DMConversationItem = React.memo(function DMConversationItem({
 }: DMConversationItemProps) {
   const hasUnread = item.lastReadTimestamp ? item.timestamp > item.lastReadTimestamp : false;
 
-  let displayName = item.displayName;
-  if (!displayName && item.address) {
-    displayName = truncateAddress(item.address, 'long');
-  }
-  displayName = displayName || 'Unknown';
-
   const isFarcaster = item.source === 'farcaster';
+
+  // Farcaster rows carry a synthetic `fid:<n>` address — a different identity
+  // namespace with no roster and no `.q` — so their own already-resolved name
+  // stays as-is. Only a Quorum row's raw field routes through the resolver,
+  // which owns both the fallback (never a stored 'Unknown' placeholder, never
+  // a hand-rolled truncated address) and the `.q` suffix.
+  // `global`: a DM row has no space of its own, so the roster tier never
+  // applies here regardless of any ambient scope.
+  const resolvedQuorumName = useResolvedName(item.address, { global: true, enrich: !isFarcaster });
+  const label = isFarcaster ? (item.displayName || 'Unknown') : resolvedQuorumName;
 
   const hasValidIcon = isFarcaster
     ? !!item.icon && item.icon.startsWith('http')
@@ -113,8 +117,8 @@ const DMConversationItem = React.memo(function DMConversationItem({
       });
     }
     actions.push({ text: 'Cancel', onPress: () => {}, style: 'cancel' });
-    Alert.alert(displayName, undefined, actions);
-  }, [isFarcaster, favorite, muted, onToggleFavorite, onToggleMute, item.conversationId, displayName]);
+    Alert.alert(label, undefined, actions);
+  }, [isFarcaster, favorite, muted, onToggleFavorite, onToggleMute, item.conversationId, label]);
 
   const handlePress = useCallback(() => {
     onSelect(item.conversationId);
@@ -134,7 +138,7 @@ const DMConversationItem = React.memo(function DMConversationItem({
         {hasValidIcon ? (
           <Image source={{ uri: item.icon }} style={styles.avatar} />
         ) : (
-          <DefaultAvatar resolvedName={displayName} address={item.address || ''} size={48} />
+          <DefaultAvatar resolvedName={label} address={item.address || ''} size={48} />
         )}
         {hasUnread && <View style={styles.unreadBadge} />}
         {isFarcaster && (
@@ -153,7 +157,7 @@ const DMConversationItem = React.memo(function DMConversationItem({
             style={[styles.userName, hasUnread && !muted && styles.userNameUnread]}
             numberOfLines={1}
           >
-            {displayName}
+            {label}
           </Text>
           {muted && (
             <IconSymbol name="bell.slash.fill" size={12} color={theme.colors.textMuted} style={{ marginLeft: Skin.space(4) }} />

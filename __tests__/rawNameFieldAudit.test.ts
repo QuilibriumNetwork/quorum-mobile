@@ -99,6 +99,8 @@ const EXCEPTIONS: Record<string, string> = {
     'Farcaster identities throughout (p.user, m.author, replyTarget.author), falling back to `fid:<n>`. No Quorum member is rendered here.',
   'components/BoundChannelFeedPanel.tsx':
     'Renders `cast.author` — a Farcaster cast author, not a space member.',
+  'components/Chat/DirectMessagesList.tsx':
+    'MIGRATED: a Quorum row resolves via `@/identity`’s `useResolvedName` (global, enrich — see the file’s own comment). The two remaining raw reads are legitimate: a Farcaster row’s own already-resolved `displayName` (a synthetic `fid:<n>` address, no roster, no `.q`), and the "unknown" filter’s `!c.displayName`, which classifies rows by whether anything was ever stored rather than rendering a name.',
   'components/Chat/FarcasterCastCard.tsx':
     'Renders `cast.author`; the other hit is a StyleSheet key literally named `displayName`.',
   'components/MiniAppsModal.tsx':
@@ -165,8 +167,6 @@ const TO_MIGRATE: Record<string, string> = {
     'DEFECT: renders `activeCall.recipientDisplayName` raw off the call payload.',
 
   // ── DM surfaces, including the PLACEHOLDER class ────────────────────────
-  'components/Chat/DirectMessagesList.tsx':
-    'DEFECT: hand-rolls truncation then `|| "Unknown"`. A stored placeholder rendered verbatim is worse than the resolver’s own fallback.',
   'components/Chat/DMChatArea.tsx':
     'DEFECT: builds identity rows from raw conversation fields and hand-truncates with `address.slice(0, 8)`.',
   'components/Chat/DMSettingsSheet.tsx':
