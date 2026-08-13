@@ -8,8 +8,9 @@
  * is never on a conversation row, so the inbox could never show one, for
  * anybody. Inside a conversation the chat view already fetches the partner's
  * profile, but the inbox is usually the FIRST screen opened — the cache is cold
- * exactly when the list is drawn, so the free cache-read trick used for space
- * rosters (`useMembersWithCachedQns`) would show nothing here.
+ * exactly when the list is drawn, so the free-read trick the Space member list
+ * relies on (resolving off whatever `@/identity`'s shared scope already has in
+ * memory, from some OTHER surface having enriched it) would show nothing here.
  *
  * ## Why fetching is affordable here, when it was refused for a space roster
  *

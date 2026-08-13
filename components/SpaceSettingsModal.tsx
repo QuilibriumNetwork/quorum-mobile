@@ -43,8 +43,6 @@ import {
 import { DraggableChannelGroup } from '@/components/SpaceSettings/DraggableChannelGroup';
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useSpaceMembers } from '@/hooks/chat/useSpaces';
-import { useMembersWithCachedQns } from '@/hooks/useMembersWithCachedQns';
-import { useVerifiedQnsNames } from '@/hooks/useVerifiedQnsNames';
 import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
 import { useBlockUser } from '@/hooks/chat/useBlockUser';
 import { useDeleteSpace, useLeaveSpace, useUpdateSpace } from '@/hooks/chat/useSpaceSettings';
@@ -798,35 +796,28 @@ export default function SpaceSettingsModal({
   // Members
   const { data: rosterMembers = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
 
-  // Attach QNS `.q` names from public profiles chat has ALREADY fetched.
-  //
-  // A `.q` travels only in a published public profile, never in a roster row,
-  // so this screen could never show one for anybody — the resolver here was
-  // correct all along, the field simply never arrived. Fetching a profile per
-  // member is the fetch storm desktop looked at and refused, so this reads the
-  // React Query cache instead and issues no requests at all.
-  const cachedQnsMembers = useMembersWithCachedQns(rosterMembers);
-
-  // Then drop any `.q` claim that does not resolve back to the member claiming
-  // it. This is the surface where the check has to earn its cost most carefully:
-  // the read above issues no requests at all, so verification is the first thing
-  // here that costs anything. `claimedNamesIn` caps at one batch, and a name
-  // past the cap is left unverified and renders as the global name — the same
-  // outcome a member with no cached profile already gets.
-  const members = useVerifiedQnsNames(cachedQnsMembers);
-
   // The roster shows who is IN the Space. Both `leave` and `kick` blank the
   // member's inbox_address and KEEP the row, so without this a departed or
   // removed member stayed listed, indistinguishable from an active one.
   // Same rule desktop applies (`left: curr.inbox_address === ''` plus an
   // isKicked filter, in useChannelData).
   //
-  // Deliberately NOT applied to `members` itself: the blocked-users list below
-  // resolves display names through it, and a blocked user who left should still
-  // resolve to a name rather than a bare address.
+  // Deliberately NOT applied to `rosterMembers` itself: the blocked-users list
+  // below resolves display names off it too, and a blocked user who left
+  // should still resolve to a name rather than a bare address.
+  //
+  // A QNS-cache-and-verify pass (`useMembersWithCachedQns` -> `useVerifiedQnsNames`)
+  // used to sit here, attaching a verified `primary_username` to each row. Name
+  // rendering no longer reads that field — it resolves through `@/identity`
+  // below instead, off the shared cross-surface scope, not off this roster —
+  // and nothing else in this file ever read `primary_username` (avatar/bio
+  // only ever read the `*_image`/`*_bio` slots). Keeping the pass would have
+  // meant a real `resolveBatch` network call, every render a member claims a
+  // name, for a value nobody looked at. Removed rather than kept as a silent
+  // no-op.
   const activeMembers = useMemo(
-    () => members.filter((m) => m.inbox_address && !m.isKicked),
-    [members]
+    () => rosterMembers.filter((m) => m.inbox_address && !m.isKicked),
+    [rosterMembers]
   );
 
   // Name resolution now goes through `@/identity`'s ladder (per-space override
@@ -855,9 +846,9 @@ export default function SpaceSettingsModal({
   // one public-profile fetch per row is the exact fetch storm both clients have
   // already refused (desktop measured 200 concurrent requests from a 200-member
   // sidebar that resolved eagerly). A member whose profile nothing else has
-  // fetched this session renders their global name with no `.q` — the same
-  // accepted limitation `useMembersWithCachedQns` below already documents for
-  // the cache-only path.
+  // fetched this session renders their global name with no `.q` — an accepted
+  // limitation, same as a member with no cached profile got under the old,
+  // now-removed cache-and-verify pass (see the comment above `activeMembers`).
   const { resolve } = useNameResolver();
 
   const resolveMemberIdentity = useCallback(
@@ -878,7 +869,7 @@ export default function SpaceSettingsModal({
   // from the member list.
   const blockedMembers = useMemo(() => {
     return [...blockedUsers].map((address) => {
-      const m = members.find((mem) => mem.address === address);
+      const m = rosterMembers.find((mem) => mem.address === address);
       // Avatar still reads the roster row (or its absence) the same way the
       // member list does — the AVATAR ladder is untouched. Name resolves
       // through `@/identity` directly from the address: a blocked user's
@@ -891,7 +882,7 @@ export default function SpaceSettingsModal({
         avatar: resolveMemberAvatar(row, { self: selfIdentity }),
       };
     });
-  }, [blockedUsers, members, selfIdentity, resolve, spaceId]);
+  }, [blockedUsers, rosterMembers, selfIdentity, resolve, spaceId]);
 
   // Invites
   const generateInviteMutation = useGenerateInvite();
