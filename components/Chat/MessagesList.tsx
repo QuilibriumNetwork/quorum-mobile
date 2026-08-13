@@ -1739,6 +1739,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       }
       members={members}
       customEmojis={customEmojis}
+      spaceId={spaceId}
       onUserPress={
         onUserPress
           ? (address) => {

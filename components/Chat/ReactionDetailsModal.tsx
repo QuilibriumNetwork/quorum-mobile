@@ -21,11 +21,12 @@ import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/Segmente
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { useTheme, type AppTheme } from '@/theme';
-import {
-  resolveMemberName,
-  resolveMemberAvatar,
-  formatResolvedName,
-} from '@/utils/resolveMemberName';
+// Avatars only — there is no identity-module equivalent for the avatar
+// ladder (a `.q` carries no picture), so this seam stays for that half.
+import { resolveMemberAvatar } from '@/utils/resolveMemberName';
+import { useNameResolver } from '@/identity';
+import { formatResolvedName } from '@/identity/useResolvedName';
+import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import type { Emoji, SpaceMember } from '@quilibrium/quorum-shared';
 
 import type { DisplayReaction } from './types';
@@ -35,10 +36,16 @@ interface ReactionDetailsModalProps {
   visible: boolean;
   onClose: () => void;
   reactions: DisplayReaction[];
-  /** Optional members for resolving address → display name + avatar. */
+  /** Optional members, used only for resolving the AVATAR now — the NAME
+   *  resolves through the identity scope's own multi-space roster instead
+   *  (see `spaceId` below). */
   members?: SpaceMember[];
   /** Space's custom emojis, used to render images for non-Unicode reactions. */
   customEmojis?: Emoji[];
+  /** The Space this reactor list lives in, if any — absent for DMs. Threaded
+   *  into the resolver so a reactor's per-space nickname can outrank their
+   *  `.q`, the same rule every other tier in this Space follows. */
+  spaceId?: string;
   /** Called when the user taps a reactor's row — typically routes to their
    *  profile modal. Omit to make rows non-interactive. */
   onUserPress?: (address: string) => void;
@@ -58,11 +65,13 @@ export function ReactionDetailsModal({
   reactions,
   members,
   customEmojis,
+  spaceId,
   onUserPress,
 }: ReactionDetailsModalProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
+  const { resolve, requestNames } = useNameResolver();
 
   // Reset selection whenever the modal opens so it's always "show all"
   // by default per the requested UX.
@@ -87,6 +96,43 @@ export function ReactionDetailsModal({
     return map;
   }, [customEmojis]);
 
+  // Distinct reactor addresses across every emoji on this message. Not the
+  // same set as `rows` below: a person who reacted with two different emoji
+  // appears twice in `rows` but must only be requested once.
+  const reactorAddresses = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const r of reactions) {
+      for (const addr of r.memberIds) {
+        if (seen.has(addr)) continue;
+        seen.add(addr);
+        out.push(addr);
+      }
+    }
+    return out;
+  }, [reactions]);
+
+  // Enrich with a public-profile fetch so a reactor's verified `.q` can
+  // actually appear — without this, `resolve` below only ever sees tiers
+  // already in memory (the per-space roster and whatever another surface
+  // happened to fetch first), and a reactor who never sent a message this
+  // session would never get one. Nothing on the wire bounds `memberIds`, so a
+  // popular reaction on an active-space message could in principle carry as
+  // many reactors as the Space has members — the same class of fetch-storm
+  // risk `MessagesList`'s own enrichment guards against. Capped at the same
+  // shared `MAX_QNS_LOOKUPS` rather than a second, independently drifting
+  // magic number.
+  const enrichableAddresses = useMemo(
+    () => qnsLookupAddresses(
+      reactorAddresses.map((address) => ({ address })),
+      MAX_QNS_LOOKUPS,
+    ),
+    [reactorAddresses],
+  );
+  React.useEffect(() => {
+    requestNames(enrichableAddresses);
+  }, [enrichableAddresses, requestNames]);
+
   // Flattened reactor rows. Order: by reaction list order, then by
   // memberIds order — matches the natural order users see in the badge
   // row. Stable per-render so the list doesn't shuffle on re-renders.
@@ -95,21 +141,22 @@ export function ReactionDetailsModal({
     for (const r of reactions) {
       for (const addr of r.memberIds) {
         const m = memberByAddress.get(addr);
-        // Reactors are not necessarily senders, so their row may never have been
-        // through the chat back-fill. Reading only the override slot rendered
-        // anyone on the follow-global default as an address, right next to the
-        // messages where they showed a name.
+        // The AVATAR still needs the roster row — there is no
+        // identity-module equivalent for it. The NAME no longer does:
+        // `resolve` reads the identity scope's OWN multi-space roster, so a
+        // reactor absent from this modal's local `members` prop still
+        // resolves correctly instead of falling back to their raw address.
         const row = m ?? { address: addr };
         out.push({
           address: addr,
           emoji: r.emoji,
-          displayName: formatResolvedName(resolveMemberName(row)),
+          displayName: formatResolvedName(resolve(addr, { spaceId })),
           avatar: resolveMemberAvatar(row),
         });
       }
     }
     return out;
-  }, [reactions, memberByAddress]);
+  }, [reactions, memberByAddress, resolve, spaceId]);
 
   const filteredRows = useMemo(() => {
     if (!selectedEmoji) return rows;
