@@ -1654,17 +1654,64 @@ Desktop's known blind spot, inherited if ported verbatim: it cannot distinguish 
 
 ## Definition of done
 
-- [ ] `@quilibrium/quorum-shared` at `2.1.0-42`, suite green with no assertion edited (Task 1)
-- [ ] The `.q` tier is reachable only from verified names, RED-proven (Task 2)
-- [ ] Nested providers merge; `defaultSpaceId` does not; RED-proven (Task 3)
-- [ ] One root scope above every screen, carrying real rosters (Task 5)
-- [ ] Avatar initials never derived from an address (Task 6)
-- [ ] The invite picker's `it.failing` is a plain `it` (Task 7)
-- [ ] `TO_MIGRATE` empty; primitives guard shown red (Task 8)
-- [ ] Fake-QNS sweep run with a control arm, reported per surface (Task 9)
-- [ ] `yarn harness:qns` passes (Task 10)
-- [ ] Degraded-resolution diagnostic reporting zero on a normal session (Task 11)
+- [x] `@quilibrium/quorum-shared` at `2.1.0-42`, suite green with no assertion edited (Task 1)
+- [x] The `.q` tier is reachable only from verified names, RED-proven (Task 2)
+- [x] Nested providers merge; `defaultSpaceId` does not; RED-proven (Task 3)
+- [x] One root scope above every screen, carrying real rosters (Task 5)
+- [x] Avatar initials never derived from an address (Task 6)
+- [x] The invite picker's `it.failing` is a plain `it` (Task 7)
+- [x] `TO_MIGRATE` empty; primitives guard shown red (Task 8)
+- [ ] Fake-QNS sweep run with a control arm, reported per surface (Task 9) — **needs a dev build; not runnable from here**
+- [x] `yarn harness:qns` passes (Task 10) — MEASURED 2026-08-13 against the production relay, both roles green
+- [ ] Degraded-resolution diagnostic reporting zero on a normal session (Task 11) — **not built; needs a dev build to be worth anything**
+
+## Outcome
+
+51 commits. 24 live surfaces migrated, 795 → 918 tests, `TO_MIGRATE` empty and
+the raw-field audit converted from a migration tracker into a permanent guard,
+joined by a second guard restricting the primitives themselves. Both were shown
+to fire against a live violation, not merely to pass.
+
+**What Task 10 proved, on real infrastructure** (MEASURED, 2026-08-13, production
+relay, both bot roles): a `.q` claim crosses the wire, is stored under the
+separate `claimed_primary_username` key, and the receiving side **refuses to
+verify it**. That is the receive-path half of the forgery guarantee, end to end,
+with no mocks.
+
+**What the render half rests on:** a real derivable ed448 key/address pair, with
+`@/utils/verifyQnsClaim` unmocked, so `claimedNameBelongsTo` actually runs.
+Impersonation is proven at four levels — the predicate, the provider wiring, and
+three separate render surfaces — and a single mutation to the predicate turns all
+four red simultaneously.
+
+**Fetch fan-out is bounded and measured, not argued.** MessagesList 60 → 50,
+ReactionDetailsModal 80 → 50, ShareInviteSheet 60 → 50, BookmarksPanel 80 → 50,
+notifications 80 → 50, ThreadDetailView 61 → 50, DirectMessagesList 60 → 50, and
+`SpaceSettingsModal` — whose cardinality is the whole community — **0** on a
+200-member roster.
+
+### Known gaps, deliberately left
+
+- **Tasks 9 and 11 need a device.** The fake-QNS sweep with a control arm, and
+  the degraded-resolution diagnostic, are the two things automated tests cannot
+  substitute for. Task 9 in particular is what would catch a surface that
+  resolves correctly in a test and wrongly in the real provider tree — desktop
+  stayed green through eight provider-wiring bugs.
+- **`useQuorumIdentityForFid` still fans out uncapped**, one fid-link lookup per
+  rendered cast. Different endpoint, pre-dates this work, filed separately at
+  `issues/.open/2026-08-13-quorum-identity-badge-fires-an-uncapped-fid-link-lookup-per-cast.md`.
+- **`components/Chat/DirectMessagesList.tsx` is dead code.** Capped anyway so a
+  future revival inherits the right shape; deletion left as a proposal under the
+  pre-existing `issues/.open/2026-06-21-dm-favorites-sync-and-wire.md`.
+- **Three `act(...)` warnings** remain in `ModerationModals.test.tsx` and
+  `UserProfileModal.test.tsx`. Confirmed to pre-date this work, but inconsistent
+  with the pristine-output standard the rest of the branch holds to.
+- **The guards are grep-shaped**, and say so. A dynamic `require()`, a namespace
+  import or a re-export chain would not be seen. Three blind-spot classes are
+  documented in the Phase D table.
+- **tsc baseline is 11, not 12.** `components/BrowserModal.tsx` stopped erroring
+  when a `patch-package` postinstall reapplied; re-measured independently.
 
 ---
 
-*Last updated: 2026-08-11*
+*Last updated: 2026-08-13*
