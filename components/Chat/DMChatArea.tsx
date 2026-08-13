@@ -495,6 +495,11 @@ export const DMChatArea = React.memo(function DMChatArea({
           senderName: message.userName,
           textSnippet: message.content.slice(0, 100),
           messageDate: message.timestamp,
+          // Frozen deliberately — this is a cached preview, not a live label,
+          // and the write side stays as-is by design. BookmarksPanel's READ
+          // resolves the current name from `conversationId` at render time
+          // and only falls back to this string when that conversation is no
+          // longer known locally.
           sourceName: conversationData?.displayName || 'DM',
           contentType: message.renderType === 'embed' ? 'image' : message.renderType === 'sticker' ? 'sticker' : 'text',
           imageUrl: message.imageUrl,

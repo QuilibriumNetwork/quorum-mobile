@@ -143,6 +143,8 @@ const EXCEPTIONS: Record<string, string> = {
     'MIGRATED: the post-tip DM’s stored conversation title now resolves `quorumIdentity.address` via `@/identity`’s `useResolvedName` instead of trusting `recipientQuorumIdentity.displayName` — an unverified claim off a public-profile fetch that `useQuorumIdentityForFid` never checks. The remaining hits are the resolved value flowing through `sendTipNotification`’s own `displayName` parameter/local (declared, destructured, and passed through), not a second raw read.',
 
   // ── WRITE paths: the raw field is the thing being edited ────────────────
+  'components/Chat/DMChatArea.tsx':
+    'The composer channel-name hand-truncation (`address.slice(0, 8)`) resolves via `@/identity`’s `useResolvedName`. What remains raw is legitimate: the `dmMemberMap` build block (`global_display_name`/`claimed_primary_username` keys, lines ~160-187) is a separate, already-verified mechanism (`useVerifiedQnsNamesInMap`) feeding per-message sender names, out of this migration’s scope; and `cachedPreview.sourceName` (line ~498) WRITES a frozen preview snapshot by design — the standing decision for the whole frozen-name class is that the write side stays untouched. The corresponding READ is fixed in `BookmarksPanel.tsx`, which resolves the current name from the bookmark’s `conversationId` at render time and falls back to this frozen string only when that conversation is no longer known locally (see `__tests__/migrated/BookmarksPanel.test.tsx`).',
   'components/ProfileModal.tsx':
     'Your OWN profile editor — holds `user.displayName` in form state and writes it back. Editing a name is not rendering somebody else’s.',
   'components/UnifiedProfileEditModal.tsx':
@@ -168,12 +170,13 @@ const EXCEPTIONS: Record<string, string> = {
 /**
  * The RATCHET. Every entry is a real defect. Remove yours as part of migrating
  * it; never add one.
+ *
+ * Empty: Phase D's last row (`DMChatArea.tsx`) moved to `EXCEPTIONS` above —
+ * its one remaining raw match is a deliberate write, not outstanding work.
+ * Stays declared (rather than deleted) so `KNOWN`/`sourceFiles` below need no
+ * shape change the next time this list is non-empty.
  */
-const TO_MIGRATE: Record<string, string> = {
-  // ── DM surfaces, including the PLACEHOLDER class ────────────────────────
-  'components/Chat/DMChatArea.tsx':
-    'PARTIALLY MIGRATED: the composer channel-name hand-truncation (`address.slice(0, 8)`) now resolves via `@/identity`’s `useResolvedName`. Two things remain raw and are NOT this file’s row: the `dmMemberMap` build block (`global_display_name`/`claimed_primary_username` keys, lines ~160-187) is a separate, already-verified mechanism (`useVerifiedQnsNamesInMap`) feeding per-message sender names, out of this migration’s scope; and `cachedPreview.sourceName` (line ~498) is a genuine, newly-found DEFECT — a hand-rolled `conversationData?.displayName || \'DM\'` baked into a bookmark’s stored preview with no `.q` support — left unfixed here because it has no covering test in this pass. Flagged for a follow-up row.',
-};
+const TO_MIGRATE: Record<string, string> = {};
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
