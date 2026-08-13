@@ -63,11 +63,11 @@ import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
 import {
-  resolveMemberName,
   resolveMemberAvatar,
   resolveMemberBio,
-  formatResolvedName,
 } from '@/utils/resolveMemberName';
+import { useNameResolver } from '@/identity';
+import { formatResolvedName } from '@/identity/useResolvedName';
 import { selfNamePlaceholder } from '@/utils/resolveSelfName';
 import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, queryKeys, IMAGE_CONFIGS, type Emoji, type Permission, type Role, type Space, type SpaceMember, type Sticker } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
@@ -829,21 +829,16 @@ export default function SpaceSettingsModal({
     [members]
   );
 
-  // Identity resolution: per-space override → global → (your own live profile) →
-  // address. The roster used to read only the override slot, which is why the
-  // Space CREATOR showed as a bare address: their row is written blank on
-  // purpose at creation ("empty = follow global", spaceService.ts, same comment
-  // and same fields on desktop), and only a later profile save back-fills the
-  // global slot into every space. A Space created after your last profile edit
-  // therefore had nothing in either slot.
+  // Name resolution now goes through `@/identity`'s ladder (per-space override
+  // → verified QNS `.q` → global slot → locally-known name → address). The
+  // self arm that used to live here is now the root scope's own
+  // `locallyKnownNames` (see `RootIdentityScope`), so a Space created after
+  // your last profile save still renders its own row correctly with no local
+  // special-casing and no network call.
   //
-  // The self arm is what makes that case correct without requiring a profile
-  // re-save: for your own row the live profile is authoritative and already in
-  // memory.
-  // The ladder itself lives in `utils/resolveMemberName` (over the shared rule),
-  // so this screen can no longer disagree with chat about who somebody is.
-  // `name` stays undefined when nothing resolved, because the avatar placeholder
-  // wants initials from a real name and not from an address.
+  // The AVATAR ladder is separate and unchanged: `@/identity` resolves names
+  // only, never pictures (a `.q` carries no photo), so `resolveMemberAvatar`
+  // keeps its own self fallback via `selfIdentity` below.
   const selfIdentity = useMemo(
     () => ({
       address: user?.address,
@@ -854,17 +849,26 @@ export default function SpaceSettingsModal({
     [user?.address, user?.displayName, user?.username, user?.profileImage]
   );
 
+  // `resolve` is a pure read of maps already in memory — it never issues a
+  // request. This screen is the one surface in the app that must NOT enrich: a
+  // Space's member list is the size of the whole community, not a viewport, and
+  // one public-profile fetch per row is the exact fetch storm both clients have
+  // already refused (desktop measured 200 concurrent requests from a 200-member
+  // sidebar that resolved eagerly). A member whose profile nothing else has
+  // fetched this session renders their global name with no `.q` — the same
+  // accepted limitation `useMembersWithCachedQns` below already documents for
+  // the cache-only path.
+  const { resolve } = useNameResolver();
+
   const resolveMemberIdentity = useCallback(
     (member: SpaceMember) => {
-      const resolved = resolveMemberName(member, { self: selfIdentity });
-      const label = formatResolvedName(resolved);
+      const label = formatResolvedName(resolve(member.address, { spaceId }));
       return {
-        name: resolved.isAddressFallback ? undefined : label,
         avatar: resolveMemberAvatar(member, { self: selfIdentity }),
         label,
       };
     },
-    [selfIdentity]
+    [resolve, spaceId, selfIdentity]
   );
 
   // Blocked addresses for this space, resolved to a display name/avatar via the
@@ -875,16 +879,19 @@ export default function SpaceSettingsModal({
   const blockedMembers = useMemo(() => {
     return [...blockedUsers].map((address) => {
       const m = members.find((mem) => mem.address === address);
-      // Same ladder as the member list. A blocked user who followed global used
-      // to render as an address here even when their name was known.
+      // Avatar still reads the roster row (or its absence) the same way the
+      // member list does — the AVATAR ladder is untouched. Name resolves
+      // through `@/identity` directly from the address: a blocked user's
+      // roster row may be gone, but their name can still be known via the
+      // root scope's roster/global/local tiers, same as an active member.
       const row = m ?? { address };
       return {
         address,
-        name: formatResolvedName(resolveMemberName(row, { self: selfIdentity })),
+        name: formatResolvedName(resolve(address, { spaceId })),
         avatar: resolveMemberAvatar(row, { self: selfIdentity }),
       };
     });
-  }, [blockedUsers, members, selfIdentity]);
+  }, [blockedUsers, members, selfIdentity, resolve, spaceId]);
 
   // Invites
   const generateInviteMutation = useGenerateInvite();
@@ -1966,7 +1973,7 @@ export default function SpaceSettingsModal({
                   <Image source={{ uri: identity.avatar }} style={styles.memberAvatarImage} />
                 ) : (
                   <DefaultAvatar
-                    resolvedName={identity.name}
+                    resolvedName={identity.label}
                     address={member.address}
                     size={44}
                   />
