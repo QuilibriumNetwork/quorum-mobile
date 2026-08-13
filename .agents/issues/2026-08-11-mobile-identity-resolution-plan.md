@@ -1703,6 +1703,22 @@ notifications 80 → 50, ThreadDetailView 61 → 50, DirectMessagesList 60 → 5
 - **`components/Chat/DirectMessagesList.tsx` is dead code.** Capped anyway so a
   future revival inherits the right shape; deletion left as a proposal under the
   pre-existing `issues/.open/2026-06-21-dm-favorites-sync-and-wire.md`.
+- **`components/Chat/BookmarksPanel.tsx` is UNREACHABLE, so row 25's fix is
+  currently unobservable.** Bookmarks can be *created* — `addBookmark` is wired
+  into both `app/(tabs)/spaces/[id]/[channelId].tsx` and
+  `app/(tabs)/messages/dm/[id].tsx` — but the panel that lists them is mounted
+  behind a `bookmarksPanelVisible` flag in `SpaceChatArea.tsx:883` and
+  `DMChatArea.tsx:603` that **nothing ever sets to `true`**. The bookmark screen
+  is not implemented yet.
+
+  The frozen-name fix on that panel is correct and will be right the day the
+  screen ships; it just cannot be verified by using the app today. **Recorded
+  because the review process did not catch it, and the reason is instructive:**
+  every brief asked implementers "what renders this surface", which is satisfied
+  by finding the JSX. Both the implementer and an opus reviewer answered it
+  correctly and both missed reachability. The question that catches this class is
+  "what user action opens this, and can a user reach it today". Future migration
+  briefs should ask that instead.
 - **Three `act(...)` warnings** remain in `ModerationModals.test.tsx` and
   `UserProfileModal.test.tsx`. Confirmed to pre-date this work, but inconsistent
   with the pristine-output standard the rest of the branch holds to.
