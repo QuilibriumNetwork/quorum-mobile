@@ -4,9 +4,9 @@ title: "QNS primary .q names: everything done, everything left, and how to bring
 status: in-progress
 priority: high
 created: 2026-08-06
-updated: 2026-08-11
+updated: 2026-08-13
 area: identity resolution / QNS / cross-client parity
-repos: quorum-desktop (ahead as of 2026-08-11 — it now has the provider/component layer), quorum-mobile (behind on that layer, still ahead on elect/un-elect), quorum-shared (owns the rule: resolveIdentity)
+repos: quorum-desktop (has the provider/component layer since 2026-08-11), quorum-mobile (caught up on that layer 2026-08-13 via `feat/resolve-identity`; still ahead on elect/un-elect), quorum-shared (owns the rule: resolveIdentity)
 source: consolidation of a day's work on 2026-08-06, written because the work spans two repos and five issue files and nobody should have to reassemble it
 related:
   - "issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md (the design, incl. §10 and §10a)"
@@ -20,6 +20,18 @@ related:
 # One page for the whole `.q` effort
 
 ## Status
+
+**2026-08-13 — the shared echo-demotion item (item 1 of "What belongs in
+`quorum-shared`" below) is now fully absorbed, closed on shared, desktop AND
+mobile.** Mobile's remaining half of that item — bump `@quilibrium/quorum-shared`
+to `2.1.0-42` and migrate onto the new `resolveIdentity`/provider layer — turned
+out to be the whole `identity/` module and Phase D migration on
+`feat/resolve-identity` (24 live call sites). It is done: the completion ratchet
+(`__tests__/rawNameFieldAudit.test.ts`'s `TO_MIGRATE`) is empty, and a second
+guard (`__tests__/identityPrimitivesGuard.test.ts`) restricts `resolveIdentity`
+and `identityFromMaps` to `identity/` and one adapter file, RED-proven. Not
+deleted silently here — see the item's own entry further down for the update
+that supersedes its earlier "mobile's step is now..." TODO framing.
 
 **2026-08-09 — mobile is DONE end to end; every remaining item on this page is
 desktop.** PR #245 shipped receiver-side verification on all four mobile
@@ -420,10 +432,13 @@ lives twice.
 **Move to shared — these are rules, and a rule that exists twice is a rule that
 will disagree with itself:**
 
-1. **The echo demotion — ✅ DONE IN SHARED, 2026-08-10. Absorbed; do not plan
-   this item.** It shipped as part of a larger change rather than on its own, so
-   the analysis below is kept only as the argument that produced it. Read the
-   ✅ box after it, then stop.
+1. **The echo demotion — ✅ DONE, 2026-08-13. Absorbed on shared, desktop AND
+   mobile; nothing left to plan for either client.** Shared shipped it
+   2026-08-10; mobile's remaining half (bump the dependency and migrate onto
+   it) shipped 2026-08-13 — see that update at the bottom of this item. It
+   shipped as part of a larger change rather than on its own, so the analysis
+   below is kept only as the argument that produced it. Read the ✅ box after
+   it, then stop.
 
    MEASURED 2026-08-11: `resolveIdentity` in `quorum-shared` applies the demotion
    (`if (space && space !== global) return …`, i.e. an override equal to the
@@ -499,6 +514,20 @@ will disagree with itself:**
    > So mobile's step is now: bump `2.1.0-40` → `2.1.0-42` **and** migrate its
    > one shared-importing file in the same PR (the change is breaking by
    > design), then port the provider/component layer across its 17 call sites.
+   >
+   > **2026-08-13 update — DONE. This item is now fully absorbed on both
+   > clients, not just shared and desktop.** Mobile bumped to `2.1.0-42`,
+   > migrated `utils/resolveMemberName.ts` onto `resolveIdentity` in the same
+   > PR, and built the `identity/` module (`identityFromMaps`, a root
+   > `IdentityScopeProvider`, `<MemberName>`/`useResolvedName`) that every live
+   > name-rendering surface now goes through — 24 call sites across the
+   > `feat/resolve-identity` branch's Phase D rows. The completion ratchet
+   > (`__tests__/rawNameFieldAudit.test.ts`'s `TO_MIGRATE`) is empty, and a
+   > second guard (`__tests__/identityPrimitivesGuard.test.ts`) now restricts
+   > `resolveIdentity`/`identityFromMaps` themselves to `identity/` and one
+   > adapter file, RED-proven against a throwaway import — mobile's equivalent
+   > of desktop's live guard mentioned above. There is no remaining shared
+   > echo-demotion work on either client; item 1 is closed.
 2. **The forged-`.q` guard — DONE on all three repos, 2026-08-06.** Shared
    `#77`, desktop `06c38370d` on `main`. Mobile already had it. The history
    below is kept because the gap it describes is the argument for item 1.
@@ -629,11 +658,14 @@ This is why the broadcast transport moved from last to first in the design doc.
 - [ ] The user profile modal's dead `@handle` line resolved either way
 - [x] The echo demotion and the forged-`.q` guard live in `quorum-shared` —
       both inside `resolveIdentity`, published as `2.1.0-42` (MEASURED
-      2026-08-11). Mobile still pins `2.1.0-40`, so consuming them is the
-      outstanding half, tracked as the next item.
-- [ ] Mobile bumped to a shared version carrying `resolveIdentity` **and**
+      2026-08-11).
+- [x] Mobile bumped to a shared version carrying `resolveIdentity` **and**
       migrated in the same PR (Phase F of
       `quorum-desktop/.agents/issues/.open/2026-08-10-identity-resolution-architecture-plan.md`)
+      — DONE 2026-08-13, `feat/resolve-identity`. Pinned at `2.1.0-42`; every
+      live name-rendering surface resolves through `@/identity`; the
+      migration ratchet (`__tests__/rawNameFieldAudit.test.ts`) is empty and a
+      primitives guard keeps it that way.
 - [ ] Desktop items (4) and (6) done
 - [ ] Desktop reaches feature parity on electing and un-electing
 - [ ] Receiver-side verification on BOTH clients, or on neither
