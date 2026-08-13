@@ -851,6 +851,16 @@ export default function SpaceSettingsModal({
   // now-removed cache-and-verify pass (see the comment above `activeMembers`).
   const { resolve } = useNameResolver();
 
+  // Self's own resolved identity, `global: true` because there is no
+  // per-space tier to check (matches `resolveSelfName`'s own rule). Feeds the
+  // Display-name field's placeholder below — the ONLY route a `.q` may reach
+  // that placeholder through, since `resolve` is the real verified ladder,
+  // not a raw read of `user.primaryUsername`. `resolve` never requests here
+  // (see above), but the root scope already requests self's own profile
+  // unconditionally (`RootIdentityScope`), so this is populated by the time
+  // any screen mounts.
+  const selfResolved = user?.address ? resolve(user.address, { global: true }) : null;
+
   const resolveMemberIdentity = useCallback(
     (member: SpaceMember) => {
       const label = formatResolvedName(resolve(member.address, { spaceId }));
@@ -1663,8 +1673,10 @@ export default function SpaceSettingsModal({
         onChangeText={(t) => { const v = capDisplayName(t); setSpaceProfileDisplayName(v); setSpaceProfileNameError(displayNameLiveError(v)); }}
         // A promise about what happens if this is left empty, so it must be the
         // name the app would actually show — the `.q` when one is elected. See
-        // the helper for what the old `displayName || username` got wrong.
-        placeholder={selfNamePlaceholder(user, 'Your name in this space')}
+        // the helper for what the old `displayName || username` got wrong, and
+        // for why the `.q` comes from `selfResolved` (identity/'s verified
+        // ladder) rather than from `user` directly.
+        placeholder={selfNamePlaceholder(selfResolved, user, 'Your name in this space')}
         placeholderTextColor={theme.colors.textMuted}
         // Hard-capped to MAX_DISPLAY_NAME_BYTES by bytes (capDisplayName). No
         // maxLength (counts chars, not bytes). Live error = non-length rules only.
