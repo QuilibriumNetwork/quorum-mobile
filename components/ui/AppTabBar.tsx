@@ -4,7 +4,7 @@ import { QnsIcon } from '@/components/ui/QnsIcon';
 import { useAuth } from '@/context';
 import { useUnifiedNotifications } from '@/hooks/useUnifiedNotifications';
 import { feedActiveTabBus } from '@/services/ui/feedActiveTab';
-import { resolveSelfName } from '@/utils/resolveSelfName';
+import { useMemberIdentity, useResolvedMemberName } from '@/identity';
 import { useTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -53,25 +53,30 @@ export function AvatarButton() {
   const { user } = useAuth();
   const { theme } = useTheme();
   const pathname = usePathname();
+  const address = user?.address ?? '';
 
   const uri = user?.profileImage || user?.farcaster?.pfpUrl || undefined;
-  // Through `resolveSelfName` rather than `displayName || primaryUsername`,
-  // which had the ladder upside down: a `.q` REPLACES the global name, so the
-  // global name winning here meant your own avatar was derived from the name
-  // you no longer go by — the one identity in the app that disagreed with
-  // itself about who you are. Same fix, same reasoning, as `HeaderAvatar.tsx`.
-  //
+  // Own name through the SAME verified ladder every other member resolves
+  // through — see `HeaderAvatar.tsx` for the full reasoning. This surface
+  // used to call `resolveSelfName`, which trusted `user.primaryUsername`
+  // directly with no check that the claim resolves back to this address; it
+  // is now the third and last self surface to move onto `@/identity`, so the
+  // tab bar's own avatar can no longer disagree with the profile header about
+  // who you are. `global: true`: self has no per-space tier. `enrich` stays
+  // at its default `false` — `IdentityScopeProvider` already requests
+  // `selfAddress`'s public profile itself whenever one is set, so asking
+  // again here would only be a deduped no-op.
+  const identity = useMemberIdentity(address);
+  const resolved = useResolvedMemberName(address, { global: true });
+
   // The empty-name case stays empty rather than taking the resolver's
-  // "Unnamed": `CachedAvatar` treats any defined string as a request for
-  // initials, so passing "Unnamed" through would put a "U" on the avatar of
-  // every user who has set no name at all.
-  const hasSelfName = !!(user?.primaryUsername?.trim() || user?.displayName?.trim());
-  const fallbackName = hasSelfName
-    ? resolveSelfName({
-        primaryUsername: user?.primaryUsername,
-        displayName: user?.displayName,
-      }).initialsSource
-    : '';
+  // truncated-address fallback: `CachedAvatar` treats any defined string as a
+  // request for initials, and an address-derived initial belongs to nobody
+  // and would be shared by nearly every user (most addresses share the same
+  // "Qm" prefix) — the same failure the old "Unnamed" fallback had, which
+  // this surface already went out of its way to avoid.
+  const hasSelfName = !!(identity.qnsName || identity.globalName);
+  const fallbackName = hasSelfName ? resolved.name : '';
 
   const onAccount = pathname === ACCOUNT_PATH || pathname.startsWith(`${ACCOUNT_PATH}/`);
 
