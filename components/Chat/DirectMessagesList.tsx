@@ -11,6 +11,7 @@ import type { Conversation } from '@/hooks/chat';
 import { coerceMessagePreview, previewKindIcon } from '@/utils/messagePreview';
 import { formatRowTime } from '@/utils/dateFormat';
 import { useResolvedName } from '@/identity';
+import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import React, { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Alert, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
@@ -70,6 +71,10 @@ interface DMConversationItemProps {
   onSelect: (id: string) => void;
   onToggleFavorite?: (id: string) => void;
   onToggleMute?: (id: string) => void;
+  /** Addresses allowed to issue a public-profile fetch this render, already
+   *  capped to `MAX_QNS_LOOKUPS` by the list — see that computation's own
+   *  comment for why a row cannot decide this for itself. */
+  enrichableAddresses: Set<string>;
 }
 
 const DMConversationItem = React.memo(function DMConversationItem({
@@ -82,6 +87,7 @@ const DMConversationItem = React.memo(function DMConversationItem({
   onSelect,
   onToggleFavorite,
   onToggleMute,
+  enrichableAddresses,
 }: DMConversationItemProps) {
   const hasUnread = item.lastReadTimestamp ? item.timestamp > item.lastReadTimestamp : false;
 
@@ -94,7 +100,12 @@ const DMConversationItem = React.memo(function DMConversationItem({
   // a hand-rolled truncated address) and the `.q` suffix.
   // `global`: a DM row has no space of its own, so the roster tier never
   // applies here regardless of any ambient scope.
-  const resolvedQuorumName = useResolvedName(item.address, { global: true, enrich: !isFarcaster });
+  // `enrich`: capped to `enrichableAddresses` — see the list's own comment;
+  // a row past the cap still resolves, just without a fresh profile fetch.
+  const resolvedQuorumName = useResolvedName(item.address, {
+    global: true,
+    enrich: !isFarcaster && enrichableAddresses.has(item.address),
+  });
   const label = isFarcaster ? (item.displayName || 'Unknown') : resolvedQuorumName;
 
   const hasValidIcon = isFarcaster
@@ -249,6 +260,18 @@ export function DirectMessagesList({
     });
   }, [conversations, activeFilter, isFavorite, isMuted]);
 
+  // Bounds how many rows' `useResolvedName` may issue a public-profile fetch.
+  // FlashList windowing does not bound this on its own: `filteredConversations`
+  // is the FULL filtered/sorted list, which grows past any visible window via
+  // `onEndReached` pagination, same shape as `MessagesList`'s
+  // `enrichableSenderAddresses`. Reuses the identical shared cap
+  // `BookmarksPanel`/`ShareInviteSheet` already enforce for this same
+  // conversation-list class, rather than a second, independently drifting cap.
+  const enrichableAddresses = useMemo(
+    () => new Set(qnsLookupAddresses(filteredConversations, MAX_QNS_LOOKUPS)),
+    [filteredConversations],
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: Conversation }) => {
       return (
@@ -260,12 +283,13 @@ export function DirectMessagesList({
           isFavorite={isFavorite?.(item.conversationId) ?? false}
           isMuted={isMuted?.(item.conversationId) ?? false}
           onSelect={onSelectConversation}
+          enrichableAddresses={enrichableAddresses}
           onToggleFavorite={onToggleFavorite}
           onToggleMute={onToggleMute}
         />
       );
     },
-    [styles, selectedConversation, onSelectConversation, theme, isFavorite, isMuted, onToggleFavorite, onToggleMute]
+    [styles, selectedConversation, onSelectConversation, theme, isFavorite, isMuted, onToggleFavorite, onToggleMute, enrichableAddresses]
   );
 
   // Error state
