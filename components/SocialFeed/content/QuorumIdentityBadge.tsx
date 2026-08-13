@@ -22,9 +22,22 @@ interface QuorumIdentityBadgeProps {
   theme: AppTheme;
   /** Optional override: smaller font/icon for inline placement next to a username. */
   compact?: boolean;
+  /**
+   * Whether this badge may issue a public-profile fetch for its linked
+   * Quorum address. Required, not defaulted: the badge is a LEAF with no
+   * view of how many siblings are mounted at once (a windowed FlashList row
+   * vs. one of hundreds of casts in a non-windowed ScrollView), so it cannot
+   * safely decide this itself. The CALLER must already have bounded its own
+   * fan-out to at most `MAX_QNS_LOOKUPS` concurrent enrichments — see
+   * `hooks/chat/useConversationsWithQnsNames.ts` — before passing `true`
+   * here. A caller that mounts every cast at once (no windowing) must
+   * additionally cap WHICH badges enrich, since it cannot rely on windowing
+   * to do that for it (see `ThreadDetailView`'s `enrichableFids`).
+   */
+  enrich: boolean;
 }
 
-export function QuorumIdentityBadge({ fid, theme, compact = false }: QuorumIdentityBadgeProps) {
+export function QuorumIdentityBadge({ fid, theme, compact = false, enrich }: QuorumIdentityBadgeProps) {
   const { data } = useQuorumIdentityForFid(fid);
   const styles = useMemo(() => createStyles(theme, compact), [theme, compact]);
 
@@ -44,13 +57,10 @@ export function QuorumIdentityBadge({ fid, theme, compact = false }: QuorumIdent
         provider's `verifiedQnsNames` map can never gain an entry for it, so
         the badge could never show a `.q` at all — the fetch is what makes
         verification possible in the first place, not an optional extra.
-        Bounded the same way the message list is (row 17 of the migration
-        table): the badge only mounts inside a virtualised FlashList of
-        casts, so only the currently-visible rows request a profile at once,
-        and the identity provider dedupes by address so re-scrolling past an
-        already-seen author never re-fetches.
+        Whether it is SAFE to make that fetch is the caller's call, not this
+        component's — see the prop doc above.
       */}
-      <MemberName address={data.address} global enrich style={styles.text} numberOfLines={1} />
+      <MemberName address={data.address} global enrich={enrich} style={styles.text} numberOfLines={1} />
     </View>
   );
 }

@@ -122,7 +122,7 @@ function renderBadge(fid = 1) {
   return renderWithProviders(
     <QueryClientProvider client={queryClient}>
       <IdentityScopeProvider rostersBySpace={{}} selfAddress={null}>
-        <QuorumIdentityBadge fid={fid} theme={DarkTheme} />
+        <QuorumIdentityBadge fid={fid} theme={DarkTheme} enrich />
       </IdentityScopeProvider>
     </QueryClientProvider>,
   );
