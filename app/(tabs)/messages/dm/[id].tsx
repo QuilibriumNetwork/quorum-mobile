@@ -16,7 +16,8 @@ import { queryKeys } from '@quilibrium/quorum-shared';
 import type { Conversation } from '@quilibrium/quorum-shared';
 import { useUserPublicProfile } from '@/hooks/useUserPublicProfile';
 import { resolveConversationTitle } from '@/utils/conversationTitle';
-import { useVerifiedQnsNames } from '@/hooks/useVerifiedQnsNames';
+import { useResolvedMemberName } from '@/identity';
+import { formatResolvedName } from '@/identity/useResolvedName';
 import { useBookmarks, useReceiptSettings } from '@/hooks/useUserConfig';
 import { useCall } from '@/context';
 import { useOpenLink } from '@/hooks/useOpenLink';
@@ -360,54 +361,47 @@ export default function DMChatScreen() {
   // between the first render (no conversation) and the second (conversation
   // arrived) — React's hook-order check fires on exactly that.
   //
-  // The same helper the inbox row uses, so the header and the list cannot call
-  // the same partner two different things. The rule it applies — `displayName`
-  // is a GLOBAL name, not a per-conversation override, because a DM cannot be
-  // renamed — is documented there.
+  // The same ladder `DMChatHeader` resolves the visible header from, so the
+  // header and this screen's OTHER consumers (call payloads, the profile
+  // modal, the route title) cannot name the partner two different things.
   //
-  // `primary_username` comes straight from the fetched profile rather than
-  // through the conversation row: `conversation` is a union whose base half does
-  // not declare the field, and this is its only consumer.
+  // `conversationTitle.ts` no longer carries a QNS tier at all — it used to
+  // accept a `primary_username` here, verified by this screen's own
+  // `useVerifiedQnsNames` pass, but that made the guarantee a matter of every
+  // caller remembering to verify rather than something the function itself
+  // enforced. The `.q` now comes entirely from `@/identity`'s own verified
+  // resolution of `recipientAddress`, called unconditionally (hooks run every
+  // render regardless of `isFarcasterConversation`; the address is `''` for a
+  // Farcaster conversation, which `@/identity` treats as "nothing to
+  // resolve"). `enrich`: bounded to one address per mount, the same
+  // justification `DMChatHeader`/the moderation modals use.
+  //
+  // A Farcaster conversation's `address` is a synthetic `fid:<n>` string —
+  // never a Quorum address — so it must never reach `@/identity` at all;
+  // `resolveConversationTitle` (QNS-free, see its own header) still handles
+  // that case and the "no address yet" case, reading only `displayName`.
   //
   // It sits above the call handlers because they name the person on the
   // ringing screen. Leaving it below meant their `useCallback` closed over a
   // title computed before the `.q` had arrived and, since their deps do not
-  // include the public profile, never picked up the corrected one.
-  // A `primary_username` off a fetched profile is the partner's CLAIM to a
-  // name, not proof they hold it, so it goes through the same check every other
-  // surface uses before it can render with a `.q`.
-  //
-  // This screen needs its own pass because it fetches the profile itself,
-  // independently of the member map that `DMChatArea` verifies. Without it the
-  // header could show `alice.q` while the message bubbles directly beneath it
-  // showed Alice's degraded global name — a contradiction on one screen, and
-  // the header is the more prominent of the two.
+  // include the resolved name, never picked up the corrected one.
   //
   // The title also feeds the ringing screen and the kick/mute/block
   // confirmations, so an unverified name here reaches the destructive actions.
-  const recipientClaimRow = useMemo(
-    () =>
-      recipientAddress
-        ? [
-            {
-              address: recipientAddress,
-              primary_username: recipientPublicProfile?.primary_username,
-            },
-          ]
-        : [],
-    [recipientAddress, recipientPublicProfile?.primary_username],
+  const resolvedRecipient = useResolvedMemberName(
+    !isFarcasterConversation ? (recipientAddress ?? '') : '',
+    { global: true, enrich: true },
   );
-  const [verifiedRecipient] = useVerifiedQnsNames(recipientClaimRow);
 
-  const title = useMemo(
-    () =>
-      resolveConversationTitle({
+  const title = useMemo(() => {
+    if (isFarcasterConversation || !conversation?.address) {
+      return resolveConversationTitle({
         address: conversation?.address,
         displayName: conversation?.displayName,
-        primary_username: verifiedRecipient?.primary_username,
-      }),
-    [conversation?.address, conversation?.displayName, verifiedRecipient?.primary_username],
-  );
+      });
+    }
+    return formatResolvedName(resolvedRecipient);
+  }, [isFarcasterConversation, conversation?.address, conversation?.displayName, resolvedRecipient]);
 
   const { initiateCall } = useCall();
   const handleCallPress = useCallback(() => {
