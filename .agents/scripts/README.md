@@ -100,6 +100,7 @@ device serial. `_env.ps1` loads it and is dot-sourced by the PowerShell scripts;
 | File | What it's for |
 |------|---------------|
 | `_env.ps1` | **Bootstrap, not a command.** Sets `$repo`/`$captureDir`, loads `.env.local`. Dot-sourced by the PowerShell scripts |
+| `_adb-preflight.ps1` | **Library, not a command.** `Resolve-QmUsbDevice` — picks the cabled phone, waits out an unauthorized one, discards stray Wi-Fi endpoints. Dot-sourced by the two cable scripts |
 | `.env.local.example` | Template for optional machine-local settings — copy to `.env.local` (gitignored) |
 | `dev-unblock-user.md` | **A doc, not a script.** One-shot recipe to unblock a user with no UI path |
 
@@ -166,8 +167,10 @@ and binds Metro to it.
 ## Rebuilding the app (`build-app.ps1`)
 
 ```powershell
-.\.agents\scripts\build-app.ps1            # arm64-v8a only (both test phones)
-.\.agents\scripts\build-app.ps1 -AllAbis   # full ABI set
+.\.agents\scripts\build-app.ps1                        # arm64-v8a only (both test phones)
+.\.agents\scripts\build-app.ps1 -AllAbis               # full ABI set
+.\.agents\scripts\build-app.ps1 -Serial <device-1-serial>   # pick one of two cabled phones
+.\.agents\scripts\build-app.ps1 -BuildOnly             # compile the APK with no phone attached
 ```
 
 One button — full native rebuild + install. Run this when:
@@ -449,6 +452,55 @@ administrator rights), restarts the server, and prints the device list.
 If that list is empty, replug the cable, unlock the phone, and accept the
 "Allow USB debugging" prompt.
 
+## "This computer is not authorized" / "No development build is installed"
+
+If a run dies with either of these — especially both together, and especially
+when the cable has worked fine for months:
+
+```
+This computer is not authorized for developing on Device 192.168.0.3:5555
+CommandError: No development build (com.quilibrium.quorummobile) for this
+project is installed. Install a development build on the target device...
+```
+
+**your build and your install are almost certainly fine.** The message names the
+wrong culprit. Run `adb devices` and look at how many entries come back:
+
+```
+<device-1-serial>   device         <- the cabled phone, healthy
+192.168.0.3:5555   unauthorized   <- a stale Wi-Fi endpoint
+```
+
+Expo picks a device itself, and it does **not** honour `ANDROID_SERIAL`. When it
+lands on the Wi-Fi entry it cannot run `pm list packages` against an
+unauthorized endpoint, and it reports that failure as "no development build
+installed". Rebuilding cannot help, because nothing was wrong with the build —
+that is the trap, and it costs ~9 minutes per attempt to fall into.
+
+**Both cable scripts now heal this automatically** (`_adb-preflight.ps1`): once a
+healthy USB phone is confirmed, every `<ip>:port` endpoint is disconnected
+regardless of its state, leaving Expo exactly one candidate. `build-app.ps1`
+resolves the phone *before* Gradle starts, so a device problem costs seconds
+rather than surfacing as a bogus build error at the end.
+
+The rule is **USB wins**: with a cable attached, Wi-Fi endpoints are discarded.
+With no cable, they are left untouched and the script points you at
+`dev-start-mobile-wifi.ps1` instead — so it can never delete the only endpoint
+you have.
+
+These ghosts reappear on their own (observed 2026-08-13: a `192.168.0.x` and a
+Tailscale-range `100.x.y.z` endpoint both re-materialised as `unauthorized`
+minutes after being disconnected, at addresses nobody typed). That is why the
+prune runs on **every** invocation and matches on shape rather than on state —
+a one-off manual cleanup does not stay clean.
+
+Manual escape hatch, if you ever need it:
+
+```powershell
+adb disconnect 192.168.0.3:5555     # drop one endpoint
+adb disconnect                      # drop every Wi-Fi endpoint
+```
+
 ## Standard debug workflow
 
 1. Run `dev-start-mobile.ps1` — Metro running, clean log.
@@ -488,4 +540,4 @@ them.
 | `gen-android-adaptive-icon.js` | Superseded by `gen-app-icons.js` in the same 2026-06-19 commit; running it would overwrite `icon-android-adaptive.png` with the pre-redesign version. |
 | `gen-splash-logo.js` | Superseded by `gen-splash-densities.js`; running it would overwrite `splash-glyph.png` with the older build. |
 
-*Last updated: 2026-07-26*
+*Last updated: 2026-08-13*
