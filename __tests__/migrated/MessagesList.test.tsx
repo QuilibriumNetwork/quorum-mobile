@@ -30,12 +30,31 @@
  * point is proving the real `useNameResolver` wiring, not a stand-in for it.
  */
 import React from 'react';
-import { screen, waitFor, cleanup } from '@testing-library/react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { screen, waitFor, cleanup, act } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider, notifyManager } from '@tanstack/react-query';
 import { renderWithProviders } from '@/jest/renderWithProviders';
 import { IdentityScopeProvider } from '@/identity/identityProvider';
 import { useTheme } from '@/theme';
 import type { DisplayMessage } from '@/components/Chat/types';
+
+// react-query's notifyManager defers every subscriber notification through a
+// real `setTimeout(0)` (`systemSetTimeoutZero`, deliberately NOT tied to
+// promise/microtask timing), so `IdentityScopeProvider`'s `useQueries`-driven
+// re-render lands on its own macrotask outside whatever `act()` scope wrapped
+// the render call — it warns "not wrapped in act(...)" no matter how long the
+// assertion below waits for it. Wrapping the notify callback in `act` is the
+// fix the library itself documents for this exact case (see
+// `notifyManager.setNotifyFunction`'s docstring: "wrap notifications with
+// React.act while running tests"). It makes the state update land where React
+// expects it to; it does not change what is asserted. This also happens to
+// quiet the `ViewHolderCollection` warning this file could otherwise emit —
+// FlashList's own layout effect re-measures as a downstream consequence of
+// this SAME re-render, so once the render is properly act()-wrapped, so is
+// everything it cascades into. Nothing FlashList-specific is mocked or
+// suppressed here.
+notifyManager.setNotifyFunction((callback) => {
+  act(callback);
+});
 
 // Same genuine ed448 key/address pair reused across this migration —
 // deriveAddress(KEY) === TARGET, real math, not a placeholder.
