@@ -196,3 +196,67 @@ describe('logMentionOrReply — a mention of the viewer', () => {
     expect(storedText()).toContain('ping');
   });
 });
+
+describe('logMentionOrReply — the sender name degrades, it never forges', () => {
+  // This function runs on the WebSocket receive path, outside any React tree,
+  // so it cannot call the hook that verifies a claimed QNS name against the
+  // network. `resolveMemberName` (which builds both `senderName` and
+  // `senderDisplayName` below) has no verification of its own either — see
+  // `messageSenderName.test.ts`'s "shows a QNS name with its suffix" case,
+  // which proves it renders a `.q` for whatever sits in `primary_username`,
+  // no questions asked.
+  //
+  // What keeps this path honest is the roster row it is ever handed:
+  // `ctx.getSpaceMember` is wired to `storage.getSpaceMember`
+  // (`WebSocketContext.tsx`), and the ONLY thing that handler ever writes from
+  // an incoming claim is `claimed_primary_username` — never bare
+  // `primary_username`, which is reserved for a verified promotion that only
+  // happens inside a React tree and is never persisted back to storage. So a
+  // real roster row reaching this function can carry a claim, but never
+  // through the field this function's `.q` tier actually reads.
+  //
+  // This is the receive-path counterpart to the chat screen, which resolves
+  // the SAME sender through `@/identity` and, once the claim verifies, shows
+  // `alice.q`. A notification for the identical message may still show
+  // `Alice` — a degradation, not a bug: showing the unverified `.q` on a lock
+  // screen would be exactly the forgery this architecture exists to prevent.
+  it('shows the global name, never a .q, for a sender whose claim only ever arrived unpromoted', async () => {
+    await logMentionOrReply(
+      replyMentioning(`@<${THEM}> hi`),
+      ctx({
+        getSpaceMember: async (_s: string, id: string) =>
+          id === THEM
+            ? { address: THEM, global_display_name: 'Alice', claimed_primary_username: 'alice' }
+            : roster[id],
+      }),
+    );
+
+    const entry = getMentionReplyLog()[0];
+    expect(entry.senderName).toBe('Alice');
+    expect(entry.senderDisplayName).toBe('Alice');
+    expect(entry.senderName).not.toContain('.q');
+    expect(entry.senderDisplayName).not.toContain('.q');
+  });
+
+  it('would show the .q if the roster row ever carried a promoted claim — proving the field, not the function, is what protects this path', async () => {
+    // The contrast case. Same sender, same claimed name, but expressed the way
+    // a VERIFIED promotion would look (bare `primary_username`, the shape
+    // `useVerifiedQnsNamesInMap` produces inside React and never persists).
+    // This must render `.q` — if it did not, the test above would be passing
+    // for the wrong reason (a resolver that drops every claim, not one that
+    // only trusts a promoted one).
+    await logMentionOrReply(
+      replyMentioning(`@<${THEM}> hi`),
+      ctx({
+        getSpaceMember: async (_s: string, id: string) =>
+          id === THEM
+            ? { address: THEM, global_display_name: 'Alice', primary_username: 'alice' }
+            : roster[id],
+      }),
+    );
+
+    const entry = getMentionReplyLog()[0];
+    expect(entry.senderName).toBe('alice.q');
+    expect(entry.senderDisplayName).toBe('alice.q');
+  });
+});

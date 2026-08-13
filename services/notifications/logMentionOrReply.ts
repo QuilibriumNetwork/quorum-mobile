@@ -12,6 +12,32 @@
  *     `notifyForBadge` (mute) + checking the enabled types here.
  *
  * Returns void; appends 0 or 1 entry. Dedup is handled by the log (stable id).
+ *
+ * ## Why every name here goes through `@/utils/resolveMemberName`, not `@/identity`
+ *
+ * Both call sites (`WebSocketContext.tsx`'s live and catch-up handlers) run on
+ * the WebSocket message-receive path — there is no React component above this
+ * function, so `useResolvedMemberName`'s hooks, and the network verification
+ * they trigger, cannot run here. `resolveMemberName` degrades instead of
+ * verifying: it will render a `.q` for whatever sits in a row's
+ * `primary_username`, no questions asked (`messageSenderName.test.ts` proves
+ * both directions of that).
+ *
+ * What actually keeps a mention or a sender name here from forging a `.q` is
+ * one level upstream: `ctx.getSpaceMember` is wired to `storage.getSpaceMember`,
+ * and `WebSocketContext.tsx`'s roster-update handler never writes an incoming
+ * claim into `primary_username` — only into `claimed_primary_username`, which
+ * this file's calls into `resolveMemberName` never read. A name that has not
+ * been promoted (verified, inside a React tree, and never persisted back to
+ * storage) simply is not on the row this function sees. It falls through to
+ * the global name or the truncated address instead — the same member's chat
+ * bubble may show `alice.q` while this notification shows `Alice`, and that
+ * mismatch is correct: showing the unverified claim on a lock screen would be
+ * the exact forgery the identity architecture exists to prevent.
+ * `logMentionOrReply.test.ts`'s "the sender name degrades, it never forges"
+ * block exercises both the safe shape and, as a contrast, what a promoted row
+ * would render, to prove it is the FIELD doing the protecting and not the
+ * function.
  */
 
 import {

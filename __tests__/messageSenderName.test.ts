@@ -41,6 +41,21 @@ describe('messageSenderName', () => {
     );
   });
 
+  it('ignores an unpromoted claim under claimed_primary_username, unlike primary_username above', () => {
+    // This function performs no verification of its own — the test above shows
+    // it happily renders a `.q` for whatever sits in `primary_username`. What
+    // keeps that safe on the receive path is that nothing ever writes a raw
+    // broadcast claim there: `WebSocketContext`'s roster-update handler stores
+    // an incoming claim under `claimed_primary_username` instead, precisely so
+    // a surface that (like this one) skips verification never sees it. This
+    // pins that the field name alone does the protecting: reading the member
+    // exactly as `storage.getSpaceMember` would return it — the claim present,
+    // but only under its inert key — must fall through to the global name.
+    expect(
+      withMember({ claimed_primary_username: 'alice', global_display_name: 'Alice' }),
+    ).toBe('Alice');
+  });
+
   it('still lets a per-space name outrank a QNS name', () => {
     // The ladder's whole point: a name you chose for this space beats the `.q`.
     expect(
