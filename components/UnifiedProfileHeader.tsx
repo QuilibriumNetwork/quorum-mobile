@@ -6,7 +6,14 @@ import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/Segmente
 import type { UserInfo } from '@/context/AuthContext';
 import type { ProfileAuthor } from '@/hooks/useFarcasterProfile';
 import { truncateAddress } from '@/utils/formatAddress';
-import { resolveSelfName } from '@/utils/resolveSelfName';
+import { MemberName, useMemberIdentity, useResolvedMemberName } from '@/identity';
+// `formatResolvedName` is not re-exported from the `@/identity` barrel (only
+// the hooks and `<MemberName>` are), so it is imported from its owning module
+// directly — the same reach used by `ShareInviteSheet.tsx`/`SpaceSettingsModal.tsx`
+// and others. It stays the ONLY place a `.q` suffix is spelled out; this just
+// reaches it by a longer path, for the two call sites below (a plain string
+// prop, not a render) that need the formatted name outside of `<MemberName>`.
+import { formatResolvedName } from '@/identity/useResolvedName';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -50,13 +57,25 @@ export default function UnifiedProfileHeader({
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  // Own name through the SAME verified ladder every other member resolves
+  // through (see HeaderAvatar.tsx for the full reasoning), rather than
+  // trusting `primaryUsername`/`displayName` off the live auth profile
+  // directly. Called unconditionally, before any early return below — these
+  // are hooks. `global: true`: self has no per-space tier, so an ambient
+  // Space scope must not let a roster nickname outrank the QNS name here.
+  const identity = useMemberIdentity(user.address);
+  const resolved = useResolvedMemberName(user.address, { global: true });
+  // ANY Quorum tier — not only the QNS one — outranks Farcaster below. The
+  // previous code reached the same priority two different ways (a `.q`
+  // check, and a `user.displayName ||` chain that put the global name ahead
+  // of Farcaster too); this is that same combined priority under one gate.
+  const hasQuorumName = !!(identity.qnsName || identity.globalName);
+
   const hasFarcaster = Boolean(user.farcaster?.fid);
 
   if (!hasFarcaster) {
     return <QuorumOnlyHeader user={user} onEdit={onEditQuorum} onCopyAddress={onCopyAddress} theme={theme} styles={styles} />;
   }
-
-  const selfName = resolveSelfName(user);
 
   // Unmerged with both profiles: one big card + a [Quorum | Farcaster] switcher
   // above it. Swapping changes only this card; the nav pills below are separate.
@@ -88,8 +107,8 @@ export default function UnifiedProfileHeader({
           />
         ) : (
           <BigProfileCard
-            displayName={selfName.label}
-            avatarName={selfName.initialsSource}
+            displayName={formatResolvedName(resolved)}
+            avatarName={resolved.name}
             avatarUri={user.profileImage}
             address={user.address}
             onCopyAddress={onCopyAddress}
@@ -106,15 +125,10 @@ export default function UnifiedProfileHeader({
   // as fallback. Handle + address are always shown together.
   //
   // The `.q` leads here too when there is one. Farcaster only supplies a name
-  // when Quorum has none at all, which now means neither a `.q` nor a global.
-  const hasQns = !!(user.primaryUsername ?? '').trim();
-  const displayName = hasQns
-    ? selfName.label
-    : user.displayName ||
-      farcasterProfile?.displayName ||
-      user.farcaster?.username ||
-      'Unnamed';
-  const avatarName = hasQns ? selfName.initialsSource : displayName;
+  // when Quorum has none at all — neither a `.q` nor a verified/local global name.
+  const farcasterFallbackName = farcasterProfile?.displayName || user.farcaster?.username || 'Unnamed';
+  const displayName = hasQuorumName ? formatResolvedName(resolved) : farcasterFallbackName;
+  const avatarName = hasQuorumName ? resolved.name : farcasterFallbackName;
   const avatarUri = user.profileImage || farcasterProfile?.pfp?.url || user.farcaster?.pfpUrl;
 
   return (
@@ -140,14 +154,13 @@ export default function UnifiedProfileHeader({
             @{user.farcaster.username}
           </Text>
         )}
-        {/* Only when the `.q` is NOT already the name above — repeating it as a
-            sub-label is what made it read as a decoration rather than as the
-            identity it is. */}
-        {!hasQns && user.primaryUsername && (
-          <Text style={[styles.handleText, { color: theme.colors.accent }]} numberOfLines={1}>
-            {user.primaryUsername}.q
-          </Text>
-        )}
+        {/* A second "the `.q` is not already the name above" handle line used to
+            live here, hand-appending the suffix onto the raw claim. It could
+            never actually fire — `hasQuorumName`'s predecessor gated it on the
+            SAME condition (a QNS name present) that already made the name
+            rendered above be the `.q`, so the two were mutually exclusive by
+            construction — and it built the suffix outside `identity/`, which
+            nothing may do. Removed rather than ported. */}
       </View>
       <TouchableOpacity
         style={styles.addressRow}
@@ -270,23 +283,23 @@ function QuorumOnlyHeader({
   theme: AppTheme;
   styles: ReturnType<typeof createStyles>;
 }) {
-  // Same ladder as every other surface: the `.q` IS the name when there is one.
-  const selfName = resolveSelfName(user);
+  // Same ladder as every other surface, and verified the same way — see
+  // HeaderAvatar.tsx: the `.q` IS the name when there is one, but only once it
+  // resolves back to this address through a published public profile.
+  const resolved = useResolvedMemberName(user.address, { global: true });
   return (
     <View style={styles.mergedContainer}>
       <TouchableOpacity onPress={onEdit} activeOpacity={0.8} style={styles.mergedAvatarWrap}>
         <CachedAvatar
           source={user.profileImage ? { uri: user.profileImage } : null}
           style={styles.mergedAvatar}
-          fallbackName={selfName.initialsSource}
+          fallbackName={resolved.name}
         />
         <View style={styles.editBadge}>
           <IconSymbol name="pencil" size={12} color="#fff" />
         </View>
       </TouchableOpacity>
-      <Text style={styles.mergedDisplayName} numberOfLines={1}>
-        {selfName.label}
-      </Text>
+      <MemberName address={user.address} global style={styles.mergedDisplayName} numberOfLines={1} />
       <TouchableOpacity
         style={styles.addressRow}
         onPress={onCopyAddress}

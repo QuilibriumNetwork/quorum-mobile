@@ -15,7 +15,7 @@ import { router } from 'expo-router';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import * as Skin from '@/theme/skins/geometry';
 import { useAuth } from '@/context';
-import { resolveSelfName } from '@/utils/resolveSelfName';
+import { useMemberIdentity, useResolvedMemberName } from '@/identity';
 import { useTheme } from '@/theme';
 
 const SIZE = 32;
@@ -23,30 +23,38 @@ const SIZE = 32;
 export function HeaderAvatar() {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const address = user?.address ?? '';
 
   // Mirror the resolution order used by UnifiedProfileHeader — Quorum
   // profile image first, then Farcaster pfp as fallback so the header
   // avatar matches the profile screen.
   const uri = user?.profileImage || user?.farcaster?.pfpUrl || undefined;
-  // When no photo, fall back to name initials (not the generic blue logo).
-  // Through `resolveSelfName` rather than `displayName || primaryUsername`,
-  // which had the ladder upside down: a `.q` REPLACES the global name, so the
-  // global name winning here meant the one avatar you look at most was derived
-  // from the name you no longer go by. `initialsSource` is the bare name — the
-  // `.q` suffix would otherwise be read as a second word and yield two initials.
+
+  // Own name through the SAME verified ladder every other member resolves
+  // through, rather than trusting `primaryUsername`/`displayName` off the
+  // live auth profile directly. A `.q` elected on this device is still just a
+  // CLAIM until it resolves back to this address through a published public
+  // profile — the old direct read rendered it as though electing it were
+  // proof, which is exactly the forgery `identity/` exists to close, applied
+  // here to your own name instead of somebody else's.
   //
-  // The empty-name case stays empty rather than taking the resolver's
-  // "Unnamed": `CachedAvatar` treats any defined string as a request for
-  // initials, so passing "Unnamed" through would put a "U" on the avatar of
-  // every user who has set no name at all — a visible change this fix has no
-  // business making.
-  const hasSelfName = !!(user?.primaryUsername?.trim() || user?.displayName?.trim());
-  const fallbackName = hasSelfName
-    ? resolveSelfName({
-        primaryUsername: user?.primaryUsername,
-        displayName: user?.displayName,
-      }).initialsSource
-    : '';
+  // `global: true`: self has no per-space tier (see `resolveSelfName`'s
+  // docstring on the same point) — an ambient Space scope must not let a
+  // roster nickname outrank your own QNS name here. `enrich` is left at its
+  // default `false`: `IdentityScopeProvider` already requests `selfAddress`'s
+  // public profile itself whenever one is set (see its own effect), so this
+  // surface asking again would only be a deduped no-op.
+  const identity = useMemberIdentity(address);
+  const resolved = useResolvedMemberName(address, { global: true });
+
+  // When no tier has a name at all, stay empty rather than falling through to
+  // the resolver's own truncated-address fallback: CachedAvatar treats any
+  // defined string as a request for initials, and an address-derived initial
+  // ("Q" from `Qm7f3a…`) belongs to nobody and would be shared by nearly
+  // every user — the same failure the old "Unnamed" fallback had, which this
+  // surface already went out of its way to avoid.
+  const hasSelfName = !!(identity.qnsName || identity.globalName);
+  const fallbackName = hasSelfName ? resolved.name : '';
 
   return (
     <TouchableOpacity

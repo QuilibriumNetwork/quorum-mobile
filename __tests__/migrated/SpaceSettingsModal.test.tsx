@@ -23,12 +23,15 @@
  * inside the SAME provider, and is the only thing in this file allowed to
  * call `enrich`.
  *
- * `useMembersWithCachedQns` + `useVerifiedQnsNames` (kept, per the brief) are
- * a SEPARATE, older, cache-only mechanism that still feeds the AVATAR/BIO
- * ladder (`resolveMemberAvatar`/`resolveMemberBio`, untouched by this
- * migration — `@/identity` resolves names, never pictures). It is exercised
- * here for real, unmocked, since it costs no network by construction
- * (`enabled: false`).
+ * `useMembersWithCachedQns` is GONE — it only ever attached a verified
+ * `primary_username` to each row, and nothing in this file has read that
+ * field since names moved onto `@/identity`. Keeping it would have meant a
+ * real `resolveBatch` network call, every render a member claims a name, for
+ * a value nobody looked at; it and its cache-and-verify pass were removed. The
+ * AVATAR/BIO ladder (`resolveMemberAvatar`/`resolveMemberBio`, untouched by
+ * this migration — `@/identity` resolves names, never pictures) now reads
+ * straight off each row's `*_image`/`*_bio` slots, with `selfIdentity` as the
+ * self-only fallback.
  *
  * ## What is mocked, and why
  *
