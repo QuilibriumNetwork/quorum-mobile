@@ -18,15 +18,30 @@
 #
 # USAGE - run from the repo root when you need to (re)build the app:
 #   .\.agents\scripts\build-app.ps1
+#   .\.agents\scripts\build-app.ps1 -Serial <device-1-serial>  # two phones cabled
+#   .\.agents\scripts\build-app.ps1 -BuildOnly            # compile, no phone
+#   .\.agents\scripts\build-app.ps1 -AllAbis              # full ABI set
 #
 # By default this builds arm64-v8a ONLY (both physical test phones are arm64;
 # we never use the x86 emulator). Pass -AllAbis to build the full ABI set.
+#
+# The phone is resolved BEFORE the build starts (see _adb-preflight.ps1), so a
+# device problem costs you seconds instead of surfacing as a bogus build error
+# nine minutes later.
 
 param(
     # Build every Android ABI (armeabi-v7a, arm64-v8a, x86, x86_64) instead of just
     # arm64-v8a. Only needed for an x86 emulator or a genuinely 32-bit device - our
     # test phones (Motorola Edge 50 Fusion, Samsung Galaxy A40) are both arm64-v8a.
-    [switch]$AllAbis
+    [switch]$AllAbis,
+
+    # Target a specific phone by adb serial (see `adb devices`). Autodetected
+    # otherwise; only needed when two phones are cabled at once.
+    [string]$Serial,
+
+    # Compile without a phone attached. Skips the device preflight AND the install
+    # step - the APK is left in android\app\build\outputs\apk\debug\.
+    [switch]$BuildOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -53,6 +68,30 @@ Write-Host ""
 
 # Repo root (this script lives in .agents\scripts\). Needed by the pre-flight below.
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
+
+# --- Device pre-flight (FIRST, because it is the cheapest) -------------------
+# This script's whole job is "rebuild AND install on the phone", so the phone has
+# to be resolved BEFORE we spend ~9 min in Gradle. On 2026-08-13 it wasn't, and a
+# stale unauthorized Wi-Fi adb endpoint (192.168.0.3:5555) made the run fail at
+# the very END with "This computer is not authorized for developing on Device
+# 192.168.0.3:5555" + "No development build ... is installed" - a message that
+# blames the build for a device-selection problem. Nine minutes to learn nothing.
+# Resolve-QmUsbDevice discards the Wi-Fi endpoint once the cable is confirmed
+# healthy, so `expo run:android` is left with exactly one candidate.
+$device = $null
+if (-not $BuildOnly) {
+    . (Join-Path $PSScriptRoot '_adb-preflight.ps1')
+    $target = Resolve-QmUsbDevice -Serial $Serial
+    if (-not $target) {
+        Write-Host "  Not starting a ~9 min build that could not install anywhere." -ForegroundColor Red
+        Write-Host "  To compile the APK without a phone:  .\.agents\scripts\build-app.ps1 -BuildOnly" -ForegroundColor Yellow
+        Write-Host ""
+        exit 1
+    }
+    $device = $target.Serial
+    Write-Host "Target phone: $device" -ForegroundColor Green
+    Write-Host ""
+}
 
 # --- Windows MAX_PATH (260 char) pre-flight ---------------------------------
 # RN New Architecture C++ codegen mirrors each source file's FULL path into its
@@ -150,13 +189,28 @@ $ErrorActionPreference = $prevEAP
 
 # Native rebuild + install. Installs as the .debug package (side-by-side),
 # so it never touches the real production app.
-Write-Host "Building the .debug variant (installs alongside your real app)..." -ForegroundColor DarkGray
-yarn android
+if ($BuildOnly) {
+    # No phone: drive Gradle directly. `expo run:android` always tries to install,
+    # so it is the wrong entry point when there is nothing to install onto.
+    Write-Host "Building the .debug APK only (no phone, no install)..." -ForegroundColor DarkGray
+    cmd /c "`"$repoRoot\android\gradlew.bat`" -p `"$repoRoot\android`" assembleDebug"
+} else {
+    # -d pins the target explicitly. ANDROID_SERIAL alone is NOT enough: Expo runs
+    # its own device picker, which is exactly how the 2026-08-13 run ended up on an
+    # unauthorized Wi-Fi endpoint while the cabled phone sat there working.
+    Write-Host "Building the .debug variant (installs alongside your real app)..." -ForegroundColor DarkGray
+    yarn android --device $device
+}
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host ""
-    Write-Host "Build succeeded and app installed." -ForegroundColor Green
-    Write-Host "Now run dev-start-mobile.ps1 for JS/TS iteration."
+    if ($BuildOnly) {
+        Write-Host "Build succeeded (not installed - used -BuildOnly)." -ForegroundColor Green
+        Write-Host "APK: android\app\build\outputs\apk\debug\app-debug.apk"
+    } else {
+        Write-Host "Build succeeded and app installed on $device." -ForegroundColor Green
+        Write-Host "Now run dev-start-mobile.ps1 for JS/TS iteration."
+    }
 } else {
     Write-Host ""
     Write-Host "Build failed (exit $LASTEXITCODE)." -ForegroundColor Yellow

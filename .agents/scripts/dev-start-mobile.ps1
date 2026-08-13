@@ -134,46 +134,22 @@ try {
     # the phone's localhost:8081 tunnel to Metro on the PC (127.0.0.1, which
     # answers). We set the bridge here, and auto-launch the app at localhost
     # once Metro is up, so there's nothing to do by hand on the phone.
-    $adb = "adb"
-    if (-not (Get-Command adb -ErrorAction SilentlyContinue)) {
-        $sdkAdb = Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools\adb.exe"
-        if (Test-Path $sdkAdb) { $adb = $sdkAdb }
-    }
     $androidPackage = "com.quilibrium.quorummobile.debug"
     $scheme = "quorummobile"
 
-    # --- Auto-heal: drop stray Wi-Fi adb endpoints ----------------------------
-    # Running THIS script means "use the phone on the USB cable." A Wi-Fi adb
-    # endpoint (<ip>:5555) left connected from a previous dev-start-mobile-wifi
-    # run makes >1 device visible, and Expo then bails when you press 'a' with
-    # "No development build (com.quilibrium.quorummobile) is installed" - its
-    # `adb ... pm list packages` probe actually failed with "more than one
-    # device/emulator", which it misreports as "not installed". So we proactively
-    # disconnect every TCP/Wi-Fi endpoint, leaving only cabled devices.
-    $tcpEndpoints = & $adb devices 2>$null |
-        Where-Object { $_ -match '^\S+:\d+\s+device$' } |
-        ForEach-Object { ($_ -split '\s+')[0] }
-    foreach ($ep in $tcpEndpoints) {
-        & $adb disconnect $ep 2>$null | Out-Null
-        Write-Host "  Disconnected stray Wi-Fi adb endpoint $ep (USB script targets the cable)." -ForegroundColor DarkGray
-    }
+    # --- Auto-heal + pick the cabled phone ------------------------------------
+    # Resolve-QmUsbDevice waits out an unauthorized/absent phone with actionable
+    # instructions, then - once the cable is confirmed healthy - discards every
+    # stray Wi-Fi endpoint whatever its state, and pins ANDROID_SERIAL.
+    # See _adb-preflight.ps1 for the failure this exists to stop.
+    . (Join-Path $PSScriptRoot '_adb-preflight.ps1')
+    $target = Resolve-QmUsbDevice -Serial $Serial
+    $adb    = if ($target) { $target.Adb } else { (Get-QmAdb) }
+    $device = if ($target) { $target.Serial } else { $null }
 
-    # Pick the cabled device: USB serials have no colon (Wi-Fi is <ip>:5555).
-    $device = if ($Serial) {
-        $Serial
-    } else {
-        & $adb devices 2>$null |
-            Where-Object { $_ -match '^\S+\s+device$' -and $_ -notmatch '^emulator-' -and $_ -notmatch ':' } |
-            ForEach-Object { ($_ -split '\s+')[0] } |
-            Select-Object -First 1
-    }
+    $skipAutoLaunch = $false
 
     if ($device) {
-        # Pin Expo (and every adb call it makes) to this one device, so a second
-        # device attached mid-session can never re-introduce the "more than one
-        # device/emulator" ambiguity that fakes a "not installed" error.
-        $env:ANDROID_SERIAL = $device
-
         & $adb -s $device reverse tcp:8081 tcp:8081 | Out-Null
         Write-Host "  USB device $device : adb reverse tcp:8081 set (phone localhost -> Metro)" -ForegroundColor DarkGray
 
@@ -233,8 +209,12 @@ try {
         }
     }
     else {
-        Write-Host "  WARNING: no USB phone detected (adb devices). Plug in + authorize." -ForegroundColor Yellow
-        Write-Host "  Metro will still start; press 'a' in this window once the phone is ready." -ForegroundColor Yellow
+        # Resolve-QmUsbDevice already printed the specific diagnosis (unauthorized,
+        # absent, offline, or adb missing) plus what to do about it. Metro still
+        # starts, so plugging the phone in and pressing 'a' recovers without a
+        # restart - but nothing is auto-launched, since we have no device to pin to.
+        Write-Host "  Continuing without a phone: Metro will start anyway." -ForegroundColor Yellow
+        Write-Host "  Fix the device above, then press 'a' in this window." -ForegroundColor Yellow
     }
 
     Write-Host ""
