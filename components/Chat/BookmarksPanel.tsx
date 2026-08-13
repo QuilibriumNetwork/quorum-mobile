@@ -153,6 +153,7 @@ export const BookmarksPanel = React.memo(function BookmarksPanel({
                       <MemberName
                         address={bookmark.cachedPreview.senderAddress}
                         spaceId={bookmark.spaceId}
+                        global={bookmark.sourceType === 'dm'}
                         enrich={enrichableAddresses.has(bookmark.cachedPreview.senderAddress)}
                         style={styles.bookmarkSender}
                         numberOfLines={1}

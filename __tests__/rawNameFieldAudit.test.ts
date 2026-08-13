@@ -79,8 +79,16 @@ const SCAN_ROOTS = ['components', 'app'];
 const RAW_FIELD =
   /\b(displayName|primaryUsername|globalDisplayName|display_name|primary_username|global_display_name|recipientDisplayName|callerDisplayName)\b/;
 
-const RESOLVER_IMPORT =
-  /from\s+['"](@\/utils\/|\.{1,2}\/[\w/]*)(resolveMemberName|resolveSelfName|conversationTitle)['"]/;
+/**
+ * The identity module lands. Every scanned surface resolves through
+ * `@/identity` now — the barrel, or one of its own files reached directly
+ * (`@/identity/useResolvedName`, `@/identity/RootIdentityScope`). A file that
+ * still imports only the old `@/utils/resolveMemberName` seam loses its pass:
+ * that seam remains real (the receive-path files below still use it, by
+ * design, outside React) but a render-layer file sitting on it alone is a
+ * surface the migration missed, not a legitimate holdout.
+ */
+const RESOLVER_IMPORT = /from\s+['"]@\/identity(\/[\w/]*)?['"]/;
 
 /**
  * `SomeComponent.displayName = 'SomeComponent'` is React's devtools idiom and
@@ -103,10 +111,10 @@ const EXCEPTIONS: Record<string, string> = {
     'Farcaster identities throughout (p.user, m.author, replyTarget.author), falling back to `fid:<n>`. No Quorum member is rendered here.',
   'components/BoundChannelFeedPanel.tsx':
     'Renders `cast.author` — a Farcaster cast author, not a space member.',
-  'components/Chat/DirectMessagesList.tsx':
-    'MIGRATED: a Quorum row resolves via `@/identity`’s `useResolvedName` (global, enrich — see the file’s own comment). The two remaining raw reads are legitimate: a Farcaster row’s own already-resolved `displayName` (a synthetic `fid:<n>` address, no roster, no `.q`), and the "unknown" filter’s `!c.displayName`, which classifies rows by whether anything was ever stored rather than rendering a name.',
   'components/Chat/FarcasterCastCard.tsx':
     'Renders `cast.author`; the other hit is a StyleSheet key literally named `displayName`.',
+  'components/Chat/types.ts':
+    'Two unrelated things share this file. `directCastToDisplayMessage` and `castToDisplayMessage` (lines 571, 583, 590, 645, 670) read Farcaster `senderContext`/`actionTargetUserContext`/`cast.author` fields — a Farcaster identity, not a Quorum member, same class as `FarcasterCastCard.tsx` above. Separately, `toDisplayMessage` resolves a Quorum member through the PURE `resolveMemberName`/`formatResolvedName` from `@/utils/resolveMemberName`, by design: it is a plain data-transform function called from inside `.map()` in `DMChatArea.tsx`/`SpaceChatArea.tsx`, not a component, so it cannot call a hook — the same reason `utils/messagePreview.ts` and `services/notifications/logMentionOrReply.ts` stay on the pure API. Its per-space/global tiers read the identical roster row every other surface reads; the QNS tier is structurally inert here because `SpaceMember` (this file’s `MemberMap` value type) never carries `primary_username`, so nothing forgeable can reach the `.q` suffix. The one place this result could go stale in a way that matters — the per-message sender header — is already overridden: `MessagesList.tsx` resolves that live through `@/identity` instead of trusting `item.userName`.',
   'components/MiniAppsModal.tsx':
     'Renders a mini-app FRAME author from Farcaster metadata, not a Quorum member.',
   'components/SocialFeed/content/LiveSpacesStrip.tsx':
@@ -125,26 +133,13 @@ const EXCEPTIONS: Record<string, string> = {
     'Renders Farcaster cast authors in a thread; the remaining hits are StyleSheet keys.',
   'components/Chat/FarcasterDirectMessageView.tsx':
     'RECLASSIFIED, not migrated: this component only ever renders when `isFarcasterConversation` is true (`app/(tabs)/messages/dm/[id].tsx:500-518`), and every Farcaster conversation — real or the synthetic one built for a first-time DM — carries a synthetic `fid:<n>` address (`hooks/chat/useFarcasterDirectCasts.ts:73`; the synthetic branch at `app/(tabs)/messages/dm/[id].tsx:126`). So `conversation.displayName` here is Farcaster’s OWN conversation-title field (`fc.name ?? counterParty?.displayName ?? counterParty?.username`, same hook, line 75), never a Quorum name — routing it through `@/identity` would treat that `fid:<n>` string as a member address and, per the identity module’s own warning, could render somebody else’s name. Per-message sender names (this file’s other Farcaster reads) go through `directCastToDisplayMessage` unchanged, out of this file.',
-  'components/SocialFeedModal.tsx':
-    'MIGRATED: the "Share to chat" picker’s Quorum DM rows now resolve via `@/identity`’s `useResolvedName` (global, enrich — bounded the same way `ShareInviteSheet.tsx` bounds its own fan-out), in their own `QuorumShareRow` component. Every remaining hit is legitimate Farcaster data: `cast.author`/`pending.author`/`resolvedCast.author` fields throughout this file’s (large) cast-rendering code, and the sibling `FarcasterShareRow` component’s own `conv.displayName`/`conv.farcasterUsername` — a Farcaster conversation’s own fields, deliberately left unrouted through the member resolver for the same `fid:<n>` reason as `FarcasterDirectMessageView.tsx` above.',
-  'components/UnifiedProfileHeader.tsx':
-    'MIGRATED: your OWN name (both the no-Farcaster `QuorumOnlyHeader` branch and the merged/split branches with one linked) now resolves via `@/identity`’s `useResolvedMemberName`/`<MemberName>` instead of `resolveSelfName` trusting `user.primaryUsername` directly — the same verification every other member’s claim goes through. The remaining hits are legitimate: `farcasterProfile?.displayName`/`user.farcaster?.username` are Farcaster’s own fields (a separate identity namespace, same reason as `SocialFeedModal.tsx` above), and the rest is the already-resolved Quorum name flowing through a local `displayName` variable and `BigProfileCard`’s own `displayName` prop (declared, destructured, and passed through) — not a second raw read, same class as `TipModal.tsx` below.',
-
   // ── ROLE names are a different entity that shares the field name ────────
   'components/Chat/ChannelManagerRolePickerSheet.tsx':
     'Renders `role.displayName` — a channel ROLE’s name, which has no ladder and no QNS tier.',
   'components/Chat/ChannelSettingsSheet.tsx':
     'Maps role ids to `role.displayName`. Roles, not members.',
-  'components/UserProfileModal.tsx':
-    'MIGRATED: the header now renders one name resolved via `@/identity`’s `useResolvedName` instead of hand-composing `user.userName` next to a separate, unverified `@user.primaryUsername` line (also used for the role-removal confirmation copy). The remaining hits are legitimate: `role.displayName` is a channel ROLE’s name (same as `ChannelManagerRolePickerSheet.tsx`/`ChannelSettingsSheet.tsx` above), and `styles.displayName` is a StyleSheet key literally named `displayName` (same class as `FarcasterCastCard.tsx`).',
-
-  // ── A resolved value threaded through a local parameter of the same name ─
-  'components/wallet/TipModal.tsx':
-    'MIGRATED: the post-tip DM’s stored conversation title now resolves `quorumIdentity.address` via `@/identity`’s `useResolvedName` instead of trusting `recipientQuorumIdentity.displayName` — an unverified claim off a public-profile fetch that `useQuorumIdentityForFid` never checks. The remaining hits are the resolved value flowing through `sendTipNotification`’s own `displayName` parameter/local (declared, destructured, and passed through), not a second raw read.',
 
   // ── WRITE paths: the raw field is the thing being edited ────────────────
-  'components/Chat/DMChatArea.tsx':
-    'The composer channel-name hand-truncation (`address.slice(0, 8)`) resolves via `@/identity`’s `useResolvedName`. What remains raw is legitimate: the `dmMemberMap` build block (`global_display_name`/`claimed_primary_username` keys, lines ~160-187) is a separate, already-verified mechanism (`useVerifiedQnsNamesInMap`) feeding per-message sender names, out of this migration’s scope; and `cachedPreview.sourceName` (line ~498) WRITES a frozen preview snapshot by design — the standing decision for the whole frozen-name class is that the write side stays untouched. The corresponding READ is fixed in `BookmarksPanel.tsx`, which resolves the current name from the bookmark’s `conversationId` at render time and falls back to this frozen string only when that conversation is no longer known locally (see `__tests__/migrated/BookmarksPanel.test.tsx`).',
   'components/ProfileModal.tsx':
     'Your OWN profile editor — holds `user.displayName` in form state and writes it back. Editing a name is not rendering somebody else’s.',
   'components/UnifiedProfileEditModal.tsx':
@@ -178,9 +173,21 @@ const EXCEPTIONS: Record<string, string> = {
  */
 const TO_MIGRATE: Record<string, string> = {};
 
+/**
+ * `identity/` itself sits outside `SCAN_ROOTS` today (it is a sibling of
+ * `components`/`app`, not nested under either), so this exclusion changes no
+ * behaviour right now. It is declared explicitly anyway: `identity/`'s own
+ * files — `identityFromMaps.ts`, `identityProvider.tsx`, `RootIdentityScope.tsx`
+ * — read the raw tiers directly because assembling the ladder IS their job, and
+ * none of them import `@/identity` (they ARE `@/identity`), so they would fail
+ * this audit on sight if a future SCAN_ROOTS ever swept them in. The exclusion
+ * makes that impossible rather than relying on the roots list never changing.
+ */
+const SCAN_EXCLUDED_DIRS = ['node_modules', 'identity'];
+
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
-    if (entry === 'node_modules' || entry.startsWith('.')) continue;
+    if (SCAN_EXCLUDED_DIRS.includes(entry) || entry.startsWith('.')) continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) sourceFiles(full, out);
     else if (/\.tsx?$/.test(entry)) out.push(full);
@@ -255,11 +262,21 @@ describe('no render-layer file reads a member name field raw', () => {
     expect(
       offendingLines(
         [
-          "import { resolveMemberName } from '@/utils/resolveMemberName';",
+          "import { useResolvedName } from '@/identity';",
           'const label = member.displayName;',
         ].join('\n'),
       ),
     ).toEqual([]);
+    // The old `@/utils/resolveMemberName` seam no longer grants a pass — a
+    // file sitting on it alone is exactly what repointing the regex was for.
+    expect(
+      offendingLines(
+        [
+          "import { resolveMemberName } from '@/utils/resolveMemberName';",
+          'const label = member.displayName;',
+        ].join('\n'),
+      ),
+    ).toEqual([2]);
     // React's devtools idiom must not count.
     expect(offendingLines("Foo.displayName = 'Foo';")).toEqual([]);
   });
