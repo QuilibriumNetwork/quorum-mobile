@@ -12,7 +12,7 @@
  * bell-icon badge both consume this so they stay in sync.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   flattenFarcasterNotifications,
@@ -23,6 +23,9 @@ import { useDMMute } from '@/hooks/chat/useDMMute';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
 import type { Conversation } from '@/hooks/chat/useConversations';
 import { coerceMessagePreview } from '@/utils/messagePreview';
+import { useNameResolver } from '@/identity';
+import { formatResolvedName } from '@/identity/useResolvedName';
+import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import {
   getLastSeenTimestamp,
   useNotificationLog,
@@ -80,6 +83,22 @@ export interface UseUnifiedNotificationsOptions {
   enrichConversations?: boolean;
 }
 
+/**
+ * A resolvable last-message sender: a Quorum (not Farcaster — `address` there
+ * is a synthetic `fid:<n>`, a separate identity namespace with no roster and
+ * no `.q`; routing it through the member resolver would resolve a Farcaster
+ * author against Quorum rosters) 1:1 conversation whose last message wasn't
+ * the viewer's own ('You' names no member — it is a literal, never a lookup).
+ */
+function isResolvableQuorumSender(c: Conversation): boolean {
+  return (
+    c.type === 'direct' &&
+    c.source !== 'farcaster' &&
+    !!c.lastMessageSenderName &&
+    c.lastMessageSenderName !== 'You'
+  );
+}
+
 export function useUnifiedNotifications(
   options: UseUnifiedNotificationsOptions = {},
 ): UnifiedNotificationsResult {
@@ -105,20 +124,69 @@ export function useUnifiedNotifications(
   // purpose) and the Quorum DM rows (whose log stores no avatar). Joined back
   // on every render rather than written into the log.
   const dmConversations = useUnifiedConversations({ enabled: enrichConversations });
+
+  // `c.lastMessageSenderName` is frozen at message-receive time
+  // (WebSocketContext.tsx) — a rename between then and now leaves it stale
+  // forever. The write stays (standing decision); this resolves the CURRENT
+  // name through the identity ladder instead of reading that string.
+  //
+  // 'You' (set by useSendDirectMessage/useSendDirectEmbedMessage for the
+  // viewer's own last message) is a literal, never a lookup — it names no
+  // member. Every other real Quorum conversation on mobile is 1:1 (there is
+  // no group-DM creation flow), so the only possible non-self sender IS the
+  // conversation's own `address` — the same address `conversationSnippet`'s
+  // `displayName` already names, which is exactly why a resolvable sender
+  // stops showing a redundant prefix once it agrees with a fresh title, the
+  // same way it already suppressed one against the frozen title.
+  //
+  // Global ladder, no spaceId: a DM partner is never a Space roster member.
+  const { resolve, requestNames } = useNameResolver();
+
+  // Bounded the same way ShareInviteSheet/MessagesList bound their own
+  // fan-out: `dmConversations.conversations` can be every conversation the
+  // user has scrolled through this session, not just what's visible, so a
+  // request per partner would repeat that fetch storm.
+  // `qnsLookupAddresses` expects most-recent-first input, which
+  // `useUnifiedConversations` already sorts by.
+  const resolvableSenderAddresses = useMemo(
+    () =>
+      qnsLookupAddresses(
+        (dmConversations.conversations as Conversation[])
+          .filter(isResolvableQuorumSender)
+          .map((c) => ({ address: c.address })),
+        MAX_QNS_LOOKUPS,
+      ),
+    [dmConversations.conversations],
+  );
+  useEffect(() => {
+    requestNames(resolvableSenderAddresses);
+  }, [resolvableSenderAddresses, requestNames]);
+
   const conversationDetails = useMemo(() => {
     const map = new Map<string, ConversationDetail>();
     for (const c of dmConversations.conversations as Conversation[]) {
+      const senderName = c.lastMessageSenderName;
+      const senderIsSelf = senderName === 'You';
+      const senderAddress = isResolvableQuorumSender(c) ? c.address : undefined;
       map.set(c.conversationId, {
         displayName: c.displayName ?? '',
         // Farcaster rows store a plain string, Quorum rows the typed preview
         // — coerce so this doesn't depend on which wrote it.
         preview: coerceMessagePreview(c.lastMessagePreview).text || undefined,
-        senderName: c.lastMessageSenderName,
+        senderName: senderIsSelf
+          ? 'You'
+          : senderAddress
+            ? formatResolvedName(resolve(senderAddress, { global: true }))
+            // No resolvable address — a Farcaster row (synthetic `fid:<n>`
+            // address, a separate identity namespace) or a hypothetical group
+            // conversation, which mobile never creates today. The stored
+            // string is still load-bearing for these.
+            : senderName,
         avatarUrl: c.icon || undefined,
       });
     }
     return map;
-  }, [dmConversations.conversations]);
+  }, [dmConversations.conversations, resolve]);
 
   const officialFarcaster = useMemo(
     () => flattenFarcasterNotifications(farcasterQuery.data?.pages),
