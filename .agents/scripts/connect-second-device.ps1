@@ -53,6 +53,27 @@ if ($Serial -match ':') {
     }
 }
 
+# A USB serial (no colon) must actually be attached. QM_DEVICE_2 in .env.local is
+# only the phone used last, so it goes stale the moment you swap a cable - and the
+# adb calls below would then fail one by one with "device not found" instead of
+# saying the obvious thing once, up front.
+if ($Serial -notmatch ':') {
+    . "$PSScriptRoot\_adb-preflight.ps1"
+    $ready = @(Get-QmAdbDevices -Adb (Get-QmAdb) | Where-Object { $_.State -eq 'device' } | ForEach-Object { $_.Serial })
+    if ($ready -notcontains $Serial) {
+        Write-Host ""
+        Write-Host "ERROR: device 2 ($Serial) is not attached and ready." -ForegroundColor Red
+        if ($ready.Count -gt 0) {
+            Write-Host "       Currently attached and ready: $($ready -join ', ')" -ForegroundColor Yellow
+        } else {
+            Write-Host "       Nothing is attached and ready right now." -ForegroundColor Yellow
+        }
+        Write-Host "       Pass -s <serial>, or update QM_DEVICE_2 in .agents/scripts/.env.local." -ForegroundColor Yellow
+        Write-Host ""
+        exit 1
+    }
+}
+
 # USB tunnel: this device's localhost:8081 -> Metro on the PC.
 & $adb -s $Serial reverse tcp:8081 tcp:8081
 if ($LASTEXITCODE -ne 0) {

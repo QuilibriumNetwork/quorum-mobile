@@ -140,10 +140,17 @@ function Resolve-QmMetroPort {
 # Locate adb: PATH first, then the usual SDK roots on this machine.
 function Get-QmAdb {
     if (Get-Command adb -ErrorAction SilentlyContinue) { return 'adb' }
+    # Environment first, so nothing here is tied to one machine's layout. Set
+    # QM_ANDROID_SDK in .agents/scripts/.env.local to override on a box where the
+    # SDK lives somewhere unusual and ANDROID_SDK_ROOT/ANDROID_HOME are not set.
     $roots = @()
+    if ($env:QM_ANDROID_SDK)   { $roots += $env:QM_ANDROID_SDK }
     if ($env:ANDROID_SDK_ROOT) { $roots += $env:ANDROID_SDK_ROOT }
     if ($env:ANDROID_HOME)     { $roots += $env:ANDROID_HOME }
     if ($env:LOCALAPPDATA)     { $roots += (Join-Path $env:LOCALAPPDATA 'Android\Sdk') }
+    if ($env:ProgramFiles)     { $roots += (Join-Path $env:ProgramFiles 'Android\android-sdk') }
+    # Last resort only: the Android Studio custom-install default. Every entry
+    # above is environment-derived; this one is a guess and must stay last.
     $roots += 'C:\Android\Sdk'
     foreach ($r in $roots) {
         $candidate = Join-Path $r 'platform-tools\adb.exe'
@@ -185,8 +192,18 @@ function Get-QmAdbDevices {
 # Returns @{ Adb; Serial } on success, $null on failure (caller should exit).
 function Resolve-QmUsbDevice {
     param(
-        # Pin a specific serial (from `adb devices`) instead of autodetecting.
+        # HARD pin: the caller passed -Serial explicitly, so they mean this phone
+        # and no other. If it is absent we wait for it and then fail.
         [string]$Serial,
+        # SOFT pin: a remembered default (QM_DEVICE_1 in .env.local). Used when
+        # present, quietly ignored when it is not.
+        #
+        # These must stay separate. Folding the remembered default into $Serial
+        # made the script demand a phone that was merely the LAST one used: swap
+        # the cable to your other phone and it waits 45 s for the absent one and
+        # gives up, while a perfectly healthy device sits there unused. A
+        # remembered preference must never outrank the hardware actually plugged in.
+        [string]$Preferred,
         # How long to keep polling while the phone is unauthorized/absent.
         [int]$WaitSeconds = 45
     )
@@ -219,7 +236,14 @@ function Resolve-QmUsbDevice {
 
         $ready = @($cabled | Where-Object { $_.State -eq 'device' })
         if ($ready.Count -ge 1) {
+            # Honour the soft pin only if that phone is actually here.
             $chosen = $ready[0].Serial
+            if ($Preferred -and ($ready.Serial -contains $Preferred)) {
+                $chosen = $Preferred
+            }
+            elseif ($Preferred -and $ready.Count -eq 1) {
+                Write-Host "  Remembered phone $Preferred is not plugged in; using $chosen instead." -ForegroundColor Cyan
+            }
             if ($ready.Count -gt 1) {
                 Write-Host "  Multiple phones on the cable: $($ready.Serial -join ', ')" -ForegroundColor Yellow
                 Write-Host "  Using $chosen. Pass -Serial <serial> to pick a different one." -ForegroundColor Yellow

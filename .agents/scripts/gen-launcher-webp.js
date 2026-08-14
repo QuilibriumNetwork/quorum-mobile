@@ -17,8 +17,19 @@ const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const RES = path.join(ROOT, 'android/app/src/main/res');
-// ffmpeg binary. Override with QM_FFMPEG when yours lives elsewhere or is on PATH.
-const FFMPEG = process.env.QM_FFMPEG || 'C:/Program Files/ffmpeg/bin/ffmpeg.exe';
+// ffmpeg binary. Resolution order, so this is not tied to one machine's layout:
+//   1. QM_FFMPEG env override
+//   2. `ffmpeg` on PATH (the normal case on any machine that has it installed)
+//   3. the Windows installer default - a guess, kept last purely as a fallback
+function resolveFfmpeg() {
+  try {
+    execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
+    return 'ffmpeg';
+  } catch {
+    return 'C:/Program Files/ffmpeg/bin/ffmpeg.exe';
+  }
+}
+const FFMPEG = process.env.QM_FFMPEG || resolveFfmpeg();
 const TMP = path.join(ROOT, '.agents/scripts/.tmp-icons');
 
 const DENS = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'];

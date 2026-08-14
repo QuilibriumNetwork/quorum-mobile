@@ -64,7 +64,7 @@ if (Test-Path $logPath) {
     }
     catch {
         Write-Host ""
-        Write-Host "  ERROR: $logPath is locked by another process." -ForegroundColor Red
+        Write-Host "  ERROR: .agents\reports\metro-log.txt is locked by another process." -ForegroundColor Red
         Write-Host "  Another Metro instance is probably still running." -ForegroundColor Yellow
         Write-Host "  Close that terminal, or run: Get-Process node | Stop-Process -Force" -ForegroundColor Yellow
         Write-Host ""
@@ -142,7 +142,9 @@ try {
         $staleName   = "metro-cache-stale-$PID"
         try {
             Rename-Item -Path $metroCache -NewName $staleName -ErrorAction Stop
-            Write-Host "  Cleared $metroCache (deleting in background)" -ForegroundColor DarkGray
+            # Unexpanded on purpose - $metroCache runs through the user profile and
+            # this output is mirrored to a log file. See dev-start-mobile.ps1.
+            Write-Host "  Cleared %LOCALAPPDATA%\Temp\metro-cache (deleting in background)" -ForegroundColor DarkGray
             Start-Job -ScriptBlock {
                 Get-ChildItem $using:cacheParent -Filter 'metro-cache-stale-*' -Directory -ErrorAction SilentlyContinue |
                     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -205,7 +207,7 @@ try {
     }
 
     Write-Host ""
-    Write-Host "  Starting Metro (2 workers, fs.promises concurrency capped). Logs -> $logPath" -ForegroundColor Cyan
+    Write-Host "  Starting Metro (2 workers, fs.promises concurrency capped). Logs -> .agents\reports\metro-log.txt" -ForegroundColor Cyan
     Write-Host "  Stop with Ctrl+C. To restart with a clean log: Up arrow, Enter." -ForegroundColor Cyan
     Write-Host "  In the emulator, reload with R,R (or Ctrl+M -> Reload)." -ForegroundColor Cyan
     Write-Host ""
