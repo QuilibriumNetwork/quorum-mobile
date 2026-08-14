@@ -394,7 +394,24 @@ export function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord
     placeholderData: (previous) => previous,
   });
 
-  return data ?? NO_RECORDS;
+  // `data` is not necessarily a Map, however this function is typed.
+  //
+  // React Query's cache is persisted to MMKV as JSON (`app/_layout.tsx`), and
+  // `JSON.stringify(new Map([...]))` is `{}` — a plain object with no `.get`.
+  // Any entry written before this query was excluded from persistence
+  // rehydrates in that shape, and `settleClaim` then threw
+  // `records.get is not a function` on the first row carrying a claim, taking
+  // the whole channel screen down with it.
+  //
+  // The exclusion (see `app/_layout.tsx`) stops NEW ones being written; this
+  // guard is what makes an app that already has one on disk survive the
+  // upgrade, so it cannot be dropped once the exclusion is in place.
+  //
+  // Degrading to `NO_RECORDS` is the fail-closed direction: nothing verifies,
+  // so every claim renders as its global name until the query refetches. The
+  // alternative — trusting a shape we cannot read — is how an unverified claim
+  // would reach the screen.
+  return data instanceof Map ? data : NO_RECORDS;
 }
 
 /**
