@@ -130,10 +130,26 @@ try {
 
     # Wipe the Metro transformer cache before starting. Prevents EMFILE
     # errors caused by cache file accumulation across sessions.
+    #
+    # RENAME first, delete in the background - never delete in-line. A direct
+    # `Remove-Item -Recurse -Force` walks tens of thousands of small files and
+    # BLOCKS, and a blocking Remove-Item does not answer Ctrl+C, so the script
+    # hangs with no escape but force-closing the terminal (which then orphans a
+    # Metro holding port 8081). Same fix as the two dev-start-mobile scripts.
     $metroCache = Join-Path $env:LOCALAPPDATA "Temp\metro-cache"
     if (Test-Path $metroCache) {
-        Write-Host "  Clearing $metroCache" -ForegroundColor DarkGray
-        Remove-Item $metroCache -Recurse -Force -ErrorAction SilentlyContinue
+        $cacheParent = Split-Path $metroCache -Parent
+        $staleName   = "metro-cache-stale-$PID"
+        try {
+            Rename-Item -Path $metroCache -NewName $staleName -ErrorAction Stop
+            Write-Host "  Cleared $metroCache (deleting in background)" -ForegroundColor DarkGray
+            Start-Job -ScriptBlock {
+                Get-ChildItem $using:cacheParent -Filter 'metro-cache-stale-*' -Directory -ErrorAction SilentlyContinue |
+                    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+            } | Out-Null
+        } catch {
+            Write-Host "  (Metro cache is locked by another process; left in place.)" -ForegroundColor DarkYellow
+        }
     }
 
     # Cap Metro's worker count (see dev-start-mobile.ps1 for the full rationale).
