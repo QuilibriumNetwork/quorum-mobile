@@ -45,6 +45,98 @@
 # use of never-initialised variables (a normal PowerShell idiom) start throwing.
 # A library must not change its caller's language semantics.
 
+# Can we actually BIND this port on loopback? This is the real question, and it
+# is NOT the same as "is anything listening". Measured 2026-08-13: binding 8081
+# failed with EACCES while `netstat` showed no listener at all, because Windows
+# had reserved the whole 7988-8087 range (see Get-QmExcludedPortRanges). A
+# LISTENING check is blind to that, which is why the old "port busy" symptom
+# looked like a ghost process for months.
+function Test-QmPortBindable {
+    param([Parameter(Mandatory)][int]$Port)
+    $listener = $null
+    try {
+        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+        $listener.Start()
+        return $true
+    } catch {
+        return $false
+    } finally {
+        if ($listener) { try { $listener.Stop() } catch { } }
+    }
+}
+
+# Windows port exclusions, as "start-end" strings. Hyper-V / WSL / Docker reserve
+# blocks of ports at boot and the blocks MOVE between boots, so a port that
+# worked yesterday can be unbindable today with nothing visibly holding it.
+function Get-QmExcludedPortRanges {
+    $ranges = @()
+    try {
+        foreach ($line in (netsh interface ipv4 show excludedportrange protocol=tcp 2>$null)) {
+            if ("$line" -match '^\s*(\d+)\s+(\d+)') { $ranges += "$($Matches[1])-$($Matches[2])" }
+        }
+    } catch { }
+    return $ranges
+}
+
+# Pick a Metro port we can actually bind. Prefers $Preferred (8081, which the
+# whole USB workflow assumes); falls back to the first bindable candidate.
+# Returns 0 if nothing is usable.
+function Resolve-QmMetroPort {
+    param(
+        [int]$Preferred = 8081,
+        [int[]]$Fallbacks = @(8288, 8300, 8500, 19000, 19100)
+    )
+
+    if (Test-QmPortBindable -Port $Preferred) { return $Preferred }
+
+    # Distinguish "someone is serving on it" from "Windows reserved it" - the
+    # remedies are completely different and the messages look identical in Expo.
+    $listenerPid = $null
+    try {
+        $conn = Get-NetTCPConnection -LocalPort $Preferred -State Listen -ErrorAction Stop | Select-Object -First 1
+        if ($conn) { $listenerPid = $conn.OwningProcess }
+    } catch { }
+
+    if ($listenerPid) {
+        $proc = Get-Process -Id $listenerPid -ErrorAction SilentlyContinue
+        $name = if ($proc) { $proc.ProcessName } else { 'unknown' }
+        if ($name -eq 'node') {
+            Write-Host "  Port $Preferred held by an orphaned node (PID $listenerPid) - killing it." -ForegroundColor Yellow
+            Stop-Process -Id $listenerPid -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 1
+            if (Test-QmPortBindable -Port $Preferred) { return $Preferred }
+        } else {
+            Write-Host "  Port $Preferred is held by '$name' (PID $listenerPid)." -ForegroundColor Yellow
+        }
+    } else {
+        $hit = @(Get-QmExcludedPortRanges | Where-Object {
+            $p = $_ -split '-'; [int]$p[0] -le $Preferred -and [int]$p[1] -ge $Preferred
+        })
+        Write-Host ""
+        Write-Host "  Port $Preferred cannot be bound, and NOTHING is listening on it." -ForegroundColor Yellow
+        if ($hit.Count -gt 0) {
+            Write-Host "  Cause: Windows has reserved the range $($hit -join ', ') (Hyper-V / WSL / Docker)." -ForegroundColor Yellow
+            Write-Host "  These blocks are handed out at boot and MOVE between boots, which is why" -ForegroundColor DarkGray
+            Write-Host "  a port that worked for months can fail today with no process to blame." -ForegroundColor DarkGray
+            Write-Host "  Permanent fix (admin, survives reboots):" -ForegroundColor DarkGray
+            Write-Host "    net stop winnat" -ForegroundColor DarkGray
+            Write-Host "    netsh int ipv4 add excludedportrange protocol=tcp startport=$Preferred numberofports=1 store=persistent" -ForegroundColor DarkGray
+            Write-Host "    net start winnat" -ForegroundColor DarkGray
+        }
+    }
+
+    foreach ($candidate in $Fallbacks) {
+        if (Test-QmPortBindable -Port $candidate) {
+            Write-Host "  Using port $candidate instead (adb reverse and the deep link follow it)." -ForegroundColor Cyan
+            Write-Host ""
+            return $candidate
+        }
+    }
+
+    Write-Host "  ERROR: none of $Preferred, $($Fallbacks -join ', ') could be bound." -ForegroundColor Red
+    return 0
+}
+
 # Locate adb: PATH first, then the usual SDK roots on this machine.
 function Get-QmAdb {
     if (Get-Command adb -ErrorAction SilentlyContinue) { return 'adb' }

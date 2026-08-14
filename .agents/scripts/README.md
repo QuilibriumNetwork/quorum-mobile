@@ -501,6 +501,61 @@ adb disconnect 192.168.0.3:5555     # drop one endpoint
 adb disconnect                      # drop every Wi-Fi endpoint
 ```
 
+## "Port 8081 is being used by another process" (and nothing is using it)
+
+Expo says 8081 is taken, `netstat` shows no listener, and killing every `node`
+on the machine changes nothing. **It is not a process. Windows reserved the
+port.**
+
+Hyper-V / WSL / Docker claim blocks of TCP ports at boot, and the blocks **move
+between boots** — which is exactly why a port that worked for months suddenly
+fails with nothing to blame. Measured 2026-08-13: binding 8081 returned
+`EACCES` (permission denied), not `EADDRINUSE`, with no listener anywhere.
+
+```powershell
+netsh interface ipv4 show excludedportrange protocol=tcp
+```
+
+```
+Start   End
+ 7988   8087      <- 8081 lives in here; nothing can bind it
+ 8188   8287      <- note 8288 is just outside, which is why Expo's fallback works
+```
+
+Why it broke the whole run rather than just moving ports: Expo doesn't fail, it
+asks *"Use port 8288 instead?"* and auto-answers yes — but `adb reverse` and the
+dev-client deep link were pinned to 8081. Metro ends up serving on a port the
+phone has no route to, and the run dies with a SocketTimeout or a misleading
+"No development build is installed".
+
+**The dev scripts now handle this themselves.** `Resolve-QmMetroPort`
+(`_adb-preflight.ps1`) tests whether the port can actually be *bound* — not
+whether something is listening, which is blind to this — names the reserved
+range, falls back to a usable port, and threads that one port through Metro,
+`adb reverse` and the deep link so they cannot disagree.
+
+If you want 8081 back permanently (admin, survives reboots):
+
+```powershell
+net stop winnat
+netsh int ipv4 add excludedportrange protocol=tcp startport=8081 numberofports=1 store=persistent
+net start winnat
+```
+
+## The script hangs right after "No Metro/Expo node processes"
+
+Fixed 2026-08-13; it had been happening for months. The cache wipe ran
+`Remove-Item -Recurse -Force` on `%LOCALAPPDATA%\Temp\metro-cache` inline, which
+walks tens of thousands of files and **blocks** — and a blocking `Remove-Item`
+does not answer Ctrl+C, so the only escape was force-closing the terminal.
+
+That escape is what caused the *next* failure: closing the window does not
+reliably kill the `node` tree, so an orphaned Metro survived holding the port.
+
+All three `dev-start-*` scripts now **rename** the cache directory (one instant
+metadata operation) and delete it in a background job. A rename fails fast if a
+handle is held, so the script skips rather than blocks.
+
 ## Standard debug workflow
 
 1. Run `dev-start-mobile.ps1` — Metro running, clean log.

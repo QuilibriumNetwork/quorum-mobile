@@ -67,10 +67,54 @@ try {
     }
 
     # Wipe the Metro transformer cache before starting.
+    #
+    # RENAME first, delete in the background - never delete in-line. A direct
+    # `Remove-Item -Recurse -Force` here walks tens of thousands of small files
+    # and BLOCKS, and a blocking Remove-Item does not answer Ctrl+C. That is the
+    # "hangs forever right after 'No Metro/Expo node processes'" symptom
+    # (reported 2026-08-13). Escaping it by force-closing the terminal does NOT
+    # reliably kill the node tree, so an orphaned Metro survives holding port
+    # 8081 - which makes the NEXT run drift to port 8288 and silently break the
+    # `adb reverse` bridge. One blocking delete, three downstream failures.
+    #
+    # A rename is a single metadata operation (instant on the same volume) and
+    # fails fast when a handle is still held, so we skip instead of blocking.
     $metroCache = Join-Path $env:LOCALAPPDATA "Temp\metro-cache"
     if (Test-Path $metroCache) {
-        Write-Host "  Clearing $metroCache" -ForegroundColor DarkGray
-        Remove-Item $metroCache -Recurse -Force -ErrorAction SilentlyContinue
+        $cacheParent = Split-Path $metroCache -Parent
+        $staleName   = "metro-cache-stale-$PID"
+        try {
+            Rename-Item -Path $metroCache -NewName $staleName -ErrorAction Stop
+            Write-Host "  Cleared $metroCache (deleting in background)" -ForegroundColor DarkGray
+            Start-Job -ScriptBlock {
+                # This run's cache, plus any left by a previous run that was
+                # killed before its background delete finished.
+                Get-ChildItem $using:cacheParent -Filter 'metro-cache-stale-*' -Directory -ErrorAction SilentlyContinue |
+                    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+            } | Out-Null
+        } catch {
+            Write-Host "  (Metro cache is locked by another process; left in place.)" -ForegroundColor DarkYellow
+        }
+    }
+
+    # --- Port preflight ---------------------------------------------------------
+    # Everything downstream must agree on ONE port: `adb reverse tcp:N tcp:N`, the
+    # dev-client deep link, and Metro itself. When 8081 is unusable Expo does not
+    # fail - it asks "Use port 8288 instead?" and auto-answers yes, serving the
+    # bundle on a port the phone has no route to. The run then dies with a
+    # SocketTimeout or a misleading "No development build is installed".
+    #
+    # MEASURED 2026-08-13: the reason 8081 was unusable was NOT a leftover Metro.
+    # Binding it failed with EACCES while netstat showed no listener, because
+    # Windows had reserved 7988-8087 (Hyper-V/WSL grab blocks at boot, and the
+    # blocks move between boots - hence "it worked for months, today it doesn't").
+    # Resolve-QmMetroPort tests bindability, explains which case it hit, and
+    # falls back to a port that actually works. $port then flows everywhere.
+    . (Join-Path $PSScriptRoot '_adb-preflight.ps1')
+    $port = Resolve-QmMetroPort -Preferred 8081
+    if ($port -eq 0) {
+        Write-Host "  Cannot start Metro without a bindable port. See the note above." -ForegroundColor Red
+        exit 1
     }
 
     # Cap Metro's worker count. Default is (cpus - 1); on a many-core
@@ -142,7 +186,7 @@ try {
     # instructions, then - once the cable is confirmed healthy - discards every
     # stray Wi-Fi endpoint whatever its state, and pins ANDROID_SERIAL.
     # See _adb-preflight.ps1 for the failure this exists to stop.
-    . (Join-Path $PSScriptRoot '_adb-preflight.ps1')
+    # (Already dot-sourced above for the port preflight.)
     $target = Resolve-QmUsbDevice -Serial $Serial
     $adb    = if ($target) { $target.Adb } else { (Get-QmAdb) }
     $device = if ($target) { $target.Serial } else { $null }
@@ -150,8 +194,8 @@ try {
     $skipAutoLaunch = $false
 
     if ($device) {
-        & $adb -s $device reverse tcp:8081 tcp:8081 | Out-Null
-        Write-Host "  USB device $device : adb reverse tcp:8081 set (phone localhost -> Metro)" -ForegroundColor DarkGray
+        & $adb -s $device reverse "tcp:$port" "tcp:$port" | Out-Null
+        Write-Host "  USB device $device : adb reverse tcp:$port set (phone localhost -> Metro)" -ForegroundColor DarkGray
 
         # SAFETY: the debug app MUST be installed before we try to launch it.
         # If com.quilibrium.quorummobile.debug is missing, the quorummobile://
@@ -182,30 +226,69 @@ try {
         # an actual 200 from the bundle endpoint guarantees the app only opens
         # once there's something to serve it instantly.
         if (-not $skipAutoLaunch) {
-            $launchUrl = "$scheme`://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081"
+            $launchUrl    = "$scheme`://expo-development-client/?url=http%3A%2F%2Flocalhost%3A$port"
+            $autoLaunchLog = Join-Path $repo ".agents\reports\autolaunch-log.txt"
             Start-Job -ScriptBlock {
-                param($adb, $device, $pkg, $url)
-                $bundleUrl = "http://127.0.0.1:8081/index.bundle?platform=android&dev=true"
-                # Up to 6 min: cold build can be ~2.5 min, plus margin.
+                param($adb, $device, $pkg, $url, $port, $logFile)
+
+                # Everything here runs in a background runspace whose output nobody
+                # ever reads, so an unlogged failure is INVISIBLE - the app just
+                # doesn't open and there is nothing to look at. Hence this log.
+                function Note($msg) {
+                    "[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $msg |
+                        Add-Content -Path $logFile -Encoding utf8 -ErrorAction SilentlyContinue
+                }
+                Set-Content -Path $logFile -Value '' -ErrorAction SilentlyContinue
+                Note "waiting for the bundle on port $port"
+
+                # GET, not HEAD. Metro builds the bundle in response to the request
+                # and answers GET with 200; a HEAD is not reliably answered the same
+                # way, and the old code only ever broke out of this loop on a 200 -
+                # so when HEAD did not give one it burned the whole 6-minute budget
+                # before launching. That is the "sometimes it just doesn't open"
+                # case. Over loopback the body is cheap.
+                $ready = $false
                 for ($i = 0; $i -lt 72; $i++) {
                     try {
-                        $r = Invoke-WebRequest -Uri $bundleUrl -Method Head -TimeoutSec 300 -UseBasicParsing
-                        if ($r.StatusCode -eq 200) { break }
-                    } catch { }
+                        $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/index.bundle?platform=android&dev=true" `
+                                               -Method Get -TimeoutSec 300 -UseBasicParsing
+                        if ($r.StatusCode -eq 200) { $ready = $true; Note "bundle ready (HTTP 200)"; break }
+                        Note "bundle not ready (HTTP $($r.StatusCode))"
+                    } catch {
+                        if ($i % 6 -eq 0) { Note "waiting... ($($_.Exception.Message))" }
+                    }
                     Start-Sleep -Seconds 5
                 }
+                if (-not $ready) { Note "gave up waiting for a 200; launching anyway" }
+
                 # Re-assert the bridge (survives adb daemon restarts) and clear the
                 # dev launcher's cached error state so it doesn't bounce straight to
                 # the error screen, then launch at localhost. The `-d $url $pkg`
                 # form constrains the deep link to the .debug package explicitly,
                 # so it can never resolve to the real app even if both register
                 # the quorummobile:// scheme.
-                & $adb -s $device reverse tcp:8081 tcp:8081 | Out-Null
-                & $adb -s $device shell am force-stop $pkg | Out-Null
-                & $adb -s $device shell am start -a android.intent.action.VIEW -d $url $pkg | Out-Null
-            } -ArgumentList $adb, $device, $androidPackage, $launchUrl | Out-Null
+                & $adb -s $device reverse "tcp:$port" "tcp:$port" 2>&1 | Out-Null
+                & $adb -s $device shell am force-stop $pkg 2>&1 | Out-Null
+
+                # Launch, then VERIFY - `am start` exits 0 even when the activity
+                # never came up, so its exit code proves nothing. Check for a live
+                # pid instead, and retry: a cold dev client occasionally loses the
+                # first intent while it is still initialising.
+                for ($attempt = 1; $attempt -le 3; $attempt++) {
+                    $out = & $adb -s $device shell am start -a android.intent.action.VIEW -d $url $pkg 2>&1
+                    Start-Sleep -Seconds 3
+                    $livePid = (& $adb -s $device shell pidof $pkg 2>$null | Out-String).Trim()
+                    if ($livePid) { Note "launched OK on attempt $attempt (pid $livePid)"; break }
+                    Note "attempt $attempt did not start the app: $out"
+                    if ($attempt -eq 3) {
+                        Note "AUTO-LAUNCH FAILED - press 'a' in the Metro window, or open the app by hand."
+                    }
+                }
+            } -ArgumentList $adb, $device, $androidPackage, $launchUrl, $port, $autoLaunchLog | Out-Null
             Write-Host "  App will auto-open AFTER the bundle finishes building (~2.5 min on a cold start)." -ForegroundColor DarkGray
             Write-Host "  >> Do NOT open the app yourself before then, or it will time out. <<" -ForegroundColor Yellow
+            Write-Host "  If it does NOT open, press 'a' - and see why in:" -ForegroundColor DarkGray
+            Write-Host "  $autoLaunchLog" -ForegroundColor DarkGray
         }
     }
     else {
@@ -214,12 +297,26 @@ try {
         # starts, so plugging the phone in and pressing 'a' recovers without a
         # restart - but nothing is auto-launched, since we have no device to pin to.
         Write-Host "  Continuing without a phone: Metro will start anyway." -ForegroundColor Yellow
-        Write-Host "  Fix the device above, then press 'a' in this window." -ForegroundColor Yellow
+        Write-Host "  Fix the device above, then Ctrl+C and re-run this script." -ForegroundColor Yellow
     }
 
     Write-Host ""
     Write-Host "  Starting Metro (2 workers, fs.promises concurrency capped)." -ForegroundColor Cyan
-    Write-Host "  This window is INTERACTIVE: press 'a' to open Android, 'r' to reload, Ctrl+C to stop." -ForegroundColor Cyan
+    Write-Host "  This window is INTERACTIVE: press 'a' to build the bundle, 'r' to reload, Ctrl+C to stop." -ForegroundColor Cyan
+    # About 'a': it does TWO things, and only the second one fails here.
+    #   1. It makes the dev client request /index.bundle, which is what actually
+    #      kicks Metro into bundling. This is useful - Metro builds on demand, so
+    #      pressing 'a' is a legitimate way to start the build immediately.
+    #   2. It then tries to LAUNCH com.quilibrium.quorummobile, the app id Expo
+    #      derives from app.json. But build-app.ps1 installs the dev build with
+    #      Gradle's sideBySide applicationIdSuffix, as
+    #      com.quilibrium.quorummobile.debug - so the base id is deliberately
+    #      never installed and step 2 always reports
+    #      "No development build (com.quilibrium.quorummobile) ... is installed".
+    # That error is EXPECTED NOISE, not a broken build. The auto-launch job above
+    # opens the correct .debug package once the bundle is served.
+    Write-Host "  ('a' may then say 'No development build ... is installed' - expected," -ForegroundColor DarkGray
+    Write-Host "   it looks for the non-.debug id. The script opens the right app itself.)" -ForegroundColor DarkGray
     Write-Host "  Logs are mirrored to: $logPath" -ForegroundColor Cyan
     Write-Host ""
     # Expo sits silently on 'Starting project at...' for ~15-25s on a cold start
@@ -264,7 +361,9 @@ try {
     # bundle in seconds.
     $resetFlag = if ($ResetCache) { '--reset-cache' } else { '' }
     # start:lazy = plain `expo start` (no inline POSIX env prefix); env vars set above.
-    yarn start:lazy --max-workers 2 --localhost $resetFlag
+    # --port is explicit so Metro cannot end up somewhere the adb bridge and the
+    # deep link are not pointing. The preflight above already guaranteed it free.
+    yarn start:lazy --max-workers 2 --localhost --port $port $resetFlag
 }
 finally {
     if ($transcriptOn) { Stop-Transcript | Out-Null }

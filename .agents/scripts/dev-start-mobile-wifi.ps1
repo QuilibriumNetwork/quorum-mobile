@@ -159,13 +159,31 @@ try {
     }
 
     # Wipe the Metro transformer cache before starting (prevents EMFILE).
+    #
+    # RENAME first, delete in the background - never delete in-line. A direct
+    # `Remove-Item -Recurse -Force` walks tens of thousands of small files and
+    # BLOCKS, and a blocking Remove-Item does not answer Ctrl+C: the script hangs
+    # here with no way out but force-closing the terminal, which does not
+    # reliably kill the node tree and so orphans a Metro still holding port 8081.
+    # Reported 2026-08-13 as months-long behaviour. A rename is one metadata
+    # operation and fails fast when a handle is held, so we skip, never block.
     $metroCache = Join-Path $env:LOCALAPPDATA "Temp\metro-cache"
     if (Test-Path $metroCache) {
         if ($DryRun) {
             Write-Host "  [dry-run] WOULD clear $metroCache" -ForegroundColor DarkGray
         } else {
-            Write-Host "  Clearing $metroCache" -ForegroundColor DarkGray
-            Remove-Item $metroCache -Recurse -Force -ErrorAction SilentlyContinue
+            $cacheParent = Split-Path $metroCache -Parent
+            $staleName   = "metro-cache-stale-$PID"
+            try {
+                Rename-Item -Path $metroCache -NewName $staleName -ErrorAction Stop
+                Write-Host "  Cleared $metroCache (deleting in background)" -ForegroundColor DarkGray
+                Start-Job -ScriptBlock {
+                    Get-ChildItem $using:cacheParent -Filter 'metro-cache-stale-*' -Directory -ErrorAction SilentlyContinue |
+                        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                } | Out-Null
+            } catch {
+                Write-Host "  (Metro cache is locked by another process; left in place.)" -ForegroundColor DarkYellow
+            }
         }
     }
 
