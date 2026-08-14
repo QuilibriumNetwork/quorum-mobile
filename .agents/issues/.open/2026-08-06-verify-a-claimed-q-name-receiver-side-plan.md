@@ -421,6 +421,24 @@ rewrite.
       shipped the transport in #245 without it. Desktop ignores the wire field
       today (verified in both receive paths), so its users are not exposed —
       they simply see no `.q`. This is the open item.
+- [ ] **Desktop's PUBLIC-PROFILE path is unchecked too, which the line above does
+      not cover.** READ 2026-08-14: `quorum-desktop/src/identity/identityProvider.tsx:108`
+      assigns `qnsName: nn(profile?.primary_username)` straight from the fetched
+      profile, and its `IdentitySources` carries the raw `profiles` map
+      (`:31-32`) rather than mobile's separate `verifiedQnsNames`. There is no
+      `claimedNameBelongsTo` anywhere in desktop's identity path — the only two
+      hits in `src/` are the QNS lookup hook and a test harness.
+      So desktop's sole gate on a forged `.q` is the RELAY's publish-time
+      validation, which we know exists because it is what rejects a publish with
+      `qns primary username failed validation` (MEASURED 2026-08-14, incidentally,
+      while trying to elect a name in the dev panel). That makes desktop
+      defence-in-depth-short rather than demonstrably exploitable — a distinction
+      worth keeping, but not one to rely on, since it puts a client-side
+      rendering guarantee behind a server-side check neither client controls.
+      Mobile closed this path in the identity migration
+      (`identity/identityProvider.tsx`, verified claims only); desktop has not.
+      This is a PARITY divergence and belongs with the wire-field item above,
+      not after it.
 - [ ] Measured on a real space: number of requests on opening a busy channel
 - [ ] Measured: scrolling a long member list fast does not fire a request per
       virtualisation tick. This surface costs zero today (§4) and is the one
