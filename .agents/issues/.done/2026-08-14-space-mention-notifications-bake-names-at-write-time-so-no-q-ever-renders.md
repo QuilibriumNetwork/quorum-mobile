@@ -1,7 +1,7 @@
 ---
 type: bug
 title: "Space mention notifications bake names at write time, so a .q never renders there"
-status: open
+status: done
 priority: high
 ai_generated: true
 created: 2026-08-14
@@ -10,6 +10,37 @@ area: "Notifications / identity resolution / desktop parity"
 ---
 
 # Space mention notifications bake names at write time, so a `.q` never renders there
+
+## Status
+
+**Fixed in `8b6f12b`, confirmed on device by the operator 2026-08-14.**
+
+What landed, matching the Scope section below:
+
+- `partitionNotifications` takes a `resolveName` bound to `@/identity` in
+  `useUnifiedNotifications`, applied to the author AND to in-body mention
+  tokens, both scoped to the ROW's `spaceId`.
+- The resolved author is exposed as `UnifiedNotification.actorName`. The
+  renderer (`app/(tabs)/profile/index.tsx`) reads that instead of reaching into
+  `raw.quorum.senderDisplayName`, which is what actually produced the reported
+  symptom — it bypassed resolution entirely.
+- The write path stores mention tokens raw and no longer takes a `self`
+  identity. `SelfIdentity` could never carry a `primaryUsername`, so the viewer
+  was the one person structurally guaranteed never to see their own `.q` in a
+  notification about them. Removed rather than left unused, so it cannot return
+  as a second naming path.
+- Rows already in MMKV hold baked names, carry no tokens, and render unchanged.
+  No migration, by choice.
+
+Proven red before the fix: 10 failed / 7 passed on revert. Full suite 928
+passed, tsc unchanged.
+
+**Diagnostic note worth keeping.** The first read of this bug blamed the in-body
+mention. A screenshot showed the body already rendering `@qtest.q` correctly
+while the author prefix read a global display name — two different fields, two
+different sources, and only the second was broken. The screenshot did in one
+step what more code reading would not have: the two fields are adjacent on one
+line and look like one string.
 
 ## Summary
 
