@@ -58,7 +58,7 @@ import {
   isConversationMutedForCurrentUser,
 } from '@/services/config';
 import { messagePreview, messageSenderName, type MessagePreview } from '@/utils/messagePreview';
-import { mentionedAddresses, renderMentionsAsPlainText } from '@/utils/mentionTokens';
+import { renderMentionsAsPlainText } from '@/utils/mentionTokens';
 import {
   formatResolvedName,
   resolveMemberName,
@@ -78,17 +78,6 @@ export interface LogMentionOrReplyCtx {
   /** Mute/notify gate — same `shouldNotifyForContext` result the badge uses. */
   notifyForBadge: boolean;
   /**
-   * The viewer's own identity, for resolving a mention OF THEM.
-   *
-   * Not optional in spirit, whatever the type says: every row in this section
-   * exists because someone mentioned YOU, so your own address is the most
-   * likely one to appear in a body here. `resolveMemberName` falls straight
-   * through to the address whenever the space holds no stored identity for the
-   * viewer, which is common — a space you joined but never set a per-space
-   * profile in. Omitting this is how "@you" renders as your own hash.
-   */
-  self?: SelfIdentity;
-  /**
    * Resolve a space member — used for the sender's display name AND for any
    * addresses mentioned inside the message body.
    *
@@ -100,47 +89,6 @@ export interface LogMentionOrReplyCtx {
     spaceId: string,
     memberId: string
   ) => Promise<Partial<ResolvableMember> | undefined>;
-}
-
-/**
- * Rewrite `@<QmAbc…>` in a preview into `@Their Name`, resolving each mentioned
- * address against the space roster.
- *
- * Done at WRITE time rather than render time because the panel is global across
- * spaces: resolving later would mean per-space roster lookups from a surface
- * that has no space. Here we are already inside one space and already awaiting
- * `getSpaceMember` for the sender, so this is the same mechanism repeated.
- *
- * A stored name going stale if someone renames is acceptable, and arguably
- * correct: a notification is a point-in-time record of what arrived.
- */
-async function resolvePreviewMentions(
-  preview: MessagePreview,
-  ctx: LogMentionOrReplyCtx,
-): Promise<MessagePreview> {
-  const addresses = mentionedAddresses(preview.text);
-  if (addresses.length === 0) return preview;
-
-  const names = new Map<string, string>();
-  await Promise.all(
-    addresses.map(async (address) => {
-      let member: Partial<ResolvableMember> | undefined;
-      try {
-        member = await ctx.getSpaceMember(ctx.spaceId, address);
-      } catch {
-        // A roster miss is not a reason to drop the whole notification.
-      }
-      // Resolve even with no roster row: `self` can still name the viewer, who
-      // is by far the most likely person to be mentioned in this section.
-      const resolved = resolveMemberName({ ...member, address }, { self: ctx.self });
-      // isAddressFallback means every tier missed, so the "name" is just the
-      // address again — leave it unresolved and let the renderer truncate,
-      // rather than substituting one form of the hash for another.
-      if (!resolved.isAddressFallback) names.set(address, formatResolvedName(resolved));
-    }),
-  );
-
-  return { ...preview, text: renderMentionsAsPlainText(preview.text, (a) => names.get(a)) };
 }
 
 function senderIdOf(message: Message): string | undefined {
@@ -260,7 +208,14 @@ export async function logMentionOrReply(
     senderId,
     senderName,
     senderDisplayName,
-    preview: await resolvePreviewMentions(messagePreview(message), ctx),
+    // Mention tokens are left RAW and resolved when the panel renders, by
+    // `partitionNotifications`' `resolveName` (bound to `@/identity` in
+    // `useUnifiedNotifications`). Resolving them here instead meant they were
+    // named by `resolveMemberName` on a path with no React tree, which can
+    // never verify a QNS claim — so a `.q` could not appear in a notification
+    // for anyone, including the viewer, however the same member rendered one
+    // channel away. Desktop resolves these in its panel for the same reason.
+    preview: messagePreview(message),
     createdAt: message.createdDate || Date.now(),
   };
   appendMentionReplyLog(entry);

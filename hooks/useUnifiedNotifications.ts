@@ -12,7 +12,7 @@
  * bell-icon badge both consume this so they stay in sync.
  */
 
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   flattenFarcasterNotifications,
@@ -23,6 +23,8 @@ import { useDMMute } from '@/hooks/chat/useDMMute';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
 import type { Conversation } from '@/hooks/chat/useConversations';
 import { coerceMessagePreview } from '@/utils/messagePreview';
+import { mentionedAddresses } from '@/utils/mentionTokens';
+import { truncateAddress } from '@/utils/formatAddress';
 import { useNameResolver } from '@/identity';
 import { formatResolvedName } from '@/identity/useResolvedName';
 import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
@@ -41,6 +43,7 @@ import {
 import { partitionNotifications } from '@/services/notifications/partitionNotifications';
 import type {
   ConversationDetail,
+  NotificationNameResolver,
   UnifiedNotification,
 } from '@/services/notifications/partitionNotifications';
 
@@ -188,6 +191,55 @@ export function useUnifiedNotifications(
     return map;
   }, [dmConversations.conversations, resolve]);
 
+  // ── Space mention/reply rows: resolve names at RENDER, like desktop ──────
+  //
+  // `logMentionOrReply` froze the author's name and every in-body mention into
+  // the stored row, on the WebSocket receive path. Nothing verifies a QNS claim
+  // there — there is no React tree above it — so a `.q` could never appear in a
+  // notification, for anyone including the viewer, however the same member
+  // rendered one channel away. Desktop resolves these in the panel
+  // (`NotificationPanel.tsx`, `<MemberName spaceId={rowSpaceId} enrich />`), and
+  // the DM rows above already do it here for the same reason.
+  //
+  // Scoped to the ROW's space, not globally: that is what keeps a deliberate
+  // per-space nickname outranking the `.q`, matching what the channel shows.
+  const quorumSpaceAddresses = useMemo(() => {
+    const rows: { address?: string }[] = [];
+    for (const e of quorumEntries) {
+      if (e.kind === 'dm') continue;
+      if (e.senderId) rows.push({ address: e.senderId });
+      const text = e.preview?.text;
+      if (text) for (const a of mentionedAddresses(text)) rows.push({ address: a });
+    }
+    // Same cap as every other fan-out on this list. `quorumEntries` is
+    // newest-first, so the rows that lose enrichment past the cap are the
+    // oldest — and they degrade to their global name, never to something wrong.
+    return qnsLookupAddresses(rows, MAX_QNS_LOOKUPS);
+  }, [quorumEntries]);
+
+  useEffect(() => {
+    requestNames(quorumSpaceAddresses);
+  }, [quorumSpaceAddresses, requestNames]);
+
+  const resolveName = useCallback<NotificationNameResolver>(
+    (address, spaceId) => {
+      if (!address) return undefined;
+      const resolved = resolve(address, spaceId ? { spaceId } : { global: true });
+      // `ResolvedMemberName` carries no "nothing matched" flag — the ladder
+      // signals it by handing back the truncated address itself
+      // (`resolveWithFallback`). Compare against that rather than inventing a
+      // second way to spell the same condition.
+      //
+      // `undefined` rather than the hash, so the caller falls back to whatever
+      // name the log froze at write time: for a member who has since left, or
+      // whose roster never synced, that stored string is often a real name and
+      // is never worse than an address.
+      if (resolved.name === truncateAddress(address)) return undefined;
+      return formatResolvedName(resolved);
+    },
+    [resolve],
+  );
+
   const officialFarcaster = useMemo(
     () => flattenFarcasterNotifications(farcasterQuery.data?.pages),
     [farcasterQuery.data?.pages],
@@ -199,6 +251,7 @@ export function useUnifiedNotifications(
         quorumEntries,
         chatEntries,
         conversationDetails,
+        resolveName,
         officialFarcaster,
         haatzFarcaster: haatzQuery.data ?? [],
         clearedBefore,

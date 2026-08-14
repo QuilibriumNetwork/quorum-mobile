@@ -433,7 +433,13 @@ export default function NotificationsScreen() {
                 </Text>
               </Text>
               {(() => {
-                const author = item.raw?.quorum?.senderDisplayName?.trim();
+                // `item.actorName`, NOT `raw.quorum.senderDisplayName` — the
+                // latter is the name frozen on the WebSocket receive path,
+                // which cannot verify a QNS claim, so reading it here showed a
+                // global display name under an author who renders as `.q`
+                // everywhere else. `actorName` is the same value run through
+                // the identity ladder, with that frozen string as its fallback.
+                const author = item.actorName;
                 // Not raw.quorum.preview.text — that is the unresolved wire
                 // form, mention tokens and all.
                 const text = item.previewText;
