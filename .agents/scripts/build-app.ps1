@@ -81,7 +81,9 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $device = $null
 if (-not $BuildOnly) {
     . (Join-Path $PSScriptRoot '_adb-preflight.ps1')
-    $target = Resolve-QmUsbDevice -Serial $Serial
+    # QM_DEVICE_1 is a remembered preference, never a requirement - see the note
+    # on -Preferred in _adb-preflight.ps1. Explicit -Serial still means "this one".
+    $target = Resolve-QmUsbDevice -Serial $Serial -Preferred $env:QM_DEVICE_1
     if (-not $target) {
         Write-Host "  Not starting a ~9 min build that could not install anywhere." -ForegroundColor Red
         Write-Host "  To compile the APK without a phone:  .\.agents\scripts\build-app.ps1 -BuildOnly" -ForegroundColor Yellow

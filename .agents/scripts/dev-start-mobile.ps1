@@ -25,10 +25,14 @@ param(
 
 . "$PSScriptRoot\_env.ps1"
 
-# Fall back to a serial pinned in .env.local. Resolved here rather than as a
-# param default because param defaults bind BEFORE the script body runs, so
-# _env.ps1 has not loaded .env.local yet at that point.
-if (-not $Serial -and $env:QM_DEVICE_1) { $Serial = $env:QM_DEVICE_1 }
+# A serial pinned in .env.local is a PREFERENCE, not a requirement - it is just
+# the phone you happened to use last. Keep it out of $Serial: assigning it there
+# made the script demand that exact phone, so swapping the cable to the other
+# device made it wait 45 s for an absent phone and give up while a healthy one
+# sat unused (2026-08-14). Explicit -Serial still means "this phone or nothing".
+# Read here rather than as a param default: defaults bind BEFORE the script body,
+# so _env.ps1 has not loaded .env.local at that point.
+$preferredSerial = $env:QM_DEVICE_1
 
 $logPath = Join-Path $repo ".agents\reports\metro-log.txt"
 
@@ -85,7 +89,11 @@ try {
         $staleName   = "metro-cache-stale-$PID"
         try {
             Rename-Item -Path $metroCache -NewName $staleName -ErrorAction Stop
-            Write-Host "  Cleared $metroCache (deleting in background)" -ForegroundColor DarkGray
+            # Print the UNEXPANDED path: $metroCache resolves through the Windows
+            # user profile, and this console output is mirrored into
+            # reports/metro-log.txt, so expanding it writes the account name into
+            # a file. Keep the operator's name out of logs entirely.
+            Write-Host "  Cleared %LOCALAPPDATA%\Temp\metro-cache (deleting in background)" -ForegroundColor DarkGray
             Start-Job -ScriptBlock {
                 # This run's cache, plus any left by a previous run that was
                 # killed before its background delete finished.
@@ -187,7 +195,7 @@ try {
     # stray Wi-Fi endpoint whatever its state, and pins ANDROID_SERIAL.
     # See _adb-preflight.ps1 for the failure this exists to stop.
     # (Already dot-sourced above for the port preflight.)
-    $target = Resolve-QmUsbDevice -Serial $Serial
+    $target = Resolve-QmUsbDevice -Serial $Serial -Preferred $preferredSerial
     $adb    = if ($target) { $target.Adb } else { (Get-QmAdb) }
     $device = if ($target) { $target.Serial } else { $null }
 
@@ -287,8 +295,13 @@ try {
             } -ArgumentList $adb, $device, $androidPackage, $launchUrl, $port, $autoLaunchLog | Out-Null
             Write-Host "  App will auto-open AFTER the bundle finishes building (~2.5 min on a cold start)." -ForegroundColor DarkGray
             Write-Host "  >> Do NOT open the app yourself before then, or it will time out. <<" -ForegroundColor Yellow
+            # Print the path RELATIVE to the repo. $autoLaunchLog is derived from
+            # $repo (never hardcoded), but echoing it absolute puts a machine-
+            # specific path into the console and into metro-log.txt. Repo-relative
+            # is also the form that still makes sense if the repo ever moves - a
+            # drive move (D: -> E:) has already caused one hard-to-find bug here.
             Write-Host "  If it does NOT open, press 'a' - and see why in:" -ForegroundColor DarkGray
-            Write-Host "  $autoLaunchLog" -ForegroundColor DarkGray
+            Write-Host "  .agents\reports\autolaunch-log.txt" -ForegroundColor DarkGray
         }
     }
     else {
@@ -317,7 +330,7 @@ try {
     # opens the correct .debug package once the bundle is served.
     Write-Host "  ('a' may then say 'No development build ... is installed' - expected," -ForegroundColor DarkGray
     Write-Host "   it looks for the non-.debug id. The script opens the right app itself.)" -ForegroundColor DarkGray
-    Write-Host "  Logs are mirrored to: $logPath" -ForegroundColor Cyan
+    Write-Host "  Logs are mirrored to: .agents\reports\metro-log.txt" -ForegroundColor Cyan
     Write-Host ""
     # Expo sits silently on 'Starting project at...' for ~15-25s on a cold start
     # (config + dependency resolution) BEFORE it prints 'Starting Metro Bundler'.

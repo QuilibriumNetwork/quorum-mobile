@@ -50,6 +50,42 @@ param(
 # runs when neither is set.
 if (-not $HostIp -and $env:QM_HOST_IP) { $HostIp = $env:QM_HOST_IP }
 
+# --- Port 8081 must be bindable, and here it must be 8081 exactly -------------
+# This script pins 8081 in several places (the advertised LAN URL, the launch
+# deep link, the bundle-readiness probe) AND allow-metro-firewall.ps1 opens
+# inbound 8081 specifically. So unlike the USB script, we cannot just move to a
+# free port - the phone would be firewalled out of the new one. Fail loudly.
+#
+# Windows reserves randomized blocks of TCP ports at boot (Hyper-V / WSL), so
+# 8081 can become unbindable with EACCES and NO process listening on it.
+# Measured on the USB path 2026-08-13: range 7988-8087 swallowed 8081. Expo does
+# not error on that, it quietly moves to another port - which here means the
+# advertised URL, the firewall rule and Metro all disagree, and the phone shows
+# "Unable to load script" with nothing obviously wrong.
+. "$PSScriptRoot\_adb-preflight.ps1"
+if (-not (Test-QmPortBindable -Port 8081)) {
+    $reserved = @(Get-QmExcludedPortRanges | Where-Object {
+        $p = $_ -split '-'; [int]$p[0] -le 8081 -and [int]$p[1] -ge 8081
+    })
+    Write-Host ""
+    Write-Host "  ERROR: port 8081 cannot be bound." -ForegroundColor Red
+    if ($reserved.Count -gt 0) {
+        Write-Host "  Windows has reserved the range $($reserved -join ', ') (Hyper-V / WSL / Docker)." -ForegroundColor Red
+        Write-Host "  Nothing is listening on 8081 - there is no process to kill." -ForegroundColor Red
+        Write-Host "  Reclaim it (admin, survives reboots):" -ForegroundColor Yellow
+        Write-Host "    net stop winnat" -ForegroundColor Yellow
+        Write-Host "    netsh int ipv4 add excludedportrange protocol=tcp startport=8081 numberofports=1 store=persistent" -ForegroundColor Yellow
+        Write-Host "    net start winnat" -ForegroundColor Yellow
+    } else {
+        Write-Host "  Something is already listening on it - check: netstat -ano | findstr :8081" -ForegroundColor Yellow
+    }
+    Write-Host "  The Wi-Fi path cannot fall back to another port: the firewall rule and the" -ForegroundColor DarkGray
+    Write-Host "  advertised URL are both pinned to 8081. The USB script CAN (it moves the" -ForegroundColor DarkGray
+    Write-Host "  adb reverse bridge with it):  .\.agents\scripts\dev-start-mobile.ps1" -ForegroundColor DarkGray
+    Write-Host ""
+    exit 1
+}
+
 $logPath = Join-Path $repo ".agents\reports\metro-log.txt"
 
 # Make sure the reports folder exists
@@ -70,7 +106,7 @@ if (Test-Path $logPath) {
     }
     catch {
         Write-Host ""
-        Write-Host "  ERROR: $logPath is locked by another process." -ForegroundColor Red
+        Write-Host "  ERROR: .agents\reports\metro-log.txt is locked by another process." -ForegroundColor Red
         Write-Host "  Another Metro instance is probably still running." -ForegroundColor Yellow
         Write-Host "  Close that terminal, or run: Get-Process node | Stop-Process -Force" -ForegroundColor Yellow
         Write-Host ""
@@ -170,13 +206,15 @@ try {
     $metroCache = Join-Path $env:LOCALAPPDATA "Temp\metro-cache"
     if (Test-Path $metroCache) {
         if ($DryRun) {
-            Write-Host "  [dry-run] WOULD clear $metroCache" -ForegroundColor DarkGray
+            Write-Host "  [dry-run] WOULD clear %LOCALAPPDATA%\Temp\metro-cache" -ForegroundColor DarkGray
         } else {
             $cacheParent = Split-Path $metroCache -Parent
             $staleName   = "metro-cache-stale-$PID"
             try {
                 Rename-Item -Path $metroCache -NewName $staleName -ErrorAction Stop
-                Write-Host "  Cleared $metroCache (deleting in background)" -ForegroundColor DarkGray
+                # Unexpanded on purpose - $metroCache runs through the user profile
+                # and this output is mirrored to a log file. See dev-start-mobile.ps1.
+                Write-Host "  Cleared %LOCALAPPDATA%\Temp\metro-cache (deleting in background)" -ForegroundColor DarkGray
                 Start-Job -ScriptBlock {
                     Get-ChildItem $using:cacheParent -Filter 'metro-cache-stale-*' -Directory -ErrorAction SilentlyContinue |
                         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -506,7 +544,8 @@ try {
     Write-Host ""
     Write-Host "  Starting Metro on $($lanIp):8081 (2 workers, fs.promises capped)." -ForegroundColor Cyan
     Write-Host "  This window is INTERACTIVE: press 'a' for Android, 'r' to reload, Ctrl+C to stop." -ForegroundColor Cyan
-    Write-Host "  Logs mirrored to: $logPath" -ForegroundColor Cyan
+    # Repo-relative on purpose - see the note in dev-start-mobile.ps1.
+    Write-Host "  Logs mirrored to: .agents\reports\metro-log.txt" -ForegroundColor Cyan
     Write-Host ""
 
     # Clear any transcript left "running" by a prior run that was Ctrl+C'd (Ctrl+C

@@ -45,6 +45,28 @@ if (-not $s1 -or -not $s2) {
     Write-Host "       Serials come from ``adb devices``. Wi-Fi serials look like <ip>:5555." -ForegroundColor Yellow
     exit 1
 }
+
+# Validate the serials against what is actually attached, BEFORE running a whole
+# capture round against a phone that isn't there. QM_DEVICE_1/2 in .env.local are
+# just the phones used last: swap a cable and they go stale silently, and the
+# failure then surfaces deep inside the round as confusing adb errors. Naming two
+# devices explicitly is inherent here (you cannot autodetect "device 2"), so this
+# validates rather than substitutes - it tells you exactly what IS connected.
+. "$PSScriptRoot\_adb-preflight.ps1"
+$attached = @(Get-QmAdbDevices -Adb (Get-QmAdb) | Where-Object { $_.State -eq 'device' } | ForEach-Object { $_.Serial })
+$missing  = @(@($s1, $s2) | Where-Object { $attached -notcontains $_ })
+if ($missing.Count -gt 0) {
+    Write-Host ""
+    Write-Host "ERROR: these configured serials are not attached: $($missing -join ', ')" -ForegroundColor Red
+    if ($attached.Count -gt 0) {
+        Write-Host "       Currently attached and ready: $($attached -join ', ')" -ForegroundColor Yellow
+    } else {
+        Write-Host "       Nothing is attached and ready right now." -ForegroundColor Yellow
+    }
+    Write-Host "       Pass -s1/-s2 explicitly, or update QM_DEVICE_1 / QM_DEVICE_2 in .env.local." -ForegroundColor Yellow
+    Write-Host ""
+    exit 1
+}
 $scripts = Join-Path $repo ".agents\scripts"
 $pkg = "com.quilibrium.quorummobile.debug"
 $launchUrl = "quorummobile://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081"
