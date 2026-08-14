@@ -346,7 +346,7 @@ const FakeQnsModule = __DEV__
   ? (require('@/services/dev/fakeQns') as typeof import('@/services/dev/fakeQns'))
   : null;
 
-const DEV_CLAIM_EXEMPTION: ClaimExemption | undefined = FakeQnsModule
+export const DEV_CLAIM_EXEMPTION: ClaimExemption | undefined = FakeQnsModule
   ? (name, address) => FakeQnsModule.isFakeClaimFor(name, address)
   : undefined;
 

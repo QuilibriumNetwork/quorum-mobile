@@ -31,11 +31,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const ADDR = 'QmPeerAEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imzzzz';
 const SELF_ADDR = 'QmMeMeMeMeMeMeMeMeMeMeMeMeMeMeMeMeMeMeMeMeMe';
+const PARTNER = 'QmThemThemThemThemThemThemThemThemThemThemTh';
 
 type MockUser = { address: string; displayName?: string } | null;
 let mockUser: MockUser;
 let mockSpaces: Array<{ spaceId: string }>;
 let mockRosters: Record<string, Record<string, { display_name?: string; global_display_name?: string }>>;
+let mockConversations: { address?: string; displayName?: string }[];
 
 // Mocked at the SPECIFIC file `RootIdentityScope.tsx` imports, not the
 // `@/context` / `@/hooks/chat` barrels — those barrels transitively reach
@@ -52,6 +54,14 @@ jest.mock('@/hooks/chat/useSpaces', () => ({
 }));
 jest.mock('@/hooks/useMultiSpaceRosters', () => ({
   useMultiSpaceRosters: () => mockRosters,
+}));
+// Same specific-file reasoning as above: `@/hooks/chat` is one of the barrels
+// that reaches the native crypto module. Shaped like the real infinite query
+// (`{ data: { pages: [{ conversations }] } }`) rather than a flat array, so a
+// refactor that stops flattening pages fails here instead of silently
+// resolving nothing.
+jest.mock('@/hooks/chat/useConversations', () => ({
+  useConversations: () => ({ data: { pages: [{ conversations: mockConversations }] } }),
 }));
 
 import { RootIdentityScope } from '@/identity/RootIdentityScope';
@@ -73,6 +83,7 @@ describe('RootIdentityScope', () => {
     mockUser = null;
     mockSpaces = [];
     mockRosters = {};
+    mockConversations = [];
   });
 
   afterEach(() => {
@@ -101,5 +112,34 @@ describe('RootIdentityScope', () => {
     renderInScope(<MemberName address={SELF_ADDR} />);
 
     expect(screen.getByText('Selfy')).toBeTruthy();
+  });
+
+  it('seeds a DM partner\'s broadcast name, with no roster and no public profile', () => {
+    // The regression this branch shipped. A DM has no `spaceId`, so no roster
+    // row is consulted; the partner's name lives ONLY on the conversation row
+    // until they publish a public profile. Without the wiring the ladder falls
+    // through to a truncated address, which is what the operator saw: names
+    // intact in channels (roster), addresses in DMs.
+    //
+    // No `spaceId` on purpose — that is what a DM surface passes.
+    mockUser = { address: SELF_ADDR, displayName: 'Selfy' };
+    mockConversations = [{ address: PARTNER, displayName: 'Bob' }];
+
+    renderInScope(<MemberName address={PARTNER} />);
+
+    expect(screen.getByText('Bob')).toBeTruthy();
+  });
+
+  it('does not let a conversation row rename SELF', () => {
+    // The control arm for the test above. Self's device name must outrank a
+    // conversation row carrying self's address, otherwise the merge order is
+    // wrong in a way the happy path cannot see.
+    mockUser = { address: SELF_ADDR, displayName: 'Selfy' };
+    mockConversations = [{ address: SELF_ADDR, displayName: 'Stale Self' }];
+
+    renderInScope(<MemberName address={SELF_ADDR} />);
+
+    expect(screen.getByText('Selfy')).toBeTruthy();
+    expect(screen.queryByText('Stale Self')).toBeNull();
   });
 });

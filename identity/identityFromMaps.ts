@@ -90,6 +90,43 @@ export function selfLocalNameEntry(
   return { [address]: name };
 }
 
+/**
+ * DM partners' locally-known names, as `locallyKnownNames` entries.
+ *
+ * A DM carries no `spaceId`, so `identityFromMaps` consults no roster row for
+ * one — see its first line. The partner's name arrives instead on the
+ * conversation row, broadcast by the partner themselves. Without this the only
+ * global tier left for them is a PUBLISHED public profile, so every partner who
+ * has not published one renders as a truncated address in the inbox, the DM
+ * header, DM settings and the composer hint, even though the app has known
+ * their name the whole time.
+ *
+ * That is not hypothetical: it is the regression this branch shipped and the
+ * one the `locallyKnownNames` docstring above already describes desktop having
+ * shipped and sent back. The tier existed from the start; nothing ever filled
+ * it for anyone but self, and no test caught it because every DM test supplies
+ * a public profile the real app has no reason to have.
+ *
+ * Deliberately the LAST tier: a published profile is authoritative, this is
+ * merely what the peer told you directly. First row wins for a repeated
+ * address, so the most recent conversation's name is the one that shows.
+ */
+export function conversationLocalNames(
+  conversations: readonly { address?: string | null; displayName?: string | null }[] | undefined,
+): Record<string, string> {
+  if (!conversations?.length) return EMPTY_LOCAL_NAMES;
+
+  const out: Record<string, string> = {};
+  for (const c of conversations) {
+    const address = (c?.address ?? '').trim();
+    const name = nn(c?.displayName);
+    if (!address || !name || out[address]) continue;
+    out[address] = name;
+  }
+
+  return Object.keys(out).length ? out : EMPTY_LOCAL_NAMES;
+}
+
 export function identityFromMaps(
   address: string,
   spaceId: string | undefined,

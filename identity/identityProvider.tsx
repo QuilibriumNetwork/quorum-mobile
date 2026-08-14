@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { getQuorumClient } from '@/services/api/quorumClient';
 import { publicProfileQueryKey, type PublicProfile } from '@/hooks/useUserPublicProfile';
-import { claimedNamesIn, useClaimRecords } from '@/hooks/useVerifiedQnsNames';
+import { DEV_CLAIM_EXEMPTION, claimedNamesIn, useClaimRecords } from '@/hooks/useVerifiedQnsNames';
 import { claimedNameBelongsTo } from '@/utils/verifyQnsClaim';
 import {
   EMPTY_LOCAL_NAMES,
@@ -162,7 +162,25 @@ export const IdentityScopeProvider: React.FunctionComponent<{
     for (const [address, profile] of Object.entries(profiles)) {
       const claim = (profile?.primary_username ?? '').trim();
       if (!claim) continue;
-      if (claimedNameBelongsTo(claimRecords.get(claim), address)) map[address] = claim;
+      // `DEV_CLAIM_EXEMPTION` is the fake-QNS overlay's seam, and it is
+      // `undefined` in any non-dev build (it is gated at the `require()`, not
+      // here — see its definition). A synthesized name is registered nowhere,
+      // so it can NEVER pass the real check; without this the overlay injects
+      // names and the check strips every one of them, and the instrument
+      // reports success while every QNS surface renders exactly as it did
+      // before it existed.
+      //
+      // This clause was missing when verification moved into this provider,
+      // which is precisely how it failed: the exemption was threaded into
+      // `stripUnverifiedNames*` — the path this replaced — so it kept passing
+      // its own tests while the app-wide path silently lost it. Pinned by
+      // `identityProviderDevExemption.test.tsx`.
+      if (
+        DEV_CLAIM_EXEMPTION?.(claim, address) ||
+        claimedNameBelongsTo(claimRecords.get(claim), address)
+      ) {
+        map[address] = claim;
+      }
     }
     return map;
   }, [profiles, claimRecords]);
