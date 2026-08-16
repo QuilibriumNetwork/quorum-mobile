@@ -124,6 +124,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [`auth:user` has no live writer for a rename made on another device](issues/.open/2026-08-05-auth-user-record-has-no-live-writer-for-a-rename-made-elsewhere.md)
 - 📋 [Verifying a `.q` claim, without paying for it on every render](issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md)
 - 📋 [Add the global "Always sign Direct Messages" toggle to mobile settings](issues/.open/2026-08-07-no-global-always-sign-dms-toggle-on-mobile.md)
+- 📋 [Adopt shared's QNS claim verification](issues/.open/2026-08-16-adopt-shared-qns-claim-verification.md)
 
 ### Deferred
 
@@ -281,4 +282,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-16 12:56:06
+**Last Updated**: 2026-08-16 14:51:24
