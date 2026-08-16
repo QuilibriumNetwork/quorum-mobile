@@ -165,8 +165,15 @@ export function claimedNamesIn(
  * public profile, which can only ever under-show or mis-show a name the user
  * did once claim — it cannot promote a name they never claimed, because the
  * verification below is unconditional either way.
+ *
+ * **Exported so `IdentityScopeProvider` applies this exact rule** rather than
+ * re-deriving it. The obvious re-derivation — `rosterClaim ?? profileClaim`, or
+ * any truthiness test — compiles, reads correctly, and silently drops the
+ * un-election case, because it cannot tell an empty claim from an absent one.
+ * One copy of the rule, in the file whose docstring explains why it is shaped
+ * this way.
  */
-function claimIn(row: Partial<ClaimingRow> | undefined): string {
+export function claimIn(row: Partial<ClaimingRow> | undefined): string {
   const broadcast = row?.claimed_primary_username;
   if (broadcast !== undefined && broadcast !== null) return broadcast.trim();
   return (row?.primary_username ?? '').trim();

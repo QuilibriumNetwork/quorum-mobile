@@ -115,10 +115,18 @@ function describe(
     body:
       outcome.status === 'published'
         ? `@${name} is now your primary username. Other people will see you as ${name}.q.`
-        : // Say this plainly instead of implying the name is now visible. A
-          // private profile is where the `.q` stops: the published profile is
-          // the only thing that carries one to anyone else.
-          `@${name} is now your primary username. Your profile is private, so only you can see it. Turn on Public Profile to show ${name}.q to other people.`,
+        : // A private profile is NOT where the `.q` stops, and saying so was
+          // the bug this replaced. The space/DM broadcast carries the elected
+          // name to spacemates and DM partners regardless of the toggle
+          // (`WebSocketContext`'s profile rebroadcast sends `primaryUsername`
+          // unconditionally), and since the server refuses every publish
+          // carrying the field, that broadcast is in practice the ONLY route a
+          // `.q` has to anyone. The old copy both denied the route that works
+          // and pointed the user at the one that does not.
+          //
+          // So the toggle is described by what it actually adds: reach beyond
+          // the people you already share a space or a DM with.
+          `@${name} is now your primary username. People in your spaces and DMs can see you as ${name}.q. Turn on Public Profile to show it to people outside them too.`,
   };
 }
 

@@ -32,11 +32,19 @@ export function useMultiSpaceRosters(
             address?: string;
             display_name?: string | null;
             global_display_name?: string | null;
+            claimed_primary_username?: string | null;
           };
           if (row.address) {
             map[row.address] = {
               display_name: row.display_name,
               global_display_name: row.global_display_name,
+              // The broadcast claim, copied verbatim INCLUDING an empty string.
+              // Empty is an un-election and has to survive the copy; a member
+              // who never claimed anything has `undefined`/`null` here, which
+              // `claimIn` reads as "this transport said nothing" and falls back
+              // to the public profile. Normalising either into the other loses
+              // one of those two meanings.
+              claimed_primary_username: row.claimed_primary_username,
             };
           }
         }

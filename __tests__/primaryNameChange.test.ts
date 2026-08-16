@@ -74,14 +74,29 @@ describe('changePrimaryName', () => {
     expect(mockRepublish.mock.calls[0][0].primaryUsername).toBe(NO_PRIMARY_NAME);
   });
 
-  it('does not claim other people can see the name when the profile is private', async () => {
+  it('tells an unpublished user their spaces and DMs still see the name', async () => {
+    // This assertion was inverted until 2026-08-16, when it demanded the word
+    // "private" and that the copy deny anyone could see the name. That encoded
+    // a belief that stopped being true when the `.q` was decoupled from the
+    // public-profile toggle: the space/DM broadcast carries an elected name to
+    // spacemates and DM partners regardless of the toggle, and since the server
+    // refuses every publish carrying the field, that broadcast is the only
+    // route a `.q` actually has. The old copy denied the route that works and
+    // pointed the user at the one that does not.
     mockRepublish.mockResolvedValue({ status: 'not-public' });
 
     const { body } = await changePrimaryName({ name: 'gatto', next: 'gatto', self, updateProfile });
 
-    expect(body).toMatch(/private/i);
+    expect(body).toContain('spaces and DMs');
+    expect(body).toContain('gatto.q');
+    // The toggle is still worth offering, for the audience a broadcast cannot
+    // reach: people with no shared space or DM.
     expect(body).toMatch(/Public Profile/);
+    // Still must not overclaim. The unqualified promise belongs to the
+    // published branch, where it is true for strangers too.
     expect(body).not.toMatch(/Other people will see you/);
+    // And must not revive the claim that a private profile hides the name.
+    expect(body).not.toMatch(/only you can see/i);
   });
 
   it('says the name is published only when it actually was', async () => {

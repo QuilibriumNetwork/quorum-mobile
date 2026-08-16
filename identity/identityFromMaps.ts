@@ -30,6 +30,20 @@ export interface RosterNameRow {
   display_name?: string | null;
   /** GLOBAL slot — the member's global name, pushed into the roster. */
   global_display_name?: string | null;
+  /**
+   * The QNS name this member CLAIMS, delivered over the space/DM broadcast.
+   *
+   * Untrusted, and deliberately NOT a name tier — `identityFromMaps` never
+   * reads it. It reaches the ladder only after `IdentityScopeProvider` has
+   * resolved it back to this member's address and written it into
+   * `verifiedQnsNames`. A row is the wrong place to hold a verified fact,
+   * because a row is what an attacker controls.
+   *
+   * ABSENT and EMPTY mean different things: absent is "this transport said
+   * nothing, use the public profile", empty is an un-election that must
+   * override a public profile still carrying the old name. See `claimIn`.
+   */
+  claimed_primary_username?: string | null;
 }
 
 /**

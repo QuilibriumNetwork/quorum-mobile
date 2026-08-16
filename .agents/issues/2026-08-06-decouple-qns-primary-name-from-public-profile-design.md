@@ -392,9 +392,11 @@ an external system stuck on a name you no longer use.
   wanted.~~ **REVERSED 2026-08-06 — it is now a hard requirement, see §10a.**
   That sentence was written while assuming the server checked. It does not, in
   practice, so nothing does.
-- **Signing `primaryUsername` properly** means adding it to `canonicalize`, which
-  WOULD break signature compatibility across versions. Not done here. It is a
-  clean, separate ask for the lead.
+
+> Section order note: §10 and §10a were appended after §7 and sit before §8/§9
+> on purpose — they reverse claims made in §7, so they read in sequence. The
+> numbers are load-bearing (§10/§10a are cross-referenced from this file and
+> from three sibling issues) and must not be renumbered to tidy the order.
 
 ## 10. The public-profile transport is DEAD, which promotes this one
 
@@ -477,18 +479,37 @@ this issue exists.
 
 Ordered. §6b first — it is small, needs no decision, and helps the larger group.
 
+⚠️ **A checked box here means the mechanism exists and was verified in the
+code — not that it renders on the `feat/resolve-identity` branch.** The
+transport, the store and the verification all still work on that branch; the
+identity ladder simply stopped reading the stored claim. See the ⚠️ in `## Status`
+at the top.
+
 - [x] **Electing a name primary publishes.** Client side done. The re-fetch check
       cannot pass until the server is fixed — the publish is correctly formed and
       correctly refused (§10)
 - [x] A primary name can be un-elected at all (§6c-1) — today it is permanent for anyone owning one name
 - [x] Making a name private clears it as primary (§6c-2)
 - [x] Transferring a name away clears it as primary (§6c-3) — the impersonation case
-- [ ] The join-stamped per-space override no longer masks the `.q` — without this a published `.q` still loses in every space, on either transport
-- [ ] **The receiver verifies a claimed `.q` against the resolver before rendering it, and fails closed (§10a)** — blocking for the broadcast transport, not optional
+- [x] The join-stamped per-space override no longer masks the `.q` — without this a published `.q` still loses in every space, on either transport.
+      VERIFIED 2026-08-16 by review: the `space !== global` guard in
+      `quorum-shared/src/utils/resolveDisplayName.ts:113-118` demotes the name
+      copied at join, so only a *deliberate* nickname outranks the `.q`
+- [x] **The receiver verifies a claimed `.q` against the resolver before rendering it, and fails closed (§10a)** — blocking for the broadcast transport, not optional.
+      VERIFIED 2026-08-16 by review: `utils/verifyQnsClaim.ts`
+      `claimedNameBelongsTo` + `hooks/useVerifiedQnsNames.ts` `settleClaim`
+      (`:273`) / `useClaimRecords` (`:370`, 1h `staleTime` documented as a
+      security parameter). A claim with no record resolves to no name
 - [ ] The server's QNS lookup is fixed, so the public-profile route works for strangers (not ours; filed)
 - [ ] Merged mode fans the CURRENT RESOLVED display name out to the Farcaster DISPLAY name, in both directions, with explicit confirmation, and never touches the fname (§6a, §6c)
-- [ ] `primaryUsername` on the mobile send path, included in the dedupe signature
-- [ ] Stored on both mobile space receive paths and the DM path, in the global slot group under `globalProfileTimestamp`
+- [x] `primaryUsername` on the mobile send path, included in the dedupe signature.
+      VERIFIED 2026-08-16 by review: `services/space/spaceMessageService.ts:915`,
+      `services/dm/dmProfileService.ts:91`, broadcast at
+      `context/WebSocketContext.tsx:6647`, fingerprinted at `:6563`
+- [x] Stored on both mobile space receive paths and the DM path, in the global slot group under `globalProfileTimestamp`.
+      VERIFIED 2026-08-16 by review: `context/WebSocketContext.tsx:769` (DM),
+      `:2791` (inbox) and `:4709` (native batch); both space writes are gated on
+      `applyGlobal`
 - [ ] Same on desktop
 - [ ] L2 passes with public profiles OFF on both clients — the acceptance criterion
 - [ ] The control arm in L2 checked, not assumed
@@ -496,7 +517,10 @@ Ordered. §6b first — it is small, needs no decision, and helps the larger gro
 - [ ] Promoted into shared's `UpdateProfileMessage` type, or a follow-up filed
 - [ ] The two lead questions in §7 asked
 
-## Status
+## Status history
+
+Newest first. The current state is the `## Status` section at the top; this is
+how it got there.
 
 **2026-08-09 — the transport shipped on mobile in PR #245**, together with the
 §10a verification it was blocked on. `primary_username` now rides the
@@ -554,4 +578,14 @@ receiver-side verification (§10a) becomes blocking rather than out of scope.
 Blocked on nothing for the client work. §10's server fix is not ours, and the
 public-profile route cannot be verified end to end until it lands.
 
-*Last updated: 2026-08-06*
+*Last updated: 2026-08-16*
+
+## Review Log
+**2026-08-16 - claude-opus-5**: First review pass. Checked the whole document against the code rather than trusting its prose. The technical content held up unusually well — every file:line anchor in the top Status table is exact. Fixed four structural defects and checked off four DoD items that were verifiably shipped. Left in-progress: real work remains (desktop, Farcaster merged mode, the server fix).
+- VERIFIED SHIPPED, checked four DoD boxes with inline evidence: (1) send path — spaceMessageService.ts:915, dmProfileService.ts:91, broadcast WebSocketContext.tsx:6647, dedupe fingerprint :6563; (2) receive/store on all three paths — WebSocketContext.tsx:769 DM, :2791 inbox, :4709 native batch, both space writes gated on applyGlobal as the design required; (3) receiver-side verification per 10a — utils/verifyQnsClaim.ts claimedNameBelongsTo plus useVerifiedQnsNames.ts settleClaim :273 / useClaimRecords :370 with a 1h staleTime documented in-code as a security parameter; (4) the join-stamped override no longer masks the .q — the space !== global guard at quorum-shared/src/utils/resolveDisplayName.ts:113-118.
+- Added a caveat above the DoD: a checked box means the mechanism exists and was verified in code, NOT that it renders on feat/resolve-identity. The transport, store and verification all still work on that branch; only the ladder stopped reading the stored claim. Without this line the checked boxes read as contradicting the regression warning in Status.
+- STRUCTURAL: the file had TWO '## Status' sections (a 2026-08-16 current-state summary and the historical log). Renamed the lower one to '## Status history' with a pointer to the top one. No content moved or removed.
+- STRUCTURAL: section 7 carried the 'Signing primaryUsername properly means adding it to canonicalize' bullet twice, verbatim. Removed the duplicate, kept the first.
+- Section numbering runs 1-7, 10, 10a, 8, 9. Did NOT renumber — 10 and 10a are cross-referenced from this file and three sibling issues, so renumbering would break live links. Added a short note explaining the order is deliberate (10/10a reverse claims made in 7) and must not be tidied.
+- Footer said 'Last updated: 2026-08-06' while frontmatter said updated: 2026-08-16. Footer corrected.
+- Frontmatter otherwise correct: type: task, status: in-progress, sitting in the issues/ root — folder and status agree, no change needed. Left status as in-progress: desktop parity, merged Farcaster fan-out and the upstream server fix are all genuinely open.
