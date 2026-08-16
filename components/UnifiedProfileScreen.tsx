@@ -23,8 +23,8 @@ import {
 import { useTheme, type AppTheme } from '@/theme';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
@@ -44,6 +44,9 @@ export default function UnifiedProfileScreen({
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
+  // The page's only scroller. Held so a section change can rewind it (below).
+  const pageScrollRef = useRef<ScrollView>(null);
 
   const [splitMode, setSplitMode] = useProfileSplitMode();
   const [decisionModalVisible, setDecisionModalVisible] = useState(false);
@@ -107,6 +110,25 @@ export default function UnifiedProfileScreen({
     if (!hasFarcaster && activePill === 'farcaster') setActivePill('profile');
     if (!hasFarcaster && identityTab === 'farcaster') setIdentityTab('quorum');
   }, [hasFarcaster, activePill, identityTab]);
+
+  // Rewind the page whenever the section changes.
+  //
+  // The sections share ONE scroller, so without this the new section inherits
+  // the old one's offset: tapping a pill from halfway down Profile drops you
+  // halfway down Settings, into the middle of content you have never seen.
+  //
+  // Keyed off the EFFECTIVE pill rather than done in the tap handler, so the
+  // fallback above (Farcaster disconnects while you are deep in its section,
+  // its pill vanishes, Profile takes over) rewinds too — that is the same bug
+  // arriving by a different route.
+  //
+  // Unanimated on purpose: effects run after the commit, so the new section is
+  // already on screen by now. Animating would scroll THROUGH the new content
+  // rather than out of the old, which reads as a glitch rather than a
+  // transition.
+  useEffect(() => {
+    pageScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [effectiveActivePill]);
 
   // Open the current user's own cast feed (their ProfileView) via the feed tab's
   // existing profileFid deep-link. Surfaced from the Farcaster section's
@@ -230,69 +252,98 @@ export default function UnifiedProfileScreen({
     // `insets.top` here — that would double up and push the profile
     // card down by a second status bar's worth.
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <UnifiedProfileHeader
-        user={user}
-        farcasterProfile={farcasterAuthor}
-        splitMode={splitMode}
-        identityTab={effectiveIdentityTab}
-        onIdentityTabChange={setIdentityTab}
-        onEditQuorum={() => setEditTarget('quorum')}
-        onEditFarcaster={() => setEditTarget('farcaster')}
-        onEditUnified={handleEditRequest}
-        onCopyAddress={handleCopyAddress}
-      />
-
-      <SegmentedPills
-        items={pills}
-        activeKey={effectiveActivePill}
-        onChange={(key) => setActivePill(key as ProfileSection)}
-        variant="solid"
-        scrollable
-        centerOnSelect
-        style={styles.pillRow}
-        // Center the row only when there are few pills (merged/Quorum-only:
-        // Profile/Premium/Settings always fit). With the 5-pill split layout we
-        // keep left-aligned so the row can scroll without clipping on narrow
-        // screens. flexGrow makes the centered content fill the viewport.
-        contentContainerStyle={[
-          styles.pillRowContent,
-          pills.length <= 3 && styles.pillRowContentCentered,
-        ]}
-      />
-
-      <View style={styles.content}>
-        <ProfileModal
-          visible={true}
-          onClose={() => {}}
-          onOpenWarpcastImport={onOpenWarpcastImport}
-          isRouteMode={true}
-          hideHeader={true}
-          hideTabBar={true}
-          activeSection={effectiveActivePill}
-          onViewMyCasts={handleViewMyCasts}
-          // Merge when unmerged; unmerge when merged. ProfileModal confirms first;
-          // here we just flip the split-mode display flag (no data is altered).
-          onMergeProfiles={splitMode ? () => { void handleMergeProfiles(); } : undefined}
-          onUnmergeProfiles={!splitMode ? () => setSplitMode(true) : undefined}
-          // After connecting Farcaster, jump to the Farcaster pill.
-          onFarcasterConnected={() => setActivePill('farcaster')}
-          farcasterIdentity={{
-            // Only drive the Profile section to Farcaster when unmerged AND the
-            // header switcher is on Farcaster.
-            active: splitMode && hasFarcaster && effectiveIdentityTab === 'farcaster',
-            displayName: farcasterAuthor?.displayName || user.farcaster?.username,
-            bio: farcasterAuthor?.profile?.bio?.text,
-            username: user.farcaster?.username,
-            fid: user.farcaster?.fid,
-          }}
-          // The header shows the identity switcher only when unmerged with both
-          // profiles — that's when Bio carries a brand icon.
-          dualIdentity={splitMode && hasFarcaster}
-          onOpenMarketplace={() => setMarketplaceModalVisible(true)}
-          onOpenAuctions={() => setAuctionsModalVisible(true)}
-          onOpenOffers={() => setOffersModalVisible(true)}
+      {/* One scroll for the whole page. The profile card scrolls away; the nav
+          pill row rides up with it and then pins to the top (stickyHeaderIndices
+          below), so sections stay reachable from anywhere in a long list. The
+          identity switcher is part of the card and scrolls with it by design —
+          it picks WHOSE profile is shown, which is a decision you make once at
+          the top, not while reading Settings. */}
+      <ScrollView
+        ref={pageScrollRef}
+        testID="settings-page-scroll"
+        style={styles.page}
+        contentContainerStyle={styles.pageContent}
+        showsVerticalScrollIndicator={false}
+        // Index 1 = the pill row below. It counts DIRECT children of the
+        // content view, so the header, the pill row and the body must stay
+        // three siblings in this order — inserting a sibling above the pills
+        // silently sticks the wrong element.
+        stickyHeaderIndices={[1]}
+      >
+        <UnifiedProfileHeader
+          user={user}
+          farcasterProfile={farcasterAuthor}
+          splitMode={splitMode}
+          identityTab={effectiveIdentityTab}
+          onIdentityTabChange={setIdentityTab}
+          onEditQuorum={() => setEditTarget('quorum')}
+          onEditFarcaster={() => setEditTarget('farcaster')}
+          onEditUnified={handleEditRequest}
+          onCopyAddress={handleCopyAddress}
         />
-      </View>
+
+        {/* Opaque wrapper, not bare pills: while pinned this sits ON TOP of the
+            scrolling content, and a transparent row would let the content run
+            visibly underneath it. */}
+        <View
+          testID="settings-nav-pills"
+          style={[styles.pillRowSticky, { backgroundColor: theme.colors.background }]}
+        >
+          <SegmentedPills
+            items={pills}
+            activeKey={effectiveActivePill}
+            onChange={(key) => setActivePill(key as ProfileSection)}
+            variant="solid"
+            scrollable
+            centerOnSelect
+            style={styles.pillRow}
+            // Center the row only when there are few pills (merged/Quorum-only:
+            // Profile/Premium/Settings always fit). With the 5-pill split layout we
+            // keep left-aligned so the row can scroll without clipping on narrow
+            // screens. flexGrow makes the centered content fill the viewport.
+            contentContainerStyle={[
+              styles.pillRowContent,
+              pills.length <= 3 && styles.pillRowContentCentered,
+            ]}
+          />
+        </View>
+
+        <View style={styles.content}>
+          <ProfileModal
+            visible={true}
+            onClose={() => {}}
+            onOpenWarpcastImport={onOpenWarpcastImport}
+            isRouteMode={true}
+            hideHeader={true}
+            hideTabBar={true}
+            // This ScrollView is the page's only vertical scroller.
+            externalScroll={true}
+            activeSection={effectiveActivePill}
+            onViewMyCasts={handleViewMyCasts}
+            // Merge when unmerged; unmerge when merged. ProfileModal confirms first;
+            // here we just flip the split-mode display flag (no data is altered).
+            onMergeProfiles={splitMode ? () => { void handleMergeProfiles(); } : undefined}
+            onUnmergeProfiles={!splitMode ? () => setSplitMode(true) : undefined}
+            // After connecting Farcaster, jump to the Farcaster pill.
+            onFarcasterConnected={() => setActivePill('farcaster')}
+            farcasterIdentity={{
+              // Only drive the Profile section to Farcaster when unmerged AND the
+              // header switcher is on Farcaster.
+              active: splitMode && hasFarcaster && effectiveIdentityTab === 'farcaster',
+              displayName: farcasterAuthor?.displayName || user.farcaster?.username,
+              bio: farcasterAuthor?.profile?.bio?.text,
+              username: user.farcaster?.username,
+              fid: user.farcaster?.fid,
+            }}
+            // The header shows the identity switcher only when unmerged with both
+            // profiles — that's when Bio carries a brand icon.
+            dualIdentity={splitMode && hasFarcaster}
+            onOpenMarketplace={() => setMarketplaceModalVisible(true)}
+            onOpenAuctions={() => setAuctionsModalVisible(true)}
+            onOpenOffers={() => setOffersModalVisible(true)}
+          />
+        </View>
+      </ScrollView>
 
       {/* Decision modal (first-time prompt) */}
       <ProfileSplitModeModal
@@ -439,10 +490,23 @@ function createStyles(theme: AppTheme) {
     root: {
       flex: 1,
     },
-    pillRow: {
-      flexGrow: 0,
+    page: {
+      flex: 1,
+    },
+    pageContent: {
+      // The body already carries its own trailing space for the blur tab bar
+      // (ProfileModal's routeContainer), so nothing extra is needed here.
+      flexGrow: 1,
+    },
+    // The pinned band. Padding lives here rather than on the pills so the
+    // opaque background covers the full gap above and below them — otherwise
+    // content scrolls through the margin while the row is stuck.
+    pillRowSticky: {
       paddingTop: Skin.space(8),
       paddingBottom: Skin.space(4),
+    },
+    pillRow: {
+      flexGrow: 0,
     },
     pillRowContent: {
       paddingHorizontal: Skin.space(16),
@@ -452,8 +516,11 @@ function createStyles(theme: AppTheme) {
       flexGrow: 1,
       justifyContent: 'center',
     },
+    // `flexGrow`, not `flex: 1`: this is scroll content now, so it must size to
+    // its children and merely absorb any leftover height on a short section.
+    // `flex: 1` would set flexBasis to 0 and risks collapsing it to nothing.
     content: {
-      flex: 1,
+      flexGrow: 1,
     },
   });
 }

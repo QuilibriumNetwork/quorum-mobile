@@ -102,7 +102,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, ScrollView, StyleSheet, Switch, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logger } from '@quilibrium/quorum-shared';
@@ -141,6 +141,12 @@ interface ProfileModalProps {
   /** Hide ProfileModal's built-in Profile/Premium/Settings tab bar — used when
    *  the parent renders the pill row instead. */
   hideTabBar?: boolean;
+  /** The parent owns the vertical scroll, so render the section body in a plain
+   *  View. Set by UnifiedProfileScreen, which puts the profile card, the pill
+   *  row and this body inside ONE ScrollView so the card scrolls away and the
+   *  pills stick. Keeping our own ScrollView there would nest two vertical
+   *  scrollers and the inner one would swallow the gesture. */
+  externalScroll?: boolean;
   /** Open the current user's own cast feed (their ProfileView). Surfaced as a
    *  "My Casts" row in the Farcaster section. */
   onViewMyCasts?: () => void;
@@ -317,6 +323,39 @@ function OtaUpdateSection({ theme }: { theme: AppTheme }) {
   );
 }
 
+/**
+ * Wrapper around the Profile/Premium/Settings/Farcaster section body.
+ *
+ * Normally it scrolls itself. Under `externalScroll` the parent owns the page
+ * scroll and this collapses to a plain View — both style objects are merged
+ * onto it, because a ScrollView splits its padding across the frame (`style`)
+ * and the content (`contentContainerStyle`) while a View has only the one box.
+ */
+function SectionBody({
+  externalScroll,
+  style,
+  contentContainerStyle,
+  children,
+}: {
+  externalScroll: boolean;
+  style: StyleProp<ViewStyle>;
+  contentContainerStyle: StyleProp<ViewStyle>;
+  children: React.ReactNode;
+}) {
+  if (externalScroll) {
+    return <View style={[style, contentContainerStyle]}>{children}</View>;
+  }
+  return (
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      style={style}
+      contentContainerStyle={contentContainerStyle}
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
 export default function ProfileModal({
   visible,
   onClose,
@@ -328,6 +367,7 @@ export default function ProfileModal({
   onOpenOffers,
   activeSection,
   hideTabBar = false,
+  externalScroll = false,
   onViewMyCasts,
   onMergeProfiles,
   farcasterIdentity,
@@ -1869,8 +1909,8 @@ export default function ProfileModal({
         </View>
       )}
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
+      <SectionBody
+        externalScroll={externalScroll}
         style={styles.scrollContent}
         contentContainerStyle={styles.scrollContentContainer}
       >
@@ -2698,7 +2738,7 @@ export default function ProfileModal({
                 pill only renders while connected. */}
           </View>
         )}
-      </ScrollView>
+      </SectionBody>
     </>
   );
 
@@ -2708,8 +2748,19 @@ export default function ProfileModal({
       <>
         {/* When embedded under the pill row (hideHeader), the parent screen
             already covers the status-bar safe area — adding insets.top here
-            would double up and leave a large gap below the pills. */}
-        <View style={[styles.routeContainer, { paddingTop: hideHeader ? 0 : insets.top, backgroundColor: theme.colors.background }]}>
+            would double up and leave a large gap below the pills.
+
+            `flex: 1` is dropped under externalScroll: inside the parent's
+            scroll content this box has no fixed height to fill, and a
+            flexBasis of 0 there risks collapsing it to nothing. It sizes to
+            its content instead, which is what a scrolling page wants. */}
+        <View
+          style={[
+            styles.routeContainer,
+            externalScroll && styles.routeContainerInScroll,
+            { paddingTop: hideHeader ? 0 : insets.top, backgroundColor: theme.colors.background },
+          ]}
+        >
           {profileContent}
         </View>
 
@@ -3034,6 +3085,10 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     routeContainer: {
       flex: 1,
       paddingBottom: Skin.space(90), // Clear the blur tab bar
+    },
+    // Overrides `flex: 1` when the parent owns the scroll — see the call site.
+    routeContainerInScroll: {
+      flex: 0,
     },
     header: {
       flexDirection: 'row',
