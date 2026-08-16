@@ -14,6 +14,7 @@
  */
 
 import {
+  forgetConversationClaims,
   forgetAnnouncedNames,
   type AnnouncedNameRow,
   type RosterStore,
@@ -115,5 +116,34 @@ describe('forgetAnnouncedNames', () => {
 
     expect(res.rowsCleared).toBe(1);
     expect(res.failures).toEqual(['broken']);
+  });
+});
+
+describe('forgetConversationClaims — the DM half', () => {
+  it('clears a claim stored on a conversation row', async () => {
+    // DMs have no roster, so the partner's announced claim lands here instead.
+    // Clearing only spaces left every DM surface stuck, which read as the
+    // repair doing nothing at all.
+    const rows: AnnouncedNameRow[] = [{ address: A, claimed_primary_username: 'qtest' }];
+    const res = await forgetConversationClaims({
+      conversations: async () => rows,
+      save: async (row) => {
+        rows[0] = row;
+      },
+    });
+
+    expect(res).toEqual({ rowsCleared: 1, failed: false });
+    expect('claimed_primary_username' in rows[0]).toBe(false);
+  });
+
+  it('reports a failure rather than counting it as cleared', async () => {
+    const res = await forgetConversationClaims({
+      conversations: async () => {
+        throw new Error('unreadable');
+      },
+      save: async () => {},
+    });
+
+    expect(res).toEqual({ rowsCleared: 0, failed: true });
   });
 });

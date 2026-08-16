@@ -114,6 +114,11 @@ export function QnsFakePanel() {
   /** Blocks a second tap while a POST is in flight. Two overlapping publishes
    *  race to be the server's last write, and the loser silently wins. */
   const [publishing, setPublishing] = useState(false);
+  /** Kept separate from `publishing`/`publishOutcome` so the repair's result
+   *  appears beside the repair button, not under the publish controls three
+   *  rows above it where it reads as belonging to them. */
+  const [repairing, setRepairing] = useState(false);
+  const [repairOutcome, setRepairOutcome] = useState<string>('');
 
   /** Drop every cached public profile so the next render refetches through the
    *  overlay. Without this a toggle looks inert for up to an hour. */
@@ -214,28 +219,61 @@ export function QnsFakePanel() {
    * only; it un-announces nothing for anybody else.
    */
   const handleForgetAnnounced = useCallback(async () => {
-    setPublishing(true);
-    setPublishOutcome('clearing announced names…');
-    const { forgetAnnouncedNames } = await import('@/services/dev/forgetAnnouncedNames');
-    const { getAllSpaces } = await import('@/services/config/spaceStorage');
-    const { getMMKVAdapter } = await import('@/services/storage/mmkvAdapter');
-    const adapter = getMMKVAdapter();
-    const res = await forgetAnnouncedNames({
-      spaceIds: () => getAllSpaces().map((s) => s.spaceId),
-      members: (spaceId) =>
-        adapter.getSpaceMembers(spaceId) as unknown as Promise<
-          { address?: string; claimed_primary_username?: string | null }[]
-        >,
-      saveMember: (spaceId, member) =>
-        adapter.saveSpaceMember(spaceId, member as Parameters<typeof adapter.saveSpaceMember>[1]),
-    });
-    setPublishOutcome(
-      `forgot ${res.rowsCleared} announced name(s) across ${res.spacesTouched} space(s)` +
-        (res.failures.length ? ` · ${res.failures.length} space(s) FAILED` : ''),
-    );
-    setPublishing(false);
-    invalidate();
-  }, [invalidate]);
+    setRepairing(true);
+    setRepairOutcome('clearing…');
+    try {
+      const { forgetAnnouncedNames, forgetConversationClaims } = await import(
+        '@/services/dev/forgetAnnouncedNames'
+      );
+      const { getAllSpaces } = await import('@/services/config/spaceStorage');
+      const { getMMKVAdapter } = await import('@/services/storage/mmkvAdapter');
+      const adapter = getMMKVAdapter();
+
+      const spaces = await forgetAnnouncedNames({
+        spaceIds: () => getAllSpaces().map((s) => s.spaceId),
+        members: (spaceId) =>
+          adapter.getSpaceMembers(spaceId) as unknown as Promise<
+            { address?: string; claimed_primary_username?: string | null }[]
+          >,
+        saveMember: (spaceId, member) =>
+          adapter.saveSpaceMember(spaceId, member as Parameters<typeof adapter.saveSpaceMember>[1]),
+      });
+
+      // DMs keep the claim on the CONVERSATION row, not a roster — clearing
+      // only spaces leaves every DM surface stuck and reads as "it did nothing".
+      const dms = await forgetConversationClaims({
+        conversations: async () =>
+          (await adapter.getConversations({ type: 'direct', limit: 500 }))
+            .conversations as unknown as { address?: string; claimed_primary_username?: string | null }[],
+        save: (row) => adapter.saveConversation(row as Parameters<typeof adapter.saveConversation>[0]),
+      });
+
+      // The rosters live under their OWN query key. Invalidating only the
+      // public-profile cache (what `invalidate()` does) left the provider
+      // serving the pre-repair roster from memory, so a successful wipe looked
+      // like a no-op — which is exactly how this failed the first time.
+      await queryClient.invalidateQueries({ queryKey: ['identity-roster'] });
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      invalidate();
+
+      const failures = spaces.failures.length + (dms.failed ? 1 : 0);
+      setRepairOutcome(
+        `cleared ${spaces.rowsCleared} roster row(s) in ${spaces.spacesTouched} space(s), ` +
+          `${dms.rowsCleared} DM row(s)` +
+          (failures ? ` · ${failures} FAILED` : '') +
+          (spaces.rowsCleared + dms.rowsCleared === 0
+            ? ' — nothing was stored, so this was not the cause'
+            : ' — reopen the screen to see it'),
+      );
+    } catch (e) {
+      // Silence here was the first version's real defect: a throw left the
+      // button disabled with no message, which is indistinguishable from a
+      // repair that ran and achieved nothing.
+      setRepairOutcome(`FAILED: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setRepairing(false);
+    }
+  }, [invalidate, queryClient]);
 
   const handleClearSelf = useCallback(async () => {
     setSelfName('');
@@ -353,11 +391,12 @@ export function QnsFakePanel() {
       />
       <DevButtonRow>
         <DevButton
-          label="Forget announced names"
+          label={repairing ? 'Clearing…' : 'Forget announced names'}
           onPress={() => void handleForgetAnnounced()}
-          disabled={publishing}
+          disabled={repairing}
         />
       </DevButtonRow>
+      {!!repairOutcome && <DevReadout>{repairOutcome}</DevReadout>}
       <Text style={styles.note}>
         This covers most of the job. Nearly every surface can render YOU: your
         messages, a reply to your own message, a mention you type at yourself,

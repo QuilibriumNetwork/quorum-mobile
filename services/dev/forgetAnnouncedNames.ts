@@ -94,3 +94,44 @@ export async function forgetAnnouncedNames(store: RosterStore): Promise<ForgetRe
 
   return result;
 }
+
+/**
+ * The DM half of the same repair.
+ *
+ * A DM carries no roster, so a partner's announced claim lands on the
+ * CONVERSATION row instead (`dm-update-profile` → `claimed_primary_username`,
+ * see `DMChatArea`). Clearing only space rosters therefore leaves every DM
+ * surface still stuck, which looks exactly like the repair not working at all.
+ *
+ * Same delete-the-key rule as above, for the same reason.
+ */
+export interface ConversationStore {
+  conversations(): Promise<AnnouncedNameRow[]>;
+  save(row: AnnouncedNameRow): Promise<void>;
+}
+
+export async function forgetConversationClaims(
+  store: ConversationStore,
+): Promise<{ rowsCleared: number; failed: boolean }> {
+  let rows: AnnouncedNameRow[];
+  try {
+    rows = await store.conversations();
+  } catch {
+    return { rowsCleared: 0, failed: true };
+  }
+
+  let rowsCleared = 0;
+  let failed = false;
+  for (const row of rows) {
+    if (!row || !('claimed_primary_username' in row)) continue;
+    if (row.claimed_primary_username === undefined) continue;
+    const { claimed_primary_username: _dropped, ...rest } = row;
+    try {
+      await store.save(rest as AnnouncedNameRow);
+      rowsCleared += 1;
+    } catch {
+      failed = true;
+    }
+  }
+  return { rowsCleared, failed };
+}
