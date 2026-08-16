@@ -3,7 +3,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useSpaces } from '@/hooks/chat/useSpaces';
 import { useMultiSpaceRosters } from '@/hooks/useMultiSpaceRosters';
 import { useConversations } from '@/hooks/chat/useConversations';
-import { IdentityScopeProvider } from './identityProvider';
+import { IdentityScopeProvider, conversationClaimsFrom } from './identityProvider';
 import {
   EMPTY_LOCAL_NAMES,
   conversationLocalNames,
@@ -82,9 +82,26 @@ export function RootIdentityScope({ children }: { children: React.ReactNode }) {
     return { ...partners, ...self };
   }, [conversations, selfAddress, user?.displayName]);
 
+  // DM partners' UNVERIFIED `.q` claims, from the same conversation rows.
+  //
+  // A DM has no roster, and the `dm-update-profile` broadcast lands on the
+  // conversation row rather than a member row, so this is the ONLY place a
+  // DM-only partner's claim can enter the ladder. Without it a partner who
+  // shares no Space with you can never show a `.q`, which is most of the point
+  // of the broadcast transport — the public-profile route that would otherwise
+  // carry one is refused by the server for every name.
+  //
+  // Still just a claim: the provider resolves it back to the partner's address
+  // before it can render, through the same checkpoint the roster claims use.
+  const conversationClaims = React.useMemo(
+    () => conversationClaimsFrom(conversations),
+    [conversations],
+  );
+
   return (
     <IdentityScopeProvider
       rostersBySpace={rostersBySpace}
+      conversationClaims={conversationClaims}
       selfAddress={selfAddress}
       locallyKnownNames={locallyKnownNames}
     >

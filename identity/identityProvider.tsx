@@ -59,51 +59,67 @@ export function mergeRostersBySpace(
 }
 
 /**
- * The broadcast claim each of `addresses` carries on a roster row, across every
- * space in scope.
+ * The broadcast claim each of `addresses` carries, across every space roster in
+ * scope AND the DM conversation rows.
  *
- * A key is present only when some row actually carried the field, so a caller
- * can tell ABSENT from EMPTY. `claimIn` depends on that distinction: absent
- * means "this transport said nothing, use the public profile", empty is an
- * un-election that must override a profile still carrying the old name.
+ * A key is present only when some source actually carried the field, so a
+ * caller can tell ABSENT from EMPTY. `claimIn` depends on that distinction:
+ * absent means "this transport said nothing, use the public profile", empty is
+ * an un-election that must override a profile still carrying the old name.
+ *
+ * ## Both sources, because the broadcast has two landing places
+ *
+ * The same `update-profile` broadcast reaches spacemates and DM partners, but
+ * the receiver stores it in two different rows: a space member row, and the
+ * conversation row for a DM (`WebSocketContext`'s `dm-update-profile`
+ * handler). A DM also resolves with NO `spaceId`, so `identityFromMaps`
+ * consults no roster at all for one. Reading rosters alone would leave every
+ * partner who shares no space without a `.q` — and a DM is precisely where two
+ * people who share no space meet.
  *
  * ## Bounded by `addresses`, which is the requested set
  *
- * Rosters are unbounded by anything the user did — a 5,000-member space would
- * otherwise feed 5,000 claims into the verifier the moment any surface in that
- * space mounts. Only addresses something has actually asked to resolve are
- * considered, which is the same bound the public-profile fetch already uses.
- * This adds no new fan-out: it adds NAMES to a batch that is already capped at
- * one request by `claimedNamesIn`, never new per-address requests.
+ * Rosters and inboxes are both unbounded by anything the user did — a
+ * 5,000-member space, or an inbox scrolled far enough, would otherwise feed
+ * thousands of claims into the verifier. Only addresses something has actually
+ * asked to resolve are considered, which is the same bound the public-profile
+ * fetch already uses. This adds no new fan-out: it adds NAMES to a batch
+ * already capped at one request by `claimedNamesIn`, never new per-address
+ * requests.
  *
- * ## One person, two spaces, two claims
+ * ## One person, several sources, several claims
  *
  * `verifiedQnsNames` is flat (address -> name) but rosters are per-space, so a
- * member whose spaces disagree needs a deterministic rule. Both halves of this
+ * member whose sources disagree needs a deterministic rule. Both halves of this
  * one are fail-closed:
  *
  * 1. **Any present-and-empty claim un-elects.** Dropping a primary name
- *    broadcasts the clear to every space; one space having heard it is enough.
- *    A space that merely never got the message still holds the old name, and
+ *    broadcasts the clear everywhere; one source having heard it is enough. A
+ *    space that merely never got the message still holds the old name, and
  *    preferring that would keep rendering a name its owner has abandoned.
- * 2. **Otherwise the first non-empty claim in SORTED space-id order.** Sorted
- *    rather than insertion order because merging with a parent scope reorders
- *    the keys, and a claim that flapped between renders would flicker a name.
+ * 2. **Otherwise the first non-empty claim, scanning spaces in SORTED id order
+ *    and then the conversation.** Sorted rather than insertion order because
+ *    merging with a parent scope reorders the keys, and a claim that flapped
+ *    between renders would flicker a name. In practice every source carries the
+ *    same value, since they all come from one `user.primaryUsername`; the order
+ *    only has to be STABLE, not clever.
  *
  * Neither half can promote a name nobody owns. Verification runs afterwards and
  * is unconditional, so this only decides which claim gets TESTED — its worst
  * outcome is under-showing a real name, which is invisible and self-correcting.
  */
-export function rosterClaimsFor(
+export function broadcastClaimsFor(
   addresses: readonly string[],
   rostersBySpace: Record<string, Record<string, RosterNameRow>>,
+  conversationClaims: Record<string, string>,
 ): Record<string, string> {
+  if (!addresses.length) return EMPTY_BROADCAST_CLAIMS;
   const spaceIds = Object.keys(rostersBySpace).sort();
-  if (!spaceIds.length || !addresses.length) return EMPTY_ROSTER_CLAIMS;
 
   const out: Record<string, string> = {};
   for (const address of addresses) {
     let claim: string | undefined;
+
     for (const spaceId of spaceIds) {
       const raw = rostersBySpace[spaceId]?.[address]?.claimed_primary_username;
       if (raw === undefined || raw === null) continue;
@@ -113,19 +129,58 @@ export function rosterClaimsFor(
         claim = '';
         break;
       }
-      // Rule 2: keep the first, but keep scanning — a later space may still
+      // Rule 2: keep the first, but keep scanning — a later source may still
       // carry the un-election that outranks it.
       if (claim === undefined) claim = trimmed;
     }
+
+    // The DM row, scanned last and under the same two rules. `in` rather than
+    // a truthiness check: an empty entry here is an un-election, and reading
+    // it as "no claim" is exactly the bug the presence rule exists to prevent.
+    if (claim !== '' && address in conversationClaims) {
+      const trimmed = (conversationClaims[address] ?? '').trim();
+      if (!trimmed) claim = '';
+      else if (claim === undefined) claim = trimmed;
+    }
+
     if (claim !== undefined) out[address] = claim;
   }
 
-  return Object.keys(out).length ? out : EMPTY_ROSTER_CLAIMS;
+  return Object.keys(out).length ? out : EMPTY_BROADCAST_CLAIMS;
 }
 
 /** Stable empty reference, so a scope with no claims does not hand its memos a
  *  fresh object every render. */
-const EMPTY_ROSTER_CLAIMS: Record<string, string> = {};
+const EMPTY_BROADCAST_CLAIMS: Record<string, string> = {};
+
+/**
+ * DM partners' broadcast claims, keyed by address, from the conversation rows.
+ *
+ * Presence-preserving on purpose: a row whose `claimed_primary_username` is an
+ * empty string yields an empty entry, NOT a missing one, because empty is an
+ * un-election. A row that has never carried the field yields no entry at all.
+ *
+ * First row wins for a repeated address, matching `conversationLocalNames` — so
+ * the most recent conversation's claim is the one considered.
+ */
+export function conversationClaimsFrom(
+  conversations:
+    | readonly { address?: string | null; claimed_primary_username?: string | null }[]
+    | undefined,
+): Record<string, string> {
+  if (!conversations?.length) return EMPTY_BROADCAST_CLAIMS;
+
+  const out: Record<string, string> = {};
+  for (const c of conversations) {
+    const address = (c?.address ?? '').trim();
+    const raw = c?.claimed_primary_username;
+    if (!address || raw === undefined || raw === null) continue;
+    if (address in out) continue;
+    out[address] = raw.trim();
+  }
+
+  return Object.keys(out).length ? out : EMPTY_BROADCAST_CLAIMS;
+}
 
 interface IdentityContextValue {
   sources: IdentitySources;
@@ -154,12 +209,26 @@ export const IdentityScopeProvider: React.FunctionComponent<{
    *  gets the global ladder even when an ancestor is scoped to a Space. */
   spaceId?: string;
   rostersBySpace: Record<string, Record<string, RosterNameRow>>;
+  /**
+   * DM partners' UNVERIFIED broadcast claims, address -> claimed name, from
+   * `conversationClaimsFrom`. Empty string means un-elected; a missing key
+   * means the DM transport said nothing.
+   *
+   * A prop rather than part of `IdentitySources`, deliberately: `IdentitySources`
+   * must have nowhere to put an unverified claim, which is what makes it
+   * impossible for a downstream consumer to render one. That does mean a NESTED
+   * scope cannot inherit these from its parent the way it inherits rosters —
+   * acceptable today because the root scope is the only provider mounted, and
+   * it is the one holding the conversations.
+   */
+  conversationClaims?: Record<string, string>;
   selfAddress: string | null;
   locallyKnownNames?: Record<string, string>;
   children: React.ReactNode;
 }> = ({
   spaceId,
   rostersBySpace,
+  conversationClaims = EMPTY_BROADCAST_CLAIMS,
   selfAddress,
   locallyKnownNames = EMPTY_LOCAL_NAMES,
   children,
@@ -246,19 +315,20 @@ export const IdentityScopeProvider: React.FunctionComponent<{
   // ── TWO transports, one checkpoint ──────────────────────────────────────
   //
   // A claim arrives either on a fetched public profile (`primary_username`) or
-  // over the space/DM broadcast, stored on the local roster row
-  // (`claimed_primary_username`). The public-profile route is dead server-side
-  // — the API rejects every publish carrying the field — so the broadcast is
-  // the only one that currently delivers anything, and a ladder reading only
-  // profiles renders no `.q` for anyone.
+  // over the space/DM broadcast, stored locally as `claimed_primary_username`
+  // — on a space member row for a space, on the conversation row for a DM. The
+  // public-profile route is dead server-side (the API rejects every publish
+  // carrying the field), so the broadcast is the only one that currently
+  // delivers anything, and a ladder reading only profiles renders no `.q` for
+  // anyone.
   //
   // Both are untrusted and both go through the SAME check below. This adds an
   // INPUT, not a second decision point: there is still exactly one place that
   // writes `verifiedQnsNames`, and `IdentitySources` still has nowhere to put
   // an unverified claim.
-  const rosterClaims = React.useMemo(
-    () => rosterClaimsFor(addresses, mergedRostersBySpace),
-    [addresses, mergedRostersBySpace],
+  const broadcastClaims = React.useMemo(
+    () => broadcastClaimsFor(addresses, mergedRostersBySpace, conversationClaims),
+    [addresses, mergedRostersBySpace, conversationClaims],
   );
 
   // One row per requested address carrying both transports, so the name that
@@ -271,11 +341,11 @@ export const IdentityScopeProvider: React.FunctionComponent<{
       rows[address] = {
         address,
         primary_username: profiles[address]?.primary_username,
-        claimed_primary_username: rosterClaims[address],
+        claimed_primary_username: broadcastClaims[address],
       };
     }
     return rows;
-  }, [addresses, profiles, rosterClaims]);
+  }, [addresses, profiles, broadcastClaims]);
 
   const claimedNames = React.useMemo(
     () => claimedNamesIn(Object.values(claimRows)),

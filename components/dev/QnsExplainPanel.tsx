@@ -52,11 +52,20 @@ function overlayNameFor(address: string): string | undefined {
 }
 
 /**
- * The broadcast claim this address carries on any roster row.
+ * The broadcast claim this address carries, on any roster row OR on the DM
+ * conversation row.
  *
- * `undefined` when no space carried the field at all — distinct from `''`,
+ * `undefined` when nothing carried the field at all — distinct from `''`,
  * which is an un-election. A present-and-empty claim anywhere wins, matching
- * how the app settles a member whose spaces disagree.
+ * how the app settles a member whose sources disagree.
+ *
+ * **The conversation row is not optional here.** The same broadcast lands in
+ * two different places: a space member row for a space, the conversation row
+ * for a DM (`WebSocketContext`'s `dm-update-profile` handler). A panel that
+ * scanned only rosters would report "no claim" for every DM-only partner —
+ * i.e. it would say the feature is broken precisely in the case it was built
+ * for, which is worse than having no panel. Mirrors `broadcastClaimsFor`'s
+ * scan order: spaces first, then the conversation.
  */
 async function broadcastClaimFor(address: string): Promise<string | undefined> {
   let found: string | undefined;
@@ -74,6 +83,22 @@ async function broadcastClaimFor(address: string): Promise<string | undefined> {
     if (!trimmed) return ''; // un-election ends the scan
     if (found === undefined) found = trimmed;
   }
+
+  try {
+    const { conversations } = await getMMKVAdapter().getConversations({ type: 'direct' });
+    const row = (
+      conversations as unknown as { address?: string; claimed_primary_username?: string | null }[]
+    ).find((c) => c?.address === address);
+    const raw = row?.claimed_primary_username;
+    if (raw !== undefined && raw !== null) {
+      const trimmed = raw.trim();
+      if (!trimmed) return '';
+      if (found === undefined) found = trimmed;
+    }
+  } catch {
+    // Same rule as an unreadable roster: it tells us nothing, it is not an answer.
+  }
+
   return found;
 }
 
