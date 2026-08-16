@@ -394,6 +394,40 @@ icons come back exactly as they were?"
 > Before writing any new navigation-header, chrome or composer code, read
 > `.agents/docs/ios-ui-pitfalls-android-only-testing.md`.
 
+### 14. Account screen: the sticky nav pill row under rubber-band scrolling 🔲
+**▶ Ask:** "Open the Account tab. Scroll down: the profile card should slide away and the
+Profile/Premium/Settings pill row should stop at the top and stay there. Then (a) while the
+row is pinned, tap a different pill — does the page jump back to the very top, with the
+profile card visible again? And (b) back at the very top of the list, pull DOWN hard and let
+go. Does the pill row stretch, detach, float over the profile card, or leave a gap while the
+list bounces back?"
+**Pass:** (a) the new section always starts at the top, with no leftover offset from the
+previous one; (b) the row pins flush to the top on the way down, and during the bounce it
+stays attached to the content, with the background behind it opaque at all times.
+**Fail:** for (a) note whether it stayed mid-page or animated visibly; for (b) note whether
+the row stretched, hovered, or let content show through it.
+
+**Context (agent):**
+- **What/when:** shipped with the account single-page-scroll change (branch
+  `feat/settings-single-page-scroll-sticky-pills`, 2026-08-16). Android-only so far.
+- **The change:** [UnifiedProfileScreen.tsx](../../components/UnifiedProfileScreen.tsx) now
+  wraps the profile card, the pill row and the section body in ONE `ScrollView` with
+  `stickyHeaderIndices={[1]}`. [ProfileModal.tsx](../../components/ProfileModal.tsx) takes a
+  new `externalScroll` prop that makes its section body a plain `View`, so there is exactly
+  one vertical scroller on the page. Because the sections now SHARE that scroller, changing
+  section rewinds it to `y: 0` — otherwise the new section inherits the old one's offset.
+- **Why iOS may differ:** `stickyHeaderIndices` is the one `ScrollView` feature with a
+  genuinely different implementation per platform. iOS drives it natively and combines it
+  with **rubber-band overscroll**, which Android does not have (Android shows a glow/stretch
+  instead). The pull-down-and-release case therefore has no Android equivalent to observe.
+- **If it FAILS:** the usual fix is to move the sticky row's padding and background onto the
+  wrapper (already done — `styles.pillRowSticky`) and, failing that, to give the wrapper an
+  explicit height so the native sticky implementation has a fixed box to pin.
+- **Structural regressions are covered by a test**, so this item is only about the *visual*
+  behaviour: `__tests__/migrated/UnifiedProfileScreenScroll.test.tsx` fails if the sticky
+  index stops pointing at the pill row, if `externalScroll` is dropped, if the rewind stops
+  firing on a section change, or if it starts firing on every render.
+
 ---
 
 ## Verified
@@ -402,4 +436,4 @@ _(none yet — move ✅ items here with the date + tester)_
 
 ---
 
-*Last updated: 2026-08-10*
+*Last updated: 2026-08-16*
