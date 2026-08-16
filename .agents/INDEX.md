@@ -166,6 +166,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [The broadcast marked itself done before doing anything](issues/.done/2026-08-09-a-profile-change-could-silently-never-reach-anyone.md)
 - 🐛 [The invite contact picker renders an unresolved name](issues/.done/2026-08-10-invite-contact-picker-renders-an-unresolved-name.md)
 - 🐛 [The profile modal's bio is read raw, so it vanishes for any member the sender merge never touched](issues/.done/2026-08-11-profile-modal-bio-is-read-raw-so-it-vanishes-for-any-unmerged-member.md)
+- 🐛 [Photoless users all render as the same Quorum mark](issues/.done/2026-08-16-photoless-users-all-render-as-the-same-quorum-mark.md)
 - 🐛 [Space mention notifications bake names at write time, so a `.q` never renders there](issues/.done/2026-08-16-space-mention-notifications-bake-names-at-write-time-so-no-q-ever-renders.md)
 - 📋 [Channel reorder mutations should broadcast (not local-only)](issues/.done/2026-05-29-channel-reorder-mutations-should-broadcast.md)
 - 📋 [Port DM update-profile (identity sync over DM sessions) from desktop](issues/.done/2026-06-09-port-dm-update-profile-from-desktop.md)
@@ -283,4 +284,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-16 15:34:44
+**Last Updated**: 2026-08-16 16:09:26
