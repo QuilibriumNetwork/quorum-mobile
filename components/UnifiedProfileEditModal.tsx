@@ -364,6 +364,11 @@ export default function UnifiedProfileEditModal({
           <CachedAvatar
             source={avatar ? { uri: avatar } : null}
             style={styles.avatar}
+            // Tracks the name field live, so clearing your photo previews the
+            // initials you will actually get rather than a generic placeholder.
+            fallbackName={displayName}
+            // Inside a ScrollView, mounted once — no recycling to shimmer.
+            transition={100}
           />
           <View style={styles.avatarBadge}>
             <IconSymbol name="camera.fill" size={14} color="#fff" />

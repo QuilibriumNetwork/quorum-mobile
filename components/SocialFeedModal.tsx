@@ -3186,7 +3186,9 @@ function ThreadDetailView({
                 <View style={{ marginRight: Skin.space(12) }}>
                   <CachedAvatar
                     source={replyAvatarUri ? { uri: replyAvatarUri } : null}
-                    fallbackName={currentUser?.displayName || currentUser?.farcaster?.username}
+                    // Last rung is 'You', matching the label directly below —
+                    // `''` would render "?" beside text reading "You".
+                    fallbackName={currentUser?.displayName || currentUser?.farcaster?.username || 'You'}
                     style={{
                       width: 44,
                       height: 44,
@@ -4688,7 +4690,6 @@ type SearchResultItem =
   | { type: 'channel'; data: SearchChannel; key: string }
   | { type: 'cast'; data: SearchCast; key: string };
 
-const AVATAR_FALLBACK = require('../assets/images/quorum-symbol-bg-blue.png');
 // Default cast length for non-Pro users (Pro limits fetched dynamically)
 const DEFAULT_CAST_LENGTH = 320;
 
@@ -5096,13 +5097,15 @@ const FeedPostCard = React.memo(function FeedPostCard({
       <Pressable onPress={navigateToThread} style={styles.postHeader}>
         <TouchableOpacity onPress={navigateToProfile} style={styles.avatarContainer}>
           <ApexAvatarRing active={authorIsApex} size={44}>
-            {/* expo-image: off-thread decode + cache so avatars don't stall scroll. */}
-            <ExpoImage
-              source={post.authorAvatar ? { uri: post.authorAvatar } : AVATAR_FALLBACK}
+            {/* CachedAvatar, not a bare ExpoImage: this row used to fall back to
+                the shared Quorum mark, so every photoless author in the feed
+                rendered as the same blue square. `memory-disk` is kept because
+                this is the long feed people scroll back through. */}
+            <CachedAvatar
+              source={post.authorAvatar ? { uri: post.authorAvatar } : null}
               style={styles.avatar}
+              fallbackName={post.authorName}
               cachePolicy="memory-disk"
-              recyclingKey={post.authorAvatar ?? `fallback-${post.authorFid}`}
-              transition={0}
             />
           </ApexAvatarRing>
           {!isFollowing && post.authorFid > 0 && (

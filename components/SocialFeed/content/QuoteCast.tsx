@@ -33,6 +33,7 @@ export function QuoteCast({ cast, theme, onPress }: QuoteCastProps) {
           <CachedAvatar
             source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
             style={styles.avatar}
+            fallbackName={cast.author.displayName || cast.author.username}
           />
           <Text style={styles.displayName}>
             {cast.author.displayName}

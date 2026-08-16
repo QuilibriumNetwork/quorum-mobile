@@ -5,6 +5,7 @@
  * showing the cast author, text, and images.
  */
 
+import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useFarcasterThread, parseFarcasterUrl, type ThreadCast } from '@/hooks/useFarcasterThread';
 import { useTheme, type AppTheme } from '@/theme';
@@ -183,13 +184,13 @@ export function FarcasterCastCard({ url, cast: providedCast, channelKey, fullWid
       )}
       {/* Header with author info */}
       <View style={styles.header}>
-        <Image
-          source={
-            cast.author.pfp?.url
-              ? { uri: cast.author.pfp.url }
-              : require('../../assets/images/quorum-symbol-bg-blue.png')
-          }
+        {/* CachedAvatar, not a bare Image: this used to fall back to the shared
+            Quorum mark, so every photoless cast author rendered identically.
+            Name matches the label to the right of it. */}
+        <CachedAvatar
+          source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
           style={styles.avatar}
+          fallbackName={cast.author.displayName || cast.author.username}
         />
         <View style={styles.authorInfo}>
           <Text style={styles.displayName} numberOfLines={1}>

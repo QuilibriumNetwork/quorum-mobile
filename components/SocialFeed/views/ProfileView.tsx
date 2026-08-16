@@ -98,6 +98,11 @@ export function ProfileView({
               <CachedAvatar
                 source={author.pfp?.url ? { uri: author.pfp.url } : null}
                 style={styles.avatar}
+                fallbackName={author.displayName || author.username}
+                // Mounts once as the list header, never recycled, and it is the
+                // largest photo on the screen — so the fade earns its keep here
+                // where it would only shimmer in a scrolling row.
+                transition={100}
               />
             </TouchableOpacity>
             <ProfileOverflowButton targetFid={fid} username={author.username} theme={theme} />
@@ -212,6 +217,7 @@ export function ProfileView({
               <CachedAvatar
                 source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
                 style={styles.castAvatar}
+                fallbackName={cast.author.displayName || cast.author.username}
               />
             </TouchableOpacity>
             <View style={staticStyles.flex1}>

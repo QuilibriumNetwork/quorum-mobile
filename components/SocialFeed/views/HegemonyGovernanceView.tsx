@@ -68,6 +68,7 @@ function ReplyThread({
                   <CachedAvatar
                     source={{ uri: r.authorPfpUrl }}
                     style={{ width: 16, height: 16, borderRadius: Skin.circleOrSquare(8), backgroundColor: theme.colors.surface3 }}
+                    fallbackName={r.authorDisplayName || r.authorUsername}
                   />
                 )}
                 <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(12), fontWeight: '600' }}>
@@ -192,6 +193,7 @@ export function HegemonyGovernanceView({ theme, token }: { theme: AppTheme; toke
                 <CachedAvatar
                   source={{ uri: c.authorPfpUrl }}
                   style={{ width: 28, height: 28, borderRadius: Skin.circleOrSquare(14), backgroundColor: theme.colors.surface3 }}
+                  fallbackName={c.authorDisplayName || c.authorUsername || `fid:${c.authorFid}`}
                 />
               )}
               <Text style={{ color: theme.colors.textMain, fontWeight: '600', fontSize: Skin.font(13) }}>

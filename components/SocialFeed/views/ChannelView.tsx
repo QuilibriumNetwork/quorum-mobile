@@ -203,6 +203,7 @@ export function ChannelView({
               <CachedAvatar
                 source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
                 style={styles.castAvatar}
+                fallbackName={cast.author.displayName || cast.author.username}
               />
             </TouchableOpacity>
             <View style={staticStyles.flex1}>

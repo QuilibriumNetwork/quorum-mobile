@@ -140,6 +140,7 @@ export default function ComposeChannelPickerModal({
                   <CachedAvatar
                     source={item.imageUrl ? { uri: item.imageUrl } : null}
                     style={styles.avatar}
+                    fallbackName={item.name}
                   />
                   <View style={styles.rowText}>
                     <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>

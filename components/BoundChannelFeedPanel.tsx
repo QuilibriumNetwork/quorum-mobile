@@ -294,6 +294,7 @@ function CastRow({
       <CachedAvatar
         source={cast.author?.pfp?.url ? { uri: cast.author.pfp.url } : null}
         style={[castRowStyles.avatar, { backgroundColor: theme.colors.surface3 }]}
+        fallbackName={cast.author?.displayName || cast.author?.username || ''}
       />
       <View style={castRowStyles.body}>
         <View style={castRowStyles.headerRow}>

@@ -154,6 +154,11 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
             borderRadius: Skin.circleOrSquare(18),
             backgroundColor: theme.colors.surface3,
           }}
+          // `username`, not `displayName`: the line under this avatar renders
+          // `by @{host.username}`, and the initials must come from the name
+          // actually on screen. A Farcaster identity, so it must never be
+          // routed through the Quorum member resolver.
+          fallbackName={host?.username || ''}
         />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text

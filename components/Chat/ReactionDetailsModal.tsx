@@ -216,7 +216,7 @@ export function ReactionDetailsModal({
               return (
                 <RowWrapper key={`${row.address}:${row.emoji}:${idx}`}>
                   {row.avatar ? (
-                    <CachedAvatar source={{ uri: row.avatar }} style={styles.avatar} />
+                    <CachedAvatar source={{ uri: row.avatar }} style={styles.avatar} fallbackName={row.displayName} />
                   ) : (
                     <DefaultAvatar resolvedName={row.displayName} address={row.address} size={36} style={styles.avatar} />
                   )}
