@@ -202,7 +202,9 @@ export function QnsExplainPanel() {
   });
 
   return (
-    <DevPanel title="Why no .q? (dev builds only)">
+    // No "(dev builds only)" in the title — `DevPanel` appends it itself (see
+    // its `title` prop docstring). Passing it here rendered the suffix twice.
+    <DevPanel title="Why no .q?">
       <DevRow
         label="Explain an address"
         hint="Paste a full Qm… address (copy it from a profile). Read cache answers what the APP currently knows — including whether it ever fetched at all, which Fetch now would destroy."
