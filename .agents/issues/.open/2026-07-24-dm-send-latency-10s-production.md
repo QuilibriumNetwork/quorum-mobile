@@ -3,7 +3,7 @@ type: bug
 title: "DM send takes ~10-11s — reproduces in production (live app + preview build), not dev-only"
 status: open
 created: 2026-07-24
-updated: 2026-07-24
+updated: 2026-08-16
 severity: medium-high (every DM takes ~10s to send for the affected account; pending a fresh-account test to confirm whether all users are hit or only churn-affected accounts)
 area: DM send path / native crypto bridge (quorum-crypto) / encryption-state storage / device registration fetch
 related:
@@ -12,6 +12,18 @@ related:
 ---
 
 # DM send takes ~10-11s (production, not dev-only)
+
+## Status
+
+**2026-08-16 — partially fixed; verify what remains.** The 2026-07-27 recap
+recorded this as partially fixed by PR #176, with the remainder likely closed by
+PR #177, pending a verification that never happened. Measure whether the latency
+still reproduces before starting, rather than assuming either state.
+
+_Carried over from `RECAP.md`'s 2026-07-27 audit, which flagged this file as
+possibly stale. Recorded here so the caveat travels with the issue instead of
+living only in a dashboard that has to be regenerated to be believed._
+
 
 > **Capturing a round for this bug?** The DM diagnostic rig lives on the local,
 > never-pushed branch `diag/dm-frame-trace`; `master` carries none of it. Get onto

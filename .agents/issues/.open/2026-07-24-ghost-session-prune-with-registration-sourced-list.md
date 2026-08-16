@@ -3,11 +3,24 @@ type: task
 title: "Add ghost-session prune to DM sends using a registration-sourced device list"
 status: open
 created: 2026-07-24
+updated: 2026-08-16
 related:
   - "issues/.done/2026-07-24-dm-session-confirm-row-mismatch-x3dh-every-send.md (FIXED parent)"
 ---
 
 # Ghost-session prune (desktop parity), done safely
+
+## Status
+
+**2026-08-16 — may already be covered; verify before starting.** Flagged during
+the 2026-07-27 recap as possibly already handled by PRs #178 and #179, and never
+re-checked since. Confirm what those two actually landed before treating this as
+open work.
+
+_Carried over from `RECAP.md`'s 2026-07-27 audit, which flagged this file as
+possibly stale. Recorded here so the caveat travels with the issue instead of
+living only in a dashboard that has to be regenerated to be believed._
+
 
 Desktop prunes DM session rows whose tag matches no registered device inbox on every send
 (MessageService.ts ~L3081). Mobile's PR #177 deliberately shipped WITHOUT this prune: the code

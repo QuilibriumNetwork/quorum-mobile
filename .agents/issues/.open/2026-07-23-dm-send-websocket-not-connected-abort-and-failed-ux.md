@@ -3,6 +3,7 @@ type: bug
 title: "DM send aborts with 'WebSocket not connected' (~5%) — message never sent, and the failed-state UX has no retry"
 status: open
 created: 2026-07-23
+updated: 2026-08-16
 severity: HIGH (correctness: ~10-15% of DM sends never arrive — user-observed rate revised UP from 5% on 2026-07-23; UX: sender has no clear recovery)
 area: DM send path / WebSocket outbound / message send-status UI
 related:
@@ -12,6 +13,18 @@ related:
 ---
 
 # DM send aborts with "WebSocket not connected" + weak failed-state UX
+
+## Status
+
+**2026-08-16 — likely addressed; verify before starting.** The 2026-07-27 recap
+judged this likely fixed by PR #175 but never confirmed it. Note the two halves
+are separable: the abort itself may be fixed while the failed-state UX (no retry
+affordance) is untouched. Check both before closing.
+
+_Carried over from `RECAP.md`'s 2026-07-27 audit, which flagged this file as
+possibly stale. Recorded here so the caveat travels with the issue instead of
+living only in a dashboard that has to be regenerated to be believed._
+
 
 > **Capturing a round for this bug?** The DM diagnostic rig lives on the local,
 > never-pushed branch `diag/dm-frame-trace`; `master` carries none of it. Get onto

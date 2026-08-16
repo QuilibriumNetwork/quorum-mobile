@@ -3,6 +3,7 @@ type: task
 title: "Check SPACE/channel message sends for the same latency bugs found in DMs"
 status: open
 created: 2026-07-24
+updated: 2026-08-16
 related:
   - "issues/.open/2026-07-24-dm-send-latency-10s-production.md (the DM investigation; PR #176 shipped the caches)"
   - "issues/.done/2026-07-24-dm-session-confirm-row-mismatch-x3dh-every-send.md (DM session-confirm loop)"
@@ -10,6 +11,18 @@ related:
 ---
 
 # Audit space sends for the DM latency bugs
+
+## Status
+
+**2026-08-16 — may be moot; verify scope before starting.** Flagged during the
+2026-07-27 recap as possibly superseded by PR #175 (space append/send, Layer 1).
+Nobody re-checked. The first step is to confirm whether the latency described
+here still reproduces after #175, not to start the audit.
+
+_Carried over from `RECAP.md`'s 2026-07-27 audit, which flagged this file as
+possibly stale. Recorded here so the caveat travels with the issue instead of
+living only in a dashboard that has to be regenerated to be believed._
+
 
 The DM send path had three per-send taxes (measured 2026-07-24). Verify whether the space send
 path (`services/space/spaceMessageService.ts`, Triple Ratchet) shares them:

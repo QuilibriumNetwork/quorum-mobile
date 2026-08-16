@@ -4,6 +4,7 @@ title: "CenterModal: keyboard covers the input field AND footer buttons on small
 status: done
 severity: medium
 created: 2026-06-28
+updated: 2026-08-16
 found-on: Samsung Galaxy A40 (SM-A405FN, Android 11, ~320dp width)
 component: components/shared/CenterModal.tsx
 affects: TypeToConfirmModal (and any future CenterModal with a text input)
@@ -11,6 +12,21 @@ related: not caused by the button-consistency sweep — pre-existing; surfaced d
 ---
 
 # CenterModal keyboard overlap
+
+## Status
+
+**2026-08-16 — closed despite a standing flag that the closure was wrong.** The
+2026-07-27 recap flagged this as misfiled while its own frontmatter still said
+open, and recorded that **only a secondary issue was actually fixed** — the
+primary symptom, the keyboard covering the input and the footer buttons on small
+screens, was not. It is now `status: done` in `.done/`, and nothing records the
+primary symptom ever being addressed. Re-verify on a small screen before
+trusting this as closed.
+
+_Carried over from `RECAP.md`'s 2026-07-27 audit, which flagged this file as
+possibly stale. Recorded here so the caveat travels with the issue instead of
+living only in a dashboard that has to be regenerated to be believed._
+
 
 ## Symptom
 On a small device (Galaxy A40), opening a center-anchored confirmation modal that contains a

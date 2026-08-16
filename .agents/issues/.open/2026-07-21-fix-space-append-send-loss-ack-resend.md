@@ -3,7 +3,7 @@ type: task
 title: "Fix space mobile→desktop send loss: resend log-append on missing hub ack (H-B) — LAYER 2"
 status: open
 created: 2026-07-21
-updated: 2026-07-24
+updated: 2026-08-16
 severity: high
 area: WebSocket transport / space hub-log send path (MOBILE-ONLY)
 parent: "issues/.archived/2026-07-24-transport-reliability-START-HERE.md"
@@ -23,6 +23,18 @@ related:
 > the decrypted `log-since-result` stream and resend if it doesn't. See START-HERE for the summary.
 
 # Fix space send-side loss (H-B): resend `log-append` on missing ack
+
+## Status
+
+**2026-08-16 — newly unblocked, needs a re-check.** This was deliberately gated
+on Layer 1, which shipped as PR #175. The 2026-07-27 recap flagged it as newly
+unblocked pending a quick re-check of whether Layer 1 changed the shape of the
+remaining work. That re-check has not happened.
+
+_Carried over from `RECAP.md`'s 2026-07-27 audit, which flagged this file as
+possibly stale. Recorded here so the caveat travels with the issue instead of
+living only in a dashboard that has to be regenerated to be believed._
+
 
 ## Problem (proven, not hypothetical)
 

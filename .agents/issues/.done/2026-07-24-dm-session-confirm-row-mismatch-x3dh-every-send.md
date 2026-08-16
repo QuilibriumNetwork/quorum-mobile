@@ -3,7 +3,7 @@ type: bug
 title: "DM sessions never confirm: confirm writes to a state row the send path never reads, send path clobbers it back — full X3DH ×6 devices on every send"
 status: done
 created: 2026-07-24
-updated: 2026-07-24
+updated: 2026-08-16
 severity: high (sole remaining cause of DM send latency ~2-3s after the cache fixes; also generates 6 init envelopes per send = inbox spam / envelope hoard fuel)
 area: DM Double-Ratchet session lifecycle / encryption-state row schema
 related:
@@ -12,6 +12,20 @@ related:
 ---
 
 # DM sessions never confirm — the permanent re-init loop
+
+## Status
+
+**2026-08-16 — closed on a "likely fixed" judgement, not a confirmed one.** The
+2026-07-27 recap marked this as likely fixed by PR #177, and noted it was misfiled
+as open at the time. It is now `status: done` in `.done/`. The load-bearing word
+was "likely": nothing records that anyone confirmed X3DH stopped repeating on
+every send. Worth one deliberate check, because the symptom is expensive and
+silent.
+
+_Carried over from `RECAP.md`'s 2026-07-27 audit, which flagged this file as
+possibly stale. Recorded here so the caveat travels with the issue instead of
+living only in a dashboard that has to be regenerated to be believed._
+
 
 ## Measured symptom
 Every DM send on the test pairing logs `session split: newSession=0 existingSession=6` and all

@@ -3,6 +3,7 @@ type: task
 title: "Fix mobile DM delivery receipts: outgoing messageId differs between stored and wire copy"
 status: done
 created: 2026-07-24
+updated: 2026-08-16
 priority: medium
 effort: small — single-file fix in useSendDirectMessage.ts, verify with two-device test
 symptom: delivery receipts (✓) never appear for messages sent mobile → desktop; read receipts (✓✓) work both ways; desktop → mobile delivery works
@@ -10,6 +11,20 @@ area: hooks/chat/useSendDirectMessage.ts
 ---
 
 # Mobile DM delivery receipts broken — outgoing messageId mismatch
+
+## Status
+
+**2026-08-16 — closed after being flagged for verification; the check may never
+have happened.** The 2026-07-27 recap listed this as ready-but-verify-scope-first,
+on the grounds that PRs #171, #172 and #181 might already cover it. It has since
+been marked `status: done` and moved to `.done/`. Whether that closure followed
+the verification or simply overtook it is recorded nowhere. If delivery receipts
+misbehave again, start by re-opening this.
+
+_Carried over from `RECAP.md`'s 2026-07-27 audit, which flagged this file as
+possibly stale. Recorded here so the caveat travels with the issue instead of
+living only in a dashboard that has to be regenerated to be believed._
+
 
 ## Symptom (observed)
 
