@@ -27,6 +27,7 @@ This is the main index for all documentation, bug reports, and task management.
 ### In Progress
 
 - 🐛 [Space calls never start, and every failed start leaves a permanent banner](issues/2026-08-10-space-calls-dead-endpoints-and-stale-banner.md)
+- 🐛 [A persisted query cache turns the claim-records Map into `{}` and crashes the channel screen](issues/2026-08-14-persisted-query-cache-turns-a-map-into-an-object-and-crashes-the-channel.md)
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
 - 📋 [Mobile Identity Resolution Implementation Plan](issues/2026-08-11-mobile-identity-resolution-plan.md)
@@ -279,4 +280,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-14 11:05:56
+**Last Updated**: 2026-08-16 09:53:40
