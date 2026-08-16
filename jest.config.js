@@ -2,11 +2,25 @@
 // Uses the jest-expo preset for RN/Expo module resolution + babel transform.
 module.exports = {
   preset: 'jest-expo',
-  testMatch: ['**/__tests__/**/*.test.ts', '**/*.test.ts'],
+  // `.tsx` as well as `.ts`, so a test can RENDER a screen and assert on what it
+  // displays — not only call a function and check its return value.
+  //
+  // The distinction is not academic. Every name-resolution test here was green
+  // while `ShareInviteSheet` rendered a raw, unresolved name, because they all
+  // exercised the resolver and nothing exercised the screen. A component that
+  // never CALLS the resolver is invisible to a function-level test by
+  // construction, and that is the defect class this whole area keeps producing.
+  //
+  // Before this, a `.tsx` test would not have failed — it would not have RUN,
+  // which is worse, because the suite still reports green.
+  testMatch: ['**/__tests__/**/*.test.ts?(x)', '**/*.test.ts?(x)'],
   // Disabled to avoid a Watchman named-pipe failure in some local Windows
   // environments (mirrors metro.config.js useWatchman:false). Jest only uses
   // Watchman to speed up file discovery, so turning it off is behavior-safe.
   watchman: false,
+  // Native-module stubs that only a RENDER test needs. Deliberately NOT
+  // `setupFiles`, which jest-expo's preset owns — see the file's header.
+  setupFilesAfterEnv: ['<rootDir>/jest/setup-native.js'],
   moduleNameMapper: {
     // Project-root path alias (tsconfig "@/*" -> "./*"). Metro resolves this
     // from tsconfig; jest needs it spelled out.

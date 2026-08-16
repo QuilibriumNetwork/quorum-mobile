@@ -171,6 +171,21 @@ export function coerceMessagePreview(value: unknown): MessagePreview {
 /**
  * Sender name helper — returns the sender's display name when possible, or
  * a short-form of the address otherwise.
+ *
+ * Stays on the pure `resolveMemberName` rather than `@/identity` on purpose.
+ * Its only two callers (`WebSocketContext.tsx`'s live and catch-up receive
+ * handlers, feeding both the space-activity preview and the mentions/replies
+ * log via `logMentionOrReply`) run on the WebSocket message-receive path,
+ * outside any React tree — there is no component above them to own a hook,
+ * so `useResolvedMemberName`'s network-backed verification is simply
+ * unreachable from here. `resolveMemberName` has no verification of its own
+ * either, and would render a `.q` for whatever sits in a row's
+ * `primary_username`. What keeps that safe on this path is that
+ * `WebSocketContext.tsx`'s roster-update handler never writes an incoming
+ * claim to that field — only to `claimed_primary_username`, which this
+ * function (like `resolveMemberName`) does not read. See
+ * `logMentionOrReply.ts`'s own header for the fuller picture, and
+ * `messageSenderName.test.ts` for both halves of the proof.
  */
 export function messageSenderName(
   senderAddress: string | undefined,

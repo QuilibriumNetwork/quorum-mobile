@@ -9,10 +9,12 @@ import { composerBottomBusySV } from '@/services/ui/composerPanelVisible';
 import BrowserLink from '@/components/BrowserLink';
 import { haptics } from '@/utils/haptics';
 import {
-  resolveMemberName,
   resolveMemberAvatar,
-  formatResolvedName,
+  resolveMemberBio,
 } from '@/utils/resolveMemberName';
+import { useNameResolver } from '@/identity';
+import { formatResolvedName } from '@/identity/useResolvedName';
+import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import { useToast } from '@/context/ToastContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
@@ -362,6 +364,18 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   );
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { showToast } = useToast();
+
+  // The message header name, resolved through `@/identity` rather than the
+  // caller-supplied `item.userName` (precomputed upstream by
+  // `toDisplayMessage` through the older, non-React seam — see that file).
+  // `resolve` is a plain function, safe to call from a per-row render
+  // callback; only the `useNameResolver()` hook call itself lives here, at
+  // the top, per the "never a hook per list item" rule.
+  const { resolve, requestNames } = useNameResolver();
+  const resolveDisplayName = useCallback(
+    (address: string) => formatResolvedName(resolve(address, { spaceId })),
+    [resolve, spaceId]
+  );
   const [viewerImage, setViewerImage] = useState<string | null>(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
   const [actionSheetMessageId, setActionSheetMessageId] = useState<string | null>(null);
@@ -688,14 +702,14 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     if (member) {
       onUserPress({
         userId,
-        userName: formatResolvedName(resolveMemberName(member)),
+        userName: resolveDisplayName(userId),
         userAvatar: resolveMemberAvatar(member),
-        bio: member.bio,
+        bio: resolveMemberBio(member),
         farcasterFid: member.farcasterFid,
         farcasterUsername: member.farcasterUsername,
       });
     }
-  }, [memberMap, onUserPress]);
+  }, [memberMap, onUserPress, resolveDisplayName]);
 
   // Apex gold ring — batched "is this sender Apex-active?" lookup over the
   // distinct sender addresses of the loaded messages. Degrades silently to
@@ -705,6 +719,36 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
     [messages]
   );
   const apexAddresses = useApexStatusForAddresses(senderAddresses);
+
+  // Enrich the message headers' name resolution with a public-profile fetch,
+  // so a sender's verified `.q` can actually appear (without this, `resolve`
+  // above only ever sees tiers already in memory — the per-space roster and
+  // whatever another surface happened to fetch first).
+  //
+  // This is a highest-traffic, non-windowed-by-address surface: FlashList
+  // only MOUNTS visible rows, but `messages` is every message loaded this
+  // session (grows via `onLoadMore`), and a channel's distinct-sender count
+  // is bounded by the SPACE's membership, not by the conversation — the same
+  // "space roster" shape `qnsLookupAddresses`'s own docstring refuses to
+  // fetch uncapped. Capped at `MAX_QNS_LOOKUPS`, the same shared cap
+  // `ShareInviteSheet.tsx`/`SocialFeedModal.tsx` use for an unbounded
+  // DM-partner set — reusing it here avoids a second, independently
+  // drifting magic number for the same class of fetch-storm risk.
+  // `requestNames` dedupes against addresses already requested, so this is
+  // a no-op on every render except when a genuinely new distinct sender
+  // enters the loaded set. `messages` is oldest-first, so the MOST RECENTLY
+  // active senders are collected by walking from the end — an overflow past
+  // the cap drops the OLDEST distinct senders' `.q`, not the newest.
+  const enrichableSenderAddresses = useMemo(() => {
+    const recentFirst: { address: string }[] = [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      recentFirst.push({ address: messages[i].userId });
+    }
+    return qnsLookupAddresses(recentFirst, MAX_QNS_LOOKUPS);
+  }, [messages]);
+  useEffect(() => {
+    requestNames(enrichableSenderAddresses);
+  }, [enrichableSenderAddresses, requestNames]);
 
   // Helper to render tappable avatar
   const renderAvatar = useCallback(
@@ -722,9 +766,9 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
             }) | undefined;
             onUserPress({
               userId: item.userId,
-              userName: item.userName,
+              userName: resolveDisplayName(item.userId),
               userAvatar: typeof item.userAvatar === 'string' ? item.userAvatar : undefined,
-              bio: member?.bio,
+              bio: member ? resolveMemberBio(member) : undefined,
               farcasterFid: member?.farcasterFid,
               farcasterUsername: member?.farcasterUsername,
             });
@@ -740,7 +784,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
           {avatarSource ? (
             <CachedAvatar source={avatarSource} style={styles.messageAvatar} />
           ) : (
-            <DefaultAvatar displayName={item.userName} address={item.userId} size={40} style={styles.messageAvatar} />
+            <DefaultAvatar resolvedName={resolveDisplayName(item.userId)} address={item.userId} size={40} style={styles.messageAvatar} />
           )}
         </ApexAvatarRing>
       );
@@ -755,7 +799,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
 
       return avatarContent;
     },
-    [styles.messageAvatar, styles.messageAvatarRing, onUserPress, memberMap, apexAddresses]
+    [styles.messageAvatar, styles.messageAvatarRing, onUserPress, memberMap, apexAddresses, resolveDisplayName]
   );
 
   // onStartReached fires when scrolling toward the top (older messages)
@@ -1180,7 +1224,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
             <View style={styles.messageContent}>
               {!isCompact && (
               <View style={styles.messageHeader}>
-                <Text style={styles.messageUser} numberOfLines={1}>{item.userName}</Text>
+                <Text style={styles.messageUser} numberOfLines={1}>{resolveDisplayName(item.userId)}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
                 {renderUnsignedWarning(item)}
               </View>
@@ -1214,6 +1258,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   enableTranslate
                   customEmojis={customEmojis}
                   members={members}
+                  spaceId={spaceId}
                   channels={channels}
                   roles={roles}
                   everyoneAuthorized={isEveryoneAuthorized(item)}
@@ -1237,7 +1282,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, renderAvatar, renderUnsignedWarning, renderCompactIndicators, renderReceipt, renderMediaReceipt, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, compactMessageIds]
+    [styles, renderReactions, renderAvatar, renderUnsignedWarning, renderCompactIndicators, renderReceipt, renderMediaReceipt, handleMessageLongPress, handleImagePress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, customEmojis, members, spaceId, channels, roles, isEveryoneAuthorized, currentUserId, theme, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, compactMessageIds, resolveDisplayName]
   );
 
   // Render sticker message
@@ -1257,7 +1302,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
             <View style={styles.messageContent}>
               {!isCompact && (
               <View style={styles.messageHeader}>
-                <Text style={styles.messageUser} numberOfLines={1}>{item.userName}</Text>
+                <Text style={styles.messageUser} numberOfLines={1}>{resolveDisplayName(item.userId)}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
                 {renderUnsignedWarning(item)}
               </View>
@@ -1285,7 +1330,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, renderReactions, stickerMap, renderAvatar, renderUnsignedWarning, renderCompactIndicators, handleMessageLongPress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, compactMessageIds]
+    [styles, renderReactions, stickerMap, renderAvatar, renderUnsignedWarning, renderCompactIndicators, handleMessageLongPress, MESSAGE_IMAGE_MAX_WIDTH, highlightedMessageId, highlightAnimStyle, compactMessageIds, resolveDisplayName]
   );
 
   // Helper to get reply preview from parent message
@@ -1385,7 +1430,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
             <View style={styles.messageContent}>
               {!isCompact && (
               <View style={styles.messageHeader}>
-                <Text style={styles.messageUser} numberOfLines={1}>{item.userName}</Text>
+                <Text style={styles.messageUser} numberOfLines={1}>{resolveDisplayName(item.userId)}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
                 {/* No per-message pinned/bookmarked glyph. Both states have a
                     dedicated surface (PinnedMessagesPanel / BookmarksPanel), and
@@ -1421,6 +1466,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                     enableTranslate
                     customEmojis={customEmojis}
                     members={members}
+                    spaceId={spaceId}
                     channels={channels}
                     roles={roles}
                     everyoneAuthorized={isEveryoneAuthorized(item)}
@@ -1441,6 +1487,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
                   enableTranslate
                   customEmojis={customEmojis}
                   members={members}
+                  spaceId={spaceId}
                   channels={channels}
                   roles={roles}
                   everyoneAuthorized={isEveryoneAuthorized(item)}
@@ -1498,7 +1545,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
         </Pressable>
       );
     },
-    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedInline, renderCompactIndicators, renderReceipt, receiptRead, showUnsignedToast, scrollToMessageWithHighlight, customEmojis, members, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds]
+    [styles, theme, onRetryMessage, onJoinSpace, onOpenFarcasterCast, renderReactions, renderAvatar, renderUnsignedInline, renderCompactIndicators, renderReceipt, receiptRead, showUnsignedToast, scrollToMessageWithHighlight, customEmojis, members, spaceId, channels, roles, isEveryoneAuthorized, currentUserId, onUserPress, handleMentionPress, onChannelLinkPress, onLinkPress, highlightedMessageId, highlightAnimStyle, getReplyPreview, handleMessageLongPress, compactMessageIds, resolveDisplayName]
   );
 
   const renderCast = useCallback(
@@ -1692,6 +1739,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
       }
       members={members}
       customEmojis={customEmojis}
+      spaceId={spaceId}
       onUserPress={
         onUserPress
           ? (address) => {
@@ -1704,9 +1752,9 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               if (member) {
                 onUserPress({
                   userId: address,
-                  userName: formatResolvedName(resolveMemberName(member)),
+                  userName: resolveDisplayName(address),
                   userAvatar: resolveMemberAvatar(member),
-                  bio: member.bio,
+                  bio: resolveMemberBio(member),
                   farcasterFid: member.farcasterFid,
                   farcasterUsername: member.farcasterUsername,
                 });

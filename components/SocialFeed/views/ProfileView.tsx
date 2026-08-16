@@ -116,7 +116,9 @@ export function ProfileView({
             <Text style={styles.username}>
               @{author.username}
             </Text>
-            <QuorumIdentityBadge fid={author.fid} theme={theme} />
+            {/* One badge per screen mount — the profile being viewed, not a
+                list row — so an unconditional enrich is always bounded. */}
+            <QuorumIdentityBadge fid={author.fid} theme={theme} enrich />
           </View>
 
           {/* Bio */}
@@ -228,7 +230,11 @@ export function ProfileView({
               <Text style={styles.castMeta}>
                 @{cast.author.username} • {formatTimestamp(cast.timestamp)}
               </Text>
-              <QuorumIdentityBadge fid={cast.author.fid} theme={theme} compact />
+              {/* Safe to enrich unconditionally: this row only exists while
+                  mounted inside the FlashList below, which only mounts the
+                  currently-visible window — unlike ThreadDetailView's plain
+                  ScrollView, there is no unbounded-fan-out risk here. */}
+              <QuorumIdentityBadge fid={cast.author.fid} theme={theme} compact enrich />
             </View>
           </View>
         </Pressable>

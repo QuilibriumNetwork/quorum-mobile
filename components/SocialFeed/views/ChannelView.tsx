@@ -216,7 +216,11 @@ export function ChannelView({
               <Text style={styles.castAuthorMeta}>
                 @{cast.author.username} • {formatTimestamp(cast.timestamp)}
               </Text>
-              <QuorumIdentityBadge fid={cast.author.fid} theme={theme} compact />
+              {/* Safe to enrich unconditionally: this row only exists while
+                  mounted inside the FlashList below, which only mounts the
+                  currently-visible window — unlike ThreadDetailView's plain
+                  ScrollView, there is no unbounded-fan-out risk here. */}
+              <QuorumIdentityBadge fid={cast.author.fid} theme={theme} compact enrich />
             </View>
           </View>
         </Pressable>

@@ -12,6 +12,7 @@ import { ImageViewer, AutoHeightImage, ImageCarousel, VideoPlayer, YouTubeEmbed,
 import { CastText, LinkPreview, QuoteCast, FrameEmbed, LikeIcon, getLikeIconType, SnapEmbed, useSnapDetection, SnapIcon } from '../content';
 import { QuorumIdentityBadge } from '../content/QuorumIdentityBadge';
 import { SCREEN_HEIGHT, formatTimestamp, lookupUserByUsername } from '../utils';
+import { MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
@@ -76,6 +77,34 @@ export function ThreadDetailView({
   const [revealedBlocked, setRevealedBlocked] = useState<Set<string>>(() => new Set());
   const { fids: blockedFids } = useBlockedFids();
   const { fids: mutedFids } = useMutedFids();
+
+  // Bounds how many casts' `QuorumIdentityBadge` may fetch a public profile.
+  // Unlike ChannelView/ProfileView, this screen's casts render inside a
+  // plain, non-windowed ScrollView (below) — every parent, the main cast,
+  // and every reply mounts at once, so nothing here bounds badge count the
+  // way FlashList windowing does elsewhere. Thread size is controlled by
+  // whoever posted, not by the viewer, so an unbounded cap here is a
+  // fetch storm waiting for a large enough thread.
+  //
+  // The cap is keyed on the cast's AUTHOR FID rather than on address, unlike
+  // `qnsLookupAddresses` elsewhere: a fid only maps to a Quorum address
+  // asynchronously, inside the badge's own `useQuorumIdentityForFid` lookup,
+  // so the address isn't known here at all — only the fid is, synchronously,
+  // off the cast itself. Capping on fid first is at least as tight: each fid
+  // resolves to at most one address, so at most `MAX_QNS_LOOKUPS` distinct
+  // fids being eligible can never let more than `MAX_QNS_LOOKUPS` distinct
+  // addresses reach an enrich fetch. Ordered context-first (parents, then
+  // the focused cast, then replies) to match the screen's own render order,
+  // so an overflow drops the LATEST replies' `.q`, not the thread's context.
+  const enrichableFids = useMemo(() => {
+    const ordered = [...parentCasts, ...(mainCast ? [mainCast] : []), ...replies];
+    const out = new Set<number>();
+    for (const cast of ordered) {
+      if (out.size >= MAX_QNS_LOOKUPS) break;
+      if (cast.author.fid > 0) out.add(cast.author.fid);
+    }
+    return out;
+  }, [parentCasts, mainCast, replies]);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -235,7 +264,12 @@ export function ThreadDetailView({
             <Text style={styles.usernameTimestamp}>
               @{cast.author.username} • {formatTimestamp(cast.timestamp)}
             </Text>
-            <QuorumIdentityBadge fid={cast.author.fid} theme={theme} compact />
+            <QuorumIdentityBadge
+              fid={cast.author.fid}
+              theme={theme}
+              compact
+              enrich={enrichableFids.has(cast.author.fid)}
+            />
           </View>
         </View>
 

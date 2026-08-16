@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 import { useSpaceCall } from '@/context/SpaceCallContext';
 import { useToast } from '@/context/ToastContext';
+import { useNameResolver } from '@/identity';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import type { CallQuality } from '@/services/calling/webrtc-manager';
@@ -90,6 +91,14 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
   const [elapsed, setElapsed] = useState(0);
   const [callStartTime] = useState(() => Date.now());
 
+  // Called once here (not per grid item — see the participant map below), and
+  // reused for the single "waiting for others" placeholder too, so this file
+  // has exactly one resolution mechanism rather than a second hook alongside
+  // it for the bounded single site.
+  const { resolve } = useNameResolver();
+  const firstParticipant = state.participants[0];
+  const firstParticipantName = firstParticipant ? resolve(firstParticipant).name : undefined;
+
   // Elapsed timer
   useEffect(() => {
     const interval = setInterval(() => {
@@ -159,7 +168,11 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
           />
         ) : (
           <View style={styles.videoPlaceholder}>
-            <DefaultAvatar address={state.participants[0] ?? 'space'} size={96} />
+            {/* Named when a participant is already in the room and we're just
+                waiting on their video track; the neutral placeholder when the
+                room is genuinely empty — no member to attach a name or colour
+                to yet. */}
+            <DefaultAvatar resolvedName={firstParticipantName} address={firstParticipant} size={96} />
             <Text style={styles.placeholderText}>
               Waiting for others...
             </Text>
@@ -285,7 +298,12 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
         <View style={styles.avatarGrid}>
           {state.participants.length === 0 ? (
             <View style={styles.avatarItem}>
-              <DefaultAvatar address="space" size={80} />
+              {/* Empty room, nobody has joined yet — this is not a member
+                  avatar (the old `address="space"` was never a real address,
+                  just a string that happened to seed a colour), so it
+                  deliberately carries no name and no address: the neutral
+                  placeholder is the honest rendering of "nobody here". */}
+              <DefaultAvatar size={80} />
               <Text style={[styles.avatarLabel, { color: theme.colors.textSubtle }]}>
                 Waiting...
               </Text>
@@ -304,7 +322,7 @@ export function SpaceCallScreen({ onMinimize }: SpaceCallScreenProps) {
                       ],
                     ]}
                   >
-                    <DefaultAvatar address={participant} size={64} />
+                    <DefaultAvatar resolvedName={resolve(participant).name} address={participant} size={64} />
                   </View>
                 </View>
               );

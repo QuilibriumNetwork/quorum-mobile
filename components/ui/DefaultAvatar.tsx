@@ -6,11 +6,11 @@
  * person keeps the same colour everywhere in the app and on desktop, so the
  * avatar carries a little identity of its own rather than being decoration.
  *
- * Prefer a real display name over an address. Initials from a name are
- * recognisable ("AR" for "Ada Rivera"); initials from an address are two
- * arbitrary characters of a hash, which is only marginally better than
- * nothing. The `address` prop exists for call sites that genuinely have no
- * name to offer.
+ * Initials come ONLY from the resolved name being shown as the label right
+ * beside this avatar — never from the address. An address-derived initial
+ * ("Q" from `Qm7f3a…`) belongs to nobody and disagrees with whatever name the
+ * label actually shows. When there is no resolved name, `AvatarInitials`
+ * renders its neutral "?" glyph rather than guessing from the address.
  *
  * No network calls — colour and initials are both computed locally.
  *
@@ -23,18 +23,25 @@ import { type StyleProp, type ViewStyle } from 'react-native';
 import { AvatarInitials } from '@/components/ui/AvatarInitials';
 
 interface DefaultAvatarProps {
-  /** Preferred: the user's display name. Drives recognizable initials + color. */
-  displayName?: string;
-  /** Fallback for call sites that only have an address. */
+  /** The name already resolved (and shown) for this member. No fallback to
+   *  an address happens here — pass the exact string being displayed as the
+   *  label, or leave it undefined for the neutral placeholder. */
+  resolvedName?: string;
+  /** Unused by this component — no fallback derives from it. Kept so call
+   *  sites that already have an address (for other reasons, e.g. keying a
+   *  list row) don't need to strip it just to satisfy this prop list. */
   address?: string;
   size: number;
   style?: StyleProp<ViewStyle>;
 }
 
-export function DefaultAvatar({ displayName, address, size, style }: DefaultAvatarProps) {
-  // Prefer the display name; fall back to address so call sites not yet
-  // migrated keep rendering something rather than breaking.
-  const name = displayName || address || '';
+export function DefaultAvatar({ resolvedName, size, style }: DefaultAvatarProps) {
+  // No address fallback. Initials from `Qm7f3a…` are a letter belonging to
+  // nobody, rendered beside a label showing the member's real name. When
+  // there is no name, a neutral placeholder is honest and initials are not.
+  // The `.q` is stripped because getInitials splits on non-letters and would
+  // otherwise make two initials out of one name.
+  const name = (resolvedName ?? '').replace(/\.q$/i, '').trim();
   return <AvatarInitials name={name} size={size} style={style} />;
 }
 

@@ -5,6 +5,7 @@ import { RTCView } from 'react-native-webrtc';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 import { useCall } from '@/context';
+import { useResolvedName } from '@/identity';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import type { CallQuality } from '@/services/calling';
@@ -73,6 +74,15 @@ export function InCallScreen() {
   const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(0);
 
+  // The call payload carries the counterparty's real address
+  // (`activeCall.recipientAddress`), not just a display-name string, so the
+  // screen resolves its own name instead of trusting whatever the caller
+  // stamped onto the payload at dial time. `global`: a call has no per-space
+  // nickname. `enrich`: bounded to exactly one address per call. Called
+  // unconditionally (before the `!activeCall` early return below) — hooks run
+  // every render regardless of call state.
+  const recipientName = useResolvedName(activeCall?.recipientAddress ?? '', { global: true, enrich: true });
+
   useEffect(() => {
     if (!activeCall?.startTime) return;
     const interval = setInterval(() => {
@@ -109,9 +119,9 @@ export function InCallScreen() {
           />
         ) : (
           <View style={[styles.remoteVideoPlaceholder, { backgroundColor: theme.colors.surface1 }]}>
-            <DefaultAvatar displayName={activeCall.recipientDisplayName} address={activeCall.recipientAddress} size={96} />
+            <DefaultAvatar resolvedName={recipientName} address={activeCall.recipientAddress} size={96} />
             <Text style={[styles.callerName, { color: theme.colors.text }]}>
-              {activeCall.recipientDisplayName}
+              {recipientName}
             </Text>
             <Text style={[styles.duration, { color: theme.colors.textSubtle }]}>
               {isConnecting ? 'Connecting...' : formatDuration(elapsed)}
@@ -184,9 +194,9 @@ export function InCallScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 60, paddingBottom: Skin.space(80) + insets.bottom, backgroundColor: theme.colors.background }]}>
       <View style={styles.callerInfo}>
-        <DefaultAvatar displayName={activeCall.recipientDisplayName} address={activeCall.recipientAddress} size={80} />
+        <DefaultAvatar resolvedName={recipientName} address={activeCall.recipientAddress} size={80} />
         <Text style={[styles.callerName, { color: theme.colors.text }]}>
-          {activeCall.recipientDisplayName}
+          {recipientName}
         </Text>
         <View style={qualityStyles.timerRow}>
           <Text style={[styles.duration, { color: theme.colors.textSubtle }]}>

@@ -23,7 +23,7 @@ Two render paths — this matters for the results:
 
 Values to reuse:
 - user address: @QmUserUserEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz
-- user bare name (no-markdown path only): @lamat
+- user bare name (no-markdown path only): @testuser
 - channel by name: #general
 - channel with a space in the name: #Test Channel
 
@@ -31,8 +31,8 @@ Values to reuse:
 A. MENTIONS — no-markdown path (plain messages)
 =============================================================
 
-hey @lamat are you around?
-→ @lamat is a blue pill (bare name resolved against members).
+hey @testuser are you around?
+→ @testuser is a blue pill (bare name resolved against members).
 
 ping @QmUserUserEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imz take a look
 → the address renders as a pill showing the member's display name.

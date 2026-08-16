@@ -165,8 +165,15 @@ export function claimedNamesIn(
  * public profile, which can only ever under-show or mis-show a name the user
  * did once claim — it cannot promote a name they never claimed, because the
  * verification below is unconditional either way.
+ *
+ * **Exported so `IdentityScopeProvider` applies this exact rule** rather than
+ * re-deriving it. The obvious re-derivation — `rosterClaim ?? profileClaim`, or
+ * any truthiness test — compiles, reads correctly, and silently drops the
+ * un-election case, because it cannot tell an empty claim from an absent one.
+ * One copy of the rule, in the file whose docstring explains why it is shaped
+ * this way.
  */
-function claimIn(row: Partial<ClaimingRow> | undefined): string {
+export function claimIn(row: Partial<ClaimingRow> | undefined): string {
   const broadcast = row?.claimed_primary_username;
   if (broadcast !== undefined && broadcast !== null) return broadcast.trim();
   return (row?.primary_username ?? '').trim();
@@ -346,7 +353,7 @@ const FakeQnsModule = __DEV__
   ? (require('@/services/dev/fakeQns') as typeof import('@/services/dev/fakeQns'))
   : null;
 
-const DEV_CLAIM_EXEMPTION: ClaimExemption | undefined = FakeQnsModule
+export const DEV_CLAIM_EXEMPTION: ClaimExemption | undefined = FakeQnsModule
   ? (name, address) => FakeQnsModule.isFakeClaimFor(name, address)
   : undefined;
 
@@ -360,8 +367,14 @@ const DEV_CLAIM_EXEMPTION: ClaimExemption | undefined = FakeQnsModule
  * beats bookkeeping to save part of it. If it ever does show up as a real cost,
  * seed per-name cache entries; do not shrink the TTL, which is a security
  * parameter.
+ *
+ * Exported so `IdentityScopeProvider` consumes this exact query rather than
+ * keeping its own copy. `staleTime` here is a SECURITY parameter, not a
+ * performance one (see above) — two copies of that policy would drift, and
+ * a shorter one in a duplicate would quietly widen the impersonation window
+ * without either copy's history explaining why.
  */
-function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord | null> {
+export function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord | null> {
   const namesKey = names.join('|');
 
   const { data } = useQuery({
@@ -388,7 +401,24 @@ function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord | null
     placeholderData: (previous) => previous,
   });
 
-  return data ?? NO_RECORDS;
+  // `data` is not necessarily a Map, however this function is typed.
+  //
+  // React Query's cache is persisted to MMKV as JSON (`app/_layout.tsx`), and
+  // `JSON.stringify(new Map([...]))` is `{}` — a plain object with no `.get`.
+  // Any entry written before this query was excluded from persistence
+  // rehydrates in that shape, and `settleClaim` then threw
+  // `records.get is not a function` on the first row carrying a claim, taking
+  // the whole channel screen down with it.
+  //
+  // The exclusion (see `app/_layout.tsx`) stops NEW ones being written; this
+  // guard is what makes an app that already has one on disk survive the
+  // upgrade, so it cannot be dropped once the exclusion is in place.
+  //
+  // Degrading to `NO_RECORDS` is the fail-closed direction: nothing verifies,
+  // so every claim renders as its global name until the query refetches. The
+  // alternative — trusting a shape we cannot read — is how an unverified claim
+  // would reach the screen.
+  return data instanceof Map ? data : NO_RECORDS;
 }
 
 /**

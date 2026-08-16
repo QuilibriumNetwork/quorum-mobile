@@ -18,11 +18,38 @@ import { truncateAddress } from '@/utils/formatAddress';
 import { ActionRow, ActionRowGroup } from '@/components/shared';
 import { useToast } from '@/context/ToastContext';
 import { useConversations } from '@/hooks/chat/useConversations';
+// Only the pure address-capping helper is used, not the hook itself. The hook
+// attaches an UNVERIFIED `primary_username` claim to each row for a caller
+// that trusts it after its own `useVerifiedQnsNames` pass; this screen instead
+// re-resolves every row through `identity/`'s own verification (`enrich`
+// below), so the hook's `primary_username` output would never be read — it
+// would just be a second, wasted network round trip. `MAX_QNS_LOOKUPS` is
+// still worth sharing: it is the SAME conversation list, so the same bound
+// on "how many partners is it worth looking up" applies here too, and a
+// second, independent magic number is exactly how the two would drift apart.
+import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import { useShareInvite } from '@/hooks/chat/useInviteManagement';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
+import { useResolvedName, useNameResolver } from '@/identity';
+// `formatResolvedName` is not re-exported from the `@/identity` barrel (only
+// the hooks and `<MemberName>` are), so it is imported from its owning module
+// directly. It stays the ONLY place a `.q` suffix is spelled out — this just
+// reaches it by a longer path, for the one call site (a toast, not a render)
+// that needs the formatted string outside of `<MemberName>`/`useResolvedName`.
+import { formatResolvedName } from '@/identity/useResolvedName';
 import { useTheme, type AppTheme } from '@/theme';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  type ImageStyle,
+  Pressable,
+  ScrollView,
+  StyleProp,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
@@ -32,6 +59,50 @@ interface ShareInviteSheetProps {
   onClose: () => void;
   inviteLink: string;
   spaceName: string;
+}
+
+interface ConversationRowProps {
+  address: string;
+  icon?: string;
+  avatarStyle: StyleProp<ImageStyle>;
+  sending: boolean;
+  accentColor: string;
+  /** Whether THIS row is inside the bounded set worth a profile fetch. See
+   *  `enrichableAddresses` below — every row renders regardless (the list is
+   *  a plain, non-windowed `ScrollView`), but only a capped subset fetches. */
+  enrich: boolean;
+  onPress: () => void;
+}
+
+/**
+ * Own component, not an inline `.map()` body: `useResolvedName` is a hook, and
+ * the number of conversations is not known until data loads, so it can only be
+ * called once per row-COMPONENT-INSTANCE, never inside a loop in one component.
+ *
+ * Global ladder, not the ambient scope: this sheet is opened from
+ * `SpaceSettingsModal` and `InviteModal`, and `SpaceSettingsModal` is a Space
+ * surface. Only one `IdentityScopeProvider` exists today (the global root in
+ * `app/_layout.tsx`), so there is no per-space nickname to leak yet — but a DM
+ * partner is never that Space's roster member, so this stays `global: true`
+ * defensively rather than relying on today's absence of a nested scope.
+ */
+function ConversationRow({ address, icon, avatarStyle, sending, accentColor, enrich, onPress }: ConversationRowProps) {
+  const label = useResolvedName(address, { enrich, global: true });
+  return (
+    <ActionRow
+      leading={<CachedAvatar source={icon ? { uri: icon } : null} style={avatarStyle} />}
+      label={label}
+      sublabel={truncateAddress(address, 'medium')}
+      trailing={
+        sending ? (
+          <ActivityIndicator size="small" color={accentColor} />
+        ) : (
+          <IconSymbol name="paperplane.fill" size={16} color={accentColor} />
+        )
+      }
+      onPress={onPress}
+    />
+  );
 }
 
 export default function ShareInviteSheet({
@@ -47,6 +118,7 @@ export default function ShareInviteSheet({
   const { data: conversationsData, isLoading } = useConversations({ type: 'direct' });
   const sendDirectMessage = useSendDirectMessage();
   const shareInvite = useShareInvite();
+  const nameResolver = useNameResolver();
   const [sendingTo, setSendingTo] = useState<string | null>(null);
 
   // Slide-up animation. Mirrors what BaseModal does internally, but as
@@ -62,7 +134,9 @@ export default function ShareInviteSheet({
 
   // Flatten paginated conversations and keep only Quorum-native DMs (we
   // can't reliably round-trip a Farcaster DM send through this hook;
-  // those go via a separate path). Sort by most recent first.
+  // those go via a separate path). Sort by most recent first — most-recent-
+  // first order is what `qnsLookupAddresses` below relies on to decide WHICH
+  // partners are worth a request when the list is longer than the cap.
   const directConversations = useMemo(() => {
     if (!conversationsData) return [];
     const flat = conversationsData.pages.flatMap((p) => p.conversations);
@@ -71,7 +145,23 @@ export default function ShareInviteSheet({
       .sort((a, b) => b.timestamp - a.timestamp);
   }, [conversationsData]);
 
-  const handleSendToDM = async (conversationId: string, recipientAddress: string, displayName: string) => {
+  // This ScrollView is NOT windowed/virtualized (see below), so every cached
+  // conversation mounts a `ConversationRow` at once — and `useConversations`
+  // shares its query key with the Messages tab, so "every cached conversation"
+  // can be every page the user has ever scrolled through this session, not
+  // just what fits on screen. Bounding WHICH rows enrich, the same way
+  // `useConversationsWithQnsNames` bounds its own lookups, keeps a long
+  // inbox from turning one open of this sheet into one profile fetch per
+  // partner ever seen. Rows past the cap still render (from whatever the
+  // identity ladder already knows in memory); they simply do not trigger a
+  // fresh request, the same degradation `MAX_QNS_LOOKUPS`'s own docstring
+  // describes.
+  const enrichableAddresses = useMemo(
+    () => new Set(qnsLookupAddresses(directConversations, MAX_QNS_LOOKUPS)),
+    [directConversations],
+  );
+
+  const handleSendToDM = async (conversationId: string, recipientAddress: string) => {
     if (sendingTo) return; // guard against double-taps
     setSendingTo(conversationId);
     try {
@@ -81,10 +171,13 @@ export default function ShareInviteSheet({
         recipientAddress,
         text: message,
       });
+      // Global ladder: a DM partner's name must never leak a per-space
+      // nickname from whichever Space this sheet happens to be opened from.
+      const resolved = nameResolver.resolve(recipientAddress, { global: true });
       showToast({
         type: 'success',
         title: 'Invite sent',
-        message: `Sent to ${displayName || 'recipient'}`,
+        message: `Sent to ${formatResolvedName(resolved)}`,
       });
       onClose();
     } catch (e) {
@@ -162,24 +255,15 @@ export default function ShareInviteSheet({
               {directConversations.map((conv) => {
                 const sending = sendingTo === conv.conversationId;
                 return (
-                  <ActionRow
+                  <ConversationRow
                     key={conv.conversationId}
-                    leading={
-                      <CachedAvatar
-                        source={conv.icon ? { uri: conv.icon } : null}
-                        style={styles.avatar}
-                      />
-                    }
-                    label={conv.displayName || truncateAddress(conv.address)}
-                    sublabel={truncateAddress(conv.address, 'medium')}
-                    trailing={
-                      sending ? (
-                        <ActivityIndicator size="small" color={theme.colors.accent} />
-                      ) : (
-                        <IconSymbol name="paperplane.fill" size={16} color={theme.colors.accent} />
-                      )
-                    }
-                    onPress={() => handleSendToDM(conv.conversationId, conv.address, conv.displayName)}
+                    address={conv.address}
+                    icon={conv.icon}
+                    avatarStyle={styles.avatar}
+                    sending={sending}
+                    accentColor={theme.colors.accent}
+                    enrich={enrichableAddresses.has(conv.address)}
+                    onPress={() => handleSendToDM(conv.conversationId, conv.address)}
                   />
                 );
               })}

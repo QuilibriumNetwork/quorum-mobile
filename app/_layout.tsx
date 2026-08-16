@@ -29,7 +29,7 @@ installReactQueryRnBridges();
 import { LogBox } from 'react-native';
 LogBox.ignoreLogs([/WebSocket error/]);
 
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, defaultShouldDehydrateQuery } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { Slot, router, useSegments, useRootNavigationState } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -63,6 +63,7 @@ import { CallOverlay, SpaceCallOverlay } from '@/components/Call';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { queryConfig } from '@/services/api';
 import { queryPersister } from '@/services/offline';
+import { RootIdentityScope } from '@/identity/RootIdentityScope';
 import {
   initializeNotifications,
   registerBackgroundFetch,
@@ -331,6 +332,28 @@ export default function RootLayout() {
       persistOptions={{
         persister: queryPersister,
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        dehydrateOptions: {
+          // QNS claim verification is never persisted, for two independent
+          // reasons — either alone would be enough.
+          //
+          // 1. It cannot survive the trip. The query's data is a `Map`, and the
+          //    persister is JSON, so it rehydrates as `{}` with no `.get`.
+          //    That crashed the channel screen (`records.get is not a
+          //    function`) the moment any row carried a claim.
+          //
+          // 2. It must not survive the trip. That query's `staleTime` is a
+          //    documented SECURITY parameter — the window in which a name
+          //    transferred away keeps verifying under its previous owner. It is
+          //    one hour. Persisting the answers under a 24h `maxAge` silently
+          //    widens that window to a day, across restarts, which is exactly
+          //    the drift the `staleTime` comment in `useVerifiedQnsNames.ts`
+          //    warns a second copy of the policy would cause.
+          //
+          // Re-verifying on launch costs one batched request.
+          shouldDehydrateQuery: (query) =>
+            query.queryKey[0] !== 'qns-verify-claims' &&
+            defaultShouldDehydrateQuery(query),
+        },
       }}
     >
       <CustomThemeProvider defaultAccentColor="blue" defaultSkin={bootSkin} defaultAppearance={bootAppearance}>
@@ -341,9 +364,11 @@ export default function RootLayout() {
                 <SpaceCallProvider>
                   <CallProvider>
                     <ToastProvider>
-                      <AuthRouter />
-                      <CallOverlay />
-                      <SpaceCallOverlay />
+                      <RootIdentityScope>
+                        <AuthRouter />
+                        <CallOverlay />
+                        <SpaceCallOverlay />
+                      </RootIdentityScope>
                     </ToastProvider>
                   </CallProvider>
                 </SpaceCallProvider>

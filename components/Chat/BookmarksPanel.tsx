@@ -11,6 +11,9 @@ import { formatTime } from './types';
 import type { Bookmark } from '@quilibrium/quorum-shared';
 import type { AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
+import { MemberName } from '@/identity';
+import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
+import { getConversationSync } from '@/services/storage/mmkvAdapter';
 
 interface BookmarksPanelProps {
   visible: boolean;
@@ -35,6 +38,45 @@ export const BookmarksPanel = React.memo(function BookmarksPanel({
   const sortedBookmarks = useMemo(() => {
     return [...bookmarks].sort((a, b) => b.createdAt - a.createdAt);
   }, [bookmarks]);
+
+  // `bookmarks` is NOT filtered to one space or conversation — `useBookmarks()`
+  // loads every bookmark the user has ever made, across every space and every
+  // DM. Each row therefore resolves against ITS OWN `bookmark.spaceId` below,
+  // never a single ambient scope; the root `IdentityScopeProvider` already
+  // carries every space's roster, so no per-space lookup is needed here.
+
+  // A DM bookmark's `cachedPreview.sourceName` is a frozen partner name,
+  // written once by `DMChatArea.tsx`'s bookmark handler
+  // (`conversationData?.displayName || 'DM'`) and never updated. The write
+  // stays — this recovers the partner's ADDRESS instead, via a local,
+  // synchronous MMKV read (no network), so the source label can resolve
+  // through the same ladder as any other member. A bookmark whose
+  // conversation no longer exists locally has no address to resolve from,
+  // so it keeps the frozen string — the only case it is still load-bearing.
+  const dmSourceAddresses = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const b of sortedBookmarks) {
+      if (b.sourceType !== 'dm' || !b.conversationId) continue;
+      const conversation = getConversationSync(b.conversationId);
+      if (conversation?.address) map.set(b.bookmarkId, conversation.address);
+    }
+    return map;
+  }, [sortedBookmarks]);
+
+  // Bounded the same way ShareInviteSheet/ReactionDetailsModal bound their
+  // own fan-out: bookmarks are capped at 200 (BOOKMARKS_CONFIG.MAX_BOOKMARKS),
+  // well past MAX_QNS_LOOKUPS, so an unbounded profile fetch per row would be
+  // the fetch-storm this architecture exists to prevent. One shared cap
+  // across BOTH the sender addresses and the DM source addresses, so the
+  // panel's total fan-out stays a single bounded number rather than two.
+  const enrichableAddresses = useMemo(() => {
+    const rows: { address: string }[] = [];
+    for (const b of sortedBookmarks) {
+      if (b.cachedPreview?.senderAddress) rows.push({ address: b.cachedPreview.senderAddress });
+    }
+    for (const address of dmSourceAddresses.values()) rows.push({ address });
+    return new Set(qnsLookupAddresses(rows, MAX_QNS_LOOKUPS));
+  }, [sortedBookmarks, dmSourceAddresses]);
 
   const handleRemove = (bookmarkId: string) => {
     Alert.alert(
@@ -107,12 +149,32 @@ export const BookmarksPanel = React.memo(function BookmarksPanel({
                 </View>
                 <View style={styles.bookmarkContent}>
                   <View style={styles.bookmarkHeader}>
-                    <Text style={styles.bookmarkSender} numberOfLines={1}>
-                      {bookmark.cachedPreview?.senderName ?? 'Unknown'}
-                    </Text>
-                    <Text style={styles.bookmarkSource}>
-                      {bookmark.cachedPreview?.sourceName ?? ''}
-                    </Text>
+                    {bookmark.cachedPreview?.senderAddress ? (
+                      <MemberName
+                        address={bookmark.cachedPreview.senderAddress}
+                        spaceId={bookmark.spaceId}
+                        global={bookmark.sourceType === 'dm'}
+                        enrich={enrichableAddresses.has(bookmark.cachedPreview.senderAddress)}
+                        style={styles.bookmarkSender}
+                        numberOfLines={1}
+                      />
+                    ) : (
+                      <Text style={styles.bookmarkSender} numberOfLines={1}>
+                        Unknown
+                      </Text>
+                    )}
+                    {dmSourceAddresses.has(bookmark.bookmarkId) ? (
+                      <MemberName
+                        address={dmSourceAddresses.get(bookmark.bookmarkId)!}
+                        global
+                        enrich={enrichableAddresses.has(dmSourceAddresses.get(bookmark.bookmarkId)!)}
+                        style={styles.bookmarkSource}
+                      />
+                    ) : (
+                      <Text style={styles.bookmarkSource}>
+                        {bookmark.cachedPreview?.sourceName ?? ''}
+                      </Text>
+                    )}
                   </View>
                   <Text style={styles.bookmarkText} numberOfLines={2}>
                     {bookmark.cachedPreview?.textSnippet ?? ''}

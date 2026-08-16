@@ -1,5 +1,4 @@
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
-import { truncateAddress } from '@/utils/formatAddress';
 import ComposeChannelPickerModal from '@/components/ComposeChannelPickerModal';
 import { InviteLinkCard, containsInviteLink } from '@/components/Chat/InviteLinkCard';
 import type { ComposeCastOptions, ComposeCastResult } from '@/services/miniapp';
@@ -34,6 +33,14 @@ import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { SpaceIcon } from '@/components/ui/SpaceIcon';
 import { useAuth } from '@/context/AuthContext';
 import { useConversations, type ConversationWithPreview } from '@/hooks/chat/useConversations';
+// Only the pure address-capping helper is used, not the hook itself — see
+// `ShareInviteSheet.tsx`'s identical import for why: this picker re-resolves
+// every Quorum row through `@/identity`'s own verification (`enrich` below)
+// rather than trusting a `primary_username` claim attached upstream.
+// `MAX_QNS_LOOKUPS` bounds the SAME kind of list (a DM inbox), so the same
+// cap applies here rather than a second, independently-drifting magic number.
+import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
+import { useResolvedName } from '@/identity';
 import { useFarcasterConversations, useSendFarcasterDirectCast } from '@/hooks/chat/useFarcasterDirectCasts';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
 import { useSendSpaceMessage } from '@/hooks/chat/useSendSpaceMessage';
@@ -509,7 +516,84 @@ const shareToChatStyles = {
   },
 };
 
-function ShareToChatModal({
+interface ShareToChatDMRowProps {
+  conv: (ConversationWithPreview | { farcasterParticipantFids?: number[] }) & {
+    conversationId: string;
+    address?: string;
+    displayName?: string;
+    icon?: string;
+    farcasterUsername?: string;
+  };
+  theme: AppTheme;
+  enrich: boolean;
+  onPress: () => void;
+}
+
+/**
+ * A genuine Quorum DM row. Own component, not an inline closure in the
+ * `.map()` below — `useResolvedName` is a hook, callable only once per row
+ * COMPONENT INSTANCE, never inside a loop body in one shared component.
+ *
+ * Global ladder: this sheet opens from the Farcaster feed, which has no
+ * Space of its own, so there is no per-space nickname to prefer here — same
+ * reasoning as `ShareInviteSheet.tsx`'s identical `ConversationRow`.
+ */
+function QuorumShareRow({ conv, theme, enrich, onPress }: ShareToChatDMRowProps) {
+  const label = useResolvedName(conv.address ?? '', { enrich, global: true });
+  return (
+    <ActionRow
+      key={conv.conversationId}
+      leading={
+        <View style={shareToChatStyles.dmAvatar(theme)}>
+          {conv.icon ? (
+            <Image source={{ uri: conv.icon }} style={shareToChatStyles.dmAvatarImage} />
+          ) : (
+            <IconSymbol name="person.fill" size={20} color={theme.colors.textMuted} />
+          )}
+        </View>
+      }
+      label={label}
+      onPress={onPress}
+    />
+  );
+}
+
+/**
+ * A Farcaster DM row. Unrouted through the member resolver on purpose: a
+ * Farcaster conversation's `address` is a synthetic `fid:<n>` string, not a
+ * Quorum member's — resolving it through `@/identity` would treat that
+ * synthetic value as a real address and render whatever (if anything)
+ * happened to be at that key, i.e. somebody else's name. `displayName` /
+ * `farcasterUsername` here are Farcaster's own fields, already correct.
+ */
+function FarcasterShareRow({ conv, theme, onPress }: Omit<ShareToChatDMRowProps, 'enrich'>) {
+  const showHandle = !!conv.farcasterUsername && conv.displayName !== conv.farcasterUsername;
+  return (
+    <ActionRow
+      key={conv.conversationId}
+      leading={
+        <View style={shareToChatStyles.dmAvatar(theme)}>
+          {conv.icon ? (
+            <Image source={{ uri: conv.icon }} style={shareToChatStyles.dmAvatarImage} />
+          ) : (
+            <IconSymbol name="person.fill" size={20} color={theme.colors.textMuted} />
+          )}
+        </View>
+      }
+      label={conv.displayName || conv.farcasterUsername || 'Unknown'}
+      sublabel={showHandle ? `@${conv.farcasterUsername}` : undefined}
+      trailing={<FarcasterLogoIcon size={16} color="#855DCD" />}
+      onPress={onPress}
+    />
+  );
+}
+
+// Exported (this file has no barrel — every other top-level symbol here is a
+// default-exported screen or a private helper) so it is render-testable in
+// isolation, the same reason `ProfileView` below already is: mounting the
+// full `SocialFeedModal` default export would drag in the whole feed's data
+// layer for a test that is only about this DM/space picker.
+export function ShareToChatModal({
   visible,
   castUrl,
   theme,
@@ -543,6 +627,16 @@ function ShareToChatModal({
     const farcasterWithSource = farcasterConversations.map(conv => ({ ...conv, source: 'farcaster' as const }));
     return [...quorumWithSource, ...farcasterWithSource].sort((a, b) => b.timestamp - a.timestamp);
   }, [quorumConversations, farcasterConversations]);
+
+  // Bounds which QUORUM rows are worth a profile fetch when the merged list
+  // is longer than the cap — same reasoning as `ShareInviteSheet`. Farcaster
+  // rows are never in this set: `qnsLookupAddresses` filters to Quorum
+  // addresses internally, and a Farcaster row's `fid:<n>` address would not
+  // pass that filter even if it were not already excluded by `source`.
+  const enrichableAddresses = useMemo(
+    () => new Set(qnsLookupAddresses(allDMs, MAX_QNS_LOOKUPS)),
+    [allDMs],
+  );
 
   const spaces = spacesData ?? [];
 
@@ -701,32 +795,20 @@ function ShareToChatModal({
                   <ActionRowGroup style={shareToChatStyles.group}>
                     {allDMs.map((conv: any) => {
                       const isFarcaster = conv.source === 'farcaster';
-                      const showHandle =
-                        isFarcaster && conv.farcasterUsername && conv.displayName !== conv.farcasterUsername;
-                      return (
-                        <ActionRow
+                      return isFarcaster ? (
+                        <FarcasterShareRow
                           key={conv.conversationId}
-                          leading={
-                            <View style={shareToChatStyles.dmAvatar(theme)}>
-                              {conv.icon ? (
-                                <Image source={{ uri: conv.icon }} style={shareToChatStyles.dmAvatarImage} />
-                              ) : (
-                                <IconSymbol name="person.fill" size={20} color={theme.colors.textMuted} />
-                              )}
-                            </View>
-                          }
-                          label={
-                            conv.displayName ||
-                            (isFarcaster ? conv.farcasterUsername : truncateAddress(conv.address)) ||
-                            'Unknown'
-                          }
-                          sublabel={showHandle ? `@${conv.farcasterUsername}` : undefined}
-                          trailing={
-                            isFarcaster ? (
-                              <FarcasterLogoIcon size={16} color="#855DCD" />
-                            ) : undefined
-                          }
-                          onPress={() => (isFarcaster ? handleSelectFarcasterDM(conv) : handleSelectDM(conv))}
+                          conv={conv}
+                          theme={theme}
+                          onPress={() => handleSelectFarcasterDM(conv)}
+                        />
+                      ) : (
+                        <QuorumShareRow
+                          key={conv.conversationId}
+                          conv={conv}
+                          theme={theme}
+                          enrich={enrichableAddresses.has(conv.address)}
+                          onPress={() => handleSelectDM(conv)}
                         />
                       );
                     })}

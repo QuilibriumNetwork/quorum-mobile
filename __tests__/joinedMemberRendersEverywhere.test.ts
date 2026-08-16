@@ -163,19 +163,18 @@ describe('the same member once the server stops rejecting a .q', () => {
   it('lets the .q win everywhere the global name won before', () => {
     // The tier that is unreachable in production today. Tested so it does not
     // rot while it waits on the server fix.
+    //
+    // `resolveConversationTitle` is deliberately NOT exercised here any more:
+    // `ConversationIdentity` no longer has a `primary_username` field at all —
+    // a DM partner's `.q` now comes entirely from `@/identity` at the two
+    // screens that render one (see `conversationTitle.ts`'s own header), which
+    // this file (pure-function-only, no React) cannot reach.
     const withQns = { ...joinedRow(), primary_username: 'alice', address: JOINER };
 
     expect(formatResolvedName(resolveMemberName(withQns as never))).toBe('alice.q');
     expect(messageSenderName(JOINER, VIEWER, { [JOINER]: withQns as never })).toBe(
       'alice.q',
     );
-    expect(
-      resolveConversationTitle({
-        address: JOINER,
-        displayName: 'Alice',
-        primary_username: 'alice',
-      }),
-    ).toBe('alice.q');
   });
 
   it('arrives via the public profile, which is its only carrier', () => {

@@ -33,6 +33,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { flattenMessages, useMessages } from '@/hooks/chat/useMessages';
 import { useMembersWithPublicProfileFallback } from '@/hooks/useMembersWithPublicProfileFallback';
 import { useVerifiedQnsNamesInMap } from '@/hooks/useVerifiedQnsNames';
+import { useResolvedName } from '@/identity';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
 import { useSendDirectEmbedMessage } from '@/hooks/chat/useSendDirectEmbedMessage';
 import { useSendDirectReaction, useRemoveDirectReaction } from '@/hooks/chat/useSendDirectReaction';
@@ -197,6 +198,11 @@ export const DMChatArea = React.memo(function DMChatArea({
   // most persuasive, because there is no roster to cross-check against.
   const fetchedDmMemberMap = useMembersWithPublicProfileFallback(dmMemberMap, dmVisibleAddresses);
   const effectiveDmMemberMap = useVerifiedQnsNamesInMap(fetchedDmMemberMap);
+
+  // The composer's channel-name hint. `global`: a DM has no per-space
+  // nickname. `enrich`: bounded to exactly one address per mount, so the
+  // profile fetch that makes a `.q` possible here is affordable.
+  const dmChannelName = useResolvedName(conversationData.address ?? '', { global: true, enrich: true });
 
   // Messages
   const dmMessages = useMemo(() => {
@@ -489,6 +495,11 @@ export const DMChatArea = React.memo(function DMChatArea({
           senderName: message.userName,
           textSnippet: message.content.slice(0, 100),
           messageDate: message.timestamp,
+          // Frozen deliberately — this is a cached preview, not a live label,
+          // and the write side stays as-is by design. BookmarksPanel's READ
+          // resolves the current name from `conversationId` at render time
+          // and only falls back to this string when that conversation is no
+          // longer known locally.
           sourceName: conversationData?.displayName || 'DM',
           contentType: message.renderType === 'embed' ? 'image' : message.renderType === 'sticker' ? 'sticker' : 'text',
           imageUrl: message.imageUrl,
@@ -557,7 +568,13 @@ export const DMChatArea = React.memo(function DMChatArea({
           value={messageText}
           onChangeText={setMessageText}
           onSend={handleSendDirectMessage}
-          channelName={conversationData.displayName || conversationData.address?.slice(0, 8) || 'DM'}
+          // NOTE: MessageInput destructures `channelName` (and `isDM`) but
+          // never reads either again — dead props, verified by grep across
+          // the whole component. This value is still computed through the
+          // resolver rather than hand-truncated, because the prop's contract
+          // says a resolved name and a caller-supplied fallback here would be
+          // wrong even though nothing currently renders it.
+          channelName={dmChannelName}
           isDM
           theme={theme}
           // Deliberately NOT bound to the send mutation's isPending. The

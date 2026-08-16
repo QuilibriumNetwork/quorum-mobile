@@ -45,7 +45,7 @@ the name:
 | name sent | does it resolve on QNS? | result |
 |---|---|---|
 | `gatto` | no — `GET names.quilibrium.com/resolve/gatto` is 404 | HTTP 400, error string above |
-| `lamat` | yes — resolves, to a *different* address | HTTP 400, **byte-identical** error string |
+| a genuinely registered name | yes — resolves, to a *different* address | HTTP 400, **byte-identical** error string |
 
 A working ownership check would have to distinguish those two. It does not, so
 the failure happens before the name is ever considered. `Get "./"` is a Go HTTP
@@ -58,7 +58,7 @@ user, however legitimately they own it.**
 
 ## What this explains
 
-- An account that genuinely owns `lamat`, with a public profile, has no
+- An account that genuinely owns a registered name, with a public profile, has no
   `primary_username` in its published record. Measured:
   `GET api.quorummessenger.com/users/QmVYRW…/public-profile` returns only
   `bio, display_name, profile_image, signature, timestamp`.

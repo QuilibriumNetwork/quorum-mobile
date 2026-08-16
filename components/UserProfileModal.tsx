@@ -4,6 +4,7 @@ import { MuteUserModal } from '@/components/MuteUserModal';
 import { BlockUserModal } from '@/components/BlockUserModal';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
+import { useResolvedName } from '@/identity';
 import { useTheme, type AppTheme } from '@/theme';
 import { useAuth } from '@/context';
 import { useToast } from '@/context/ToastContext';
@@ -22,10 +23,14 @@ import * as Skin from '@/theme/skins/geometry';
 
 export interface UserProfileInfo {
   userId: string;
+  /** Not read for the header render — the modal resolves its own name from
+   *  `userId` (+ the surrounding `spaceId`) via `@/identity`, the same way
+   *  `BlockUserModal`/`KickUserModal`/`MuteUserModal` do. Kept for callers
+   *  that build other UI (list rows, notifications) from the same object
+   *  before a profile is even opened. */
   userName: string;
   userAvatar?: string;
   bio?: string;
-  primaryUsername?: string;
   /** Farcaster linkage carried in the user's update-profile broadcast
    *  for this space. Surfaced as a tappable row that routes into the
    *  Farcaster feed at this user's profile. */
@@ -78,6 +83,18 @@ export default function UserProfileModal({
   const assignRoleMutation = useAssignRole();
   const removeRoleMutation = useRemoveFromRole();
 
+  // Resolved here rather than trusted from `user.userName`/`user.primaryUsername`
+  // — this is the ladder's one verified answer, not a caller-assembled
+  // display name next to an unverified `.q` claim. Feeds the header AND the
+  // role-removal confirmations below, so a destructive confirmation can never
+  // name this person differently from the header the user just looked at.
+  // `spaceId` may be undefined (a DM-opened profile has no space), which
+  // `useResolvedName` already treats as the global ladder. `user?.userId ??
+  // ''`: this hook must run every render, including the one before the
+  // `!user` guard below returns null. `enrich`: bounded to one address per
+  // mount, the same justification the moderation modals use.
+  const resolvedName = useResolvedName(user?.userId ?? '', { spaceId, enrich: true });
+
   const styles = createStyles(theme, isDark, insets);
 
   // Roles the user currently has
@@ -126,8 +143,8 @@ export default function UserProfileModal({
     const ok = await confirm({
       title: 'Remove Role',
       message: roleName
-        ? `Remove the "${roleName}" role from ${user.userName}? This change is visible to everyone in the space.`
-        : `Remove this role from ${user.userName}? This change is visible to everyone in the space.`,
+        ? `Remove the "${roleName}" role from ${resolvedName}? This change is visible to everyone in the space.`
+        : `Remove this role from ${resolvedName}? This change is visible to everyone in the space.`,
       confirmLabel: 'Remove',
     });
     if (!ok) return;
@@ -159,7 +176,7 @@ export default function UserProfileModal({
     const roleLabel = role ? role.displayName : 'this role';
     Alert.alert(
       'Remove role',
-      `Remove ${roleLabel} from ${user?.userName ?? 'this user'}?`,
+      `Remove ${roleLabel} from ${resolvedName}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Remove', style: 'destructive', onPress: () => { void removeRole(roleId); } },
@@ -218,6 +235,14 @@ export default function UserProfileModal({
   // Space owners can kick any member other than themselves
   const canKick = !!(isSpaceOwner && spaceId && !isSelf && !targetIsFormerMember);
 
+  // Personal block (viewer-side hide), gated on `spaceId` the same way
+  // Kick/Mute below are — `BlockUserModal` resolves the target's name
+  // scoped to this space, so rendering it without one would fall through to
+  // the global ladder silently rather than failing loudly. `onBlockUser` is,
+  // in practice, only ever passed by Space-context callers, but that is a
+  // caller convention, not something the type system enforces.
+  const canBlock = !!(onBlockUser && !isSelf && spaceId);
+
   // Moderation mute: gated on the VIEWER holding the `user:mute` role permission
   // (NOT isSpaceOwner — receivers can't verify ownership, so owners need a role
   // too; matches the receive-side check). Requires a channel to broadcast on.
@@ -252,13 +277,10 @@ export default function UserProfileModal({
             {hasValidAvatar ? (
               <Image source={{ uri: user.userAvatar }} style={styles.avatar} />
             ) : (
-              <DefaultAvatar displayName={user.userName} address={user.userId} size={100} style={styles.avatar} />
+              <DefaultAvatar resolvedName={resolvedName} address={user.userId} size={100} style={styles.avatar} />
             )}
           </View>
-          <Text style={styles.displayName}>{user.userName}</Text>
-          {user.primaryUsername && (
-            <Text style={styles.username}>@{user.primaryUsername}</Text>
-          )}
+          <Text style={styles.displayName}>{resolvedName}</Text>
           <TouchableOpacity
             onPress={handleCopyAddress}
             style={styles.addressRow}
@@ -376,7 +398,7 @@ export default function UserProfileModal({
         )}
 
         {/* Actions - styled as tappable rows */}
-        {((onStartDM && !isSelf) || (onBlockUser && !isSelf) || canModMute || canKick) && (
+        {((onStartDM && !isSelf) || canBlock || canModMute || canKick) && (
           <View style={styles.actionsContainer}>
             <ActionRowGroup>
               {onStartDM && !isSelf && (
@@ -392,7 +414,7 @@ export default function UserProfileModal({
               {/* Personal block (viewer-side hide). Hides this user's messages
                   from your own stream, only for you, only in this space.
                   Distinct from the moderation mute below. */}
-              {onBlockUser && !isSelf && (
+              {canBlock && (
                 <ActionRow
                   icon={isUserBlocked ? 'hand.raised.slash.fill' : 'hand.raised.fill'}
                   label={isUserBlocked ? 'Unblock' : 'Block'}
@@ -427,7 +449,6 @@ export default function UserProfileModal({
           visible={kickVisible}
           onClose={() => setKickVisible(false)}
           spaceId={spaceId!}
-          userName={user.userName}
           userIcon={hasValidAvatar ? user.userAvatar : undefined}
           userAddress={user.userId}
         />
@@ -438,23 +459,22 @@ export default function UserProfileModal({
           onClose={() => setMuteVisible(false)}
           spaceId={spaceId!}
           channelId={channelId!}
-          userName={user.userName}
           userIcon={hasValidAvatar ? user.userAvatar : undefined}
           userAddress={user.userId}
           isUnmuting={targetIsModMuted}
         />
       )}
-      {onBlockUser && !isSelf && (
+      {canBlock && (
         <BlockUserModal
           visible={blockVisible}
           onClose={() => setBlockVisible(false)}
           onConfirm={() => {
-            onBlockUser(user.userId);
+            onBlockUser!(user.userId);
             onClose();
           }}
-          userName={user.userName}
           userIcon={hasValidAvatar ? user.userAvatar : undefined}
           userAddress={user.userId}
+          spaceId={spaceId!}
           isUnblocking={!!isUserBlocked}
         />
       )}
@@ -491,13 +511,6 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
       color: theme.colors.textMain,
-      marginBottom: Skin.space(4),
-      textAlign: 'center',
-    },
-    username: {
-      fontSize: Skin.font(15),
-      fontFamily: theme.fonts.regular.fontFamily,
-      color: theme.colors.primary,
       marginBottom: Skin.space(4),
       textAlign: 'center',
     },

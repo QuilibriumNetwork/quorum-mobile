@@ -11,19 +11,26 @@ import { resetDMSession } from '@/hooks/chat/useSendDirectMessage';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { isValidAvatarUri } from '@/utils/validation';
 import { truncateAddress } from '@/utils/formatAddress';
+import { useResolvedName } from '@/identity';
 import * as Skin from '@/theme/skins/geometry';
 
 interface DMSettingsSheetProps {
   visible: boolean;
   onClose: () => void;
   conversationId: string;
-  displayName: string;
+  /** The DM partner's address. The sheet resolves its own display name from
+   *  this (global scope — a DM has no per-space nickname) rather than trusting
+   *  a name string the caller already computed, so the header AND the
+   *  destructive-action confirmations below can never disagree with the rest
+   *  of the app about who this conversation is with. */
+  address: string;
   theme: AppTheme;
-  /** When provided, the sheet shows the recipient's pfp + name above the title.
-   *  Used when opening the sheet from the messages list (long-press), where the
-   *  user has no other on-screen confirmation of which conversation they hit. */
+  /** Shows the recipient's pfp + name above the title. Used when opening the
+   *  sheet from the messages list (long-press), where the user has no other
+   *  on-screen confirmation of which conversation they hit. The in-chat gear
+   *  icon omits it — the header right above already shows the same identity. */
+  showRecipientHeader?: boolean;
   avatarUri?: string;
-  address?: string;
   onDeleteConversation?: () => void;
   /** Repudiability. The UI shows the inverse ("Always sign messages"): signing
    *  ON ⇔ isRepudiable false. Unset ⇒ signed by default. */
@@ -53,10 +60,10 @@ export function DMSettingsSheet({
   visible,
   onClose,
   conversationId,
-  displayName,
-  theme,
-  avatarUri,
   address,
+  theme,
+  showRecipientHeader = false,
+  avatarUri,
   onDeleteConversation,
   isRepudiable,
   onToggleRepudiable,
@@ -106,6 +113,14 @@ export function DMSettingsSheet({
   // tearing down this sheet (which is conditionally mounted by the parent).
   const [isConfirming, setIsConfirming] = useState(false);
 
+  // Resolved once, used for the header (when shown) AND the destructive-action
+  // confirmations below — the copy a user reads before confirming "block" or
+  // "delete" must be the same name every other surface in the app agrees on.
+  // `global`: a DM has no per-space nickname. `enrich`: bounded to exactly one
+  // address per mount, so the profile fetch that makes a `.q` possible here is
+  // affordable. Called before the early return below — hooks run every render.
+  const recipientName = useResolvedName(address, { global: true, enrich: true });
+
   if (!visible) return null;
 
   const guardedClose = () => {
@@ -117,7 +132,7 @@ export function DMSettingsSheet({
     setIsConfirming(true);
     const ok = await confirm({
       title: 'Delete Conversation',
-      message: `This will delete the conversation with ${displayName} from your device only. The other person will still have the conversation on their device.`,
+      message: `This will delete the conversation with ${recipientName} from your device only. The other person will still have the conversation on their device.`,
       confirmLabel: 'Delete',
     });
     setIsConfirming(false);
@@ -130,7 +145,7 @@ export function DMSettingsSheet({
     setIsConfirming(true);
     const ok = await confirm({
       title: 'Fix Encryption',
-      message: `This will reset the encryption session with ${displayName}. The next message will establish a fresh secure connection.\n\nUse this if messages are failing to send or decrypt.`,
+      message: `This will reset the encryption session with ${recipientName}. The next message will establish a fresh secure connection.\n\nUse this if messages are failing to send or decrypt.`,
       confirmLabel: 'Reset Session',
       variant: 'primary',
     });
@@ -147,22 +162,22 @@ export function DMSettingsSheet({
     <BaseModal visible={visible} onClose={guardedClose} showHandle scrollable>
       <View style={styles.container}>
         <View style={styles.header}>
-          {address != null && (
+          {showRecipientHeader && (
             isValidAvatarUri(avatarUri) ? (
               <Image source={{ uri: avatarUri }} style={styles.headerAvatar} />
             ) : (
-              <DefaultAvatar displayName={displayName} address={address} size={56} style={styles.headerAvatar} />
+              <DefaultAvatar resolvedName={recipientName} address={address} size={56} style={styles.headerAvatar} />
             )
           )}
-          {address != null && (
-            <Text style={styles.headerName} numberOfLines={1}>{displayName}</Text>
+          {showRecipientHeader && (
+            <Text style={styles.headerName} numberOfLines={1}>{recipientName}</Text>
           )}
-          {address != null && (
+          {showRecipientHeader && (
             <Text style={styles.headerAddress} numberOfLines={1}>
               {truncateAddress(address, 'long')}
             </Text>
           )}
-          <Text style={address != null ? styles.headerSubtitle : styles.headerText}>
+          <Text style={showRecipientHeader ? styles.headerSubtitle : styles.headerText}>
             Conversation Settings
           </Text>
         </View>

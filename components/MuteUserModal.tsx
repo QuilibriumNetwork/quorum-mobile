@@ -16,6 +16,7 @@ import { View, Text, StyleSheet, ActivityIndicator, Image, TextInput } from 'rea
 import { BaseModal } from '@/components/shared/BaseModal';
 import { ConfirmActions } from '@/components/shared/ConfirmActions';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
+import { useResolvedName } from '@/identity';
 import { useTheme, type AppTheme } from '@/theme';
 import { useModMuteUser } from '@/hooks/chat/useModMuteUser';
 import * as Skin from '@/theme/skins/geometry';
@@ -25,7 +26,6 @@ interface MuteUserModalProps {
   onClose: () => void;
   spaceId: string;
   channelId: string;
-  userName: string;
   userIcon?: string;
   userAddress: string;
   /** True = unmute flow (no duration); false/undefined = mute flow. */
@@ -39,7 +39,6 @@ export function MuteUserModal({
   onClose,
   spaceId,
   channelId,
-  userName,
   userIcon,
   userAddress,
   isUnmuting = false,
@@ -50,6 +49,11 @@ export function MuteUserModal({
   const [daysText, setDaysText] = useState('1');
 
   const { muteUser, unmuteUser } = useModMuteUser();
+
+  // Resolved here, not trusted from the caller — see BlockUserModal's
+  // identical comment. Mute is space-scoped, so a per-space nickname (if any)
+  // ranks above the target's `.q`. `enrich`: bounded to one address per mount.
+  const userName = useResolvedName(userAddress, { spaceId, enrich: true });
 
   useEffect(() => {
     if (!visible) {
@@ -110,7 +114,7 @@ export function MuteUserModal({
           {userIcon ? (
             <Image source={{ uri: userIcon }} style={styles.avatar} />
           ) : (
-            <DefaultAvatar displayName={userName} address={userAddress} size={40} />
+            <DefaultAvatar resolvedName={userName} address={userAddress} size={40} />
           )}
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>

@@ -142,6 +142,19 @@ python .agents/update-index.py
 3. Run the index update script
 4. Create documentation for significant changes
 
+## Key material
+
+Never widen where a private key, keyset or ratchet state can be observed — no unencrypted
+persistence, no logging, no notification payloads, no telemetry or crash payloads. This
+applies to features, not just debug helpers; the check is "does this line make a secret
+observable somewhere new?". Dev-only diagnostics must be **build-gated** (`if (__DEV__)`)
+and verified against a release build rather than the source. A `// debug only` comment is
+not a gate.
+
+MMKV in this app is **unencrypted** (`encryptionKey` is used nowhere) and
+`android:allowBackup="true"` sends it to cloud backups — key material belongs in
+SecureStore, never MMKV.
+
 ## DM diagnostic rig — `git debug`
 
 DM/transport instrumentation is **not on `master`** and must never be merged

@@ -17,8 +17,10 @@ import type { Conversation } from '@/hooks/chat';
 import { useDMConversationSettingsLoader } from '@/hooks/chat/useDMConversationSettings';
 import { useDMMute } from '@/hooks/chat/useDMMute';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
-import { useConversationsWithQnsNames } from '@/hooks/chat/useConversationsWithQnsNames';
+import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import { resolveConversationTitle } from '@/utils/conversationTitle';
+import { useNameResolver } from '@/identity';
+import { formatResolvedName } from '@/identity/useResolvedName';
 import { useStorageAdapter } from '@/context/StorageContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@quilibrium/quorum-shared';
@@ -90,7 +92,7 @@ const InboxRow = React.memo(function InboxRow({ item, styles, theme, onPress, on
         {isValidAvatarUri(item.icon) ? (
           <Image source={{ uri: item.icon }} style={styles.dmAvatar} />
         ) : (
-          <DefaultAvatar displayName={item.title} address={item.id} size={48} style={styles.dmAvatar} />
+          <DefaultAvatar resolvedName={item.title} address={item.id} size={48} style={styles.dmAvatar} />
         )}
         {item.isFarcaster && (
           <View style={styles.farcasterBadge}>
@@ -158,10 +160,23 @@ export default function MessagesInbox() {
     hasNextPage,
   } = useUnifiedConversations();
 
+  const conversations = rawConversations;
+
   // A `.q` name lives only in the partner's public profile, never on the
-  // conversation row, so without this the inbox can never show one. See the
-  // hook for why fetching is affordable for a DM list and was not for a roster.
-  const conversations = useConversationsWithQnsNames(rawConversations);
+  // conversation row, so without a request the inbox can never show one.
+  // `resolve`/`requestNames` are `@/identity`'s bulk pattern (a hook cannot be
+  // called once per row inside this loop below) — the SAME verified ladder
+  // `DMChatHeader` resolves the open conversation's title from, so the list
+  // and the header can never call the same partner two different things.
+  // Bounded by `qnsLookupAddresses`/`MAX_QNS_LOOKUPS`, which already excludes
+  // Farcaster's synthetic `fid:<n>` addresses (never a Quorum public profile)
+  // — see that helper for why fetching is affordable for a DM list and was
+  // not for a roster.
+  const { resolve, requestNames } = useNameResolver();
+  useEffect(() => {
+    requestNames(qnsLookupAddresses(conversations ?? [], MAX_QNS_LOOKUPS));
+  }, [conversations, requestNames]);
+
   const [search, setSearch] = useState('');
   const [newConversationVisible, setNewConversationVisible] = useState(false);
   const [manualRefresh, setManualRefresh] = useState(false);
@@ -207,11 +222,7 @@ export default function MessagesInbox() {
   const items = useMemo<InboxItem[]>(() => {
     const rows: InboxItem[] = [];
 
-    // `primary_username` rides along from the QNS hook above; the cast keeps it
-    // rather than narrowing back to the bare row and losing the `.q`.
-    for (const conv of (conversations as (Conversation & {
-      primary_username?: string;
-    })[]) ?? []) {
+    for (const conv of (conversations as Conversation[]) ?? []) {
       const hasUnread = conv.lastReadTimestamp ? conv.timestamp > conv.lastReadTimestamp : false;
       // Coerce any preview shape (typed, legacy string, raw object) to
       // {kind,text}; an empty text with no icon means "no message yet".
@@ -220,16 +231,25 @@ export default function MessagesInbox() {
       const previewText = preview?.text || undefined;
       const previewIcon = preview ? previewKindIcon(preview.kind) : undefined;
       const hasPreview = !!(previewText || previewIcon);
+      const isFarcasterRow = conv.source === 'farcaster';
+      // A Farcaster row's `address` is a synthetic `fid:<n>` string — never a
+      // Quorum address — and has no QNS tier at all, so it (and the "no
+      // address yet" case) stays on `resolveConversationTitle`'s degraded,
+      // QNS-free presentation. A Quorum row resolves through the SAME
+      // verified ladder the conversation header uses, so a partner cannot be
+      // called one thing in the list and another inside the chat.
+      const title =
+        isFarcasterRow || !conv.address
+          ? resolveConversationTitle({ address: conv.address, displayName: conv.displayName })
+          : formatResolvedName(resolve(conv.address, { global: true }));
       rows.push({
         id: conv.conversationId,
-        // Same helper the conversation header uses, so a partner cannot be
-        // called one thing in the list and another inside the chat.
-        title: resolveConversationTitle(conv),
+        title,
         icon: conv.icon,
         address: conv.address,
         timestamp: conv.timestamp,
         unreadCount: hasUnread ? 1 : 0,
-        isFarcaster: conv.source === 'farcaster',
+        isFarcaster: isFarcasterRow,
         isMuted: isMuted(conv.conversationId),
         subtitle: previewText,
         subtitleIcon: previewIcon,
@@ -248,8 +268,10 @@ export default function MessagesInbox() {
     return filtered;
     // `isMuted` is a useCallback keyed on the muted set, so its identity changes
     // on every toggle — that alone re-runs this memo. No separate
-    // `mutedConversations` dep needed.
-  }, [conversations, search, isMuted]);
+    // `mutedConversations` dep needed. `resolve`'s identity changes whenever
+    // `@/identity`'s shared sources change (a profile lands, a claim
+    // verifies), which is what makes a `.q` appear here once it resolves.
+  }, [conversations, search, isMuted, resolve]);
 
   const handlePressItem = useCallback((item: InboxItem) => {
     haptics.light();
@@ -400,10 +422,10 @@ export default function MessagesInbox() {
             visible
             onClose={() => setSettingsItem(null)}
             conversationId={settingsItem.id}
-            displayName={settingsItem.title}
             theme={theme}
             avatarUri={settingsItem.icon}
             address={settingsItem.address ?? settingsItem.id.split('/')[0]}
+            showRecipientHeader
             isMuted={isMuted(settingsItem.id)}
             onToggleMute={handleToggleMuteFromSheet}
             onDeleteConversation={handleDeleteFromSheet}

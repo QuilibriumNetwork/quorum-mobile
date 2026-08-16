@@ -47,9 +47,9 @@ make it pass is believed complete but has never once succeeded end to end.
 
 ## Symptoms
 
-A user (LaMat) has:
-1. Registered a QNS name (`lamat` resolves via `https://names.quilibrium.com/resolve/lamat`).
-2. Set it as their primary username in the mobile profile UI (`updateProfile({ primaryUsername: 'lamat' })`).
+A user has:
+1. Registered a QNS name, which resolves via `https://names.quilibrium.com/resolve/<name>`.
+2. Set it as their primary username in the mobile profile UI (`updateProfile({ primaryUsername: '<name>' })`).
 3. Toggled public profile ON and re-saved.
 
 Yet the **published public profile on the server still has no `primary_username`**:

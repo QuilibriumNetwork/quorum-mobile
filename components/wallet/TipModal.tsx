@@ -15,6 +15,7 @@ import { useToast } from '@/context/ToastContext';
 import { useStorageAdapter } from '@/context/StorageContext';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
 import { useQuorumIdentityForFid } from '@/hooks/useQuorumIdentityForFid';
+import { useResolvedName } from '@/identity';
 import { useWallet, useWalletKeys, aggregateAssets, AggregatedAsset, useEvmBalancesForAddress } from '@/hooks/useWallet';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
 import { useWarpcastWallet } from '@/hooks/useWarpcastWallet';
@@ -91,6 +92,18 @@ export default function TipModal({
 
   // Fetched in parallel: linked Quorum identity for the post-tip DM notification
   const { data: quorumIdentity } = useQuorumIdentityForFid(visible ? authorFid : undefined);
+
+  // `quorumIdentity.displayName`/`.primaryUsername` are raw fields off a
+  // public-profile fetch this hook does NOT verify — the exact shape of claim
+  // `@/identity` exists to re-check before it can earn a `.q`. Resolved here,
+  // scoped globally (a tip has no Space context), so the DM this modal may
+  // create for the recipient (see `sendTipNotification` below) is titled with
+  // the same verified answer every other surface in the app agrees on rather
+  // than an unverified claim. `enrich`: bounded to one recipient per mount.
+  const recipientResolvedName = useResolvedName(quorumIdentity?.address ?? '', {
+    global: true,
+    enrich: !!quorumIdentity?.address,
+  });
 
   const [selectedAsset, setSelectedAsset] = React.useState<AggregatedAsset | null>(null);
   const [amount, setAmount] = React.useState('');
@@ -353,7 +366,7 @@ export default function TipModal({
         if (recipientQuorumIdentity?.address) {
           void sendTipNotification({
             quorumAddress: recipientQuorumIdentity.address,
-            displayName: authorDisplayName || recipientQuorumIdentity.displayName || `@${authorUsername}`,
+            displayName: authorDisplayName || recipientResolvedName,
             tipAmount: txAmount,
             symbol: txSymbol,
             txHash,

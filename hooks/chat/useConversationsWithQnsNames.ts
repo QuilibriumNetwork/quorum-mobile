@@ -1,15 +1,22 @@
 /**
- * useConversationsWithQnsNames — attach each DM partner's QNS `.q` name to the
- * conversation rows the Messages tab renders.
+ * qnsLookupAddresses / MAX_QNS_LOOKUPS — the bound on how many DM partners'
+ * public profiles are worth fetching for the Messages tab, and its siblings
+ * (the invite contact picker, the mention/message-input QNS lookups) that
+ * enrich the same conversation list and must not drift from the same cap.
  *
- * ## Why the list needs its own fetch
+ * ## History
  *
- * A `.q` travels in one place only: the member's published public profile. It
- * is never on a conversation row, so the inbox could never show one, for
- * anybody. Inside a conversation the chat view already fetches the partner's
- * profile, but the inbox is usually the FIRST screen opened — the cache is cold
- * exactly when the list is drawn, so the free cache-read trick used for space
- * rosters (`useMembersWithCachedQns`) would show nothing here.
+ * This file used to also export `useConversationsWithQnsNames`, a hook that
+ * fetched each partner's public profile itself and attached a VERIFIED
+ * `primary_username` to the conversation row for `app/(tabs)/messages/index.tsx`
+ * to read. That row's own `.q` now resolves through `@/identity`'s
+ * `useNameResolver` instead (verified the same way, by the same
+ * `IdentityScopeProvider`, rather than a second, parallel fetch-and-verify
+ * pass) — see that screen's own comment. Nothing reads `primary_username`
+ * off a conversation row any more, so the hook was removed rather than kept
+ * as a silent, still-network-calling no-op. The address-capping helpers
+ * below are unaffected: `messages/index.tsx` still uses `qnsLookupAddresses`
+ * to decide which addresses are worth `requestNames`-ing through `@/identity`.
  *
  * ## Why fetching is affordable here, when it was refused for a space roster
  *
@@ -29,32 +36,7 @@
  *
  * `MAX_QNS_LOOKUPS` makes the bound real rather than assumed. See it below for
  * why the overflow degrades safely.
- *
- * Results share `publicProfileQueryKey` with the conversation view and the chat
- * member fallback, at a 1h `staleTime` — so the cost is at most one small GET
- * per partner per hour, reused by every other surface that asks. Desktop's
- * `useConversationsWithProfileBackfill` fetches the same set for the same
- * reason; matching it is what keeps the two clients rendering a partner
- * identically. Note desktop has NO cap and inherits the same latent problem —
- * flagged in the parity doc.
- *
- * ## What this deliberately does NOT do
- *
- * Desktop's hook also writes resolved name/avatar back to its local
- * conversation row, because a desktop row can hold the literal "Unknown User"
- * placeholder. Mobile has no such placeholder — an unresolved row falls back to
- * a truncated address at render — so there is nothing to repair and no reason
- * to take on write-back. This hook is read-only.
  */
-
-import { useMemo } from 'react';
-import { useQueries } from '@tanstack/react-query';
-import { getQuorumClient } from '@/services/api/quorumClient';
-import {
-  publicProfileQueryKey,
-  type PublicProfile,
-} from '@/hooks/useUserPublicProfile';
-import { useVerifiedQnsNames } from '@/hooks/useVerifiedQnsNames';
 
 /**
  * A Farcaster conversation carries the synthetic address `fid:<n>`
@@ -66,7 +48,7 @@ const isQuorumAddress = (address: string | undefined): address is string =>
   !!address && !address.startsWith('fid:');
 
 /**
- * The most partners this hook will ever look up, however long the inbox is.
+ * The most partners worth looking up, however long the inbox is.
  *
  * One page's worth, matching `useConversations`' `limit: 50`. That keeps the
  * common case — a user whose whole DM list fits in one page — completely
@@ -74,12 +56,17 @@ const isQuorumAddress = (address: string | undefined): address is string =>
  * scroll depth.
  *
  * **The overflow degrades to exactly the previous behaviour**: a partner past
- * the cap has no `primary_username` attached, so the resolver falls through to
- * their global name. Nothing renders wrong, a name is simply less specific than
- * it could be — the same trade the space member list already takes for a member
- * who has never posted.
+ * the cap is never requested, so `@/identity` falls through to their global
+ * name. Nothing renders wrong, a name is simply less specific than it could
+ * be — the same trade the space member list already takes for a member who
+ * has never posted.
+ *
+ * Exported so other surfaces reading this same conversation list (e.g. the
+ * invite contact picker) can bound their OWN `enrich`/`requestNames` fan-out
+ * to the identical cap, rather than each carrying its own copy of `50` that
+ * can silently drift from this one.
  */
-const MAX_QNS_LOOKUPS = 50;
+export const MAX_QNS_LOOKUPS = 50;
 
 /**
  * The distinct Quorum partner addresses worth looking up, newest first, capped.
@@ -107,73 +94,4 @@ export function qnsLookupAddresses(
     out.push(c.address);
   }
   return out;
-}
-
-export function useConversationsWithQnsNames<T extends { address?: string }>(
-  conversations: T[],
-): readonly (T & { primary_username?: string })[] {
-  const addresses = useMemo(
-    () => qnsLookupAddresses(conversations, MAX_QNS_LOOKUPS),
-    [conversations],
-  );
-
-  // Memoised, not rebuilt inline. This hook is called from the inbox, which
-  // also owns the search box's `useState`, so it re-renders on every keystroke;
-  // building the descriptor array there re-allocated one object per loaded
-  // partner per character typed. Nothing refetched — React Query dedupes by key
-  // — but it was avoidable work on the JS thread while typing.
-  const queryOptions = useMemo(
-    () =>
-      addresses.map((address) => ({
-        queryKey: publicProfileQueryKey(address),
-        queryFn: async (): Promise<PublicProfile | null> =>
-          await getQuorumClient().getPublicProfile(address),
-        staleTime: 60 * 60 * 1000, // 1 hour — matches useUserPublicProfile
-        gcTime: 24 * 60 * 60 * 1000,
-        retry: false,
-      })),
-    [addresses],
-  );
-
-  const queries = useQueries({ queries: queryOptions });
-
-  // Key the memo on the `.q` values themselves, not on the profile objects.
-  // `useQueries` returns a fresh array every render, and joining the objects
-  // would stringify each to "[object Object]" — a dep that cannot tell one
-  // profile from another, so a refetch that CHANGED someone's `.q` would never
-  // re-render. The names are the only field read here, so joining them is both
-  // cheaper and strictly more precise.
-  const qnsKey = queries
-    .map((q) => (q?.data as PublicProfile | null | undefined)?.primary_username ?? '')
-    .join('|');
-
-  const qnsByAddress = useMemo(() => {
-    const out = new Map<string, string>();
-    addresses.forEach((address, i) => {
-      const name = (queries[i]?.data as PublicProfile | null | undefined)
-        ?.primary_username;
-      const trimmed = (name ?? '').trim();
-      if (trimmed) out.set(address, trimmed);
-    });
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addresses, qnsKey]);
-
-  const withClaims = useMemo(() => {
-    if (qnsByAddress.size === 0) return conversations;
-    return conversations.map((c) => {
-      const qns = c.address ? qnsByAddress.get(c.address) : undefined;
-      // Only rewrite rows that gain something, so the rest keep their identity
-      // and the list memo downstream does not churn.
-      return qns ? { ...c, primary_username: qns } : c;
-    });
-  }, [conversations, qnsByAddress]);
-
-  // A `primary_username` read out of somebody's public profile is their CLAIM
-  // to a name, not proof they hold it. Drop any that does not resolve back to
-  // the partner's own address before the inbox renders it — the DM list is
-  // where an impersonated name is most persuasive, because there is no roster
-  // to cross-check against. Verified rows keep their identity, so the list memo
-  // downstream still does not churn.
-  return useVerifiedQnsNames(withClaims);
 }

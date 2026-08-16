@@ -42,6 +42,18 @@ export interface UnifiedNotification {
    * the field the row actually rendered was not.
    */
   previewText?: string;
+  /**
+   * The author's name for the row's "Name: message" prefix, ALREADY resolved
+   * through the identity ladder (so it carries a `.q` when one is verified, and
+   * a per-space nickname inside that space).
+   *
+   * Exists so the renderer never reaches into `raw.quorum.senderDisplayName`,
+   * which is the name frozen at write time on a path that cannot verify a
+   * claim. A row reading that field directly is how the author prefix kept
+   * showing a global display name while every other surface showed the `.q`.
+   * Falls back to that frozen string when nothing resolves.
+   */
+  actorName?: string;
   /** Routing payload — consumer picks branch on `type` to deep-link. */
   link?:
     | { type: 'message'; spaceId?: string; channelId?: string; conversationId?: string }
@@ -399,8 +411,31 @@ export function chatToUnified(
   };
 }
 
-function quorumTitle(e: MentionReplyEntry): string {
-  const who = e.senderName || 'Someone';
+/**
+ * Resolve an address to a rendered name, at RENDER time, through `@/identity`.
+ *
+ * Returns `undefined` when it cannot do better than the address itself, so
+ * every caller can fall back to whatever string the log froze at write time.
+ *
+ * `spaceId` is the ROW's space, and passing it is what makes the space ladder
+ * apply — a deliberate per-space nickname outranks the `.q`, exactly as it does
+ * inside that space's channels. Omit it and a member with a nickname would read
+ * one way in the channel and another in the notification about it.
+ */
+export type NotificationNameResolver = (
+  address: string,
+  spaceId?: string,
+) => string | undefined;
+
+function quorumTitle(e: MentionReplyEntry, resolveName?: NotificationNameResolver): string {
+  // Resolved at render, falling back to the frozen string. A DM row is left
+  // alone: its name already comes from the live conversation list, one layer
+  // up in `quorumToUnified`, which is the same render-time treatment by a
+  // different route.
+  const who =
+    (e.kind !== 'dm' ? resolveName?.(e.senderId, e.spaceId) : undefined) ||
+    e.senderName ||
+    'Someone';
   switch (e.kind) {
     case 'mention-you':
       return `${who} mentioned you`;
@@ -420,30 +455,42 @@ function quorumTitle(e: MentionReplyEntry): string {
 }
 
 /**
- * Mention tokens are resolved to names at WRITE time, where the space roster is
- * in hand. This is the backstop for anything that reached the log without it:
- * rows written before that existed, and any address the roster could not
- * resolve. With no resolver it only truncates, which is the difference between
- * a row reading "@Qm3f4a…8b2 take a look" and one that is a 46-character hash
- * with the actual message pushed off the end.
+ * Mention tokens inside the body, resolved at RENDER time.
+ *
+ * These used to be baked into the stored text by `logMentionOrReply`, which ran
+ * on the WebSocket receive path with no React tree above it — so no claim could
+ * be verified and a `.q` could never appear, for anyone including the viewer.
+ * Resolving here instead is what lets a mention in a notification read the same
+ * as the same mention in the channel.
+ *
+ * Rows written before that change still hold names baked into the text. They
+ * carry no tokens, so this is a no-op for them and they keep rendering exactly
+ * as they did — no migration, and nothing to lose if one never resolves.
+ *
+ * With no resolver, or an address the resolver cannot name, it truncates. That
+ * is the difference between a row reading "@Qm3f4a…8b2 take a look" and one
+ * that is a 46-character hash with the actual message pushed off the end.
  */
-function previewText(e: MentionReplyEntry): string {
+function previewText(e: MentionReplyEntry, resolveName?: NotificationNameResolver): string {
   const text = e.preview?.text?.trim();
-  return text ? renderMentionsAsPlainText(text) : '';
+  if (!text) return '';
+  const spaceId = e.kind !== 'dm' ? e.spaceId : undefined;
+  return renderMentionsAsPlainText(text, (address) => resolveName?.(address, spaceId));
 }
 
 /** Channel breadcrumb + message preview text, e.g. "#general · hey there". */
-function quorumBody(e: MentionReplyEntry): string {
-  if (e.kind === 'dm') return previewText(e);
+function quorumBody(e: MentionReplyEntry, resolveName?: NotificationNameResolver): string {
+  if (e.kind === 'dm') return previewText(e, resolveName);
   const channel = e.channelName ? `#${e.channelName}` : '#channel';
   const crumb = e.threadId ? `${channel} › Thread` : channel;
-  const text = previewText(e);
+  const text = previewText(e, resolveName);
   return text ? `${crumb} · ${text}` : crumb;
 }
 
 export function quorumToUnified(
   e: MentionReplyEntry,
   conversations?: ReadonlyMap<string, ConversationDetail>,
+  resolveName?: NotificationNameResolver,
 ): UnifiedNotification {
   // A DM row joins the live conversation list for the sender's avatar, exactly
   // as the Farcaster ping rows do — the log stores no picture, and a picture is
@@ -455,9 +502,13 @@ export function quorumToUnified(
     id: `quorum:${e.id}`,
     source: 'quorum',
     timestamp: e.createdAt,
-    title: detail?.displayName?.trim() || quorumTitle(e),
-    body: quorumBody(e),
-    previewText: previewText(e),
+    title: detail?.displayName?.trim() || quorumTitle(e, resolveName),
+    body: quorumBody(e, resolveName),
+    previewText: previewText(e, resolveName),
+    actorName:
+      (e.kind !== 'dm' ? resolveName?.(e.senderId, e.spaceId) : undefined) ||
+      (e.kind !== 'dm' ? e.senderDisplayName?.trim() : undefined) ||
+      undefined,
     actorAvatarUrl: detail?.avatarUrl || undefined,
     link:
       e.kind === 'dm'
@@ -483,6 +534,12 @@ export interface PartitionInput {
    * the generic copy the log stored.
    */
   conversationDetails?: ReadonlyMap<string, ConversationDetail>;
+  /**
+   * Render-time name resolution for the Quorum rows, bound to `@/identity` by
+   * the caller. Absent leaves every row on the name the log froze at write
+   * time, which is what this module did before and is still the fallback.
+   */
+  resolveName?: NotificationNameResolver;
   officialFarcaster: readonly FarcasterNotification[];
   haatzFarcaster: readonly FarcasterNotification[];
   /** Farcaster dismissal watermark; 0 = never cleared. */
@@ -524,6 +581,7 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
     quorumEntries,
     chatEntries,
     conversationDetails,
+    resolveName,
     officialFarcaster,
     haatzFarcaster,
     clearedBefore,
@@ -588,7 +646,7 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
   // Space channel mute is already enforced upstream at log-write time via
   // shouldNotifyForContext.
   const quorumMentionItems = quorumEntries
-    .map((e) => quorumToUnified(e, conversationDetails))
+    .map((e) => quorumToUnified(e, conversationDetails, resolveName))
     .filter(notMutedDM);
   const quorumItems = [...quorumMentionItems, ...quorumChat];
   quorumItems.sort((a, b) => b.timestamp - a.timestamp);

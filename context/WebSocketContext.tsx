@@ -460,17 +460,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const fullUserAddrRef = useRef<string | undefined>(undefined);
   fullUserAddrRef.current = user?.address;
 
-  // Same reasoning as the ref above, for the viewer's own identity: the
-  // notification write path resolves mentions, and a mention of the viewer is
-  // the most common kind there. Held in a ref rather than closed over for
-  // exactly the stale-`user` reason documented above.
-  const selfIdentityRef = useRef<SelfIdentity | undefined>(undefined);
-  selfIdentityRef.current = {
-    address: user?.address,
-    displayName: user?.displayName,
-    username: user?.username,
-    profileImage: user?.profileImage,
-  };
+  // A `selfIdentityRef` used to live here, handed to `logMentionOrReply` so a
+  // mention of the viewer could be named on this path. It is gone because the
+  // naming is: notification rows resolve every name at RENDER now, through
+  // `@/identity`, which is the only thing that can verify a QNS claim — this
+  // path never could, so the viewer was the one person guaranteed never to get
+  // their own `.q` in a notification about them.
 
   // Helper function to get current user address for logging
   const getAddr = () => userAddrRef.current;
@@ -2984,7 +2979,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // Every row here exists because someone mentioned YOU, so the
               // viewer's own address is the one most likely to appear in a
               // body. Without this it resolves to their own hash.
-              self: selfIdentityRef.current,
+
               getSpaceMember: (sid, mid) => storage.getSpaceMember(sid, mid),
             });
 
@@ -4847,7 +4842,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               ?.flatMap((g) => g.channels)
               .find((c) => c.channelId === channelId)?.channelName,
             notifyForBadge,
-            self: selfIdentityRef.current,
+
             getSpaceMember: (sid, mid) => storage.getSpaceMember(sid, mid),
           });
 

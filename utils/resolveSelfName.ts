@@ -1,3 +1,5 @@
+import { formatResolvedName, type ResolvedMemberName } from '@/identity/useResolvedName';
+
 /**
  * Your OWN name, for the surfaces that render you from the live auth profile
  * rather than from a roster row.
@@ -6,54 +8,52 @@
  * are separate because the inputs are: another member resolves from a stored
  * row (per-space override, global slot, QNS name arriving with their public
  * profile), while your own profile screen has your live in-memory `UserInfo`
- * and no roster at all. The ORDER is the same, and must stay that way.
+ * and no roster at all.
  *
- * ## The rule
+ * ## The `.q` does NOT come from here
  *
- *   QNS `.q` name  →  global display name  →  "Unnamed"
+ * This function used to compose `${user.primaryUsername}.q` itself, trusting
+ * that field as though it were already verified. It is not: `primaryUsername`
+ * is a CLAIM a member broadcasts, and the ONLY place allowed to turn a claim
+ * into a rendered `.q` is `identity/`'s ladder, after `claimedNameBelongsTo`
+ * has checked it resolves back to the claiming address (same rule as every
+ * other member — see `identity/identityProvider.tsx`). So this function no
+ * longer reads `primaryUsername` at all; it structurally cannot produce a
+ * `.q`, for self or anyone a future caller might hand it.
  *
- * A primary QNS name REPLACES the global display name — it is not a decoration
- * shown alongside it. That is the whole meaning of electing one primary: you
- * are saying this is what you go by. Every other surface already behaves that
- * way because shared's `resolveDisplayName` ranks `primary_username` above
- * `display_name`.
+ * The `.q` tier now lives in `selfNamePlaceholder`'s `resolvedSelf` parameter,
+ * which the caller must obtain from `identity/` itself
+ * (`useResolvedMemberName(selfAddress, { global: true })` — self has no
+ * per-space tier, so `global: true` always, unlike `resolveMemberName`).
  *
- * The profile header used to compute `displayName || primaryUsername` inline in
- * three separate layouts, which inverts it: the global name won and the `.q`
- * was demoted to a small line underneath. Your own profile was the one screen
- * in the app disagreeing with the rule about who you are.
+ * ## What THIS function still does
  *
- * Note there is no per-space tier here, and that is correct rather than an
- * omission — the profile screen is not inside a space. A per-space name still
- * outranks the `.q` where a space exists; see `resolveMemberName`.
+ *   global display name  →  "Unnamed"
  *
- * ## What this does NOT do
- *
- * It does not delete or hide the global display name, only unrank it. The name
- * stays in the edit sheet because it is still doing real work:
- *
- * - A `.q` travels ONLY in a published public profile. With a private profile
- *   nobody else can see yours, so the global name is what they render you as.
- *   Removing it would leave those people with an address.
- * - A QNS name can be transferred away or un-elected, and the global name is
- *   what you fall back to.
+ * The global display name needs no verification — it makes no ownership
+ * claim the way a QNS name does — so reading it straight off the live
+ * `UserInfo` remains safe and is unchanged from before.
  */
 
 export interface SelfNameInput {
-  primaryUsername?: string;
   displayName?: string;
 }
 
 export interface ResolvedSelfName {
-  /** What to render. Carries the `.q` suffix when the QNS name won. */
+  /** What to render. */
   label: string;
   /**
-   * The name an avatar placeholder should derive initials from — the BARE name,
-   * without the `.q`. `getInitials` splits on non-letters, so handing it
-   * "gatto.q" yields two initials from one name.
+   * The name an avatar placeholder should derive initials from — the BARE
+   * name. `getInitials` splits on non-letters, so a caller appending `.q`
+   * itself must never feed the result back in with the suffix attached.
    */
   initialsSource: string;
-  /** True when `label` is the QNS name, for call sites that style it. */
+  /**
+   * Always `false`: this function never resolves a QNS tier, so it can never
+   * be the one claiming a name is verified. Kept on the type so callers that
+   * combine this with a REAL verified result (see `selfNamePlaceholder`)
+   * share one result shape.
+   */
   isQnsVerified: boolean;
 }
 
@@ -82,27 +82,39 @@ export interface ResolvedSelfName {
  * `emptyLabel` is the caller's copy for "we have no name for you", e.g.
  * "Your name in this space" — deliberately NOT `resolveSelfName`'s "Unnamed",
  * which is a rendered name and would read as though it were already your name.
+ *
+ * ## Where the `.q` comes from
+ *
+ * `resolvedSelf` is the ONLY source of the suffix — pass the caller's own
+ * `useResolvedMemberName(selfAddress, { global: true })` result (or `null`
+ * before an address exists). This function only ever renders a `.q` when
+ * `resolvedSelf.isQnsVerified` is `true`, a flag `identity/` sets exclusively
+ * after checking the claim resolves back to that exact address. There is no
+ * code path here that composes a `.q` from a raw field, for self or for
+ * anyone a future caller might pass instead — see `__tests__/resolveSelfName.test.ts`
+ * for the case this forecloses.
  */
 export function selfNamePlaceholder(
+  resolvedSelf: ResolvedMemberName | null,
   // `null` as well as `undefined`: the auth context types its user as
   // `UserInfo | null`, and making the caller narrow it would just move the
   // no-user case out of the one function that already has an answer for it.
   user: (SelfNameInput & { username?: string }) | null | undefined,
   emptyLabel: string,
 ): string {
-  const hasName =
-    !!(user?.primaryUsername ?? '').trim() || !!(user?.displayName ?? '').trim();
+  // `formatResolvedName` — imported, not re-implemented — is the one place
+  // the `.q` suffix is spelled out anywhere in the app (see its own
+  // docstring). Duplicating `${name}.q` here would be a second place for
+  // that suffix logic to drift from `<MemberName>`'s.
+  if (resolvedSelf?.isQnsVerified) return formatResolvedName(resolvedSelf);
+
+  const hasName = !!(user?.displayName ?? '').trim();
   if (hasName) return resolveSelfName(user!).label;
 
   return (user?.username ?? '').trim() || emptyLabel;
 }
 
 export function resolveSelfName(user: SelfNameInput): ResolvedSelfName {
-  const qns = (user.primaryUsername ?? '').trim();
-  if (qns) {
-    return { label: `${qns}.q`, initialsSource: qns, isQnsVerified: true };
-  }
-
   // Empty string means "not set at this tier" throughout the identity code, so
   // a whitespace-only name must fall through rather than blank the header.
   const global = (user.displayName ?? '').trim();

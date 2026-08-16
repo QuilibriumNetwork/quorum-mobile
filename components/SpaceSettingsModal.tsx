@@ -43,8 +43,6 @@ import {
 import { DraggableChannelGroup } from '@/components/SpaceSettings/DraggableChannelGroup';
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useSpaceMembers } from '@/hooks/chat/useSpaces';
-import { useMembersWithCachedQns } from '@/hooks/useMembersWithCachedQns';
-import { useVerifiedQnsNames } from '@/hooks/useVerifiedQnsNames';
 import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
 import { useBlockUser } from '@/hooks/chat/useBlockUser';
 import { useDeleteSpace, useLeaveSpace, useUpdateSpace } from '@/hooks/chat/useSpaceSettings';
@@ -63,10 +61,11 @@ import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import { truncateAddress } from '@/utils/formatAddress';
 import {
-  resolveMemberName,
   resolveMemberAvatar,
-  formatResolvedName,
+  resolveMemberBio,
 } from '@/utils/resolveMemberName';
+import { useNameResolver } from '@/identity';
+import { formatResolvedName } from '@/identity/useResolvedName';
 import { selfNamePlaceholder } from '@/utils/resolveSelfName';
 import { hexToBytes, findRoleConflict, getUniqueRoleDefaults, queryKeys, IMAGE_CONFIGS, type Emoji, type Permission, type Role, type Space, type SpaceMember, type Sticker } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
@@ -797,52 +796,40 @@ export default function SpaceSettingsModal({
   // Members
   const { data: rosterMembers = [] } = useSpaceMembers(spaceId, { enabled: !!spaceId });
 
-  // Attach QNS `.q` names from public profiles chat has ALREADY fetched.
-  //
-  // A `.q` travels only in a published public profile, never in a roster row,
-  // so this screen could never show one for anybody — the resolver here was
-  // correct all along, the field simply never arrived. Fetching a profile per
-  // member is the fetch storm desktop looked at and refused, so this reads the
-  // React Query cache instead and issues no requests at all.
-  const cachedQnsMembers = useMembersWithCachedQns(rosterMembers);
-
-  // Then drop any `.q` claim that does not resolve back to the member claiming
-  // it. This is the surface where the check has to earn its cost most carefully:
-  // the read above issues no requests at all, so verification is the first thing
-  // here that costs anything. `claimedNamesIn` caps at one batch, and a name
-  // past the cap is left unverified and renders as the global name — the same
-  // outcome a member with no cached profile already gets.
-  const members = useVerifiedQnsNames(cachedQnsMembers);
-
   // The roster shows who is IN the Space. Both `leave` and `kick` blank the
   // member's inbox_address and KEEP the row, so without this a departed or
   // removed member stayed listed, indistinguishable from an active one.
   // Same rule desktop applies (`left: curr.inbox_address === ''` plus an
   // isKicked filter, in useChannelData).
   //
-  // Deliberately NOT applied to `members` itself: the blocked-users list below
-  // resolves display names through it, and a blocked user who left should still
-  // resolve to a name rather than a bare address.
+  // Deliberately NOT applied to `rosterMembers` itself: the blocked-users list
+  // below resolves display names off it too, and a blocked user who left
+  // should still resolve to a name rather than a bare address.
+  //
+  // A QNS-cache-and-verify pass (`useMembersWithCachedQns` -> `useVerifiedQnsNames`)
+  // used to sit here, attaching a verified `primary_username` to each row. Name
+  // rendering no longer reads that field — it resolves through `@/identity`
+  // below instead, off the shared cross-surface scope, not off this roster —
+  // and nothing else in this file ever read `primary_username` (avatar/bio
+  // only ever read the `*_image`/`*_bio` slots). Keeping the pass would have
+  // meant a real `resolveBatch` network call, every render a member claims a
+  // name, for a value nobody looked at. Removed rather than kept as a silent
+  // no-op.
   const activeMembers = useMemo(
-    () => members.filter((m) => m.inbox_address && !m.isKicked),
-    [members]
+    () => rosterMembers.filter((m) => m.inbox_address && !m.isKicked),
+    [rosterMembers]
   );
 
-  // Identity resolution: per-space override → global → (your own live profile) →
-  // address. The roster used to read only the override slot, which is why the
-  // Space CREATOR showed as a bare address: their row is written blank on
-  // purpose at creation ("empty = follow global", spaceService.ts, same comment
-  // and same fields on desktop), and only a later profile save back-fills the
-  // global slot into every space. A Space created after your last profile edit
-  // therefore had nothing in either slot.
+  // Name resolution now goes through `@/identity`'s ladder (per-space override
+  // → verified QNS `.q` → global slot → locally-known name → address). The
+  // self arm that used to live here is now the root scope's own
+  // `locallyKnownNames` (see `RootIdentityScope`), so a Space created after
+  // your last profile save still renders its own row correctly with no local
+  // special-casing and no network call.
   //
-  // The self arm is what makes that case correct without requiring a profile
-  // re-save: for your own row the live profile is authoritative and already in
-  // memory.
-  // The ladder itself lives in `utils/resolveMemberName` (over the shared rule),
-  // so this screen can no longer disagree with chat about who somebody is.
-  // `name` stays undefined when nothing resolved, because the avatar placeholder
-  // wants initials from a real name and not from an address.
+  // The AVATAR ladder is separate and unchanged: `@/identity` resolves names
+  // only, never pictures (a `.q` carries no photo), so `resolveMemberAvatar`
+  // keeps its own self fallback via `selfIdentity` below.
   const selfIdentity = useMemo(
     () => ({
       address: user?.address,
@@ -853,17 +840,36 @@ export default function SpaceSettingsModal({
     [user?.address, user?.displayName, user?.username, user?.profileImage]
   );
 
+  // `resolve` is a pure read of maps already in memory — it never issues a
+  // request. This screen is the one surface in the app that must NOT enrich: a
+  // Space's member list is the size of the whole community, not a viewport, and
+  // one public-profile fetch per row is the exact fetch storm both clients have
+  // already refused (desktop measured 200 concurrent requests from a 200-member
+  // sidebar that resolved eagerly). A member whose profile nothing else has
+  // fetched this session renders their global name with no `.q` — an accepted
+  // limitation, same as a member with no cached profile got under the old,
+  // now-removed cache-and-verify pass (see the comment above `activeMembers`).
+  const { resolve } = useNameResolver();
+
+  // Self's own resolved identity, `global: true` because there is no
+  // per-space tier to check (matches `resolveSelfName`'s own rule). Feeds the
+  // Display-name field's placeholder below — the ONLY route a `.q` may reach
+  // that placeholder through, since `resolve` is the real verified ladder,
+  // not a raw read of `user.primaryUsername`. `resolve` never requests here
+  // (see above), but the root scope already requests self's own profile
+  // unconditionally (`RootIdentityScope`), so this is populated by the time
+  // any screen mounts.
+  const selfResolved = user?.address ? resolve(user.address, { global: true }) : null;
+
   const resolveMemberIdentity = useCallback(
     (member: SpaceMember) => {
-      const resolved = resolveMemberName(member, { self: selfIdentity });
-      const label = formatResolvedName(resolved);
+      const label = formatResolvedName(resolve(member.address, { spaceId }));
       return {
-        name: resolved.isAddressFallback ? undefined : label,
         avatar: resolveMemberAvatar(member, { self: selfIdentity }),
         label,
       };
     },
-    [selfIdentity]
+    [resolve, spaceId, selfIdentity]
   );
 
   // Blocked addresses for this space, resolved to a display name/avatar via the
@@ -873,17 +879,20 @@ export default function SpaceSettingsModal({
   // from the member list.
   const blockedMembers = useMemo(() => {
     return [...blockedUsers].map((address) => {
-      const m = members.find((mem) => mem.address === address);
-      // Same ladder as the member list. A blocked user who followed global used
-      // to render as an address here even when their name was known.
+      const m = rosterMembers.find((mem) => mem.address === address);
+      // Avatar still reads the roster row (or its absence) the same way the
+      // member list does — the AVATAR ladder is untouched. Name resolves
+      // through `@/identity` directly from the address: a blocked user's
+      // roster row may be gone, but their name can still be known via the
+      // root scope's roster/global/local tiers, same as an active member.
       const row = m ?? { address };
       return {
         address,
-        name: formatResolvedName(resolveMemberName(row, { self: selfIdentity })),
+        name: formatResolvedName(resolve(address, { spaceId })),
         avatar: resolveMemberAvatar(row, { self: selfIdentity }),
       };
     });
-  }, [blockedUsers, members, selfIdentity]);
+  }, [blockedUsers, rosterMembers, selfIdentity, resolve, spaceId]);
 
   // Invites
   const generateInviteMutation = useGenerateInvite();
@@ -941,10 +950,10 @@ export default function SpaceSettingsModal({
   // Delete/Leave confirmation
   const { confirm, confirmDialog } = useConfirmDialog();
 
-  // Kick modal state
+  // Kick modal state. No name field — KickUserModal now resolves the
+  // target's name itself from `address` + `spaceId`.
   const [kickTarget, setKickTarget] = useState<{
     address: string;
-    displayName: string;
     userIcon?: string;
   } | null>(null);
 
@@ -1664,8 +1673,10 @@ export default function SpaceSettingsModal({
         onChangeText={(t) => { const v = capDisplayName(t); setSpaceProfileDisplayName(v); setSpaceProfileNameError(displayNameLiveError(v)); }}
         // A promise about what happens if this is left empty, so it must be the
         // name the app would actually show — the `.q` when one is elected. See
-        // the helper for what the old `displayName || username` got wrong.
-        placeholder={selfNamePlaceholder(user, 'Your name in this space')}
+        // the helper for what the old `displayName || username` got wrong, and
+        // for why the `.q` comes from `selfResolved` (identity/'s verified
+        // ladder) rather than from `user` directly.
+        placeholder={selfNamePlaceholder(selfResolved, user, 'Your name in this space')}
         placeholderTextColor={theme.colors.textMuted}
         // Hard-capped to MAX_DISPLAY_NAME_BYTES by bytes (capDisplayName). No
         // maxLength (counts chars, not bytes). Live error = non-length rules only.
@@ -1916,7 +1927,7 @@ export default function SpaceSettingsModal({
                       {b.avatar ? (
                         <Image source={{ uri: b.avatar }} style={styles.memberAvatarImage} />
                       ) : (
-                        <DefaultAvatar displayName={b.name} address={b.address} size={44} />
+                        <DefaultAvatar resolvedName={b.name} address={b.address} size={44} />
                       )}
                     </View>
                     <View style={styles.memberInfo}>
@@ -1955,7 +1966,7 @@ export default function SpaceSettingsModal({
                     userId: member.address,
                     userName: identity.label,
                     userAvatar: identity.avatar,
-                    bio: member.bio,
+                    bio: resolveMemberBio(member),
                     farcasterFid: m.farcasterFid,
                     farcasterUsername: m.farcasterUsername,
                   });
@@ -1965,7 +1976,7 @@ export default function SpaceSettingsModal({
                   <Image source={{ uri: identity.avatar }} style={styles.memberAvatarImage} />
                 ) : (
                   <DefaultAvatar
-                    displayName={identity.name}
+                    resolvedName={identity.label}
                     address={member.address}
                     size={44}
                   />
@@ -1994,7 +2005,6 @@ export default function SpaceSettingsModal({
                     style={styles.kickButton}
                     onPress={() => setKickTarget({
                       address: member.address,
-                      displayName: identity.label,
                       userIcon: identity.avatar,
                     })}
                   >
@@ -2679,7 +2689,6 @@ export default function SpaceSettingsModal({
           visible={true}
           onClose={() => setKickTarget(null)}
           spaceId={spaceId}
-          userName={kickTarget.displayName}
           userIcon={kickTarget.userIcon}
           userAddress={kickTarget.address}
         />

@@ -1,59 +1,67 @@
 /**
- * Your own name on the profile screen.
+ * Your own name on the profile screen, and the per-space name placeholder.
  *
- * This is one function because the profile header renders in three layouts
- * (split-mode Quorum card, merged Quorum+Farcaster, Quorum-only) and all three
- * previously computed the name inline as `displayName || primaryUsername`.
- * That inverts the app's own rule — `resolveDisplayName` ranks
- * `primary_username` ABOVE `display_name` — so a user who had elected a primary
- * `.q` saw their global name as the big name and their `.q` demoted to a small
- * line beneath it. Their own profile was the one screen disagreeing with every
- * other surface about who they are.
+ * ## Why this file changed shape
  *
- * Tested rather than eyeballed because the failure is silent: both names are
- * real, so the wrong one looks like a design choice rather than a bug. It took
- * a screenshot to notice.
+ * `resolveSelfName`/`selfNamePlaceholder` used to compose `${primaryUsername}.q`
+ * directly off the raw auth profile — the same class of forgery the rest of
+ * the identity migration exists to close everywhere else, just not yet
+ * closed here: `primaryUsername` is a CLAIM the user broadcasts, not proof
+ * they own it, and nothing checked it resolved back to their own address
+ * before rendering the `.q`. In practice this could only ever mislead a user
+ * about their OWN name (the one production call site is a text-input
+ * placeholder for editing your own per-space profile), but the function's
+ * generic name and generic `SelfNameInput` type invited a future caller to
+ * hand it someone else's identity with nothing to catch it.
+ *
+ * The fix: `resolveSelfName` no longer reads `primaryUsername` AT ALL, so it
+ * is structurally incapable of composing a `.q` — not "guarded", incapable.
+ * `selfNamePlaceholder` takes a `resolvedSelf: ResolvedMemberName | null` as
+ * its first argument, already resolved through `identity/`'s verified
+ * ladder (`useResolvedMemberName(selfAddress, { global: true })` at the call
+ * site), and renders a `.q` ONLY when that value's `isQnsVerified` is `true`
+ * — a flag `identity/` sets exclusively after `claimedNameBelongsTo` checks
+ * the claim resolves back to the claiming address. The tests below prove
+ * both halves: `resolveSelfName` ignores a `primaryUsername`-shaped field
+ * even when a caller hands it one, and `selfNamePlaceholder` never infers a
+ * `.q` from a name string alone — only from the verified flag.
  */
 
-import { resolveSelfName, selfNamePlaceholder } from '../utils/resolveSelfName';
+import { resolveSelfName, selfNamePlaceholder, type SelfNameInput } from '../utils/resolveSelfName';
 
 describe('resolveSelfName', () => {
-  it('shows the .q as the name when one is primary', () => {
-    expect(resolveSelfName({ primaryUsername: 'gatto', displayName: 'GattoPardo Mobile' }))
-      .toMatchObject({ label: 'gatto.q', initialsSource: 'gatto' });
-  });
-
-  it('outranks the global name — this is the regression', () => {
-    // The old expression was `displayName || primaryUsername`, which returns
-    // the global name here. If this assertion ever reads 'GattoPardo Mobile'
-    // again, the inversion is back.
-    expect(
-      resolveSelfName({ primaryUsername: 'gatto', displayName: 'GattoPardo Mobile' }).label,
-    ).not.toBe('GattoPardo Mobile');
-  });
-
-  it('falls back to the global name when no .q is primary', () => {
+  it('shows the global display name', () => {
     expect(resolveSelfName({ displayName: 'GattoPardo Mobile' }))
-      .toMatchObject({ label: 'GattoPardo Mobile', initialsSource: 'GattoPardo Mobile' });
+      .toMatchObject({ label: 'GattoPardo Mobile', initialsSource: 'GattoPardo Mobile', isQnsVerified: false });
   });
 
-  it('treats whitespace as unset at both tiers', () => {
-    // Empty string means "not set at this tier" everywhere else in the identity
-    // code; a `.q` of "   " must not win and blank out the name.
-    expect(resolveSelfName({ primaryUsername: '   ', displayName: 'Real Name' }).label)
-      .toBe('Real Name');
-    expect(resolveSelfName({ primaryUsername: '', displayName: '  ' }).label)
-      .toBe('Unnamed');
-  });
-
-  it('gives the avatar the bare name, so gatto.q initials as G not GQ', () => {
-    // getInitials splits on non-letters, so handing it "gatto.q" would produce
-    // two initials from one name.
-    expect(resolveSelfName({ primaryUsername: 'gatto' }).initialsSource).toBe('gatto');
+  it('treats whitespace as unset', () => {
+    // Empty string means "not set at this tier" everywhere else in the
+    // identity code; a whitespace-only name must not blank the header.
+    expect(resolveSelfName({ displayName: '  ' }).label).toBe('Unnamed');
   });
 
   it('never returns an empty label', () => {
     expect(resolveSelfName({}).label).toBe('Unnamed');
+  });
+
+  it('ignores a primaryUsername field entirely — it cannot compose a .q', () => {
+    // The regression this whole file exists to pin. `SelfNameInput` no
+    // longer declares `primaryUsername`, so a plain object literal could
+    // never carry one past the type checker — this simulates a caller who
+    // gets one in anyway (a wider-typed variable, a cast, a future
+    // "helpful" field re-addition) to prove the FUNCTION, not just the
+    // type, is what makes this safe.
+    const legacyShapedInput = {
+      primaryUsername: 'gatto',
+      displayName: 'GattoPardo Mobile',
+    } as SelfNameInput & { primaryUsername: string };
+
+    const result = resolveSelfName(legacyShapedInput);
+
+    expect(result.label).toBe('GattoPardo Mobile');
+    expect(result.label).not.toBe('gatto.q');
+    expect(result.isQnsVerified).toBe(false);
   });
 });
 
@@ -65,47 +73,59 @@ describe('resolveSelfName', () => {
  * explain the follow-global default was the screen contradicting it.
  */
 describe('selfNamePlaceholder', () => {
-  it('promises the .q when one is elected', () => {
-    // The regression. `displayName || username` showed "Alice" to a user the
-    // whole app renders as "alice.q".
+  it('promises the .q only when identity/ has verified it', () => {
     expect(
-      selfNamePlaceholder({ primaryUsername: 'alice', displayName: 'Alice' }, 'fallback'),
+      selfNamePlaceholder({ name: 'alice', isQnsVerified: true }, { displayName: 'Alice' }, 'fallback'),
     ).toBe('alice.q');
   });
 
-  it('promises the global name when there is no .q', () => {
-    expect(selfNamePlaceholder({ displayName: 'Alice' }, 'fallback')).toBe('Alice');
+  it('never appends .q when the resolved value is unverified, even if the name looks QNS-like', () => {
+    // The impersonation-shaped case: a resolved value whose NAME could pass
+    // for a QNS username, but whose `isQnsVerified` flag says it was not
+    // actually confirmed. This function must trust only the flag, never
+    // infer a claim from the string's shape.
+    expect(
+      selfNamePlaceholder({ name: 'mallory', isQnsVerified: false }, { displayName: 'Alice' }, 'fallback'),
+    ).toBe('Alice');
+    expect(
+      selfNamePlaceholder({ name: 'mallory', isQnsVerified: false }, { displayName: 'Alice' }, 'fallback'),
+    ).not.toBe('mallory.q');
+  });
+
+  it('promises the global name when resolvedSelf is null (no address yet)', () => {
+    expect(selfNamePlaceholder(null, { displayName: 'Alice' }, 'fallback')).toBe('Alice');
   });
 
   it('still honours the deprecated username field when nothing else is set', () => {
     // `username` is the old alias of primaryUsername. Nothing writes it any
     // more, but a profile that still carries it should not lose its placeholder.
-    expect(selfNamePlaceholder({ username: 'legacy' }, 'fallback')).toBe('legacy');
+    expect(selfNamePlaceholder(null, { username: 'legacy' }, 'fallback')).toBe('legacy');
   });
 
-  it('ranks the deprecated field BELOW both live ones', () => {
+  it('ranks the deprecated field below both live ones', () => {
     expect(
       selfNamePlaceholder(
-        { primaryUsername: 'alice', displayName: 'Alice', username: 'legacy' },
+        { name: 'alice', isQnsVerified: true },
+        { displayName: 'Alice', username: 'legacy' },
         'fallback',
       ),
     ).toBe('alice.q');
     expect(
-      selfNamePlaceholder({ displayName: 'Alice', username: 'legacy' }, 'fallback'),
+      selfNamePlaceholder(null, { displayName: 'Alice', username: 'legacy' }, 'fallback'),
     ).toBe('Alice');
   });
 
   it("uses the caller's copy when there is no name at all", () => {
     // Deliberately NOT resolveSelfName's "Unnamed", which is a rendered name
     // and would read as though it were already your name.
-    expect(selfNamePlaceholder(undefined, 'Your name in this space')).toBe(
+    expect(selfNamePlaceholder(null, undefined, 'Your name in this space')).toBe(
       'Your name in this space',
     );
-    expect(selfNamePlaceholder({}, 'Your name in this space')).toBe(
+    expect(selfNamePlaceholder(null, {}, 'Your name in this space')).toBe(
       'Your name in this space',
     );
     expect(
-      selfNamePlaceholder({ displayName: '  ', primaryUsername: '' }, 'Your name in this space'),
+      selfNamePlaceholder(null, { displayName: '  ' }, 'Your name in this space'),
     ).toBe('Your name in this space');
   });
 });

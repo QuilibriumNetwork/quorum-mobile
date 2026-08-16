@@ -36,7 +36,7 @@
     "@polkadot/keyring": "14.0.1",
     "@polkadot/util": "14.0.1",
     "@polkadot/util-crypto": "14.0.1",
-    "@quilibrium/quorum-shared": "2.1.0-40",
+    "@quilibrium/quorum-shared": "2.1.0-42",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "11.4.1",
     "@react-navigation/bottom-tabs": "7.4.7",
@@ -120,6 +120,7 @@
   },
   "devDependencies": {
     "@babel/core": "7.28.3",
+    "@testing-library/react-native": "13.3.3",
     "@types/jest": "^29",
     "@types/react": "19.1.17",
     "eslint": "9.25.0",

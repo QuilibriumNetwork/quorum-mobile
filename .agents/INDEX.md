@@ -27,8 +27,11 @@ This is the main index for all documentation, bug reports, and task management.
 ### In Progress
 
 - 🐛 [Space calls never start, and every failed start leaves a permanent banner](issues/2026-08-10-space-calls-dead-endpoints-and-stale-banner.md)
+- 🐛 [Broadcast `.q` claims never reach the identity ladder](issues/2026-08-16-broadcast-q-claims-never-render-after-the-identity-migration.md)
+- 🐛 [A persisted query cache turns the claim-records Map into `{}` and crashes the channel screen](issues/2026-08-16-persisted-query-cache-turns-a-map-into-an-object-and-crashes-the-channel.md)
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
+- 📋 [Mobile Identity Resolution Implementation Plan](issues/2026-08-11-mobile-identity-resolution-plan.md)
 
 #### Light Theme Contrast
 
@@ -90,6 +93,8 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [`POST /users/:addr/public-profile` refuses any `primary_username`](issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md)
 - 🐛 [Somebody else can take your name away, and nothing tells you](issues/.open/2026-08-09-a-delegated-name-can-be-revoked-and-you-are-the-last-to-know.md)
 - 🐛 [The invite contact picker renders an unresolved name](issues/.open/2026-08-10-invite-contact-picker-renders-an-unresolved-name.md)
+- 🐛 [Public invite: 'Generate New Link' claims to invalidate the old link, is offered to non-owners, and never propagates the URL](issues/.open/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md)
+- 🐛 [QuorumIdentityBadge fires an uncapped fid-link lookup for every rendered cast](issues/.open/2026-08-13-quorum-identity-badge-fires-an-uncapped-fid-link-lookup-per-cast.md)
 - 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
 - 📋 [Message composer — further improvements](issues/.open/2026-06-16-message-composer-further-improvements.md)
 - 📋 [Split profile header has no visible "edit" cue](issues/.open/2026-06-16-split-profile-edit-affordance-not-discoverable.md)
@@ -116,6 +121,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Deliver quorum-shared to mobile without an npm publish, for everyone](issues/.open/2026-08-01-deliver-quorum-shared-to-mobile-without-npm-publish.md)
 - 📋 [Non-destructive feedback: move the remaining `Alert.alert` sites off native alerts](issues/.open/2026-08-01-non-destructive-alert-alert-to-toasts.md)
 - 📋 [Three pieces the resolver adoption deliberately left](issues/.open/2026-08-04-qns-names-and-the-identity-coverage-instrument.md)
+- 📋 [`auth:user` has no live writer for a rename made on another device](issues/.open/2026-08-05-auth-user-record-has-no-live-writer-for-a-rename-made-elsewhere.md)
 - 📋 [Verifying a `.q` claim, without paying for it on every render](issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md)
 - 📋 [Add the global "Always sign Direct Messages" toggle to mobile settings](issues/.open/2026-08-07-no-global-always-sign-dms-toggle-on-mobile.md)
 
@@ -156,6 +162,8 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [A mention notification shows an address where a name should be](issues/.done/2026-08-05-notification-previews-show-raw-addresses-instead-of-mention-names.md)
 - 🐛 [Mobile re-publishes bookmark avatars into the config blob](issues/.done/2026-08-07-mobile-republishes-bookmark-avatars-into-the-config-blob.md)
 - 🐛 [The broadcast marked itself done before doing anything](issues/.done/2026-08-09-a-profile-change-could-silently-never-reach-anyone.md)
+- 🐛 [The profile modal's bio is read raw, so it vanishes for any member the sender merge never touched](issues/.done/2026-08-11-profile-modal-bio-is-read-raw-so-it-vanishes-for-any-unmerged-member.md)
+- 🐛 [Space mention notifications bake names at write time, so a `.q` never renders there](issues/.done/2026-08-16-space-mention-notifications-bake-names-at-write-time-so-no-q-ever-renders.md)
 - 📋 [Channel reorder mutations should broadcast (not local-only)](issues/.done/2026-05-29-channel-reorder-mutations-should-broadcast.md)
 - 📋 [Port DM update-profile (identity sync over DM sessions) from desktop](issues/.done/2026-06-09-port-dm-update-profile-from-desktop.md)
 - 📋 [Task: make `primaryUsername` (and `isProfilePublic`) survive a device switch and reliably reach the published public profile](issues/.done/2026-06-10-primary-username-sync-and-publish.md)
@@ -264,6 +272,7 @@ This is the main index for all documentation, bug reports, and task management.
 - [Should mobile adopt quorum-shared UI primitives?](reports/2026-06-28-shared-primitives-on-mobile-analysis.md)
 - [UI touchable audit findings](reports/2026-06-28-ui-touchable-audit-findings.md)
 - [TypeScript error inventory](reports/2026-07-31-typescript-error-inventory.md)
+- [Mobile identity migration: survey](reports/2026-08-11-mobile-identity-migration-survey.md)
 
 ## 📊 Completed Reports
 
@@ -271,4 +280,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-10 18:05:58
+**Last Updated**: 2026-08-16 12:17:49

@@ -40,6 +40,14 @@
  * - **Everyone else's `.q`** is an overlay applied to public-profile READS. It
  *   never leaves the device and writes nothing. See `services/dev/fakeQns.ts`.
  *
+ * ## When ONE account shows no `.q` and everybody else does
+ *
+ * That is almost always a stored announcement rather than a product bug, and it
+ * is invisible without looking — which cost two sessions. The Diagnose section
+ * answers it: `Check announced names` lists every account this device has
+ * stored a claim for, `Forget announced names` clears them. Both are local, so
+ * a claim heard by three devices needs three Forgets.
+ *
  * ## Read the cache note before concluding anything is broken
  *
  * Public profiles are cached for an hour. Every control here invalidates that
@@ -63,10 +71,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context';
 import { republishSelfProfile } from '@/services/profile/republishSelfProfile';
 import { NO_PRIMARY_NAME } from '@/utils/primaryName';
+import { truncateAddress } from '@/utils/formatAddress';
 import { useTheme, type AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 import {
   DevButton,
+  DevButtonRow,
   DevPanel,
   DevReadout,
   DevRow,
@@ -80,6 +90,37 @@ import {
   setFakeQnsState,
   type FakeQnsState,
 } from '@/services/dev/fakeQns';
+
+/**
+ * Both stores the announced-name tooling reads, wired to MMKV.
+ *
+ * Shared by the check and the repair on purpose. They must look at exactly the
+ * same rows — a check that named accounts the repair could not clear would send
+ * someone hunting a product bug, which is the failure this whole section exists
+ * to prevent. Pinned from the other side by `announcedNameStatus.test.ts`.
+ */
+async function openAnnouncedStores() {
+  const { getAllSpaces } = await import('@/services/config/spaceStorage');
+  const { getMMKVAdapter } = await import('@/services/storage/mmkvAdapter');
+  const adapter = getMMKVAdapter();
+  type Row = { address?: string; claimed_primary_username?: string | null };
+
+  return {
+    roster: {
+      spaceIds: () => getAllSpaces().map((s) => s.spaceId),
+      members: (spaceId: string) => adapter.getSpaceMembers(spaceId) as unknown as Promise<Row[]>,
+      saveMember: (spaceId: string, member: Row) =>
+        adapter.saveSpaceMember(spaceId, member as Parameters<typeof adapter.saveSpaceMember>[1]),
+    },
+    conversations: {
+      conversations: async () =>
+        (await adapter.getConversations({ type: 'direct', limit: 500 }))
+          .conversations as unknown as Row[],
+      save: (row: Row) =>
+        adapter.saveConversation(row as Parameters<typeof adapter.saveConversation>[0]),
+    },
+  };
+}
 
 /**
  * Surface the server's own words for a rejected publish.
@@ -113,6 +154,17 @@ export function QnsFakePanel() {
   /** Blocks a second tap while a POST is in flight. Two overlapping publishes
    *  race to be the server's last write, and the loser silently wins. */
   const [publishing, setPublishing] = useState(false);
+  /** Kept separate from `publishing`/`publishOutcome` so the repair's result
+   *  appears beside the repair button, not under the publish controls three
+   *  rows above it where it reads as belonging to them. */
+  const [repairing, setRepairing] = useState(false);
+  const [repairOutcome, setRepairOutcome] = useState<string>('');
+  /** One line per account on this device carrying a stored announcement.
+   *  `null` means "not looked yet", which is deliberately different from an
+   *  empty list ("looked, nothing there") — the two were indistinguishable
+   *  before, and only the second is an answer. */
+  const [scanLines, setScanLines] = useState<string[] | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   /** Drop every cached public profile so the next render refetches through the
    *  overlay. Without this a toggle looks inert for up to an hour. */
@@ -182,6 +234,120 @@ export function QnsFakePanel() {
     }
   }, [selfName, updateProfile, user, invalidate]);
 
+  /**
+   * Give YOURSELF a name with no side effects beyond this device.
+   *
+   * The default action for a sweep, and separate from publishing because the
+   * two differ in a way no label on one button could carry: publishing
+   * ANNOUNCES the name to every space, receivers store it forever, and a stored
+   * announcement permanently outranks this overlay — so one press removes that
+   * account from every future sweep on every device that heard it.
+   *
+   * This writes only the overlay entry. Reversible, invisible to everyone else,
+   * and enough for "does my own `.q` render on every surface".
+   */
+  const handleSetSelfLocal = useCallback(() => {
+    const trimmed = selfName.trim().replace(/\.q$/i, '');
+    if (!user?.address) return;
+    if (trimmed) setFakeQnsEntry(user.address, { primaryUsername: trimmed });
+    else removeFakeQnsEntry(user.address);
+    setState(getFakeQnsState());
+    setPublishOutcome(
+      trimmed ? `local only — ${trimmed}.q, nothing announced` : 'local entry removed',
+    );
+    invalidate();
+  }, [selfName, user, invalidate]);
+
+  /**
+   * Which accounts on this device are unreachable by the overlay, and why.
+   *
+   * Read-only. It exists because the repair used to be the only way to find
+   * out: you ran it and read the count afterwards, which is a destructive test
+   * for a diagnostic question. "Everyone got a .q except this one person" has
+   * one common cause and this names it.
+   */
+  const handleCheckAnnounced = useCallback(async () => {
+    setScanning(true);
+    setScanLines(null);
+    try {
+      const { scanAnnouncedNames, describeAnnouncedRow } = await import(
+        '@/services/dev/announcedNameStatus'
+      );
+      const { roster, conversations } = await openAnnouncedStores();
+      const scan = await scanAnnouncedNames(roster, conversations);
+
+      const lines = scan.rows.map((row) =>
+        describeAnnouncedRow(row, user?.address, (a) => truncateAddress(a)),
+      );
+      // An unreadable roster is "unknown", not "clean". Reporting it as clean
+      // is how a partial answer becomes a wrong conclusion.
+      if (scan.failures.length) {
+        lines.push(`⚠ could not read: ${scan.failures.join(', ')} — result is incomplete`);
+      }
+      setScanLines(
+        lines.length
+          ? lines
+          : ['No stored announcements. The overlay can reach every account on this device.'],
+      );
+    } catch (e) {
+      setScanLines([`FAILED: ${e instanceof Error ? e.message : String(e)}`]);
+    } finally {
+      setScanning(false);
+    }
+  }, [user?.address]);
+
+  /**
+   * Wipe stored announcements so the overlay can reach those rows again.
+   *
+   * The repair for a device already stuck — see `forgetAnnouncedNames`. Local
+   * only; it un-announces nothing for anybody else, and it clears only THIS
+   * device, so every other device that heard the announce needs its own run.
+   */
+  const handleForgetAnnounced = useCallback(async () => {
+    setRepairing(true);
+    setRepairOutcome('clearing…');
+    try {
+      const { forgetAnnouncedNames, forgetConversationClaims } = await import(
+        '@/services/dev/forgetAnnouncedNames'
+      );
+      const { roster, conversations } = await openAnnouncedStores();
+
+      const spaces = await forgetAnnouncedNames(roster);
+      // DMs keep the claim on the CONVERSATION row, not a roster — clearing
+      // only spaces leaves every DM surface stuck and reads as "it did nothing".
+      const dms = await forgetConversationClaims(conversations);
+
+      // The rosters live under their OWN query key. Invalidating only the
+      // public-profile cache (what `invalidate()` does) left the provider
+      // serving the pre-repair roster from memory, so a successful wipe looked
+      // like a no-op — which is exactly how this failed the first time.
+      await queryClient.invalidateQueries({ queryKey: ['identity-roster'] });
+      await queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      invalidate();
+
+      const failures = spaces.failures.length + (dms.failed ? 1 : 0);
+      setRepairOutcome(
+        `cleared ${spaces.rowsCleared} roster row(s) in ${spaces.spacesTouched} space(s), ` +
+          `${dms.rowsCleared} DM row(s)` +
+          (failures ? ` · ${failures} FAILED` : '') +
+          (spaces.rowsCleared + dms.rowsCleared === 0
+            ? ' — nothing was stored, so this was not the cause'
+            : ' — reopen the screen to see it'),
+      );
+    } catch (e) {
+      // Silence here was the first version's real defect: a throw left the
+      // button disabled with no message, which is indistinguishable from a
+      // repair that ran and achieved nothing.
+      setRepairOutcome(`FAILED: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setRepairing(false);
+      // Re-read rather than assume. On the success path this should come back
+      // empty, and on the failure path it shows what survived — either way the
+      // list on screen is a fresh observation instead of a claim about one.
+      void handleCheckAnnounced();
+    }
+  }, [invalidate, queryClient, handleCheckAnnounced]);
+
   const handleClearSelf = useCallback(async () => {
     setSelfName('');
     updateProfile({ primaryUsername: NO_PRIMARY_NAME });
@@ -250,21 +416,28 @@ export function QnsFakePanel() {
       <View style={styles.divider} />
       <DevRow
         label="1 · Give MYSELF a .q"
-        hint="Start here. Sets your real primary-username field AND pins the same name for your address, so your profile header and your own chat rows agree."
+        hint="Start here. Set locally is what you want for a sweep: it pins the name for your address on THIS DEVICE only."
       />
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
           value={selfName}
           onChangeText={setSelfName}
-          placeholder="e.g. qatest"
+          placeholder="e.g. testname"
           placeholderTextColor={theme.colors.textSubtle}
           autoCapitalize="none"
           autoCorrect={false}
           accessibilityLabel="Fake primary QNS username"
         />
         <DevButton
-          label="Set"
+          label="Set locally"
+          onPress={handleSetSelfLocal}
+          disabled={publishing}
+        />
+      </View>
+      <DevButtonRow>
+        <DevButton
+          label="Announce for real"
           onPress={() => void handleApplySelf()}
           disabled={publishing}
         />
@@ -273,14 +446,48 @@ export function QnsFakePanel() {
           onPress={() => void handleClearSelf()}
           disabled={publishing}
         />
-      </View>
+      </DevButtonRow>
       {!!publishOutcome && <DevReadout>{publishOutcome}</DevReadout>}
       <DevWarning>
-        Set and Clear PUBLISH, the same as the real Set as Primary button — to
-        the configured API, which is production unless Use Local API is on. With
-        a private profile nothing leaves the device. Clear when you are done, or
-        turn Public Profile off, which deletes the whole published record.
+        &quot;Announce for real&quot; is a ONE-WAY DOOR. It publishes AND
+        broadcasts the name to every space, and every device that hears it
+        stores it forever. A stored announcement always outranks this overlay,
+        so that account can never be given a fake .q again — not even after
+        Clear, which announces an EMPTY name and is still an announcement. Use
+        it only to exercise the real publish path, never before a sweep.
       </DevWarning>
+
+      <View style={styles.divider} />
+      <DevRow
+        label="Diagnose · Announced names"
+        hint="Why one account can show no .q while everyone else does: it once used Announce for real, so this device stored the claim and the overlay can no longer reach it. Check names them; Forget wipes them. Both are local reads/writes — neither un-announces anything for anyone else, so every other device that heard it needs its own Forget."
+      />
+      <DevButtonRow>
+        <DevButton
+          label={scanning ? 'Checking…' : 'Check announced names'}
+          onPress={() => void handleCheckAnnounced()}
+          disabled={scanning || repairing}
+        />
+        <DevButton
+          label={repairing ? 'Clearing…' : 'Forget announced names'}
+          onPress={() => void handleForgetAnnounced()}
+          disabled={repairing || scanning}
+        />
+      </DevButtonRow>
+      {scanLines && (
+        <DevReadout>
+          <View style={styles.scanBlock}>
+            {scanLines.map((line, i) => (
+              // Index key: the list is rebuilt wholesale on every scan and
+              // never reordered in place.
+              <Text key={i} style={styles.scanLine}>
+                {line}
+              </Text>
+            ))}
+          </View>
+        </DevReadout>
+      )}
+      {!!repairOutcome && <DevReadout>{repairOutcome}</DevReadout>}
       <Text style={styles.note}>
         This covers most of the job. Nearly every surface can render YOU: your
         messages, a reply to your own message, a mention you type at yourself,
@@ -364,5 +571,13 @@ const createStyles = (theme: AppTheme) =>
       fontSize: Skin.font(11),
       lineHeight: Skin.font(15),
       color: theme.colors.textSubtle,
+    },
+    scanBlock: {
+      gap: Skin.space(4),
+    },
+    scanLine: {
+      fontSize: Skin.font(11),
+      lineHeight: Skin.font(15),
+      color: theme.colors.textMain,
     },
   });

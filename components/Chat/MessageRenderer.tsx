@@ -26,6 +26,10 @@ interface MessageRendererProps {
   text: string;
   customEmojis: Emoji[];
   members?: SpaceMember[];
+  /** The Space this message lives in, if any — passed through to
+   *  `@/identity` so a mentioned member's per-space nickname outranks their
+   *  `.q` here the same way it does everywhere else. */
+  spaceId?: string;
   channels?: Channel[];
   /** Space roles, for resolving @role mention pills. */
   roles?: Role[];
@@ -59,6 +63,7 @@ function MessageRendererBase({
   text,
   customEmojis,
   members = [],
+  spaceId,
   channels = [],
   roles = [],
   everyoneAuthorized = false,
@@ -108,6 +113,7 @@ function MessageRendererBase({
         enableTranslate={enableTranslate}
         customEmojis={customEmojis}
         members={members}
+        spaceId={spaceId}
         roles={roles}
         everyoneAuthorized={everyoneAuthorized}
         channels={channels}
@@ -132,6 +138,7 @@ function MessageRendererBase({
         enableTranslate={enableTranslate}
         customEmojis={customEmojis}
         members={members}
+        spaceId={spaceId}
         roles={roles}
         everyoneAuthorized={everyoneAuthorized}
         channels={channels}
@@ -151,6 +158,7 @@ function MessageRendererBase({
       content={prepared}
       customEmojis={customEmojis}
       members={members}
+      spaceId={spaceId}
       theme={theme}
       style={style}
       onMentionPress={onMentionPress}
