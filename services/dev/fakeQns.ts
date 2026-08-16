@@ -13,6 +13,27 @@
  * back a synthesized one. Nothing is written, nothing is signed, nothing leaves
  * the device.
  *
+ * ## That promise covers THIS MODULE, not the whole panel
+ *
+ * `components/dev/QnsFakePanel.tsx`'s "Give MYSELF a .q" does not write through
+ * here at all. It calls the product's own `updateProfile` +
+ * `republishSelfProfile`, on purpose, so the panel exercises the real
+ * elect-and-publish path rather than half of it. That is a REAL action with
+ * effects on other people's devices, and reading the sentence above as covering
+ * it has now misled two sessions.
+ *
+ * The consequence is permanent and worth stating here, where someone reasoning
+ * about the overlay will hit it: giving yourself a name broadcasts it to every
+ * space, and receivers store it as `claimed_primary_username`. A stored
+ * announcement always outranks whatever this module injects, because presence
+ * is how an un-election is expressed. So an account that has ever used that
+ * button can NEVER be given a synthesized `.q` again on any device that heard
+ * it — not even after "Clear", which announces an empty name and is still an
+ * announcement.
+ *
+ * Use "Give EVERYONE a .q" alone for a where-does-it-render sweep. Treat "Give
+ * MYSELF a .q" as a one-way door, on an account you do not need for sweeps.
+ *
  * ## Why the seam is the API client and not the hooks
  *
  * Desktop tried the hook-level version of this and recorded the trap (see

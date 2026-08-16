@@ -67,6 +67,7 @@ import { useTheme, type AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 import {
   DevButton,
+  DevButtonRow,
   DevPanel,
   DevReadout,
   DevRow,
@@ -182,6 +183,60 @@ export function QnsFakePanel() {
     }
   }, [selfName, updateProfile, user, invalidate]);
 
+  /**
+   * Give YOURSELF a name with no side effects beyond this device.
+   *
+   * The default action for a sweep, and separate from publishing because the
+   * two differ in a way no label on one button could carry: publishing
+   * ANNOUNCES the name to every space, receivers store it forever, and a stored
+   * announcement permanently outranks this overlay — so one press removes that
+   * account from every future sweep on every device that heard it.
+   *
+   * This writes only the overlay entry. Reversible, invisible to everyone else,
+   * and enough for "does my own `.q` render on every surface".
+   */
+  const handleSetSelfLocal = useCallback(() => {
+    const trimmed = selfName.trim().replace(/\.q$/i, '');
+    if (!user?.address) return;
+    if (trimmed) setFakeQnsEntry(user.address, { primaryUsername: trimmed });
+    else removeFakeQnsEntry(user.address);
+    setState(getFakeQnsState());
+    setPublishOutcome(
+      trimmed ? `local only — ${trimmed}.q, nothing announced` : 'local entry removed',
+    );
+    invalidate();
+  }, [selfName, user, invalidate]);
+
+  /**
+   * Wipe stored announcements so the overlay can reach those rows again.
+   *
+   * The repair for a device already stuck — see `forgetAnnouncedNames`. Local
+   * only; it un-announces nothing for anybody else.
+   */
+  const handleForgetAnnounced = useCallback(async () => {
+    setPublishing(true);
+    setPublishOutcome('clearing announced names…');
+    const { forgetAnnouncedNames } = await import('@/services/dev/forgetAnnouncedNames');
+    const { getAllSpaces } = await import('@/services/config/spaceStorage');
+    const { getMMKVAdapter } = await import('@/services/storage/mmkvAdapter');
+    const adapter = getMMKVAdapter();
+    const res = await forgetAnnouncedNames({
+      spaceIds: () => getAllSpaces().map((s) => s.spaceId),
+      members: (spaceId) =>
+        adapter.getSpaceMembers(spaceId) as unknown as Promise<
+          { address?: string; claimed_primary_username?: string | null }[]
+        >,
+      saveMember: (spaceId, member) =>
+        adapter.saveSpaceMember(spaceId, member as Parameters<typeof adapter.saveSpaceMember>[1]),
+    });
+    setPublishOutcome(
+      `forgot ${res.rowsCleared} announced name(s) across ${res.spacesTouched} space(s)` +
+        (res.failures.length ? ` · ${res.failures.length} space(s) FAILED` : ''),
+    );
+    setPublishing(false);
+    invalidate();
+  }, [invalidate]);
+
   const handleClearSelf = useCallback(async () => {
     setSelfName('');
     updateProfile({ primaryUsername: NO_PRIMARY_NAME });
@@ -250,7 +305,7 @@ export function QnsFakePanel() {
       <View style={styles.divider} />
       <DevRow
         label="1 · Give MYSELF a .q"
-        hint="Start here. Sets your real primary-username field AND pins the same name for your address, so your profile header and your own chat rows agree."
+        hint="Start here. Set locally is what you want for a sweep: it pins the name for your address on THIS DEVICE only."
       />
       <View style={styles.inputRow}>
         <TextInput
@@ -264,7 +319,14 @@ export function QnsFakePanel() {
           accessibilityLabel="Fake primary QNS username"
         />
         <DevButton
-          label="Set"
+          label="Set locally"
+          onPress={handleSetSelfLocal}
+          disabled={publishing}
+        />
+      </View>
+      <DevButtonRow>
+        <DevButton
+          label="Announce for real"
           onPress={() => void handleApplySelf()}
           disabled={publishing}
         />
@@ -273,14 +335,29 @@ export function QnsFakePanel() {
           onPress={() => void handleClearSelf()}
           disabled={publishing}
         />
-      </View>
+      </DevButtonRow>
       {!!publishOutcome && <DevReadout>{publishOutcome}</DevReadout>}
       <DevWarning>
-        Set and Clear PUBLISH, the same as the real Set as Primary button — to
-        the configured API, which is production unless Use Local API is on. With
-        a private profile nothing leaves the device. Clear when you are done, or
-        turn Public Profile off, which deletes the whole published record.
+        &quot;Announce for real&quot; is a ONE-WAY DOOR. It publishes AND
+        broadcasts the name to every space, and every device that hears it
+        stores it forever. A stored announcement always outranks this overlay,
+        so that account can never be given a fake .q again — not even after
+        Clear, which announces an EMPTY name and is still an announcement. Use
+        it only to exercise the real publish path, never before a sweep.
       </DevWarning>
+
+      <View style={styles.divider} />
+      <DevRow
+        label="Repair · Forget announced names"
+        hint="Wipes stored announcements from this device's rosters so the overlay can reach those rows again. Fixes an account stuck showing no .q because it once used Announce for real. Local only — un-announces nothing for anyone else."
+      />
+      <DevButtonRow>
+        <DevButton
+          label="Forget announced names"
+          onPress={() => void handleForgetAnnounced()}
+          disabled={publishing}
+        />
+      </DevButtonRow>
       <Text style={styles.note}>
         This covers most of the job. Nearly every surface can render YOU: your
         messages, a reply to your own message, a mention you type at yourself,
