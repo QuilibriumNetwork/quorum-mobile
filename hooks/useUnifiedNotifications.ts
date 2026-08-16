@@ -102,6 +102,28 @@ function isResolvableQuorumSender(c: Conversation): boolean {
   );
 }
 
+/**
+ * A Quorum 1:1 conversation whose PARTNER has a real address.
+ *
+ * Deliberately NOT `isResolvableQuorumSender`, which additionally requires that
+ * the partner sent the last message. That is the right test for the "who spoke"
+ * prefix and the wrong one for the row's TITLE: the title names the same person
+ * whichever way the last message went, so gating it on the sender left every
+ * conversation you replied to most recently titled with an unresolved name.
+ *
+ * A Farcaster row carries the synthetic address `fid:<n>` — a separate identity
+ * namespace with no Quorum profile and no `.q` — so it is excluded here for the
+ * same reason `qnsLookupAddresses` excludes it.
+ */
+function isQuorumDirectPartner(c: Conversation): boolean {
+  return (
+    c.type === 'direct' &&
+    c.source !== 'farcaster' &&
+    !!c.address &&
+    !c.address.startsWith('fid:')
+  );
+}
+
 export function useUnifiedNotifications(
   options: UseUnifiedNotificationsOptions = {},
 ): UnifiedNotificationsResult {
@@ -155,7 +177,12 @@ export function useUnifiedNotifications(
     () =>
       qnsLookupAddresses(
         (dmConversations.conversations as Conversation[])
-          .filter(isResolvableQuorumSender)
+          // Every Quorum DM partner, not only whoever spoke last: the row's
+          // TITLE names the partner either way, so enriching only last-senders
+          // meant a conversation you replied to most recently could never gain
+          // their `.q`. Still one capped batch, so the wider set costs no extra
+          // requests.
+          .filter(isQuorumDirectPartner)
           .map((c) => ({ address: c.address })),
         MAX_QNS_LOOKUPS,
       ),
@@ -170,16 +197,40 @@ export function useUnifiedNotifications(
     for (const c of dmConversations.conversations as Conversation[]) {
       const senderName = c.lastMessageSenderName;
       const senderIsSelf = senderName === 'You';
-      const senderAddress = isResolvableQuorumSender(c) ? c.address : undefined;
+
+      // The PARTNER's name, through the identity ladder.
+      //
+      // `displayName` used to be the raw stored `c.displayName`, so a DM
+      // notification titled the row with whatever string the conversation was
+      // created with — no `.q`, ever, however the same person rendered in the
+      // conversation itself. Only `senderName` below was resolved, and the row
+      // title does not use it (`quorumToUnified` prefers `displayName`).
+      //
+      // `global: true` — a DM partner is never a Space roster member, so there
+      // is no per-space tier that could apply.
+      const partnerAddress = isQuorumDirectPartner(c) ? c.address : undefined;
+      const resolvedPartner = partnerAddress
+        ? formatResolvedName(resolve(partnerAddress, { global: true }))
+        : undefined;
+      // `undefined` when the ladder had nothing better than the address itself,
+      // so the stored string still wins. For an unsynced partner that string is
+      // often a real name, and it is never worse than a hash.
+      const partnerName =
+        resolvedPartner && partnerAddress && resolvedPartner !== truncateAddress(partnerAddress)
+          ? resolvedPartner
+          : undefined;
+
       map.set(c.conversationId, {
-        displayName: c.displayName ?? '',
+        displayName: partnerName ?? c.displayName ?? '',
         // Farcaster rows store a plain string, Quorum rows the typed preview
         // — coerce so this doesn't depend on which wrote it.
         preview: coerceMessagePreview(c.lastMessagePreview).text || undefined,
         senderName: senderIsSelf
           ? 'You'
-          : senderAddress
-            ? formatResolvedName(resolve(senderAddress, { global: true }))
+          : isResolvableQuorumSender(c)
+            // The partner IS the sender in this branch, so reuse the one
+            // resolution rather than running the ladder twice for one row.
+            ? (partnerName ?? senderName)
             // No resolvable address — a Farcaster row (synthetic `fid:<n>`
             // address, a separate identity namespace) or a hypothetical group
             // conversation, which mobile never creates today. The stored

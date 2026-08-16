@@ -207,8 +207,133 @@ describe('useUnifiedNotifications — the DM sender prefix resolves through @/id
       { wrapper },
     );
 
-    await waitFor(() => expect(result.current.items[0]?.body).toBe('bob.q: hey there'));
+    // The verified name now lands in the TITLE, and `conversationSnippet`
+    // then suppresses the prefix because it would merely repeat it
+    // (`who !== d.displayName`). So the row reads "bob.q" / "hey there"
+    // rather than "Conversation Title" / "bob.q: hey there" — same
+    // information, no duplication, and the stale string gone from both halves.
+    // This assertion used to expect the duplicated form, which only looked
+    // right because the title was stale.
+    await waitFor(() => expect(result.current.items[0]?.title).toBe('bob.q'));
+    expect(result.current.items[0]?.body).toBe('hey there');
+    expect(result.current.items[0]?.title).not.toBe('Conversation Title');
     expect(result.current.items[0]?.body).not.toContain('Old Bob Name');
+  });
+
+  it("titles the row with the partner's verified .q, not the stored conversation title", async () => {
+    // The row TITLE came from the raw `conversation.displayName`, so a DM
+    // notification named the partner with whatever string the conversation was
+    // created with and could never show a `.q` — while the very same person
+    // rendered as `bob.q` inside the conversation. Only the sender prefix went
+    // through the ladder, and the title does not use it.
+    mockConversations = [
+      {
+        conversationId: 'conv-title',
+        type: 'direct',
+        timestamp: 1_700_000_000_000,
+        address: PARTNER,
+        icon: '',
+        displayName: 'Stale Conversation Title',
+        source: 'quorum',
+        lastMessageSenderName: 'Old Bob Name',
+        lastMessagePreview: 'hey there',
+      } as Conversation,
+    ];
+    mockChatEntries = [
+      {
+        id: 'chat-title',
+        title: 'New message',
+        body: 'fallback body',
+        createdAt: 1_700_000_000_000,
+        data: { type: 'message', conversationId: 'conv-title', origin: 'quorum' },
+      } as NotificationLogEntry,
+    ];
+
+    const { result } = renderHook(
+      () => useUnifiedNotifications({ enrichConversations: true }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.items[0]?.title).toBe('bob.q'));
+    expect(result.current.items[0]?.title).not.toBe('Stale Conversation Title');
+  });
+
+  it('titles the row with the partner\'s .q even when the VIEWER sent last', async () => {
+    // The enrich set used to be gated on `isResolvableQuorumSender`, which
+    // requires the partner to have sent the last message. The title names the
+    // partner either way, so a conversation you replied to most recently was
+    // never enriched and could never gain the `.q`. This is the case that gate
+    // excluded.
+    mockConversations = [
+      {
+        conversationId: 'conv-self-last',
+        type: 'direct',
+        timestamp: 1_700_000_000_000,
+        address: PARTNER,
+        icon: '',
+        displayName: 'Stale Conversation Title',
+        source: 'quorum',
+        lastMessageSenderName: 'You',
+        lastMessagePreview: 'my reply',
+      } as Conversation,
+    ];
+    mockChatEntries = [
+      {
+        id: 'chat-self-last',
+        title: 'New message',
+        body: 'fallback body',
+        createdAt: 1_700_000_000_000,
+        data: { type: 'message', conversationId: 'conv-self-last', origin: 'quorum' },
+      } as NotificationLogEntry,
+    ];
+
+    const { result } = renderHook(
+      () => useUnifiedNotifications({ enrichConversations: true }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.items[0]?.title).toBe('bob.q'));
+    // The prefix stays the literal 'You' — resolving the TITLE must not leak
+    // into the "who spoke" slot, which is not a member lookup at all.
+    expect(result.current.items[0]?.body).toBe('You: my reply');
+  });
+
+  it('keeps the stored title when the ladder can only offer an address', async () => {
+    // CONTROL ARM. An unsynced partner must keep the name the conversation
+    // carries rather than degrading to a hash — the stored string is often a
+    // real name and is never worse.
+    mockGetPublicProfile = jest.fn().mockResolvedValue(null);
+    mockResolveBatch = jest.fn().mockResolvedValue([]);
+    mockConversations = [
+      {
+        conversationId: 'conv-unsynced',
+        type: 'direct',
+        timestamp: 1_700_000_000_000,
+        address: PARTNER,
+        icon: '',
+        displayName: 'Only Known Name',
+        source: 'quorum',
+        lastMessageSenderName: 'Only Known Name',
+        lastMessagePreview: 'hi',
+      } as Conversation,
+    ];
+    mockChatEntries = [
+      {
+        id: 'chat-unsynced',
+        title: 'New message',
+        body: 'fallback body',
+        createdAt: 1_700_000_000_000,
+        data: { type: 'message', conversationId: 'conv-unsynced', origin: 'quorum' },
+      } as NotificationLogEntry,
+    ];
+
+    const { result } = renderHook(
+      () => useUnifiedNotifications({ enrichConversations: true }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.items[0]?.title).toBe('Only Known Name'));
+    expect(result.current.items[0]?.title).not.toContain(PARTNER.slice(0, 8));
   });
 
   it("shows the literal 'You' for the viewer's own last message, never a lookup", async () => {
@@ -241,7 +366,15 @@ describe('useUnifiedNotifications — the DM sender prefix resolves through @/id
     );
 
     await waitFor(() => expect(result.current.items[0]?.body).toBe('You: on my way'));
-    expect(mockGetPublicProfile).not.toHaveBeenCalled();
+    // A lookup for the PARTNER is expected here now, and is the point: the
+    // row's title names them whichever way the last message went, so the
+    // enrich set is no longer gated on who spoke. This assertion previously
+    // read `not.toHaveBeenCalled()`, which encoded that gate — and that gate
+    // was the bug (a conversation you replied to last could never gain a `.q`).
+    //
+    // What must still never happen is a lookup driven by 'You', which is a
+    // literal and not a member at all. Exactly one address, and it is theirs.
+    expect(mockGetPublicProfile.mock.calls.flat()).toEqual([PARTNER]);
   });
 
   it('leaves a Farcaster conversation\'s synthetic fid address unresolved — never routed through the member resolver', async () => {
