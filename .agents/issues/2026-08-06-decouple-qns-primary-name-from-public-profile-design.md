@@ -298,7 +298,7 @@ surprise. The fan-out must name what it is about to change and be confirmed.
 ## 6b. Electing a name primary does nothing at all today
 
 MEASURED 2026-08-06 against production. An account with a real, resolvable `.q`
-(`GET names.quilibrium.com/resolve/lamat` returns its resolve key) and a
+(`GET names.quilibrium.com/resolve/<name>` returns its resolve key) and a
 published public profile has **no `primary_username` on the server**:
 
 ```

@@ -46,7 +46,7 @@ describe('mergeSyncedPrimaryName', () => {
   });
 
   it('lets another device\'s election win', () => {
-    expect(mergeSyncedPrimaryName('lamat', 'gatto')).toBe('lamat');
+    expect(mergeSyncedPrimaryName('pardo', 'gatto')).toBe('pardo');
   });
 });
 

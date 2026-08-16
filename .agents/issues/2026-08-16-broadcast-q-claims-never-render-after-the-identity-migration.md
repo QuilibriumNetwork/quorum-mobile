@@ -19,6 +19,154 @@ related:
 
 # Broadcast `.q` claims never reach the identity ladder
 
+## Status
+
+**2026-08-16 — implemented, unit-verified, NOT yet device-verified.** The fix is
+the one planned in §4, with no deviation.
+
+| Change | Where |
+|---|---|
+| Claim added to the roster shape | `identity/identityFromMaps.ts` — `RosterNameRow.claimed_primary_username` |
+| Populated from the stored row | `hooks/useMultiSpaceRosters.ts` — copied verbatim, empty string included |
+| Precedence rule reused, not re-derived | `hooks/useVerifiedQnsNames.ts` — `claimIn` exported |
+| Both broadcast sources joined to profile claims | `identity/identityProvider.tsx` — `broadcastClaimsFor` + `claimRows`, one checkpoint |
+| **DM claims reach the ladder** | `identity/identityProvider.tsx` `conversationClaimsFrom` + `conversationClaims` prop, wired in `identity/RootIdentityScope.tsx` |
+| Misleading copy corrected (§8) | `services/profile/primaryNameChange.ts` |
+
+### §4 was incomplete: it only covered spaces
+
+Found by an independent review pass, then confirmed against source. §4's numbered
+steps talk only about `RosterNameRow` and `useMultiSpaceRosters`, but §1 defines
+Route B as reaching "every space they are in **(and to DM partners)**", and the
+two halves land in **different rows**:
+
+- a space claim → the space member row, read by `useMultiSpaceRosters`
+- a DM claim → the **conversation row** (`context/WebSocketContext.tsx:768-771`,
+  `storage.saveConversation`), which no roster hook ever sees
+
+A DM also resolves with **no `spaceId`**, so `identityFromMaps` consults no
+roster row at all for one. Implementing §4 literally would therefore have left
+every DM-only partner without a `.q` — and a DM between two people who share no
+space is precisely the case the public-profile route can never serve, since the
+server refuses every publish carrying the field. Fixed here rather than filed
+separately, because "the broadcast renders" is the whole point of the issue and
+half of it does not count.
+
+`conversationClaims` is a PROP, not part of `IdentitySources`: sources must have
+nowhere to hold an unverified claim, which is what stops a downstream consumer
+rendering one. The cost is that a nested scope cannot inherit DM claims the way
+it inherits rosters. Acceptable today (the root scope is the only provider
+mounted, and it is the one holding the conversations), and noted in the prop's
+docstring so it is not rediscovered as a bug.
+
+Two further design points worth knowing before touching this again:
+
+- **`broadcastClaimsFor` is bounded by the REQUESTED set**, not by the roster or
+  the inbox. It adds names to a batch already capped at one request by
+  `claimedNamesIn`; it never adds a per-address fetch. Pinned by two fetch-count
+  tests asserting a number, each with 200 unrequested claimants alongside.
+  **Consequence worth knowing:** a surface that does not `enrich` gets no `.q`,
+  because nothing put its addresses in the requested set. That is §4.3's
+  demand-driven bound working as specified, not a defect — but it does mean
+  adding a `.q` to a new surface means opting that surface in.
+- **Roster claims are read off the MERGED rosters**, so `parent` is now read at
+  the top of the provider rather than half-way down. A nested scope must be able
+  to verify a claim carried by a row its parent loaded, because `requested` is
+  per-provider state.
+
+**Verified:**
+
+- 12 tests in `__tests__/identityProviderRosterClaims.test.tsx` (8 space, 4 DM),
+  every one proven red before its half of the fix and green after. The one test
+  that was already green throughout is the Route A guard, which had to stay that
+  way.
+- 2 tests added to `__tests__/rootIdentityScopeWiring.test.tsx` pinning that
+  something actually HANDS the provider a DM claim. Proven red by removing just
+  the `conversationClaims` prop from `RootIdentityScope`. Without these the DM
+  gap would have been invisible in exactly the way the space gap was: the claim
+  arrives, is stored, is verifiable, and nothing reads it.
+- `__tests__/primaryNameChange.test.ts` — one test's assertions inverted, because
+  they encoded the now-false belief that a private profile hides a `.q`.
+- All four impersonation/in-flight tests proven to go RED when
+  `claimedNameBelongsTo` is stubbed to `true` in the provider, and green with it
+  restored. A security test that cannot fail is worse than none.
+- Full suite 966/967 (three consecutive runs, identical), `npx tsc --noEmit`
+  clean on every touched file, lint clean (warnings only, all pre-existing
+  patterns).
+
+> **A flake was found and fixed, and the shape is worth remembering.** The DM
+> impostor test anchored its `waitFor` on `mockResolveBatch` having been called.
+> A DM has no roster, so the impostor's fallback name arrives with the FETCHED
+> profile, while the claim comes from `conversationClaims`, which is present on
+> the very first render. The batch therefore fires before the profile lands, and
+> the assertion ran against a truncated address about 40% of the time. The `.q`
+> half was true either way, which is exactly what made it read as green. It now
+> waits for the name to SETTLE and then asserts the absence. Confirmed stable
+> over 8 consecutive runs.
+>
+> Generalising: in this provider, roster/conversation claims are synchronous and
+> profiles are not, so any assertion that mixes the two needs an anchor on the
+> slower one.
+
+> The single failure is `rawNameFieldAudit` flagging
+> `components/dev/QnsExplainPanel.tsx`, a file added by concurrent work in
+> commits `38dd909` / `700a9fa` and not touched here. It reads raw name fields
+> and has not been added to that audit's exception list. Not this change's, but
+> it is red on the branch and someone has to own it.
+
+> The un-election test initially passed for the WRONG reason — before the
+> profile promise settles there is no claim to look up, so "no `.q`" is
+> momentarily true even in an implementation that ignores the roster entirely.
+> It now renders the `.q` FIRST and asserts the clear afterwards. Worth
+> remembering: in this provider almost any single-render "no name" assertion can
+> pass by racing.
+
+### Device attempt 2026-08-16 — BLOCKED, and the blocker is not this code
+
+Attempted with an account that genuinely owns a registered, resolvable name as
+sender, and a dev-build test account as receiver. Result: the `Why no .q?` panel
+reported **`NO-CLAIM`** with `profile fetched: yes`, i.e. nothing ever arrived to
+verify.
+
+**Cause: the sending device runs a build that predates the transport.** Its QNS
+list renders a static "★ Primary" badge where both `master` and this branch
+render a **"Remove as Primary" button**. That badge is the pre-`950545e` (#238,
+2026-08-06) UI, so the build necessarily predates `e93cd26` (#245, 2026-08-09),
+which is what added `primaryUsername` to the wire. That build has nothing to
+send, so no amount of re-electing or reconnecting would have produced a claim.
+
+**Worth recording before anyone re-derives it:**
+
+- `GET names.quilibrium.com/resolve/<name>` for the sender's name returns a
+  `resolveKey`, and `deriveAddress` on it yields **exactly** that account's own
+  address. MEASURED 2026-08-16 against live infrastructure. So the ownership
+  check will pass the moment a claim arrives; nothing on the name side needs
+  fixing.
+- The RECEIVING test account appeared to have a `.q` of its own, and it was
+  **not a real name** — the resolver answered `NAME_NOT_FOUND` for it. It was the
+  fake-QNS overlay still running with "give everyone a name" already switched
+  off. The overlay must be disabled ENTIRELY, not partially, or readings stay
+  polluted. It also means that account can never be a sender for a positive test.
+- A spare name cannot be pointed at a harness bot: `submitResolveKeyUpdate`
+  (`components/qns/NameDetailModal.tsx:177-215`) always sets the resolve key to
+  `user.publicKey`. There is no UI route to a third-party resolve key.
+
+**Still open, and this is why the issue is not closed:**
+
+- **The ACCEPT branch over real infrastructure.** Narrower than it was. The
+  existing `qns-claim-two-bot` harness already proves, over the production relay,
+  that a claim survives the wire into the peer's conversation row and that a
+  FORGED claim is refused. The ownership maths is confirmed against live resolver
+  data (above). What remains unproven is only that a genuinely owned name makes
+  the whole round trip and renders — the one path that needs a sender with #245
+  AND a name resolving to it.
+- **What would close it:** a sender running #245 or later as the name's owner.
+  Either update the sending device to a post-2026-08-09 build, or run a harness
+  bot on that account key (`loadOrCreateIdentity` already accepts an
+  env-supplied `privateKeyHex`, and deliberately never persists it). The second
+  costs one extra device registration on that account, permanently.
+- **Desktop** (§9), unchanged and still out of scope here.
+
 ## For the agent picking this up — read this first
 
 This is a **regression on the `feat/resolve-identity` branch**, and it is
@@ -269,3 +417,12 @@ cosmetic parity either.
 - Section 8 was incomplete: it flagged the false user-facing string at primaryNameChange.ts:118-121 but not the code comment immediately above it (:118-120) asserting the same falsehood ('a private profile is where the .q stops'). Left in place, the next reader reverts the corrected copy to match the comment. Now called out.
 - Section 9 understated desktop. Re-verified on quorum-desktop main: identityProvider.tsx:108 does 'qnsName: nn(profile?.primary_username)' — it does not merely fail to verify, it pipes an unverified fetched claim straight into the .q tier. That is the impersonation vector the decoupling design describes in its 6c-3, live on desktop today. Reworded so it is not filed as cosmetic parity. Desktop send/receive claims also re-verified exact: useSpaceProfile.ts:313-323 sends only displayName/userIcon/bio, MessageService.ts:269 applyProfileUpdate writes six fields, none QNS.
 - Frontmatter and folder agree (type: bug, status: open, in .open/) — no change needed.
+
+**2026-08-16 - claude-opus-5**: Implementation pass (not a review). Implemented the fix per section 4, plus a gap in section 4 itself that an independent review caught. Issue stays in-progress: the device leg of section 7 is the only thing left, and nothing automated substitutes for it.
+- IMPLEMENTED as planned: claimed_primary_username added to RosterNameRow; populated in useMultiSpaceRosters; claimIn exported from useVerifiedQnsNames and reused rather than re-derived; broadcastClaimsFor + claimRows in identityProvider joining both transports into the ONE existing verification checkpoint; bounded by the demand-driven requested set, no new per-address fetch.
+- SECTION 4 WAS INCOMPLETE and this is the important finding. Its numbered steps cover only rosters, but section 1 defines Route B as reaching spaces AND DM partners, and the two land in different rows: a space claim on the member row, a DM claim on the CONVERSATION row (WebSocketContext.tsx:768-771 -> storage.saveConversation). A DM also resolves with no spaceId, so identityFromMaps consults no roster at all. Implementing section 4 literally would have shipped with every DM-only partner still missing their .q — the exact case the public-profile route can never serve. Added conversationClaimsFrom + a conversationClaims prop, wired in RootIdentityScope. Kept as a PROP, not in IdentitySources, so sources still have nowhere to hold an unverified claim.
+- Also did the section 8 adjacent fix: the elect-primary message claimed a private profile hides the .q, which stopped being true at the decoupling. Its paired test in primaryNameChange.test.ts asserted /private/i and had to be inverted — the test encoded the false belief too.
+- VERIFICATION. 12 tests in identityProviderRosterClaims.test.tsx (8 space, 4 DM) plus 2 in rootIdentityScopeWiring.test.tsx, each proven red before its half of the fix. The wiring tests matter independently: the provider tests prove it verifies a DM claim once handed one, and nothing there proves anything HANDS it one — which is precisely how the space half shipped broken. All four impersonation/in-flight tests proven to go red when claimedNameBelongsTo is stubbed to true.
+- FOUND AND FIXED A FLAKE IN MY OWN TEST. The DM impostor test anchored waitFor on the resolver batch being called; a DM has no roster so the fallback name arrives with the fetched profile, while the claim is present on first render, so the batch fires first and the assertion hit a truncated address ~40% of runs. The .q half was true either way, which is what made it look green. Re-anchored on the settled name; stable over 8 runs.
+- Full suite 966/967 across three identical runs, tsc clean on every touched file, lint clean. The one failure is rawNameFieldAudit flagging components/dev/QnsExplainPanel.tsx, added by CONCURRENT work in commits 38dd909 and 700a9fa and not touched here — it reads raw name fields and is not in that audit's exception list. Red on the branch, but not this change's, and someone has to own it.
+- Note for whoever picks this up: concurrent commits 38dd909 and 700a9fa swept part of this work into them alongside an unrelated dev-panel feature. The working tree is complete and coherent; the history is mixed.
