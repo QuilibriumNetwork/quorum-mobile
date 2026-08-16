@@ -63,7 +63,6 @@ import {
   formatResolvedName,
   resolveMemberName,
   type ResolvableMember,
-  type SelfIdentity,
 } from '@/utils/resolveMemberName';
 
 export interface LogMentionOrReplyCtx {

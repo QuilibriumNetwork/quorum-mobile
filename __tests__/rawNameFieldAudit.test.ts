@@ -150,6 +150,8 @@ const EXCEPTIONS: Record<string, string> = {
     'Writes `primaryUsername: NO_PRIMARY_NAME` to un-elect a QNS name.',
   'components/dev/QnsFakePanel.tsx':
     'Dev-only overlay that WRITES synthetic `primaryUsername` values to exercise the QNS surfaces. Gated on __DEV__.',
+  'components/dev/QnsExplainPanel.tsx':
+    'Dev-only diagnostic whose PURPOSE is to report the raw stored fields — `primary_username` off the fetched public profile, and what the overlay would synthesize. Resolving them would answer a different question than the one it is asked ("what is stored", not "what would render"), so routing this through `@/identity` would destroy the instrument. Gated on __DEV__.',
   'app/(onboarding)/complete.tsx':
     'Onboarding writes the display name it just collected.',
   'app/(onboarding)/farcaster-setup.tsx':
