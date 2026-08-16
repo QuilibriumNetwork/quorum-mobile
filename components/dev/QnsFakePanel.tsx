@@ -40,6 +40,14 @@
  * - **Everyone else's `.q`** is an overlay applied to public-profile READS. It
  *   never leaves the device and writes nothing. See `services/dev/fakeQns.ts`.
  *
+ * ## When ONE account shows no `.q` and everybody else does
+ *
+ * That is almost always a stored announcement rather than a product bug, and it
+ * is invisible without looking — which cost two sessions. The Diagnose section
+ * answers it: `Check announced names` lists every account this device has
+ * stored a claim for, `Forget announced names` clears them. Both are local, so
+ * a claim heard by three devices needs three Forgets.
+ *
  * ## Read the cache note before concluding anything is broken
  *
  * Public profiles are cached for an hour. Every control here invalidates that
@@ -63,6 +71,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context';
 import { republishSelfProfile } from '@/services/profile/republishSelfProfile';
 import { NO_PRIMARY_NAME } from '@/utils/primaryName';
+import { truncateAddress } from '@/utils/formatAddress';
 import { useTheme, type AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 import {
@@ -81,6 +90,37 @@ import {
   setFakeQnsState,
   type FakeQnsState,
 } from '@/services/dev/fakeQns';
+
+/**
+ * Both stores the announced-name tooling reads, wired to MMKV.
+ *
+ * Shared by the check and the repair on purpose. They must look at exactly the
+ * same rows — a check that named accounts the repair could not clear would send
+ * someone hunting a product bug, which is the failure this whole section exists
+ * to prevent. Pinned from the other side by `announcedNameStatus.test.ts`.
+ */
+async function openAnnouncedStores() {
+  const { getAllSpaces } = await import('@/services/config/spaceStorage');
+  const { getMMKVAdapter } = await import('@/services/storage/mmkvAdapter');
+  const adapter = getMMKVAdapter();
+  type Row = { address?: string; claimed_primary_username?: string | null };
+
+  return {
+    roster: {
+      spaceIds: () => getAllSpaces().map((s) => s.spaceId),
+      members: (spaceId: string) => adapter.getSpaceMembers(spaceId) as unknown as Promise<Row[]>,
+      saveMember: (spaceId: string, member: Row) =>
+        adapter.saveSpaceMember(spaceId, member as Parameters<typeof adapter.saveSpaceMember>[1]),
+    },
+    conversations: {
+      conversations: async () =>
+        (await adapter.getConversations({ type: 'direct', limit: 500 }))
+          .conversations as unknown as Row[],
+      save: (row: Row) =>
+        adapter.saveConversation(row as Parameters<typeof adapter.saveConversation>[0]),
+    },
+  };
+}
 
 /**
  * Surface the server's own words for a rejected publish.
@@ -119,6 +159,12 @@ export function QnsFakePanel() {
    *  rows above it where it reads as belonging to them. */
   const [repairing, setRepairing] = useState(false);
   const [repairOutcome, setRepairOutcome] = useState<string>('');
+  /** One line per account on this device carrying a stored announcement.
+   *  `null` means "not looked yet", which is deliberately different from an
+   *  empty list ("looked, nothing there") — the two were indistinguishable
+   *  before, and only the second is an answer. */
+  const [scanLines, setScanLines] = useState<string[] | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   /** Drop every cached public profile so the next render refetches through the
    *  overlay. Without this a toggle looks inert for up to an hour. */
@@ -213,10 +259,49 @@ export function QnsFakePanel() {
   }, [selfName, user, invalidate]);
 
   /**
+   * Which accounts on this device are unreachable by the overlay, and why.
+   *
+   * Read-only. It exists because the repair used to be the only way to find
+   * out: you ran it and read the count afterwards, which is a destructive test
+   * for a diagnostic question. "Everyone got a .q except this one person" has
+   * one common cause and this names it.
+   */
+  const handleCheckAnnounced = useCallback(async () => {
+    setScanning(true);
+    setScanLines(null);
+    try {
+      const { scanAnnouncedNames, describeAnnouncedRow } = await import(
+        '@/services/dev/announcedNameStatus'
+      );
+      const { roster, conversations } = await openAnnouncedStores();
+      const scan = await scanAnnouncedNames(roster, conversations);
+
+      const lines = scan.rows.map((row) =>
+        describeAnnouncedRow(row, user?.address, (a) => truncateAddress(a)),
+      );
+      // An unreadable roster is "unknown", not "clean". Reporting it as clean
+      // is how a partial answer becomes a wrong conclusion.
+      if (scan.failures.length) {
+        lines.push(`⚠ could not read: ${scan.failures.join(', ')} — result is incomplete`);
+      }
+      setScanLines(
+        lines.length
+          ? lines
+          : ['No stored announcements. The overlay can reach every account on this device.'],
+      );
+    } catch (e) {
+      setScanLines([`FAILED: ${e instanceof Error ? e.message : String(e)}`]);
+    } finally {
+      setScanning(false);
+    }
+  }, [user?.address]);
+
+  /**
    * Wipe stored announcements so the overlay can reach those rows again.
    *
    * The repair for a device already stuck — see `forgetAnnouncedNames`. Local
-   * only; it un-announces nothing for anybody else.
+   * only; it un-announces nothing for anybody else, and it clears only THIS
+   * device, so every other device that heard the announce needs its own run.
    */
   const handleForgetAnnounced = useCallback(async () => {
     setRepairing(true);
@@ -225,28 +310,12 @@ export function QnsFakePanel() {
       const { forgetAnnouncedNames, forgetConversationClaims } = await import(
         '@/services/dev/forgetAnnouncedNames'
       );
-      const { getAllSpaces } = await import('@/services/config/spaceStorage');
-      const { getMMKVAdapter } = await import('@/services/storage/mmkvAdapter');
-      const adapter = getMMKVAdapter();
+      const { roster, conversations } = await openAnnouncedStores();
 
-      const spaces = await forgetAnnouncedNames({
-        spaceIds: () => getAllSpaces().map((s) => s.spaceId),
-        members: (spaceId) =>
-          adapter.getSpaceMembers(spaceId) as unknown as Promise<
-            { address?: string; claimed_primary_username?: string | null }[]
-          >,
-        saveMember: (spaceId, member) =>
-          adapter.saveSpaceMember(spaceId, member as Parameters<typeof adapter.saveSpaceMember>[1]),
-      });
-
+      const spaces = await forgetAnnouncedNames(roster);
       // DMs keep the claim on the CONVERSATION row, not a roster — clearing
       // only spaces leaves every DM surface stuck and reads as "it did nothing".
-      const dms = await forgetConversationClaims({
-        conversations: async () =>
-          (await adapter.getConversations({ type: 'direct', limit: 500 }))
-            .conversations as unknown as { address?: string; claimed_primary_username?: string | null }[],
-        save: (row) => adapter.saveConversation(row as Parameters<typeof adapter.saveConversation>[0]),
-      });
+      const dms = await forgetConversationClaims(conversations);
 
       // The rosters live under their OWN query key. Invalidating only the
       // public-profile cache (what `invalidate()` does) left the provider
@@ -272,8 +341,12 @@ export function QnsFakePanel() {
       setRepairOutcome(`FAILED: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setRepairing(false);
+      // Re-read rather than assume. On the success path this should come back
+      // empty, and on the failure path it shows what survived — either way the
+      // list on screen is a fresh observation instead of a claim about one.
+      void handleCheckAnnounced();
     }
-  }, [invalidate, queryClient]);
+  }, [invalidate, queryClient, handleCheckAnnounced]);
 
   const handleClearSelf = useCallback(async () => {
     setSelfName('');
@@ -350,7 +423,7 @@ export function QnsFakePanel() {
           style={styles.input}
           value={selfName}
           onChangeText={setSelfName}
-          placeholder="e.g. qatest"
+          placeholder="e.g. testname"
           placeholderTextColor={theme.colors.textSubtle}
           autoCapitalize="none"
           autoCorrect={false}
@@ -386,16 +459,34 @@ export function QnsFakePanel() {
 
       <View style={styles.divider} />
       <DevRow
-        label="Repair · Forget announced names"
-        hint="Wipes stored announcements from this device's rosters so the overlay can reach those rows again. Fixes an account stuck showing no .q because it once used Announce for real. Local only — un-announces nothing for anyone else."
+        label="Diagnose · Announced names"
+        hint="Why one account can show no .q while everyone else does: it once used Announce for real, so this device stored the claim and the overlay can no longer reach it. Check names them; Forget wipes them. Both are local reads/writes — neither un-announces anything for anyone else, so every other device that heard it needs its own Forget."
       />
       <DevButtonRow>
         <DevButton
+          label={scanning ? 'Checking…' : 'Check announced names'}
+          onPress={() => void handleCheckAnnounced()}
+          disabled={scanning || repairing}
+        />
+        <DevButton
           label={repairing ? 'Clearing…' : 'Forget announced names'}
           onPress={() => void handleForgetAnnounced()}
-          disabled={repairing}
+          disabled={repairing || scanning}
         />
       </DevButtonRow>
+      {scanLines && (
+        <DevReadout>
+          <View style={styles.scanBlock}>
+            {scanLines.map((line, i) => (
+              // Index key: the list is rebuilt wholesale on every scan and
+              // never reordered in place.
+              <Text key={i} style={styles.scanLine}>
+                {line}
+              </Text>
+            ))}
+          </View>
+        </DevReadout>
+      )}
       {!!repairOutcome && <DevReadout>{repairOutcome}</DevReadout>}
       <Text style={styles.note}>
         This covers most of the job. Nearly every surface can render YOU: your
@@ -480,5 +571,13 @@ const createStyles = (theme: AppTheme) =>
       fontSize: Skin.font(11),
       lineHeight: Skin.font(15),
       color: theme.colors.textSubtle,
+    },
+    scanBlock: {
+      gap: Skin.space(4),
+    },
+    scanLine: {
+      fontSize: Skin.font(11),
+      lineHeight: Skin.font(15),
+      color: theme.colors.textMain,
     },
   });
