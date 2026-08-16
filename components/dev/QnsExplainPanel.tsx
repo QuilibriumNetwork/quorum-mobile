@@ -173,6 +173,7 @@ export function QnsExplainPanel() {
       marginBottom: Skin.space(4),
     },
     fact: { color: theme.colors.textSubtle, fontSize: Skin.font(11), lineHeight: Skin.font(15) },
+    summary: { marginBottom: Skin.space(8) },
   });
 
   return (
@@ -199,12 +200,10 @@ export function QnsExplainPanel() {
         <DevReadout>
           <View>
             <Text style={styles.verdict}>{result.verdict.toUpperCase()}</Text>
-            <Text style={styles.fact}>{result.summary}</Text>
-            {'\n'}
+            <Text style={[styles.fact, styles.summary]}>{result.summary}</Text>
             {result.facts.map((f) => (
               <Text key={f.label} style={styles.fact}>
                 {f.label}: {f.value}
-                {'\n'}
               </Text>
             ))}
             {!!crossCheck && <Text style={styles.fact}>{crossCheck}</Text>}
