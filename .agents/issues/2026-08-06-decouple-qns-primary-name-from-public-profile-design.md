@@ -18,6 +18,24 @@ related:
 
 ## Status
 
+**2026-08-16 — mobile's half is now on `master` via PR #249** (`feat: names
+resolve through one verified ladder, so a .q shows wherever a name does`).
+
+**This file stays open for desktop**, which has none of it: desktop's
+`update-profile` wire payload carries no QNS field at all
+(`src/utils/spaceProfilePayload.ts:31-41`), `PublicProfileService.ts:22-28`
+states outright that it never publishes `primary_username`, and
+`claimed_primary_username` appears zero times anywhere in `quorum-desktop/src`.
+So desktop can neither announce a claim nor store one it receives. That is three
+independent gaps, not one missing line — sized accordingly.
+
+One consequence worth recording, because it caught us: **a mobile-only broadcast
+transport means the fake-QNS tools behave differently per client.** Desktop's
+tool writes local overlay entries only and is incapable of announcing anything.
+Mobile's has a real publish-and-broadcast button, and one press permanently
+outranks the overlay on every device that hears it. Verified 2026-08-16 by
+reading both.
+
 **2026-08-16 — mobile's half SHIPPED and works in production. Desktop's half was
 never started.** Recorded here because this document reads as if both are
 pending, and a reader who assumes that will re-derive work that already exists.

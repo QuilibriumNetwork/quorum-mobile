@@ -21,8 +21,26 @@ related:
 
 ## Status
 
-**2026-08-16 — implemented, unit-verified, NOT yet device-verified.** The fix is
-the one planned in §4, with no deviation.
+**2026-08-16 — shipped in PR #249** (`feat: names resolve through one verified
+ladder, so a .q shows wherever a name does`).
+
+**Deliberately NOT moved to `.done/`.** The fix is unit-verified by 11 tests in
+`__tests__/identityProviderRosterClaims.test.tsx` — covering the reported
+symptom (a `.q` from a roster claim with no public profile at all), the
+impersonation refusal, the empty-claim un-election, the in-flight case, and the
+DM path — and the whole suite is green at 986/986. But this defect was FOUND on
+a device, and the transport it restores is the only one that works end to end,
+so a unit-green result is not the observation that closes it.
+
+**To close this file:** run a fake-QNS sweep on a device where another account
+has used "Announce for real", and confirm that account's `.q` renders in a space
+channel and in a DM. If it does, move this to `.done/` and tick the box below.
+If it does not, the fix is incomplete and this file is where that belongs.
+
+- [ ] Device-confirmed: a broadcast `.q` renders in a space channel and in a DM
+
+**2026-08-16 — implemented, unit-verified.** The fix is the one planned in §4,
+with no deviation.
 
 | Change | Where |
 |---|---|

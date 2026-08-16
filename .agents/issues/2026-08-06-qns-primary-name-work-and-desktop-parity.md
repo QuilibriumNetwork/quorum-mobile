@@ -21,6 +21,27 @@ related:
 
 ## Status
 
+**2026-08-16 — mobile's identity migration is on `master` as PR #249** (`feat:
+names resolve through one verified ladder, so a .q shows wherever a name does`),
+which lands everything the 2026-08-13 entry below describes as being on the
+branch. 79 commits, 24 migrated surfaces, 986 tests, both guards RED-proven.
+
+**This index stays open**, because parity is the point of the file and desktop
+is now behind on three separate axes rather than one:
+
+1. **No broadcast transport.** Desktop's `update-profile` payload has no QNS
+   field, so a desktop client cannot announce a `.q` — and cannot store one it
+   receives (`claimed_primary_username`: zero occurrences in `quorum-desktop/src`).
+2. **No receiver-side verification of profile claims.** Desktop has no
+   `claimedNameBelongsTo` equivalent; it renders `primary_username` off a fetched
+   public profile without checking the name resolves back to the claimant.
+3. **The elect/un-elect flow is still mobile-only**, as recorded below.
+
+Axis 2 is the one that matters most: while it stands, "desktop shows a `.q` and
+mobile does not" is an EXPECTED divergence — mobile correctly refusing an
+unverified claim — rather than a mobile defect. Anyone comparing the clients
+needs that stated before they file the wrong bug.
+
 **2026-08-13 — the shared echo-demotion item (item 1 of "What belongs in
 `quorum-shared`" below) is now fully absorbed, closed on shared, desktop AND
 mobile.** Mobile's remaining half of that item — bump `@quilibrium/quorum-shared`

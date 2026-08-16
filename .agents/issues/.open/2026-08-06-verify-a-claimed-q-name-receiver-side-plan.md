@@ -4,7 +4,7 @@ title: "Verify a claimed .q name on the receiving client before rendering it as 
 status: open
 priority: high
 created: 2026-08-06
-updated: 2026-08-09
+updated: 2026-08-16
 area: identity resolution / QNS / trust surface
 repos: quorum-mobile (first), quorum-desktop (must land together, see §7)
 source: §10a of the decoupling design, made concrete after the operator asked what actually happens to a message from a client claiming a name it does not own
@@ -17,6 +17,25 @@ related:
 # Verifying a `.q` claim, without paying for it on every render
 
 ## Status
+
+**2026-08-16 — mobile's verification is on `master` via PR #249** (`feat: names
+resolve through one verified ladder, so a .q shows wherever a name does`), and it
+is now STRUCTURAL rather than a check placed upstream: `IdentitySources` carries
+`verifiedQnsNames` only, so an unverified claim has nowhere in the identity
+model to live. 11 tests in `__tests__/identityProviderRosterClaims.test.tsx`
+cover the space and DM broadcast paths, including the impersonation refusal.
+
+The migration briefly REGRESSED this — broadcast claims stopped reaching the
+ladder entirely, so the only working `.q` transport rendered nothing. Found by a
+device sweep, fixed before merge, filed at
+`issues/2026-08-16-broadcast-q-claims-never-render-after-the-identity-migration.md`.
+Worth knowing when reading §4: verification and transport are easy to sever
+without any test noticing, because a stripped claim and an absent claim look
+identical on screen.
+
+**Still open for desktop and the two measurements**, unchanged — see the
+Definition of done. Desktop has neither the transport nor any claim verification;
+that gap is now itemised in `issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md`.
 
 **2026-08-09 — shipped on mobile in PR #245** (`feat: a primary .q name reaches
 other people, and is verified before it renders`). **Left open for desktop and

@@ -4,7 +4,7 @@ title: "Finish the identity work: QNS .q names for other members, the hook's inl
 status: open
 priority: medium
 created: 2026-08-04
-updated: 2026-08-04
+updated: 2026-08-16
 area: identity resolution / QNS / instrumentation
 source: split out of the resolver adoption shipped as PR #225 on 2026-08-04, so the shipped part could close without pretending these were done
 related:
@@ -135,12 +135,12 @@ negative result.
 Expected `.q` (mobile surfaces that go through `formatResolvedName`, all of them
 downstream of a chat screen and therefore fed by the fallback hook):
 
-- [ ] message sender names — `MessagesList.tsx:691`
-- [ ] reply-preview author — `Chat/types.ts:523`
-- [ ] mention pills in rendered markdown — `MessageMarkdownRenderer.native.tsx:366`
-- [ ] mention autocomplete rows, and matching by typing the `.q` — `MessageInput.tsx:516,1122`
-- [ ] reaction details — `ReactionDetailsModal.tsx:106`
-- [ ] mention/reply notification bodies — `logMentionOrReply.ts:113`
+- [x] message sender names — `MessagesList.tsx:691`
+- [x] reply-preview author — `Chat/types.ts:523`
+- [x] mention pills in rendered markdown — `MessageMarkdownRenderer.native.tsx:366`
+- [x] mention autocomplete rows, and matching by typing the `.q` — `MessageInput.tsx:516,1122`
+- [x] reaction details — `ReactionDetailsModal.tsx:106`
+- [x] mention/reply notification bodies — `logMentionOrReply.ts:113`
 
 Expected `.q` from `user.primaryUsername` (self only, no overlay involved):
 profile header, header avatar fallback, tab bar, Farcaster identity badge.
@@ -199,6 +199,22 @@ profile toggle only controls whether Quorum *displays* the label.
 - [ ] Same number produced on desktop for the same space, so parity is a comparison and not an impression
 
 ## Status
+
+**2026-08-16 — the surface list above is DONE, shipped in PR #249** (`feat: names
+resolve through one verified ladder, so a .q shows wherever a name does`). All
+six surfaces resolve through `@/identity`, and `__tests__/rawNameFieldAudit.test.ts`
+now fails on any file under `components/` or `app/` that reads a raw name field
+without importing the resolver — so the list cannot silently regrow.
+
+Item 197 (the hook delegating tier ordering) is moot: the migration replaced that
+hook rather than refactoring it.
+
+**Still open, which is why this file stays in `.open/`:** the identity-coverage
+instrument itself (items 198-199). Desktop's pure core has not been ported and no
+before/after number exists on either client, so coverage remains an impression
+rather than a measurement. That is also the gap tracked as Task 11 of
+`issues/2026-08-11-mobile-identity-resolution-plan.md`; the two should be closed
+together rather than separately.
 
 **2026-08-06 — part 1 shipped in PR #236** (`feat: .q names reach other members,
 and a dev switch to see them without owning one`). Desktop's half is on

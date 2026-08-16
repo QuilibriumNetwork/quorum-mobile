@@ -13,8 +13,18 @@ area: "Identity resolution / React Query persistence / security TTL"
 
 ## Status
 
-**Fixed in `bee33ec`. Unit-proven; awaiting device confirmation on the next
-build**, which is why this sits in the root of `issues/` rather than `.done/`.
+**2026-08-16 — shipped in PR #249** (`feat: names resolve through one verified
+ladder, so a .q shows wherever a name does`), still **awaiting device
+confirmation**, which is why it stays in the root of `issues/` rather than
+`.done/`.
+
+- [ ] Device-confirmed: the channel that crashed opens cleanly on a fresh build
+
+Close this file when that box is ticked. It is the only fix on the branch with
+no device observation behind it, and it is a crash, so the asymmetry favours
+leaving it visible.
+
+**Fixed in `bee33ec`. Unit-proven.**
 
 The test reproduces the operator's exact error string
 (`records.get is not a function`) with the guard reverted — 2 failed / 1 passed

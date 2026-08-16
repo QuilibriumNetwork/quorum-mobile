@@ -93,7 +93,7 @@ interface MentionReplyEntryBase {
   id: string;
   senderId: string;
   senderName?: string;     // resolved name OR short-address fallback
-  senderDisplayName?: string; // RESOLVED name only (no hash) — drives the row's author prefix
+  senderDisplayName?: string; // LEGACY, stored but no longer rendered — see below
   preview: MessagePreview; // typed { kind, text } — no emoji; renderer prepends an icon
   createdAt: number;       // ms; sort + read-state comparisons
 }
@@ -124,8 +124,22 @@ type MentionReplyEntry = SpaceMentionEntry | DmEntry;
   so an active chat refreshes one row instead of burying the panel under one
   row per message — the same unit the Messages tab and the Farcaster
   direct-cast pings use.
-- `senderDisplayName` is set only when a real display name resolves, so unsynced
-  senders don't surface a raw `Qm…` hash in the row.
+- **Names in this log are BAKED AT WRITE TIME and must not be rendered.**
+  `senderDisplayName` is still written, but the row reads `actorName` instead,
+  resolved when the row renders (`partitionNotifications.ts`'s
+  `NotificationNameResolver`, supplied by `useUnifiedNotifications`).
+
+  The reason is structural rather than cosmetic. `logMentionOrReply` runs on the
+  WebSocket receive path, outside React, where the hooks that verify a QNS claim
+  cannot run — so a name baked there can never contain a `.q`, however long the
+  entry lives. Rendering the stored field meant a mention row showed `Alice`
+  while the same person's chat bubble showed `alice.q`, and no amount of
+  re-syncing would fix it, because the value was frozen the moment the message
+  arrived. Resolving at render also means an entry written months ago picks up a
+  name elected yesterday.
+
+  The same rule applies to the DM row title, which resolves the partner's
+  address through the ladder rather than trusting `conversation.displayName`.
 - `preview` uses the typed `messagePreview` (`utils/messagePreview.ts`): media/
   events become `{kind,text}` (e.g. `{kind:'image',text:'Image'}`) and the UI
   prepends an IconSymbol — no emoji in the data.
@@ -208,8 +222,10 @@ Notifications tab).
 - **Quorum row layout** (location-first):
   - Lead line: **space name** (loud) + `  #channel` (muted, same line); `› Thread`
     appended for thread mentions.
-  - Message line: `Author: <message text>` — author shown ONLY when
-    `senderDisplayName` resolved; message in `textSubtle`, capped at 2 lines.
+  - Message line: `Author: <message text>` — author shown ONLY when `actorName`
+    resolves to something other than a truncated address; message in
+    `textSubtle`, capped at 2 lines. Resolved at render, not read from the
+    stored entry (see §2).
   - Time: relative, in `textMuted` (one notch fainter than the message → two
     contrast levels).
   - Leading icon by kind: `@you`→`at`, `@everyone`→`bullhorn`, `@role`→`shield`,
@@ -339,4 +355,4 @@ already common, so the core logic transfers.
   Farcaster direct-cast check (mute skip, watermark, per-conversation vs digest)
 - `components/ui/AppTabBar.tsx` (`BellIcon`) — the tab badge
 
-*Last updated: 2026-08-05*
+*Last updated: 2026-08-16*

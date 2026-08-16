@@ -1,10 +1,10 @@
 ---
 type: task
 title: "Implementation plan: mobile identity resolution, with verification inside the provider"
-status: open
+status: in-progress
 priority: high
 created: 2026-08-11
-updated: 2026-08-11
+updated: 2026-08-16
 area: identity resolution / QNS / cross-client architecture
 repos: quorum-mobile (this), quorum-shared (the rule, already shipped), quorum-desktop (the reference implementation)
 source: writing-plans, from the survey at reports/2026-08-11-mobile-identity-migration-survey.md and desktop's shipped branch
@@ -25,6 +25,54 @@ related:
 **Architecture:** `quorum-shared@2.1.0-42` already owns the ladder (`resolveIdentity` over a `MemberIdentity` whose fields are all required and explicitly nullable). Mobile gains an identity module keyed on `(address, spaceId?)` that assembles those tiers from the roster, the public-profile cache and locally-known names — **with QNS claim verification inside it**, so the `.q` tier cannot be reached by any path that skipped the check. Render surfaces use `<MemberName>` / `useResolvedName`; the WebSocket receive path keeps a pure function that structurally cannot mint a `.q`.
 
 **Tech Stack:** TypeScript 5.9, React 19, React Native 0.81 / Expo SDK 54, `@tanstack/react-query` 5, MMKV 4, jest + `@testing-library/react-native` 13.x, yarn (never npm).
+
+## Status
+
+**2026-08-16 — shipped in PR #249** (`feat: names resolve through one verified
+ladder, so a .q shows wherever a name does`). 79 commits, 143 files, 986 tests
+across 105 suites.
+
+Tasks 1-8, 10 and 12 are complete. **This file stays open for Task 11**, and
+because the Task 9 sweep surfaced defects whose fixes are not yet device-checked.
+
+**Task 9 was run, and it earned its place in the plan.** The operator swept a
+device on 2026-08-16 and it found five defects that the entire test suite had
+stayed green through — exactly the failure mode the task was written to catch:
+
+1. The dev verification bypass was dead, because the migration moved verification
+   into `IdentityScopeProvider` and left the exemption in the path it replaced.
+   Every synthesized `.q` was being stripped, so the instrument reported success
+   while showing nothing.
+2. DM partners resolved to truncated addresses — `locallyKnownNames` only ever
+   held self.
+3. Space-mention and DM notifications baked names at write time, so a `.q` could
+   never appear in either.
+4. A persisted query cache turned the claim-records `Map` into `{}` and crashed
+   one channel on open.
+5. Broadcast `.q` claims never reached the ladder at all — a regression on the
+   only transport that works end to end.
+
+All five are fixed. Three are closed; two remain open pending device
+confirmation, filed at `issues/2026-08-16-broadcast-q-claims-never-render-after-the-identity-migration.md`
+and `issues/2026-08-16-persisted-query-cache-turns-a-map-into-an-object-and-crashes-the-channel.md`.
+
+**What remains before this file moves to `.done/`:**
+
+- Task 11 (degraded-resolution diagnostic) — never built.
+- The two device confirmations above.
+- A repeat sweep on the fixed build, with a control arm, reported per surface.
+  The 2026-08-16 sweep was diagnostic rather than systematic: it was chasing
+  failures, not walking the surface table.
+
+**The tooling lesson worth carrying forward.** Most of the sweep's cost was not
+the product defects — it was that the instrument itself was misleading. "Give
+MYSELF a .q" took the real publish-and-broadcast path, so one press permanently
+removed that account from every future sweep on every device that heard it, and
+"Clear" made it worse by announcing an empty name. Two sessions went into
+arguing whether that was a product bug. The panel now defaults to a local-only
+overlay, names the accounts a stored announcement has made unreachable, and can
+repair them. **Budget for instrument verification, not only product
+verification** — a sweep is only as trustworthy as the tool driving it.
 
 ## Global Constraints
 
@@ -1661,7 +1709,7 @@ Desktop's known blind spot, inherited if ported verbatim: it cannot distinguish 
 - [x] Avatar initials never derived from an address (Task 6)
 - [x] The invite picker's `it.failing` is a plain `it` (Task 7)
 - [x] `TO_MIGRATE` empty; primitives guard shown red (Task 8)
-- [ ] Fake-QNS sweep run with a control arm, reported per surface (Task 9) — **needs a dev build; not runnable from here**
+- [ ] Fake-QNS sweep run with a control arm, reported per surface (Task 9) — **partially done 2026-08-16**: a device sweep ran and found five defects (see ## Status), but it was diagnostic rather than systematic. The control arm and the per-surface report still need a pass on the fixed build.
 - [x] `yarn harness:qns` passes (Task 10) — MEASURED 2026-08-13 against the production relay, both roles green
 - [ ] Degraded-resolution diagnostic reporting zero on a normal session (Task 11) — **not built; needs a dev build to be worth anything**
 
@@ -1737,4 +1785,4 @@ notifications 80 → 50, ThreadDetailView 61 → 50, DirectMessagesList 60 → 5
 
 ---
 
-*Last updated: 2026-08-13*
+*Last updated: 2026-08-16*
