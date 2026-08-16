@@ -4,8 +4,8 @@ title: "Space mention notifications bake names at write time, so a .q never rend
 status: done
 priority: high
 ai_generated: true
-created: 2026-08-14
-updated: 2026-08-14
+created: 2026-08-16
+updated: 2026-08-16
 area: "Notifications / identity resolution / desktop parity"
 ---
 
@@ -13,7 +13,7 @@ area: "Notifications / identity resolution / desktop parity"
 
 ## Status
 
-**Fixed in `8b6f12b`, confirmed on device by the operator 2026-08-14.**
+**Fixed in `8b6f12b`, confirmed on device by the operator 2026-08-16.**
 
 What landed, matching the Scope section below:
 
@@ -53,7 +53,7 @@ Space mention/reply notification rows do not follow it. They render the author's
 **global display name**, and any `@mention` inside the body likewise, however the
 mentioned member's identity actually resolves.
 
-MEASURED 2026-08-14 by the operator: a mention of themselves in a channel showed
+MEASURED 2026-08-16 by the operator: a mention of themselves in a channel showed
 their global display name in the notification, while every in-channel surface
 showed their `.q`.
 
@@ -147,10 +147,10 @@ globally. Parity says follow them.
 
 - `.agents/issues/2026-08-11-mobile-identity-resolution-plan.md` — the migration
   that moved every other surface to render-time resolution and left this one.
-- `.agents/issues/.open/2026-08-14-broadcast-q-claims-never-render-after-the-identity-migration.md`
+- `.agents/issues/.open/2026-08-16-broadcast-q-claims-never-render-after-the-identity-migration.md`
   — a different gap in the same feature; a user with no public profile has no
   `.q` on ANY surface, which would also mask this one.
 
 ---
 
-*Last updated: 2026-08-14*
+*Last updated: 2026-08-16*

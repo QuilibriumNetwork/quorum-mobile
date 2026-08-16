@@ -4,7 +4,7 @@ title: "A primary .q name should show to everyone, not only to people who can se
 status: in-progress
 priority: high
 created: 2026-08-06
-updated: 2026-08-09
+updated: 2026-08-16
 area: identity resolution / QNS / wire protocol
 repos: quorum-mobile (first), quorum-desktop (same change), quorum-shared (type promotion only, not required)
 source: found 2026-08-06 while device-testing the QNS dev overlay — the operator set a primary .q, turned their public profile OFF, and asked whether the .q should still show to other people
@@ -15,6 +15,36 @@ related:
 ---
 
 # The `.q` is stuck behind the public-profile toggle, and there is no reason for it
+
+## Status
+
+**2026-08-16 — mobile's half SHIPPED and works in production. Desktop's half was
+never started.** Recorded here because this document reads as if both are
+pending, and a reader who assumes that will re-derive work that already exists.
+
+Verified end to end on mobile:
+
+| Step | Where |
+|---|---|
+| Broadcast carries `primaryUsername` | `context/WebSocketContext.tsx` ~`:6647`, fingerprinted at ~`:6563` so an in-session election rebroadcasts |
+| Space sender accepts it | `services/space/spaceMessageService.ts:915` |
+| DM control message accepts it | `services/dm/dmProfileService.ts:91` |
+| Receiver stores it | `context/WebSocketContext.tsx:769, 2791, 4709` → `claimed_primary_username` |
+| Receiver verifies + promotes it | `hooks/useVerifiedQnsNames.ts` `settleClaim` |
+
+Desktop does **none** of it: it sends only `displayName`/`userIcon`/`bio`
+(`quorum-desktop/src/hooks/business/spaces/useSpaceProfile.ts:313-323`) and its
+`applyProfileUpdate` (`.../services/MessageService.ts:269`) writes six fields,
+none a QNS name — so a `primaryUsername` from mobile is silently dropped.
+
+**Consequence worth stating plainly:** since the public-profile transport is
+dead server-side (upstream #240), this broadcast is the ONLY functioning `.q`
+transport in the product, and it exists only on mobile.
+
+> ⚠️ The `feat/resolve-identity` branch currently regresses it — the new
+> identity ladder does not read `claimed_primary_username`. Tracked as
+> `issues/.open/2026-08-16-broadcast-q-claims-never-render-after-the-identity-migration.md`
+> and merge-blocking for that branch.
 
 ## Decision
 

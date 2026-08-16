@@ -4,8 +4,8 @@ title: "A persisted query cache turns the claim-records Map into {} and crashes 
 status: in-progress
 priority: high
 ai_generated: true
-created: 2026-08-14
-updated: 2026-08-14
+created: 2026-08-16
+updated: 2026-08-16
 area: "Identity resolution / React Query persistence / security TTL"
 ---
 
@@ -84,7 +84,7 @@ That reintroduces the crash for exactly the users who already hit it.
 
 ## Sweep for the same class
 
-READ 2026-08-14. `qns-verify-claims` is the only instance in mobile:
+READ 2026-08-16. `qns-verify-claims` is the only instance in mobile:
 
 - The three other `Promise<Map<…>>` functions (`getJupiterTokenList`,
   `fetchNativeTokenPrices`, `fetchErc20TokenPrices`, all in
@@ -107,4 +107,4 @@ persists over a filter that removes known-bad keys one crash at a time.
 
 ---
 
-*Last updated: 2026-08-14*
+*Last updated: 2026-08-16*
