@@ -782,7 +782,13 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
           style={styles.messageAvatarRing}
         >
           {avatarSource ? (
-            <CachedAvatar source={avatarSource} style={styles.messageAvatar} />
+            <CachedAvatar
+              source={avatarSource}
+              style={styles.messageAvatar}
+              // Same name the else-branch draws, so an avatar URL that 404s
+              // degrades to the identical initials rather than to something else.
+              fallbackName={resolveDisplayName(item.userId)}
+            />
           ) : (
             <DefaultAvatar resolvedName={resolveDisplayName(item.userId)} address={item.userId} size={40} style={styles.messageAvatar} />
           )}

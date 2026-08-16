@@ -662,6 +662,7 @@ function ScheduledPreview({
             borderRadius: Skin.circleOrSquare(28),
             backgroundColor: theme.colors.surface3,
           }}
+          fallbackName={hostName}
         />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text
@@ -905,6 +906,7 @@ function ChatPanel({
               <CachedAvatar
                 source={pfpUrl ? { uri: pfpUrl } : null}
                 style={{ width: 28, height: 28, borderRadius: Skin.circleOrSquare(14), backgroundColor: theme.colors.surface3 }}
+                fallbackName={displayName || `fid:${fid}`}
               />
               <View style={{ flex: 1, minWidth: 0 }}>
                 {parent && (
@@ -1286,6 +1288,11 @@ function ParticipantTile({
               borderRadius: Skin.circleOrSquare(28),
               backgroundColor: theme.colors.surface3,
             }}
+            fallbackName={
+              participant.user.displayName
+                || participant.user.username
+                || `fid:${participant.user.fid}`
+            }
           />
           {participant.handRaised && (
             <View style={[styles.handBadge, { backgroundColor: theme.colors.accent }]}>

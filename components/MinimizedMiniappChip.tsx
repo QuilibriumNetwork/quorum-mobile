@@ -61,6 +61,7 @@ export function MinimizedMiniappChip() {
       >
         <CachedAvatar
           source={entry.iconUrl ? { uri: entry.iconUrl } : null}
+          fallbackName={entry.name ?? domain}
           style={{
             width: 22,
             height: 22,

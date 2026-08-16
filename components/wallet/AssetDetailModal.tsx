@@ -769,6 +769,11 @@ export default function AssetDetailModal({
               <CachedAvatar
                 source={{ uri: asset.iconUrl }}
                 style={styles.assetIcon}
+                // Reached only when the icon URL fails to load — the no-icon
+                // case is the sibling branch below. One letter rather than that
+                // branch's two, because initials come from whole words; still
+                // the asset's own symbol, never the Quorum mark.
+                fallbackName={asset.symbol}
               />
             ) : (
               <View style={[styles.assetIconPlaceholder, { backgroundColor: theme.colors.surface0 }]}>

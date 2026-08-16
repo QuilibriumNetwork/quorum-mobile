@@ -90,7 +90,7 @@ function ConversationRow({ address, icon, avatarStyle, sending, accentColor, enr
   const label = useResolvedName(address, { enrich, global: true });
   return (
     <ActionRow
-      leading={<CachedAvatar source={icon ? { uri: icon } : null} style={avatarStyle} />}
+      leading={<CachedAvatar source={icon ? { uri: icon } : null} style={avatarStyle} fallbackName={label} />}
       label={label}
       sublabel={truncateAddress(address, 'medium')}
       trailing={

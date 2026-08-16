@@ -230,6 +230,7 @@ export function ThreadDetailView({
               <CachedAvatar
                 source={cast.author.pfp?.url ? { uri: cast.author.pfp.url } : null}
                 style={styles.avatar}
+                fallbackName={cast.author.displayName || cast.author.username}
               />
             </TouchableOpacity>
             {/* Follow button - show when not following and has valid fid */}

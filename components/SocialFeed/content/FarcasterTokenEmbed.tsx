@@ -185,6 +185,9 @@ export function FarcasterTokenEmbed({
             borderRadius: Skin.circleOrSquare(16),
             backgroundColor: theme.colors.surface3,
           }}
+          // Never the Quorum symbol: an unbranded token wearing it reads as a
+          // claim that the token IS Quorum.
+          fallbackName={data.name || data.symbol || 'Token'}
         />
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: Skin.space(6) }}>
