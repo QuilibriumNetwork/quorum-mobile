@@ -63,6 +63,38 @@ assertion that the path was *reached*, not just that the answer was right. That
 is the generalisable lesson: **a passing control arm is not evidence unless
 something asserts the code under test was actually entered.**
 
+## The sequel, same day: the fix itself broke the harness, twice, silently
+
+Both faults are recorded because each one **impersonated a product bug** rather
+than failing loudly, which is the same defect class as the original.
+
+**1. A relative plugin path.** `babel.config.js` named the plugin by path.
+`dev/harness/babel.harness.js` composes that config by requiring and *calling*
+it, and Babel then resolved the path against its own internals — every harness
+scenario died at config load. That one WAS loud (11 suites, 0 tests). Fixed by
+passing the function instead of a path.
+
+**2. The transform applied twice.** `babel.harness.js` already carried its own
+inline copy, reaching the same conclusion independently. With both active, each
+pass rewrites `import(x)` to `Promise.resolve().then(() => require(x))`, so the
+second pass emits `require(function(){…})` and jest's resolver throws
+`moduleName.startsWith is not a function` — **inside the try/catch that nearly
+every dynamic-import call site sits in.** So the symptom was not a crash: the
+brand-new config-sync scenario reported a perfectly working sync protocol as
+broken, and the first conclusion drawn from it was wrong.
+
+Consolidated to one implementation, with an identity guard in `babel.harness.js`,
+verified by inspecting the emitted code under both `test` and `development`
+rather than by running tests that would have swallowed the fault.
+
+> **The claim this corrects, stated plainly because it was reported as evidence.**
+> "The offline harness matches its baseline exactly, so the babel change is safe"
+> was wrong. It proved nothing broke LOUDLY. Every dynamic import in the harness
+> was broken at that moment, and the offline scenarios pass either way because
+> the call sites catch their own errors. A green suite is not evidence about
+> code whose failure mode is a swallowed exception — which is the entire premise
+> of this issue, missed while fixing this issue.
+
 ## The fix
 
 `jest/babel-plugin-dynamic-import-to-require.js` rewrites `import(x)` to
