@@ -73,6 +73,10 @@ yarn web                # expo start --web
 yarn lint               # expo lint (ESLint 9, flat config)
 npx tsc --noEmit        # TypeScript type checking
 
+# Release-build checks (the suite cannot see these)
+yarn check:release-bundle   # export a production bundle, assert the config-sync
+                            # instrument survived minification into it
+
 # Cache management
 yarn clean              # Clear watchman, Metro, and temp caches
 yarn reset-project      # scripts/reset-project.js

@@ -130,7 +130,7 @@ jest.mock('../modules/quorum-crypto/src', () => ({
 
 import { sha512 } from '@noble/hashes/sha2.js';
 import { gcm } from '@noble/ciphers/aes.js';
-import { hexToBytes, bytesToHex } from '@quilibrium/quorum-shared';
+import { hexToBytes, bytesToHex, logger } from '@quilibrium/quorum-shared';
 import type { UserConfig, LastPublish } from '@quilibrium/quorum-shared';
 import {
   saveConfig,
@@ -462,5 +462,128 @@ describe('allowSync is device-local and never inherited from the blob', () => {
 
     expect(result.allowSync).toBe(false);
     expect(getLocalUserConfig(ADDRESS)?.allowSync).toBe(false);
+  });
+});
+
+describe('the record still gets written in the build where logging is dead', () => {
+  /**
+   * The premise of this whole slice is that `logger.warn` reaches nobody in a
+   * release build, so the record has to be the surviving signal. Every test
+   * above ran with logging ON, which is the one condition under which that
+   * premise cannot be checked.
+   *
+   * How a release build actually silences logging — READ in the shipped
+   * `dist/index.native.js`, not only in `src`: quorum-shared's logger reads
+   * `__DEV__` once at module load and stores the answer in an `enabled` flag
+   * that every method consults. Nothing is stripped and no call disappears;
+   * `logger.warn(...)` still runs, checks the flag, and returns without
+   * touching the console.
+   *
+   * That is why `logger.disable()` is not a stand-in for production here — it
+   * sets the same flag through the module's own public API, so this block runs
+   * against the real production logging state.
+   *
+   * What it does NOT cover: whether the code survives Metro's minifier into the
+   * shipped bundle. Nothing running under jest can see that. `yarn
+   * check:release-bundle` is the separate instrument for it.
+   */
+  const silenced: jest.SpyInstance[] = [];
+  const CONSOLE_LEVELS = ['debug', 'log', 'info', 'warn', 'error'] as const;
+
+  beforeEach(() => {
+    silenced.length = 0;
+    for (const level of CONSOLE_LEVELS) {
+      silenced.push(jest.spyOn(console, level).mockImplementation(() => {}));
+    }
+  });
+
+  afterEach(() => {
+    // The flag is module-global and would otherwise leak into every later test
+    // in this file, silently turning them into production-mode runs too.
+    logger.enable();
+    silenced.forEach((spy) => spy.mockRestore());
+  });
+
+  const consoleWasReached = () => silenced.some((spy) => spy.mock.calls.length > 0);
+
+  it('CONTROL ARM — the console IS reached with logging on, so the silence below means something', async () => {
+    // Without this arm, a console spy that could never fire would make the
+    // "nothing reached the console" assertion pass against any implementation,
+    // including one where logging was never disabled at all.
+    logger.enable();
+    mockGetPrivateKey.mockResolvedValue(null); // the `no-keys` branch logs a warn
+
+    await saveConfig(publishableConfig());
+
+    expect(logger.isEnabled()).toBe(true);
+    expect(consoleWasReached()).toBe(true);
+  });
+
+  it('every outcome is still recorded when the console is getting nothing', async () => {
+    logger.disable();
+    expect(logger.isEnabled()).toBe(false);
+
+    // `off` — recorded before saveConfig's try block even begins.
+    await saveConfig({ ...publishableConfig(), allowSync: false });
+    expect(readRecord()?.outcome).toBe('off');
+
+    // `no-keys` — the branch a user hits when the keystore is unreadable.
+    mockGetPrivateKey.mockResolvedValue(null);
+    await saveConfig(publishableConfig());
+    expect(readRecord()?.outcome).toBe('no-keys');
+    mockGetPrivateKey.mockResolvedValue(PRIVATE_KEY);
+
+    // `held` — the Space list would be narrowed, so publishing is refused.
+    await saveConfig({
+      ...publishableConfig(),
+      spaceIds: ['space-1', 'space-2', 'space-3'],
+    } as UserConfig);
+    expect(readRecord()?.outcome).toBe('held');
+
+    // `rejected` — the real evals-bloat refusal, and the failure this
+    // instrument was built for. In a release build this is the ONLY trace it
+    // leaves anywhere on the device.
+    mockPostUserSettings.mockRejectedValue(new Error('400: invalid config missing data'));
+    await saveConfig(publishableConfig());
+    expect(readRecord()?.outcome).toBe('rejected');
+    expect(readRecord()?.detail).toContain('invalid config missing data');
+
+    // `timeout`.
+    mockPostUserSettings.mockRejectedValue(new Error('Network request timed out'));
+    await saveConfig(publishableConfig());
+    expect(readRecord()?.outcome).toBe('timeout');
+
+    // CONTROL: success is recorded too, so a recorder that had quietly become
+    // a no-op under this flag could not pass by writing nothing at all.
+    mockPostUserSettings.mockResolvedValue({});
+    await saveConfig(publishableConfig());
+    expect(readRecord()?.outcome).toBe('published');
+    expect(readRecord()?.payloadBytes).toBeGreaterThan(0);
+
+    // ...and the console heard about none of it, which is the user-visible
+    // reality this slice exists to change.
+    expect(consoleWasReached()).toBe(false);
+  });
+
+  it('the reader still works with logging dead, so the line has something to show', async () => {
+    // readLastPublish traces through `logger.debug` on its rejection paths. If
+    // it had ever been written to REPORT through the logger rather than merely
+    // trace, the status line would render nothing in the only build that
+    // matters, and every test above would still be green.
+    // Disabled BEFORE the setup save, not after: that save takes a failing
+    // branch, which logs, and a console assertion further down cannot tell a
+    // setup log apart from a real one.
+    logger.disable();
+
+    mockPostUserSettings.mockRejectedValue(new Error('400: invalid config missing data'));
+    await saveConfig(publishableConfig());
+
+    expect(readLastPublish()?.outcome).toBe('rejected');
+
+    // The corrupt-record path traces and returns null. Still null, still no
+    // throw, with nowhere for the trace to go.
+    memoryStores().get(RECORD_STORE)!.set(RECORD_KEY, '{ not json');
+    expect(readLastPublish()).toBeNull();
+    expect(consoleWasReached()).toBe(false);
   });
 });
