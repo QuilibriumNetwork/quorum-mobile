@@ -67,8 +67,15 @@ const MEMBERS = {
   [ADDR]: { address: ADDR, display_name: 'Alice', primary_username: 'alice' },
 };
 
-function Probe() {
-  const settled = useVerifiedQnsNamesInMap(MEMBERS);
+/** A second claimant, so a WIDENING claim set can be simulated. Owns nothing. */
+const OTHER_ADDR = 'QmThemThemThemThemThemThemThemThemThemThemThem';
+const TWO_MEMBERS = {
+  ...MEMBERS,
+  [OTHER_ADDR]: { address: OTHER_ADDR, display_name: 'Bob', primary_username: 'bob' },
+};
+
+function Probe({ members = MEMBERS }: { members?: typeof MEMBERS }) {
+  const settled = useVerifiedQnsNamesInMap(members);
   return <Text testID="qns">{settled[ADDR]?.primary_username ?? 'none'}</Text>;
 }
 
@@ -137,5 +144,61 @@ describe('useClaimRecords — a refetch that fails', () => {
     renderProbe();
 
     await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('alice'));
+  });
+
+  it('does not resurrect stale records when the set widens AFTER a failure', async () => {
+    // The hole the original fix left open, found on the desktop side and
+    // checked here because the two hooks are the same shape.
+    //
+    // React Query picks a query's `placeholderData` source by "last query that
+    // had defined data", and an ERRORED query still qualifies — the error
+    // reducer never clears `data`. It then reports the carried value as
+    // `status: 'success'`, so the status gate passes it. One new claimant is
+    // therefore enough to bring back a map that had correctly stopped
+    // verifying, through a query that has verified nothing.
+    //
+    // Routine rather than exotic: scrolling a channel adds claimants one at a
+    // time, and that is exactly what changes the query key. With `retry: false`
+    // the errored query never re-attempts, so the resurrected answer never
+    // expires on its own.
+    mockResolveBatch.mockResolvedValueOnce([RECORD]);
+    const view = renderProbe();
+    await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('alice'));
+
+    mockResolveBatch.mockRejectedValue(new Error('offline'));
+    await refetch();
+    await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('none'));
+
+    // The widened lookup never settles, so anything rendering `alice` below is
+    // stale by construction — nothing could have re-verified it.
+    mockResolveBatch.mockImplementation(() => new Promise(() => {}));
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <Probe members={TWO_MEMBERS} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalledTimes(3));
+    expect(screen.getByTestId('qns').props.children).toBe('none');
+  });
+
+  it('CONTROL: a widening claim set still carries a HEALTHY previous answer', async () => {
+    // The opposite over-correction. Carrying the previous map across a widening
+    // set is what stops every name on screen flickering whenever a new claimant
+    // appears, and it must survive the fix above. Without this arm, disabling
+    // `placeholderData` outright would look like a clean pass.
+    mockResolveBatch.mockResolvedValueOnce([RECORD]);
+    const view = renderProbe();
+    await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('alice'));
+
+    mockResolveBatch.mockImplementation(() => new Promise(() => {}));
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <Probe members={TWO_MEMBERS} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('qns').props.children).toBe('alice');
   });
 });
