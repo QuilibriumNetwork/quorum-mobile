@@ -7,11 +7,19 @@
  * jest VM has no Metro, so the call reaches Node's ESM loader and throws
  * "A dynamic import callback was invoked without --experimental-vm-modules".
  *
- * MEASURED 2026-08-17: 64 `await import(...)` call sites across 29 files, of
- * which roughly 24 sit inside a try/catch (crude heuristic — a `try {` within
- * the 20 lines above). Those are the dangerous ones: the throw is swallowed, so
- * under test the code silently takes its ERROR branch and the suite still
- * reports green. The rest at least fail loudly, and only if a test walks them.
+ * MEASURED 2026-08-17: 93 dynamic-import call sites across 40 files (63 of them
+ * awaited), of which 41 sit inside a try/catch. Those 41 are the dangerous ones:
+ * the throw is swallowed, so under test the code silently takes its ERROR branch
+ * and the suite still reports green. The rest at least fail loudly, and only if
+ * a test walks them.
+ *
+ * MEASURED the same day, by tracing which sites actually execute: exactly ONE of
+ * the 93 is reached by the suite (`services/config/configService.ts`, the
+ * signature check below). Disabling this transform turns 4 of 1030 tests red,
+ * all four on that one site. So the transform's value is not that it repairs
+ * existing coverage — it is that it makes the other 92 paths testable at all,
+ * and stops the next test written against one of them from passing vacuously.
+ * Re-measure with `yarn test:dyn-trace`.
  *
  * The config-blob signature check is the case that surfaced this. Its catch
  * returns `false`, so every test that walked getConfig's adopt path was really
@@ -33,15 +41,53 @@
  * already transforms to CommonJS. It also makes `jest.mock()` work on those
  * modules, which is the other half of why the paths were untestable.
  */
+const path = require('path');
+
+// Opt-in coverage tracing. Off by default, and read once at module load so the
+// emitted code is identical for every file in a run.
+//
+// Turning the transform on makes these call sites REACHABLE; it does not make
+// them covered, and the two are easy to confuse. With the flag set, each rewritten
+// site reports itself to `globalThis.__dynImportTrace` when it actually executes,
+// so "which of these paths does the suite really walk" becomes a measurement
+// instead of a guess. See jest/dynamic-import-trace.js for the collector.
+const TRACE = process.env.TRACE_DYNAMIC_IMPORTS === '1';
+
 module.exports = function dynamicImportToRequire({ types: t }) {
   return {
     name: 'dynamic-import-to-require',
     visitor: {
       // `Import` is the callee node of a dynamic `import(...)`, so the parent is
       // the CallExpression carrying the specifier.
-      Import(path) {
-        const call = path.parentPath;
+      Import(nodePath) {
+        const call = nodePath.parentPath;
         if (!call.isCallExpression()) return;
+
+        const requireCall = t.callExpression(t.identifier('require'), call.node.arguments);
+
+        let body = requireCall;
+        if (TRACE) {
+          const filename = this.file.opts.filename || '<unknown>';
+          const rel = path
+            .relative(this.file.opts.root || process.cwd(), filename)
+            .replace(/\\/g, '/');
+          const line = call.node.loc ? call.node.loc.start.line : 0;
+          // `globalThis.__dynImportTrace && globalThis.__dynImportTrace('f:l'), require(x)`
+          // — a plain `&&` rather than optional chaining, so the emitted code needs
+          // no further transform and works whatever the target.
+          const traceRef = t.memberExpression(
+            t.identifier('globalThis'),
+            t.identifier('__dynImportTrace')
+          );
+          body = t.sequenceExpression([
+            t.logicalExpression(
+              '&&',
+              traceRef,
+              t.callExpression(traceRef, [t.stringLiteral(`${rel}:${line}`)])
+            ),
+            requireCall,
+          ]);
+        }
 
         call.replaceWith(
           t.callExpression(
@@ -52,12 +98,7 @@ module.exports = function dynamicImportToRequire({ types: t }) {
               ),
               t.identifier('then')
             ),
-            [
-              t.arrowFunctionExpression(
-                [],
-                t.callExpression(t.identifier('require'), call.node.arguments)
-              ),
-            ]
+            [t.arrowFunctionExpression([], body)]
           )
         );
       },

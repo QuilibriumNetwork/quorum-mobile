@@ -74,3 +74,7 @@ app-example
 
 # Machine-local script settings (see .agents/scripts/.env.local.example).
 .agents/scripts/.env.local
+
+# Written by `yarn test:dyn-trace`. Records which dynamic `import(...)` call
+# sites the suite actually walks; regenerated every run and names local paths.
+.dyn-import-trace/

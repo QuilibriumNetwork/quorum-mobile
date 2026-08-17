@@ -20,7 +20,11 @@ module.exports = {
   watchman: false,
   // Native-module stubs that only a RENDER test needs. Deliberately NOT
   // `setupFiles`, which jest-expo's preset owns — see the file's header.
-  setupFilesAfterEnv: ['<rootDir>/jest/setup-native.js'],
+  setupFilesAfterEnv: [
+    '<rootDir>/jest/setup-native.js',
+    // Inert unless TRACE_DYNAMIC_IMPORTS=1. See the file for what it measures.
+    '<rootDir>/jest/dynamic-import-trace.js',
+  ],
   moduleNameMapper: {
     // Project-root path alias (tsconfig "@/*" -> "./*"). Metro resolves this
     // from tsconfig; jest needs it spelled out.
