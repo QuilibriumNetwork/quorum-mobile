@@ -6,16 +6,27 @@
  * successful upload all write the local row and all look identical, so "my
  * setting saved" was never evidence that it synced.
  *
- * Every branch in `saveConfig` already logs, but `logger.*` compiles to a no-op
- * in release builds, so a user hitting a permanently failing publish gets no
- * signal at all — not a toast, not a console line, nothing.
+ * Every branch in `saveConfig` already logs, but a log is not a signal a user
+ * can receive. On mobile it goes to the device console, which needs a cable and
+ * `adb logcat` to read, so a user hitting a permanently failing publish gets
+ * nothing they could ever see — not a toast, not a line in the app, nothing.
  *
- * That is true of BOTH clients, not just this one: desktop's publish-failure
- * path goes through the same shared `logger.warn` and is equally silent in
- * production. An earlier version of this comment claimed desktop "at least
- * leaves a console entry behind", which is wrong — desktop's one raw
- * `console.warn` is the space-list-shrink diagnostic on the ADOPT path, a
- * different thing entirely.
+ * ⚠️ Be careful with the older framing of this, which said `logger.*` "compiles
+ * to a no-op in release builds". That was true of the shared logger's default
+ * and is no longer true of this app: `installLoggingPolicy` (index.js) runs at
+ * the entry point and reconfigures it to `enabled: true, minLevel: 'warn'` in
+ * production, so warn and error DO reach the device console in a release build
+ * (PR #227, 2026-08-04). The claim survived in several comments long after the
+ * fix landed. What justifies this record is the reach of a console line, not
+ * its absence.
+ *
+ * The two clients genuinely differ here, so do not carry a conclusion across.
+ * Desktop has `src/utils/productionLogControl.ts`, but `installLogControl` only
+ * attaches a diagnostics hatch to a global — nothing calls `enable()` at
+ * startup, so the shared logger's `__DEV__` default stands and desktop's
+ * publish-failure warning really is discarded in production until a user opens
+ * the hatch by hand. Mobile's policy is installed unconditionally. Same shared
+ * logger, opposite defaults.
  *
  * The shape lives in quorum-shared so both clients agree; only the storage is
  * per-platform (MMKV here, localStorage on desktop). The record is device-local

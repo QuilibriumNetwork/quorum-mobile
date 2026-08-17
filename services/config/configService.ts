@@ -687,10 +687,10 @@ export async function saveConfig(config: UserConfig): Promise<void> {
     // on every save in a release build. The no-keypair branch below IS a
     // fault, and stays a warning.
     logger.debug('[ConfigSync] NOT publishing — allowSync is off; the change is local-only');
-    // Recorded as its own statement rather than folded into the log call above,
-    // because `logger.*` compiles out in release builds and the record must not
-    // inherit that fate — it is the only signal a real user's device leaves
-    // behind. Order relative to the log does not matter; independence does.
+    // Recorded as its own statement rather than folded into the log call above.
+    // `logger.debug` is dead in release builds (loggingPolicy sets minLevel to
+    // `warn` there), and even a surviving log only reaches a device console
+    // nobody is attached to. The record must not depend on either.
     recordLastPublish('off');
     // Nothing reached the server, so nothing earned a newer timestamp. Without
     // this the device drifts ahead unwitnessed on every local change: getConfig
@@ -922,10 +922,12 @@ export async function saveConfig(config: UserConfig): Promise<void> {
       logger.warn(
         `[ConfigSync] settings POST FAILED — this device is NOT publishing config: ${error instanceof Error ? error.message : String(error)}`
       );
-      // The warning above is the ONLY existing signal, and it compiles out in
-      // release builds — so on a real user's phone this branch is currently
-      // silent. The record is what survives that, and it is why this half
-      // matters more on mobile than it did on desktop.
+      // The warning above is the only existing signal, and it goes to the
+      // device console. It DOES survive a release build — `installLoggingPolicy`
+      // (index.js) reconfigures the shared logger to `warn` and up in
+      // production, since PR #227 — but a console line still needs a cable and
+      // `adb logcat` to read, so it reaches a developer and never a user. The
+      // record is what the device keeps, and what the settings line can show.
       //
       // Guarded on `published` for the same reason the timestamp restore below
       // is: the server may already have accepted the upload and the throw may
