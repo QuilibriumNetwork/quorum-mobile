@@ -10,7 +10,7 @@ updated: 2026-08-17
 
 ## Dashboard
 
-> Updated: 2026-08-17 · 73 live · 56 startable · 5 nearly done · 8 blocked
+> Updated: 2026-08-17 · 72 live · 55 startable · 5 nearly done · 8 blocked
 
 **Next step:** Fix the stale SQLCipher key left behind by Reset App Data — the next re-onboard bricks every chat on the device.
 
@@ -21,10 +21,9 @@ updated: 2026-08-17
 | 1 | [Reset App Data leaves a stale SQLCipher key](issues/.open/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md) | The next re-onboard cannot open the messages DB, so every chat is gone, with no way back and no explanation. |
 | 2 | [This device can key 0 of 3 Spaces it imported](issues/.open/2026-08-04-mobile-cannot-key-any-space-it-imported-from-the-config-blob.md) | Spaces arrive from the config blob unusable. The device lists them and can decrypt none of them. |
 | 3 | [Messages queued while offline are lost if the process dies](issues/.open/2026-08-01-outbound-queue-lost-on-app-restart.md) | Silent loss of something the user already pressed send on. Reads well above its `medium` grade. |
-| 4 | [63 dynamic imports have never executed under test](issues/.open/2026-08-17-dynamic-imports-silently-took-their-error-branch-under-jest.md) | Not user-facing, but it degrades the evidence behind every other fix: those call sites catch their own errors, so the suite reported green while never running the code it named. The transform is fixed; the audit is not. |
-| 5 | [A member's profile shows somebody else's Farcaster account](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md) | Two members' identities are mixed in storage, and the UI offers to open the wrong person's external profile. |
-| 6 | [Messages DB refuses to open on identity mismatch](issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md) | The user sees empty chats and is told nothing. Indistinguishable from having lost their history. |
-| 7 | [Public invite: regenerate lies, and non-owners are offered it](issues/.open/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md) | The button claims to invalidate the old link and does not, so a shared link stays live after you believe you killed it. |
+| 4 | [A member's profile shows somebody else's Farcaster account](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md) | Two members' identities are mixed in storage, and the UI offers to open the wrong person's external profile. |
+| 5 | [Messages DB refuses to open on identity mismatch](issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md) | The user sees empty chats and is told nothing. Indistinguishable from having lost their history. |
+| 6 | [Public invite: regenerate lies, and non-owners are offered it](issues/.open/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md) | The button claims to invalidate the old link and does not, so a shared link stays live after you believe you killed it. |
 
 ### Nearly done — needs a check
 

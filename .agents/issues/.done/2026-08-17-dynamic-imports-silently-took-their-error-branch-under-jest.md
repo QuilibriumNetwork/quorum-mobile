@@ -21,17 +21,19 @@ related:
 
 ## Status
 
-**2026-08-17 — done.** The mechanism was fixed in PR #252; the audit that kept
-this open was completed the same day and found the blast radius to be far
-smaller than feared, but only after building an instrument to measure it rather
-than reading call sites by eye.
+**2026-08-17 — done, shipped in PR #253**
+(`test(jest): measure which dynamic imports the suite walks, and guard the transform`).
+
+The mechanism was fixed in PR #252; the audit that kept this open was completed
+the same day and found the blast radius to be far smaller than feared, but only
+after building an instrument to measure it rather than reading call sites by eye.
 
 Two things landed:
 
 | Where | What |
 |---|---|
 | PR #252 | `jest/babel-plugin-dynamic-import-to-require.js`, wired into `babel.config.js` for the test environment only, reused by `dev/harness/babel.harness.js` behind an identity guard |
-| this branch | the coverage instrument (`yarn test:dyn-trace`), the audit result below, and `__tests__/dynamicImportTransform.test.ts` guarding the wiring in both directions |
+| PR #253 | the coverage instrument (`yarn test:dyn-trace`), the audit result below, and `__tests__/dynamicImportTransform.test.ts` guarding the wiring in both directions |
 
 ## What happened
 
