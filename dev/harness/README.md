@@ -8,6 +8,7 @@ yarn harness:smoke        # offline, no keys, no network — safe anywhere
 yarn harness              # every scenario (networked ones hit production)
 yarn harness:dm           # the two-bot DM measurement — see below
 yarn harness:config-sync  # does a setting on one device reach another? — see below
+yarn harness:config-to-desktop  # mobile publishes for desktop to read — see below
 ```
 
 ## Config sync (`yarn harness:config-sync`)
@@ -62,6 +63,33 @@ delivery itself is under test.
 Mobile's half refuses a handoff older than 30 minutes. Without that, a stale
 file lets the run pass against a row desktop wrote days ago, which is a green
 that proves nothing.
+
+### Cross-client: mobile → desktop (`yarn harness:config-to-desktop`)
+
+One direction is not symmetric evidence. "Desktop's blob decrypts on mobile"
+says nothing about the reverse, because encryption, signing and field ordering
+are written twice, once per client.
+
+```bash
+yarn harness:config-to-desktop
+```
+
+Mobile publishes for the shared account, proves the row landed by reading it
+straight back off the relay, and writes what it sent to
+`.state/rendezvous/config-from-mobile.json`.
+
+**The reading half does not exist yet.** It belongs in quorum-desktop and should
+mirror `config-cross.scenario.ts` here: read that file, refuse a handoff older
+than 30 minutes, assert `name` and `profile_image` both arrive. Until it is
+written, this scenario proves mobile publishes and nothing about desktop
+adopting it.
+
+A separate handoff file from `config-cross.json`, on purpose — sharing one would
+let each direction overwrite the other's evidence, and a run could then pass
+against values the client under test never sent. The scenario's filename avoids
+the substring `config-cross` for a related reason: `yarn harness config-cross`
+is a jest path *pattern*, so a colliding name would drag this publisher into the
+desktop → mobile run, in an order jest does not guarantee.
 
 > ⚠️ **A rig fault here impersonates a product bug, and did once.**
 > `verifyConfigSignature` catches its own errors and returns `false`, after which
@@ -268,4 +296,4 @@ Three findings that cost real time and are worth knowing before touching this:
    reporting it the whole time and nothing runs `tsc`. Call required members
    unguarded here: a loud failure is the entire value of a scenario.
 
-*Last updated: 2026-07-31*
+*Last updated: 2026-08-17*
