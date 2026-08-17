@@ -145,6 +145,50 @@ maybe('config sync, two devices on one account (networked — production)', () =
     expect(getLocalUserConfig(bot.address)?.allowSync).toBe(true);
   }, 300_000);
 
+  it('a NEW DEVICE gets back the display name AND the profile picture', async () => {
+    // The account-restore case, asserted on its own rather than as a side effect
+    // of the sync test above, because it is the one a user notices immediately:
+    // install on a new phone, sign in with your phrase, and your name and photo
+    // should be there.
+    //
+    // Both fields are checked. `name` alone would have passed even if
+    // `profile_image` were being dropped, and the photo is the half that travels
+    // as bulk data rather than a short string.
+    const bot = await loadOrCreateIdentity('config-sync-bot');
+
+    // A tiny but REAL data URI, the shape mobile stores for an avatar.
+    const pfp =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const nameC = marker('restore');
+
+    clearConfigStorage();
+    await saveConfig({
+      ...baseConfig(bot.address, true),
+      name: nameC,
+      profile_image: pfp,
+    } as unknown as UserConfig);
+    expect(readLastPublish()?.outcome).toBe('published');
+
+    // A brand-new device: same account, nothing stored locally at all.
+    clearConfigStorage();
+    expect(getLocalUserConfig(bot.address)).toBeNull();
+
+    const restored = await getConfig(bot.address);
+
+    expect(restored.name).toBe(nameC);
+    expect((restored as unknown as { profile_image?: string }).profile_image).toBe(pfp);
+
+    // And it is persisted, not just returned — onboarding reads it back later.
+    const stored = getLocalUserConfig(bot.address)!;
+    expect(stored.name).toBe(nameC);
+    expect((stored as unknown as { profile_image?: string }).profile_image).toBe(pfp);
+
+    // Sync being off on this fresh device must NOT suppress any of that. This is
+    // the assertion that pins the concern directly: pulling is ungated, and the
+    // device-local `allowSync` rule only governs PUBLISHING.
+    expect(restored.allowSync).toBe(false);
+  }, 300_000);
+
   it('a second published change also reaches the other device', async () => {
     // One round trip can pass on a stale row that happened to match. A second
     // publish with a different value proves the row is really being rewritten
