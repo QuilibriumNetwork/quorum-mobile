@@ -21,8 +21,12 @@
  *
  * Written locally rather than pulled in as `@babel/plugin-transform-dynamic-import`,
  * which is not in the tree and is not worth a dependency for twenty lines.
- * `@babel/plugin-transform-modules-commonjs` does NOT cover this — dynamic
- * import has been a separate transform since Babel 7.8.
+ * `@babel/plugin-transform-modules-commonjs` does NOT cover this: it has no
+ * `import(` handling at all, and the transform has lived in its own plugin
+ * since Babel 7.5 unified the use cases under `plugin-proposal-dynamic-import`
+ * (later renamed `plugin-transform-dynamic-import`). Reaching for the commonjs
+ * transform first is the obvious wrong turn here, and it is silent — it applies
+ * cleanly and changes nothing.
  *
  * The rewrite is intentionally naive: it does not add ESM interop, because
  * every call site here reads named exports off a module this same jest run

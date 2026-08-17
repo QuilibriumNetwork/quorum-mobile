@@ -1,8 +1,11 @@
 module.exports = function (api) {
   // Keyed on the environment rather than cached forever, because the config is
   // no longer identical across environments — see the jest-only plugin below.
-  // `api.env()` configures the cache itself, which is why `api.cache(true)` is
-  // gone; keeping both is a babel error.
+  // `api.env()` configures the cache itself, so the `api.cache(true)` that used
+  // to be on the line above is gone rather than kept alongside it: calling
+  // `api.cache(true)` FIRST and then `api.env()` throws "Caching has already
+  // been configured with .never or .forever()". (The reverse order happens to
+  // be tolerated, but relying on that is a trap not worth setting.)
   const isTest = api.env('test');
 
   return {

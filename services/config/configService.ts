@@ -687,9 +687,10 @@ export async function saveConfig(config: UserConfig): Promise<void> {
     // on every save in a release build. The no-keypair branch below IS a
     // fault, and stays a warning.
     logger.debug('[ConfigSync] NOT publishing — allowSync is off; the change is local-only');
-    // Written BEFORE the log rather than after, because `logger.*` compiles out
-    // in release builds and the record must not inherit that fate — the record
-    // is the only signal a real user's device leaves behind.
+    // Recorded as its own statement rather than folded into the log call above,
+    // because `logger.*` compiles out in release builds and the record must not
+    // inherit that fate — it is the only signal a real user's device leaves
+    // behind. Order relative to the log does not matter; independence does.
     recordLastPublish('off');
     // Nothing reached the server, so nothing earned a newer timestamp. Without
     // this the device drifts ahead unwitnessed on every local change: getConfig
@@ -718,6 +719,14 @@ export async function saveConfig(config: UserConfig): Promise<void> {
     // the still-unknown server limit eventually gets settled.
     let payloadBytes: number | undefined;
     let spacesAttempted: number | undefined;
+    // Whether the request was ever handed to the network. The try below is
+    // deliberately wide — it covers key collection, encryption and signing as
+    // well as the POST, so that a local crypto fault still saves the user's
+    // change instead of throwing out of saveConfig. The cost of that width is
+    // that the catch cannot tell "the server refused this" from "this device
+    // could not build the payload", and those point at opposite systems.
+    // Recorded in `detail` so a support reader is not sent to the wrong one.
+    let postAttempted = false;
     try {
       // Promote pre-split signing keys, then collect space keys before
       // encryption (matches desktop behavior). The 'signing' entries ride
@@ -854,6 +863,7 @@ export async function saveConfig(config: UserConfig): Promise<void> {
         const signature = await signConfigData(encryptedConfig, ts, privateKey);
 
         const client = getQuorumClient();
+        postAttempted = true;
         await client.postUserSettings(config.address, {
           user_address: config.address,
           user_public_key: publicKey,
@@ -922,10 +932,16 @@ export async function saveConfig(config: UserConfig): Promise<void> {
       // have come from the local bookkeeping after it. Recording a failure
       // there would report a healthy sync as broken.
       if (!published) {
+        const reason = error instanceof Error ? error.message : String(error);
         recordLastPublish(classifyPublishError(error), {
           payloadBytes,
           spacesPublished: spacesAttempted,
-          detail: error instanceof Error ? error.message : String(error),
+          // Prefixed with where the failure happened, because `rejected` alone
+          // is ambiguous on this client: the wide try above means a local
+          // crypto or key-collection fault lands in the same bucket as a real
+          // server refusal. Without this, a device-local fault reads as a
+          // server problem and sends debugging to the wrong system.
+          detail: postAttempted ? reason : `before send: ${reason}`,
         });
       }
       // ...and take back the timestamp with it. This is the "black hole" the

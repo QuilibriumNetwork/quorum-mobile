@@ -43,7 +43,23 @@ jest.mock('react-native-mmkv', () => ({
     };
     return {
       getString: (k: string) => store.get(k),
-      set: (k: string, v: string) => store.set(k, v),
+      set: (k: string, v: string) => {
+        // Lets one test break the RECORDER specifically, to prove it cannot
+        // take down the save it is measuring.
+        //
+        // Scoped to the record's own key on purpose: mobile's config row goes
+        // through this same `set`, unlike desktop where the record is in
+        // localStorage and the config is in IndexedDB. A blanket throw here
+        // would break the local save too, and the test would then "pass"
+        // against a broken recorder for the wrong reason.
+        if (
+          (globalThis as Record<string, unknown>).__mmkvThrowOnSet &&
+          k === 'quorum:sync:lastPublish'
+        ) {
+          throw new Error('MMKV set failed: no space left on device');
+        }
+        store.set(k, v);
+      },
       remove: removeKey,
       delete: removeKey,
       clearAll: () => store.clear(),
@@ -122,6 +138,10 @@ import {
   getLocalUserConfig,
   saveLocalUserConfig,
 } from '../services/config/configService';
+// The real reader, deliberately NOT mocked here: `readRecord` below reads the
+// store directly so the WRITE side cannot pass by agreeing with a broken
+// accessor, which leaves the reader itself needing its own coverage.
+import { readLastPublish } from '../services/config/lastPublish';
 
 const ADDRESS = 'QmUserAddress';
 const PRIVATE_KEY = 'aa'.repeat(57);
@@ -184,6 +204,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   memoryStores().forEach((s) => s.clear());
   (globalThis as Record<string, unknown>).__mmkvThrowOnRemove = false;
+  (globalThis as Record<string, unknown>).__mmkvThrowOnSet = false;
   mockGetPrivateKey.mockResolvedValue(PRIVATE_KEY);
   mockGetPublicKey.mockResolvedValue(PUBLIC_KEY);
   mockPostUserSettings.mockResolvedValue({});
@@ -278,6 +299,63 @@ describe('saveConfig records what the publish actually did', () => {
     expect(readRecord()?.outcome).toBe('published');
   });
 
+  it('a recorder failure on the publish path still saves the edit', async () => {
+    // Be precise about what this pins, because it is less than it looks.
+    //
+    // On THIS path the record write sits inside saveConfig's own try/catch, so
+    // the edit survives a broken recorder whether or not recordLastPublish has
+    // its own guard. MEASURED: removing that guard leaves this test green. So
+    // it is not evidence for the recorder's internal catch — it pins the outer
+    // behaviour, and would break if saveConfig's catch were ever narrowed.
+    //
+    // The test below is the one that pins the recorder's own guard.
+    (globalThis as Record<string, unknown>).__mmkvThrowOnSet = true;
+
+    await expect(saveConfig(publishableConfig())).resolves.toBeUndefined();
+
+    expect(mockPostUserSettings).toHaveBeenCalledTimes(1);
+    // The edit still landed locally, which is the part that would actually hurt.
+    expect(getLocalUserConfig(ADDRESS)?.spaceIds).toEqual(['space-1']);
+  });
+
+  it('a broken recorder never takes down a save it cannot be caught by', async () => {
+    // THE one that earns its place. `off` and `no-keys` are recorded before
+    // saveConfig's try block begins, and ahead of the unconditional local save,
+    // so nothing but recordLastPublish's own catch stands between a full disk
+    // and the user losing the edit entirely — "we failed to note something
+    // down" silently becoming real data loss.
+    //
+    // MEASURED: making recordLastPublish rethrow turns this red while leaving
+    // the publish-path test above green.
+    (globalThis as Record<string, unknown>).__mmkvThrowOnSet = true;
+
+    await expect(
+      saveConfig({ ...publishableConfig(), allowSync: false })
+    ).resolves.toBeUndefined();
+
+    expect(getLocalUserConfig(ADDRESS)?.spaceIds).toEqual(['space-1']);
+  });
+
+  it('reads back null rather than throwing when the stored record is corrupt', async () => {
+    // Exercises the REAL reader, which both test files otherwise bypass — one
+    // reads the store directly, the other mocks the module. Without this the
+    // parse guard has no coverage from any angle.
+    memoryStores().get(RECORD_STORE)!.set(RECORD_KEY, '{ not json');
+    expect(readLastPublish()).toBeNull();
+
+    // Shape check, not just parseability: valid JSON of the wrong shape.
+    memoryStores().get(RECORD_STORE)!.set(RECORD_KEY, JSON.stringify({ nope: true }));
+    expect(readLastPublish()).toBeNull();
+
+    memoryStores().get(RECORD_STORE)!.set(RECORD_KEY, JSON.stringify({ at: 'soon', outcome: 1 }));
+    expect(readLastPublish()).toBeNull();
+
+    // Control: a well-formed record still reads back, so the guard above is not
+    // simply rejecting everything.
+    await saveConfig(publishableConfig());
+    expect(readLastPublish()?.outcome).toBe('published');
+  });
+
   it('never lets the record into the synced blob', async () => {
     // In the blob it would broadcast a per-device fact to every other device,
     // rewrite the blob on every save, and grow the very payload it exists to
@@ -310,12 +388,18 @@ describe('allowSync is device-local and never inherited from the blob', () => {
   it('CONTROL ARM — a device that had sync ON still has it ON after a pull', async () => {
     // Without this arm, hardcoding `false` passes every other test in this
     // block while quietly disabling sync for every user.
+    //
+    // Local and remote deliberately DISAGREE (local on, remote off), matching
+    // desktop's equivalent arm. An earlier version had both saying `true`, so
+    // adopting the remote produced the same answer as preserving the local one
+    // and the arm stayed green against a full revert of the fix — it caught the
+    // hardcode but not the removal. Opposite values catch both.
     saveLocalUserConfig({
       ...publishableConfig(),
       allowSync: true,
       timestamp: 1000,
     } as UserConfig);
-    mockGetUserSettings.mockResolvedValue(remoteSaying(true));
+    mockGetUserSettings.mockResolvedValue(remoteSaying(false));
 
     const result = await getConfig(ADDRESS);
 

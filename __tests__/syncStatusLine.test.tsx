@@ -62,13 +62,28 @@ describe('SyncStatusLine renders only when publishing is failing', () => {
     expect(getByRole('alert')).toHaveTextContent(/saved on this device/i);
   });
 
-  it('distinguishes a timeout, which retries, from a refusal, which does not', () => {
+  it('does not blame the server for a `rejected` outcome', () => {
+    // saveConfig's try also covers key collection, encryption and signing, so
+    // `rejected` is reached by local crypto faults too. Naming the server would
+    // send someone debugging a device-local fault to the wrong system. Desktop
+    // CAN say "the server refused" because its try wraps only the POST.
+    mockReadLastPublish.mockReturnValue(record('rejected', { detail: 'before send: boom' }));
+
+    expect(renderLine().getByRole('alert')).not.toHaveTextContent(/server/i);
+  });
+
+  it('does not promise a retry on timeout, because this client never retries', () => {
+    // Copied verbatim from desktop, this line used to read "It will keep
+    // retrying." True there — its action queue retries transient failures. On
+    // mobile saveConfig's catch swallows the error and there is no queue, so
+    // nothing happens until the user next changes a setting. Promising an
+    // automatic retry is the exact false reassurance this line exists to remove.
     mockReadLastPublish.mockReturnValue(record('timeout'));
 
     const { getByRole } = renderLine();
 
     expect(getByRole('alert')).toHaveTextContent(/timed out/i);
-    expect(getByRole('alert')).not.toHaveTextContent(/refused/i);
+    expect(getByRole('alert')).not.toHaveTextContent(/retry|retrying/i);
   });
 
   it('reports a missing key, which only mobile can reach', () => {
