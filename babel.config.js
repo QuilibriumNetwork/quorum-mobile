@@ -19,10 +19,16 @@ module.exports = function (api) {
     ],
     plugins: [
       // Makes `await import(...)` reachable under jest, where there is no Metro
-      // to resolve it. Without this every such call site throws — 64 of them
-      // across 29 files — and the ones sitting inside a try/catch swallow it
-      // and take their error branch while the suite still reports green. Full
+      // to resolve it. Without this every such call site throws — 93 of them
+      // across 40 files — and the 41 sitting inside a try/catch swallow it and
+      // take their error branch while the suite still reports green. Full
       // rationale in the plugin file.
+      //
+      // Deleting this line is SILENT: measured 2026-08-17, it turns only 4 of
+      // 1030 tests red and restores the blind spot everywhere else.
+      // `__tests__/dynamicImportTransform.test.ts` exists to make it loud, and
+      // asserts both that the transform is here and that it stays out of every
+      // other environment.
       //
       // Required as a FUNCTION, not named by path. `dev/harness/babel.harness.js`
       // composes this config by calling it directly, and a relative plugin path
