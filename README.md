@@ -32,7 +32,8 @@ All clients sync via the protocol defined in `quorum-shared`, so messages, bookm
 - **Yarn**
 - For iOS: macOS with Xcode (Xcode 14.0-compatible project format — see `PREBUILD.md`)
 - For Android: Android Studio with NDK
-- A local clone of [`quorum-shared`](https://github.com/QuilibriumNetwork/quorum-shared) alongside this repo (referenced as `file:../quorum-shared` in `package.json`)
+
+[`quorum-shared`](https://github.com/QuilibriumNetwork/quorum-shared) is **not** a prerequisite: this repo consumes it as a pinned npm package, so `yarn install` fetches it for you. You only need a local clone if you are testing against unpublished shared changes.
 
 ### Install
 

@@ -38,7 +38,7 @@ Quorum is built as a **multi-repo ecosystem**. This repo is one of three:
 | **[quorum-mobile](https://github.com/QuilibriumNetwork/quorum-mobile)** | React Native + Expo mobile app (this repo) |
 | **[quorum-shared](https://github.com/QuilibriumNetwork/quorum-shared)** | Shared types, hooks, sync protocol |
 
-All clients sync data via `@quilibrium/quorum-shared` (linked as `file:../quorum-shared` in this repo). When implementing features, check if desktop has it and use shared types for sync compatibility.
+All clients sync data via `@quilibrium/quorum-shared`. **This repo consumes it as a pinned npm version** (see `package.json`), not as a local path — unlike desktop, which uses `link:../quorum-shared`. When implementing features, check if desktop has it and use shared types for sync compatibility.
 
 **Full Guide**: [Quorum Ecosystem Architecture](.agents/docs/quorum-shared-architecture.md)
 
@@ -175,7 +175,18 @@ quorum-mobile/
 
 ## @quilibrium/quorum-shared
 
-Linked locally via `file:../quorum-shared`. Import shared types, hooks, and utilities:
+Consumed as a **pinned npm version** — see the exact pin in `package.json`. Bump it with
+`yarn add @quilibrium/quorum-shared@<version>`; list published versions with
+`npm view @quilibrium/quorum-shared versions --json`.
+
+> **Do not change this to `link:../quorum-shared`,** even though desktop uses that. The line is
+> committed, so it travels to every branch, rewrites `yarn.lock` into a state that breaks a
+> fresh `yarn install` for everyone else, and **EAS cloud builds cannot resolve it**. To test
+> against unpublished shared changes, swap the package at the `node_modules` level only and
+> leave `package.json`/`yarn.lock` untouched — full workflow in
+> [.agents/docs/local-shared-dev-workflow.md](.agents/docs/local-shared-dev-workflow.md).
+
+Import shared types, hooks, and utilities:
 
 ```typescript
 // Types
@@ -302,4 +313,4 @@ import { AuthContext } from '@/context/AuthContext';
 
 ---
 
-_Last updated: 2026-05-29 — refreshed structure to reflect current repo: `app/(tabs)/`, Call/wallet/qns/SocialFeed feature folders, expanded services (calling, farcaster, miniapp, notifications, observability, profile, reporting, space, wallet), Expo SDK 54 / RN 0.81 / React 19, prebuild safety, tech stack snapshot. Removed Discord-clone framing._
+_Last updated: 2026-08-17_
