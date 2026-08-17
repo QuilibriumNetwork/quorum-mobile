@@ -35,6 +35,7 @@ import {
   logger,
 } from '@quilibrium/quorum-shared';
 import { getAllSpaces, getSpaceKey, getSpaceKeys, saveSpaceKey, clearSpaceStorage } from './spaceStorage';
+import { recordLastPublish, classifyPublishError } from './lastPublish';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
 import { encryptionStateStorage } from '../crypto/encryption-state-storage';
 import type { SpaceKeyInfo } from './spaceSyncService';
@@ -539,6 +540,26 @@ export async function getConfig(address: string): Promise<UserConfig> {
       // Per-entry merged (see above) rather than taken from the remote blob, so
       // a stale remote copy can't drop an override made on this device.
       conversationSettings: mergedConversationSettings,
+      // Device-local, never inherited from the blob. `allowSync` describes THIS
+      // device's relationship with the server, but it rides in the account-level
+      // config, so a decision made on one device used to be carried to the
+      // others.
+      //
+      // Two ways that turned "off" back on with nobody asking. Local storage
+      // lost: the remote wins against the `?? 0` comparison above and is adopted
+      // verbatim, sync included. Or another device still syncing: turning sync
+      // off is never published — that is the whole point of the switch — so the
+      // other device never learns, keeps publishing, and eventually wins on
+      // timestamp.
+      //
+      // A device with no stored config therefore starts at OFF rather than at
+      // whatever the blob says. Off means "do not publish"; it has never meant
+      // "do not pull", and the pull above stays ungated.
+      //
+      // Re-read rather than taken from the `localConfig` snapshot for the same
+      // reason as mergedConversationSettings: the signature verification between
+      // them yields the event loop, so a toggle can land in that window.
+      allowSync: getLocalUserConfig(address)?.allowSync ?? false,
     } as UserConfig;
     saveLocalUserConfig(configWithTimestamp);
 
@@ -666,6 +687,10 @@ export async function saveConfig(config: UserConfig): Promise<void> {
     // on every save in a release build. The no-keypair branch below IS a
     // fault, and stays a warning.
     logger.debug('[ConfigSync] NOT publishing — allowSync is off; the change is local-only');
+    // Written BEFORE the log rather than after, because `logger.*` compiles out
+    // in release builds and the record must not inherit that fate — the record
+    // is the only signal a real user's device leaves behind.
+    recordLastPublish('off');
     // Nothing reached the server, so nothing earned a newer timestamp. Without
     // this the device drifts ahead unwitnessed on every local change: getConfig
     // then returns local unconditionally and it silently stops applying other
@@ -675,6 +700,7 @@ export async function saveConfig(config: UserConfig): Promise<void> {
     config.timestamp = incomingTimestamp;
   } else if (!privateKey || !publicKey) {
     logger.warn('[ConfigSync] NOT publishing — no keypair available; the change is local-only');
+    recordLastPublish('no-keys');
     config.timestamp = incomingTimestamp;
   }
 
@@ -685,6 +711,13 @@ export async function saveConfig(config: UserConfig): Promise<void> {
     // already accepted `ts` at that point, and withdrawing it locally would
     // make this device pull its own config back on the next read.
     let published = false;
+    // Hoisted so the catch can report the size and shape of the payload that
+    // failed. The try below covers key collection and encryption as well as the
+    // POST, so a failure can land here before either exists — hence optional.
+    // The size of a REFUSED payload is the reading that matters most: it is how
+    // the still-unknown server limit eventually gets settled.
+    let payloadBytes: number | undefined;
+    let spacesAttempted: number | undefined;
     try {
       // Promote pre-split signing keys, then collect space keys before
       // encryption (matches desktop behavior). The 'signing' entries ride
@@ -790,6 +823,7 @@ export async function saveConfig(config: UserConfig): Promise<void> {
       // deletedSpaceIds tombstones remove the dead end by making such a Space
       // explicitly deletable.
       const droppedSpaceIds = (config.spaceIds ?? []).filter((id) => !finalSpaceIds.has(id));
+      spacesAttempted = uploadConfig.spaceIds.length;
 
       if (droppedSpaceIds.length > 0) {
         // Local-only: `config` is still persisted with its full Space list at
@@ -801,6 +835,11 @@ export async function saveConfig(config: UserConfig): Promise<void> {
             `the change is local-only until these finish syncing: ${droppedSpaceIds.join(', ')}`
         );
 
+        recordLastPublish('held', {
+          spacesPublished: uploadConfig.spaceIds.length,
+          spacesHeld: droppedSpaceIds.length,
+        });
+
         // Keep the timestamp we came in with. getConfig resolves purely by
         // timestamp and never merges the losing side, so a device that advanced
         // its local timestamp without the server agreeing would treat its own
@@ -811,6 +850,7 @@ export async function saveConfig(config: UserConfig): Promise<void> {
       } else {
         const key = deriveConfigKey(privateKey);
         const encryptedConfig = encryptConfig(uploadConfig, key);
+        payloadBytes = encryptedConfig.length;
         const signature = await signConfigData(encryptedConfig, ts, privateKey);
 
         const client = getQuorumClient();
@@ -822,6 +862,14 @@ export async function saveConfig(config: UserConfig): Promise<void> {
           signature,
         });
         published = true;
+
+        // Recorded here, before the bookkeeping below, so that a throw from any
+        // of it cannot turn an upload the server ALREADY ACCEPTED into a
+        // reported sync failure. The catch honours the same distinction.
+        recordLastPublish('published', {
+          payloadBytes: encryptedConfig.length,
+          spacesPublished: uploadConfig.spaceIds.length,
+        });
 
         // Clear deleted bookmark tombstones after successful sync
         clearDeletedBookmarkIds(address);
@@ -864,6 +912,22 @@ export async function saveConfig(config: UserConfig): Promise<void> {
       logger.warn(
         `[ConfigSync] settings POST FAILED — this device is NOT publishing config: ${error instanceof Error ? error.message : String(error)}`
       );
+      // The warning above is the ONLY existing signal, and it compiles out in
+      // release builds — so on a real user's phone this branch is currently
+      // silent. The record is what survives that, and it is why this half
+      // matters more on mobile than it did on desktop.
+      //
+      // Guarded on `published` for the same reason the timestamp restore below
+      // is: the server may already have accepted the upload and the throw may
+      // have come from the local bookkeeping after it. Recording a failure
+      // there would report a healthy sync as broken.
+      if (!published) {
+        recordLastPublish(classifyPublishError(error), {
+          payloadBytes,
+          spacesPublished: spacesAttempted,
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
       // ...and take back the timestamp with it. This is the "black hole" the
       // warning above describes: a device that keeps a fresh timestamp after a
       // failed POST stops accepting every other device's config from then on,
