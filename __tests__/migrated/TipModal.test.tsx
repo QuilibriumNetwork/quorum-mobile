@@ -134,7 +134,7 @@ jest.mock('@/services/wallet/transactionHistoryService', () => ({
   updateTransactionStatus: jest.fn(),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked — the verified case
+// `claimedNameBelongsTo` is deliberately NOT mocked — the verified case
 // must prove a genuinely verified claim renders `.q` in the stored
 // conversation, not merely that the modal trusts whatever the identity
 // context already contains.

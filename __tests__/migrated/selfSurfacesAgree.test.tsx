@@ -80,7 +80,7 @@ jest.mock('@/services/api/qnsClient', () => ({
   resolveBatch: (names: string[]) => mockResolveBatch(names),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked — the whole point of
+// `claimedNameBelongsTo` is deliberately NOT mocked — the whole point of
 // this file is that all three surfaces run the SAME real verification.
 
 import { AvatarButton } from '@/components/ui/AppTabBar';

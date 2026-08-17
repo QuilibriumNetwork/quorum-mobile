@@ -37,7 +37,7 @@
  * dismissal) is mocked wholesale — this file's job is only the
  * `conversationDetails` join, and `partitionNotifications` itself (real,
  * pure) already has its own coverage in `notificationPartition.test.ts`.
- * `IdentityScopeProvider` is real. `@/utils/verifyQnsClaim` is deliberately
+ * `IdentityScopeProvider` is real. `claimedNameBelongsTo` is deliberately
  * NOT mocked — the verified case must prove a genuinely verified claim
  * renders `.q`, not merely that the row trusts whatever `verifiedQnsNames`
  * already contains.
@@ -136,7 +136,7 @@ jest.mock('@/services/api/qnsClient', () => ({
   resolveBatch: (names: string[]) => mockResolveBatch(names),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked — see file header.
+// `claimedNameBelongsTo` is deliberately NOT mocked — see file header.
 
 import { useUnifiedNotifications } from '@/hooks/useUnifiedNotifications';
 

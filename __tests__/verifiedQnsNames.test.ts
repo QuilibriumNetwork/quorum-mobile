@@ -159,13 +159,60 @@ describe('resolveClaimedNames', () => {
     expect(out.get(`name${QNS_BATCH_LIMIT + 1}`)?.header.name).toBe(`name${QNS_BATCH_LIMIT + 1}`);
   });
 
-  it('returns an empty map when the resolver fails, rather than throwing', async () => {
-    // R3, fail closed on the NAME. A resolver outage must degrade names, never
-    // take down the surface that was rendering them.
-    const out = await resolveClaimedNames(['alice'], async () => {
-      throw new Error('offline');
-    });
-    expect(out.size).toBe(0);
+  it('rejects when the resolver fails, rather than reporting nobody as an owner', async () => {
+    // This used to resolve to an empty map, and that was a caching bug wearing
+    // fail-closed's clothing.
+    //
+    // The visible behaviour is the same either way — no records, so nothing
+    // verifies, so no `.q` renders. The difference is what React Query does
+    // with the answer. An empty map is a SUCCESS, so with `staleTime: 1h` a
+    // single transient blip pins "nobody owns anything" for an hour and strips
+    // the suffix from every legitimate owner for that hour. A rejection caches
+    // nothing, so the next mount refetches.
+    //
+    // Fail-closed on the NAME is still honoured, and still matters: the throw
+    // is owned by React Query, and `useClaimRecords` degrades to `NO_RECORDS`
+    // rather than letting it reach a render. An outage degrades names; it never
+    // takes down the surface rendering them.
+    await expect(
+      resolveClaimedNames(['alice'], async () => {
+        throw new Error('offline');
+      }),
+    ).rejects.toThrow('offline');
+  });
+
+  it('refuses a response with fewer records than names, instead of padding', async () => {
+    // Positional alignment is the ONLY thing tying a record to a name. Padding
+    // the shortfall with nulls — which is what this did before — silently
+    // mis-pairs everything after the first divergence, judging one account's
+    // claim against another account's key. That is the impersonation the whole
+    // feature exists to prevent, so the response is refused whole.
+    await expect(
+      resolveClaimedNames(['alice', 'bob'], async () => [rec()]),
+    ).rejects.toThrow(/1 records for 2 names/);
+  });
+
+  it('refuses a response with more records than names', async () => {
+    await expect(
+      resolveClaimedNames(['alice'], async () => [rec(), rec()]),
+    ).rejects.toThrow(/2 records for 1 names/);
+  });
+
+  it('refuses a response that is not an array at all', async () => {
+    // `resolveBatch` returns `body.records` unchecked, so a body missing the
+    // field arrives here as `undefined`. Reading `.length` off that would throw
+    // a TypeError instead of a diagnosable message.
+    await expect(
+      resolveClaimedNames(['alice'], async () => undefined as unknown as null[]),
+    ).rejects.toThrow(/no records for 1 names/);
+  });
+
+  it('still accepts a null slot for a name nobody has registered', async () => {
+    // The ordinary not-found case is a `null` SLOT at HTTP 200, not a short
+    // array — so the guard above must not mistake it for a misaligned response.
+    const out = await resolveClaimedNames(['alice', 'nobody'], async () => [rec(), null]);
+    expect(out.get('alice')).not.toBeNull();
+    expect(out.get('nobody')).toBeNull();
   });
 });
 

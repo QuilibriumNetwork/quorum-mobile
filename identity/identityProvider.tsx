@@ -9,7 +9,7 @@ import {
   useClaimRecords,
   type ClaimingRow,
 } from '@/hooks/useVerifiedQnsNames';
-import { claimedNameBelongsTo } from '@/utils/verifyQnsClaim';
+import { claimedNameBelongsTo } from '@quilibrium/quorum-shared';
 import {
   EMPTY_LOCAL_NAMES,
   type IdentitySources,

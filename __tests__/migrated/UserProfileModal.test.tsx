@@ -14,7 +14,7 @@
  *
  * After the fix there is exactly one name on screen: the ladder's resolved
  * string, `.q`-suffixed only when the claim verifies for real (this test
- * does not mock `@/utils/verifyQnsClaim`, so the real predicate runs).
+ * does not mock `claimedNameBelongsTo`, so the real predicate runs).
  *
  * ## Scope: context (space, when the modal is opened with one)
  *
@@ -38,7 +38,7 @@ import { IdentityScopeProvider } from '@/identity/identityProvider';
 
 // Same genuine ed448 key/address pair as the other migrated render tests —
 // deriveAddress(KEY) === TARGET, real math, so the unmocked verification
-// predicate (`@/utils/verifyQnsClaim`) genuinely has something to verify.
+// predicate (`claimedNameBelongsTo`) genuinely has something to verify.
 const TARGET = 'QmRxwsciKWz7fvph4PobmabjChKPZtvkBcE4oALnogXDYW';
 const KEY =
   '030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b';
@@ -100,7 +100,7 @@ jest.mock('@/hooks/chat/useModMuteUser', () => ({
   useModMuteUser: () => ({ muteUser: jest.fn(), unmuteUser: jest.fn() }),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked — see the file header.
+// `claimedNameBelongsTo` is deliberately NOT mocked — see the file header.
 
 import UserProfileModal, { type UserProfileInfo } from '@/components/UserProfileModal';
 

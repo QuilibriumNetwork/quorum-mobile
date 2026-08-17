@@ -81,7 +81,7 @@ jest.mock('@/hooks/chat/useConversations', () => ({
 
 // The provider's two network seams. Only the `.q` test below reaches them —
 // every other test here resolves without `enrich`, so nothing is requested and
-// neither mock is ever called. `@/utils/verifyQnsClaim` is left UNMOCKED on
+// neither mock is ever called. `claimedNameBelongsTo` is left UNMOCKED on
 // purpose: the point of the `.q` test is that a real ed448 derivation agrees.
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
