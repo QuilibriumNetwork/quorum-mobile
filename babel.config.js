@@ -23,7 +23,14 @@ module.exports = function (api) {
       // across 29 files — and the ones sitting inside a try/catch swallow it
       // and take their error branch while the suite still reports green. Full
       // rationale in the plugin file.
-      ...(isTest ? ['./jest/babel-plugin-dynamic-import-to-require.js'] : []),
+      //
+      // Required as a FUNCTION, not named by path. `dev/harness/babel.harness.js`
+      // composes this config by calling it directly, and a relative plugin path
+      // is then resolved against Babel's own internals rather than this file —
+      // which broke every harness scenario with "Cannot find module". A function
+      // reference has no such ambiguity. `require` here is relative to this
+      // file, so it resolves correctly however the config is loaded.
+      ...(isTest ? [require('./jest/babel-plugin-dynamic-import-to-require.js')] : []),
       // Reanimated plugin must remain last.
       'react-native-reanimated/plugin',
     ],

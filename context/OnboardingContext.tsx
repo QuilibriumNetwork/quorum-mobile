@@ -98,7 +98,11 @@ export interface OnboardingState {
   syncedConfig: {
     name?: string;
     profileImage?: string;
-    allowSync?: boolean;
+    // `allowSync` deliberately absent. It used to be carried here, but it is a
+    // per-DEVICE publishing setting and this struct describes what the ACCOUNT's
+    // blob contained. Since `allowSync` became device-local it always reads
+    // `false` on a fresh install by definition, so storing it here recorded a
+    // constant rather than a fact. See the gate below.
     spaceCount?: number;
   } | null;
 }
@@ -380,12 +384,20 @@ export function OnboardingProvider({ children }: OnboardingProviderProps) {
           };
         }
 
-        // Store synced config info for reference
-        if (config.allowSync && (config.name || config.profile_image || (config.spaceKeys && config.spaceKeys.length > 0))) {
+        // Store synced config info for reference.
+        //
+        // Deliberately NOT gated on `config.allowSync`. It once was, which was
+        // already the wrong question — whether this account has anything worth
+        // restoring has nothing to do with whether some device is currently
+        // permitted to publish. Once `allowSync` became device-local it turned
+        // actively wrong: a fresh install has no stored config, so the value
+        // reads `false` by definition and this block could never run on the one
+        // path it exists for. The blob's own contents are the right test, and
+        // they are what the condition now checks.
+        if (config.name || config.profile_image || (config.spaceKeys && config.spaceKeys.length > 0)) {
           syncedConfig = {
             name: config.name,
             profileImage: config.profile_image,
-            allowSync: config.allowSync,
             spaceCount: config.spaceKeys?.length ?? 0,
           };
         }
@@ -534,12 +546,20 @@ export function OnboardingProvider({ children }: OnboardingProviderProps) {
           };
         }
 
-        // Store synced config info for reference
-        if (config.allowSync && (config.name || config.profile_image || (config.spaceKeys && config.spaceKeys.length > 0))) {
+        // Store synced config info for reference.
+        //
+        // Deliberately NOT gated on `config.allowSync`. It once was, which was
+        // already the wrong question — whether this account has anything worth
+        // restoring has nothing to do with whether some device is currently
+        // permitted to publish. Once `allowSync` became device-local it turned
+        // actively wrong: a fresh install has no stored config, so the value
+        // reads `false` by definition and this block could never run on the one
+        // path it exists for. The blob's own contents are the right test, and
+        // they are what the condition now checks.
+        if (config.name || config.profile_image || (config.spaceKeys && config.spaceKeys.length > 0)) {
           syncedConfig = {
             name: config.name,
             profileImage: config.profile_image,
-            allowSync: config.allowSync,
             spaceCount: config.spaceKeys?.length ?? 0,
           };
         }
