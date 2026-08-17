@@ -20,10 +20,20 @@ related:
 
 ## Status
 
-**The transform is fixed** (`jest/babel-plugin-dynamic-import-to-require.js`,
-wired in `babel.config.js` for the test environment only), shipped alongside the
-mobile config-sync slices. **What is NOT done is auditing the other call sites**,
-which is why this stays open.
+**2026-08-17 — the mechanism is fixed, shipped in PR #252**
+(`feat(config): report sync failures, and make turning sync off stick`).
+
+What landed: `jest/babel-plugin-dynamic-import-to-require.js`, wired into
+`babel.config.js` for the test environment only and reused by
+`dev/harness/babel.harness.js` through an identity guard, so it cannot be applied
+twice. Verified by inspecting the emitted code under both `test` and
+`development` rather than by running tests, which would have swallowed the
+fault — see the sequel below.
+
+**Still open, and the reason this is not in `.done/`: the other 63 call sites are
+unaudited.** Turning the transform on makes those paths reachable; it does not
+make them covered. That is a real remaining criterion, not a formality — each one
+is a branch that has never executed under test.
 
 ## What happened
 
