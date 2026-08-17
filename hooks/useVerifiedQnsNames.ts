@@ -440,7 +440,26 @@ export function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord
     // fetch, so no verdict changes. A name that is NEW in the wider set is
     // simply absent from it, and absent means unverified — the addition can
     // only ever under-show, never promote something unchecked.
-    placeholderData: (previous) => previous,
+    //
+    // BUT only carry forward from a query that actually SUCCEEDED, which is what
+    // `previousQuery` is checked for. The bare `(previous) => previous` form has
+    // a hole that defeats the status gate below:
+    //
+    //   React Query picks the placeholder source by "last query that had
+    //   defined data", and an ERRORED query still qualifies, because the error
+    //   reducer never clears `data`. It then reports the carried value as
+    //   `status: 'success'`. So after a failed refetch, one new sender is enough
+    //   to resurrect the stale map through a brand-new query — past the gate,
+    //   with nothing having re-verified anything.
+    //
+    // Scrolling a channel is exactly what grows the sender set, so this is the
+    // routine path, not an edge case. With `retry: false` the errored query
+    // never re-attempts, so the resurrected answer has no expiry at all.
+    //
+    // MEASURED 2026-08-17 on both clients: the name correctly dropped to
+    // unverified after the failure, then came back on the widen.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.state.status === 'success' ? previous : undefined,
   });
 
   // `data` is not necessarily a Map, however this function is typed.
@@ -483,8 +502,11 @@ export function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord
   // but it made this path fail OPEN, and the two changes have to land together.
   //
   // A placeholder-carried map still passes, since `placeholderData` reports
-  // `success`. That is intended and safe for the reason given above it: the
-  // carried map is keyed by name, so it can only ever under-show.
+  // `success`. That is intended, but it is safe only because `placeholderData`
+  // above now refuses to carry anything forward from a query that ERRORED.
+  // Without that guard, a widening sender set walks straight through this line
+  // with the stale map. Read the two together; changing either alone reopens
+  // the hole.
   return status === 'success' && data instanceof Map ? data : NO_RECORDS;
 }
 
