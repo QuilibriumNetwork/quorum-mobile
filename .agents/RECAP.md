@@ -10,7 +10,7 @@ updated: 2026-08-17
 
 ## Dashboard
 
-> Updated: 2026-08-17 · 72 live · 55 startable · 5 nearly done · 8 blocked
+> Updated: 2026-08-17 · 73 live · 57 startable · 5 nearly done · 8 blocked
 
 **Next step:** Fix the stale SQLCipher key left behind by Reset App Data — the next re-onboard bricks every chat on the device.
 
@@ -24,6 +24,7 @@ updated: 2026-08-17
 | 4 | [A member's profile shows somebody else's Farcaster account](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md) | Two members' identities are mixed in storage, and the UI offers to open the wrong person's external profile. |
 | 5 | [Messages DB refuses to open on identity mismatch](issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md) | The user sees empty chats and is told nothing. Indistinguishable from having lost their history. |
 | 6 | [Public invite: regenerate lies, and non-owners are offered it](issues/.open/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md) | The button claims to invalidate the old link and does not, so a shared link stays live after you believe you killed it. |
+| 7 | [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md) | Desktop's claim lookup can hang with nothing to bound it, and mobile cannot finish the consolidation until shared can carry a base URL. |
 
 ### Nearly done — needs a check
 

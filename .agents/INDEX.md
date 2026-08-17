@@ -124,8 +124,8 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [`auth:user` has no live writer for a rename made on another device](issues/.open/2026-08-05-auth-user-record-has-no-live-writer-for-a-rename-made-elsewhere.md)
 - 📋 [Verifying a `.q` claim, without paying for it on every render](issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md)
 - 📋 [Add the global "Always sign Direct Messages" toggle to mobile settings](issues/.open/2026-08-07-no-global-always-sign-dms-toggle-on-mobile.md)
-- 📋 [Adopt shared's QNS claim verification](issues/.open/2026-08-16-adopt-shared-qns-claim-verification.md)
 - 📋 [Mobile lets you finish onboarding with no display name, desktop does not](issues/.open/2026-08-16-mobile-lets-you-finish-onboarding-with-no-display-name.md)
+- 📋 [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md)
 
 ### Deferred
 
@@ -251,6 +251,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Every in-app notification says who and what](issues/.done/2026-08-05-rich-in-app-notifications-plan.md)
 - 📋 [Scoped "Clear" in the Notifications tab, including Farcaster](issues/.done/2026-08-05-scoped-clear-notifications-including-farcaster.md)
 - 📋 [In-app browser: link mode, native app handoff, chrome rebuild](issues/.done/2026-08-10-in-app-browser-link-handling-plan.md)
+- 📋 [Adopt shared's QNS claim verification](issues/.done/2026-08-16-adopt-shared-qns-claim-verification.md)
 
 ### 2026 06 21 Mute And Block Overhaul
 
@@ -285,4 +286,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-17 14:26:23
+**Last Updated**: 2026-08-17 16:20:39
