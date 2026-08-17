@@ -23,46 +23,38 @@
 // object. A future `const m = await import('x'); m.default(...)` against a true
 // ESM package would not be, and would need interop added here.
 
-/** Rewrites `import(x)` into `Promise.resolve().then(() => require(x))`. */
-function lowerDynamicImport({ types: t }) {
-  return {
-    name: 'harness-lower-dynamic-import',
-    visitor: {
-      Import(path) {
-        // The Import node is the callee; its parent is the whole `import(x)`
-        // call, which is what has to be replaced.
-        const call = path.parentPath;
-        if (!call.isCallExpression()) return;
-        call.replaceWith(
-          t.callExpression(
-            t.memberExpression(
-              t.callExpression(
-                t.memberExpression(t.identifier('Promise'), t.identifier('resolve')),
-                []
-              ),
-              t.identifier('then')
-            ),
-            [
-              t.arrowFunctionExpression(
-                [],
-                t.callExpression(t.identifier('require'), call.node.arguments)
-              ),
-            ]
-          )
-        );
-      },
-    },
-  };
-}
-
+// ── This transform now lives in ONE place ───────────────────────────────────
+//
+// It used to be defined inline here. The app's jest run needs the identical
+// transform for the identical reason, so the implementation moved to
+// jest/babel-plugin-dynamic-import-to-require.js and babel.config.js adds it
+// under its `test` environment.
+//
+// ⚠️ Applying it twice is NOT harmless, which is why the guard below is a guard
+// and not a tidy-up. Each pass lowers `import(x)` to
+// `Promise.resolve().then(() => require(x))`; a second pass over that output
+// wraps the arrow again and emits `require(function(){...})`. jest's resolver
+// then dies with "moduleName.startsWith is not a function" — inside the
+// try/catch that nearly every dynamic-import call site here sits in. So the
+// symptom is not a crash: verifyConfigSignature returns false, getConfig
+// silently keeps the local config, and a config-sync scenario reports a
+// perfectly working protocol as broken. Measured on 2026-08-17, from exactly
+// that false conclusion.
+//
+// The check is by identity rather than by NODE_ENV, so the harness keeps the
+// transform even if the app config's env branch stops adding it.
 const appConfig = require('../../babel.config.js');
+const lowerDynamicImport = require('../../jest/babel-plugin-dynamic-import-to-require.js');
 
 module.exports = function (api) {
   const base = appConfig(api);
+  const plugins = base.plugins ?? [];
+  if (plugins.includes(lowerDynamicImport)) return base;
+
   return {
     ...base,
     // Prepended, so the app's own plugin order is preserved — reanimated's
     // plugin must stay last, and it still is.
-    plugins: [lowerDynamicImport, ...(base.plugins ?? [])],
+    plugins: [lowerDynamicImport, ...plugins],
   };
 };

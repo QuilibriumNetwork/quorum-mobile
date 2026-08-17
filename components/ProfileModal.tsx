@@ -14,6 +14,7 @@ import { QuorumLogoIcon } from '@/components/SocialFeed/content/QuorumLogoIcon';
 import { ApexAvatarRing, ApexIcon, APEX_GOLD } from '@/components/ui/ApexAvatarRing';
 import { useApexSubscription, type ApexSubscriptionState } from '@/hooks/useApex';
 import { SkinsModal } from '@/components/skins/SkinsModal';
+import SyncStatusLine from '@/components/SyncStatusLine';
 import { useAuth, useWebSocket } from '@/context';
 import { useToast } from '@/context/ToastContext';
 import { compressAvatarImage } from '@/services/media/imageAttachment';
@@ -4448,6 +4449,9 @@ const PrivacySettingsSection = React.memo(function PrivacySettingsSection({
             thumbColor={allowSync ? '#ffffff' : '#f4f3f4'}
           />
         </View>
+        {/* Renders nothing unless publishing is actually failing, so the panel
+            gains zero rows in normal use. */}
+        <SyncStatusLine allowSync={allowSync} theme={theme} />
         <View style={styles.settingRow}>
           <IconSymbol name="phone" size={20} color={theme.colors.primary} style={styles.settingIcon} />
           <View style={styles.settingLeft}>

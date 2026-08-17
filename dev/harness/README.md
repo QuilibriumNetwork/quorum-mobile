@@ -4,10 +4,72 @@ Run **mobile's own client code** in Node, with no device, no emulator and no
 Metro.
 
 ```bash
-yarn harness:smoke     # offline, no keys, no network — safe anywhere
-yarn harness           # every scenario (networked ones hit production)
-yarn harness:dm        # the two-bot DM measurement — see below
+yarn harness:smoke        # offline, no keys, no network — safe anywhere
+yarn harness              # every scenario (networked ones hit production)
+yarn harness:dm           # the two-bot DM measurement — see below
+yarn harness:config-sync  # does a setting on one device reach another? — see below
 ```
+
+## Config sync (`yarn harness:config-sync`)
+
+The first end-to-end measurement of config sync in this repo. Everything else
+checking it is a unit test against a mocked store and a mocked server; nothing
+had ever encrypted a real blob, POSTed it, fetched it back, verified its
+signature and decrypted it.
+
+```
+[config-sync] account=Qm……… published bytes=594 spaces=0
+[config-sync] device B adopted name from the server: true
+```
+
+**One process is correct here, unlike the DM harness.** That rule exists because
+DM state lives in ratchet/session singletons two bots would share. Config sync
+has none: it is encrypt → POST → GET → decrypt, keyed only on the account key.
+Its one singleton is the MMKV config store, and `clearConfigStorage()` empties it
+deterministically — so "a second device" is *same account, same keys, empty local
+store*, which is exactly what a reinstall is. Two devices publishing
+**concurrently** is not modelled, and does need two processes.
+
+`payloadBytes` in that first line is a real reading against the unknown server
+size limit, which two earlier recorded observations contradict each other about.
+Worth appending to the measurement log when the account shape is interesting.
+
+### Cross-client: desktop → mobile
+
+`config-sync-two-device` drives mobile's client on BOTH ends, so it proves the
+wire format round-trips but says nothing about the other client. The two
+`ConfigService` implementations are independent code sharing only a type, and
+the known merge-asymmetry issue exists because they drifted.
+
+`config-cross.scenario.ts` closes that. Run it **from the desktop repo**, which
+owns the orchestrator:
+
+```bash
+cd ../quorum-desktop && yarn harness:config-cross
+```
+
+Desktop publishes a config for the shared throwaway account (it loads the key
+this repo persists at `.state/config-sync-bot.json`), writes what it published
+to `.state/rendezvous/config-cross.json`, then mobile pulls and asserts against
+that file — not against a constant, which two repos can drift into agreeing
+about without either having sent it.
+
+The halves are sequential rather than concurrent, unlike the DM measurement.
+That is a property of what is measured: a config is a row on a server, so one
+client writes and the other reads later. DMs need both peers live because
+delivery itself is under test.
+
+Mobile's half refuses a handoff older than 30 minutes. Without that, a stale
+file lets the run pass against a row desktop wrote days ago, which is a green
+that proves nothing.
+
+> ⚠️ **A rig fault here impersonates a product bug, and did once.**
+> `verifyConfigSignature` catches its own errors and returns `false`, after which
+> `getConfig` silently keeps the local config. That is indistinguishable from
+> "the remote never arrived". Two causes have already produced it: a missing
+> `modules/quorum-crypto` mapping, and the dynamic-import transform being applied
+> twice (see `babel.harness.js`). Check the signature path before concluding the
+> protocol is broken.
 
 `HARNESS_OFFLINE=1 yarn harness` skips everything networked.
 
