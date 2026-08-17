@@ -18,6 +18,17 @@ related:
 
 ## Status
 
+> ⚠️ **Addendum 2026-08-17: the fail-open fix in this issue was only HALF the
+> bug.** The `status === 'success'` gate shipped here closed the direct path (a
+> failed refetch serving the last good map) but not the `placeholderData` path:
+> React Query treats an ERRORED query as a valid placeholder source and relabels
+> the carried value `status: 'success'`, so one new sender resurrected the stale
+> map through a brand-new query. Found by review of the equivalent desktop fix,
+> confirmed here, and closed in **PR #257**. See
+> `issues/.done/2026-08-17-widening-sender-set-resurrects-stale-qns-verifications.md`.
+> Nothing below is wrong; it is incomplete.
+
+
 **2026-08-17 — shipped in PR #256** (`refactor(qns): take the claim-verification
 predicate from shared, and bound its failure modes`)
 

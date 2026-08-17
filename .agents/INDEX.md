@@ -169,6 +169,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [Photoless users all render as the same Quorum mark](issues/.done/2026-08-16-photoless-users-all-render-as-the-same-quorum-mark.md)
 - 🐛 [Space mention notifications bake names at write time, so a `.q` never renders there](issues/.done/2026-08-16-space-mention-notifications-bake-names-at-write-time-so-no-q-ever-renders.md)
 - 🐛 [Dynamic imports silently took their error branch under jest](issues/.done/2026-08-17-dynamic-imports-silently-took-their-error-branch-under-jest.md)
+- 🐛 [A widening sender set resurrects stale QNS verifications](issues/.done/2026-08-17-widening-sender-set-resurrects-stale-qns-verifications.md)
 - 📋 [Channel reorder mutations should broadcast (not local-only)](issues/.done/2026-05-29-channel-reorder-mutations-should-broadcast.md)
 - 📋 [Port DM update-profile (identity sync over DM sessions) from desktop](issues/.done/2026-06-09-port-dm-update-profile-from-desktop.md)
 - 📋 [Task: make `primaryUsername` (and `isProfilePublic`) survive a device switch and reliably reach the published public profile](issues/.done/2026-06-10-primary-username-sync-and-publish.md)
@@ -286,4 +287,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-17 16:20:39
+**Last Updated**: 2026-08-17 17:55:32
