@@ -1,10 +1,10 @@
 ---
 type: bug
 title: "The invite contact picker renders an unresolved name, and hand-rolls its own fallback"
-status: open
+status: done
 priority: medium
 created: 2026-08-10
-updated: 2026-08-10
+updated: 2026-08-16
 area: identity resolution / QNS / invites
 repos: quorum-mobile (this) , quorum-desktop (fixed 2026-08-10)
 source: found while auditing the DESKTOP equivalent for parity item (6); mobile turned out to have the same defect from the same cause
@@ -90,12 +90,38 @@ From the parity document, written about the join-stamping fix:
 This one is the display half of the same rule: a name rendered honestly on
 desktop and raw on mobile is a name the mobile user reads wrong.
 
+## Status
+
+**2026-08-16 — fixed and shipped in PR #249** (`feat: names resolve through one
+verified ladder, so a .q shows wherever a name does`), as Task 7 of the mobile
+identity migration.
+
+What landed: `ShareInviteSheet` resolves through `useResolvedName` /
+`useNameResolver` from `@/identity` (`components/ShareInviteSheet.tsx:33,90,121`)
+instead of reading a row field. The `it.failing` test that recorded the defect is
+now a plain passing `it`.
+
+The fix went further than this file asked in two ways. The picker now **verifies**
+a claimed `.q` rather than only resolving one, and its fetch fan-out is bounded
+(60 → 50), because an invite list's cardinality is the contact book.
+
+The fourth item — sweeping the rest of the share/invite paths — was satisfied
+structurally rather than by hand: `__tests__/rawNameFieldAudit.test.ts` now fails
+on *any* file under `components/` or `app/` that reads a raw name field without
+importing the resolver, so the same shape cannot reappear anywhere in the tree
+unnoticed.
+
 ## Definition of done
 
-- [ ] Picker resolves through `useConversationsWithQnsNames` + the resolver
-- [ ] Hand-rolled `truncateAddress` fallbacks at lines 87, 173, 183 removed
-- [ ] A test that fails without the fix
-- [ ] The rest of mobile's share/invite paths swept for the same shape
+- [x] Picker resolves through the resolver (via `@/identity`, which supersedes
+      `useConversationsWithQnsNames` — the migration replaced that seam)
+- [x] Hand-rolled `truncateAddress` fallbacks removed. The one remaining call is
+      a deliberate `sublabel` showing the address as a secondary line beneath the
+      resolved name, not a fallback standing in for one.
+- [x] A test that fails without the fix — `__tests__/shareInviteSheetName.test.tsx`,
+      plus `__tests__/shareInviteSheetFetchBound.test.tsx` for the cap
+- [x] The rest of mobile's share/invite paths swept for the same shape — done by
+      the ratchet rather than by inspection, which is stronger
 
 ## Note
 
@@ -105,4 +131,4 @@ than here. Ask for the path; do not restate it in a tracked file.
 
 ---
 
-*Last updated: 2026-08-10*
+*Last updated: 2026-08-16*

@@ -2,6 +2,7 @@
 type: task
 title: Mobile lets you finish onboarding with no display name, desktop does not
 status: open
+priority: medium
 created: 2026-08-16
 updated: 2026-08-16
 ---
@@ -18,11 +19,11 @@ The operator's call, 2026-08-16: **mobile should do what desktop does.**
 
 ## The divergence, measured
 
-| | Desktop | Mobile |
-|---|---|---|
-| Display name at signup | Required | Optional |
-| Skip available | No | Yes |
-| Can an account exist with no name? | No | **Yes** |
+|                                    | Desktop  | Mobile   |
+| ---------------------------------- | -------- | -------- |
+| Display name at signup             | Required | Optional |
+| Skip available                     | No       | Yes      |
+| Can an account exist with no name? | No       | **Yes**  |
 
 **Desktop** gates the Continue button on `canProceedWithName`
 (`quorum-desktop/src/hooks/business/user/useOnboardingFlowLogic.ts:263`), and an
