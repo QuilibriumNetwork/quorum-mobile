@@ -34,6 +34,35 @@ store*, which is exactly what a reinstall is. Two devices publishing
 size limit, which two earlier recorded observations contradict each other about.
 Worth appending to the measurement log when the account shape is interesting.
 
+### Cross-client: desktop → mobile
+
+`config-sync-two-device` drives mobile's client on BOTH ends, so it proves the
+wire format round-trips but says nothing about the other client. The two
+`ConfigService` implementations are independent code sharing only a type, and
+the known merge-asymmetry issue exists because they drifted.
+
+`config-cross.scenario.ts` closes that. Run it **from the desktop repo**, which
+owns the orchestrator:
+
+```bash
+cd ../quorum-desktop && yarn harness:config-cross
+```
+
+Desktop publishes a config for the shared throwaway account (it loads the key
+this repo persists at `.state/config-sync-bot.json`), writes what it published
+to `.state/rendezvous/config-cross.json`, then mobile pulls and asserts against
+that file — not against a constant, which two repos can drift into agreeing
+about without either having sent it.
+
+The halves are sequential rather than concurrent, unlike the DM measurement.
+That is a property of what is measured: a config is a row on a server, so one
+client writes and the other reads later. DMs need both peers live because
+delivery itself is under test.
+
+Mobile's half refuses a handoff older than 30 minutes. Without that, a stale
+file lets the run pass against a row desktop wrote days ago, which is a green
+that proves nothing.
+
 > ⚠️ **A rig fault here impersonates a product bug, and did once.**
 > `verifyConfigSignature` catches its own errors and returns `false`, after which
 > `getConfig` silently keeps the local config. That is indistinguishable from
