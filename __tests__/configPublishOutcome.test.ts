@@ -4,8 +4,8 @@
  * §1 — the device records what its last publish actually DID. Sync being off, a
  * refuse-to-publish hold and a genuine upload all write the local row and all
  * look identical, so "my setting saved" has never been evidence that it synced.
- * On mobile the only existing signal is `logger.warn`, which compiles to a no-op
- * in release builds, so a real user gets nothing at all.
+ * On mobile the only existing signal is `logger.warn`, which reaches the device
+ * console and nothing else, so a real user gets nothing they could ever see.
  *
  * §2 — `allowSync` describes THIS device's relationship with the server, but it
  * rides in the account-level blob, so turning sync off on the phone could be
@@ -465,26 +465,42 @@ describe('allowSync is device-local and never inherited from the blob', () => {
   });
 });
 
-describe('the record still gets written in the build where logging is dead', () => {
+describe('the record does not depend on logging being alive', () => {
   /**
-   * The premise of this whole slice is that `logger.warn` reaches nobody in a
-   * release build, so the record has to be the surviving signal. Every test
-   * above ran with logging ON, which is the one condition under which that
-   * premise cannot be checked.
+   * ⚠️ CORRECTION, and it matters for reading these tests. An earlier version of
+   * this block said it reproduced "the production logging state", on the premise
+   * that a release build silences `logger.warn`. That premise is stale for this
+   * app and the tests below were mislabelled because of it.
    *
-   * How a release build actually silences logging — READ in the shipped
-   * `dist/index.native.js`, not only in `src`: quorum-shared's logger reads
-   * `__DEV__` once at module load and stores the answer in an `enabled` flag
-   * that every method consults. Nothing is stripped and no call disappears;
-   * `logger.warn(...)` still runs, checks the flag, and returns without
-   * touching the console.
+   * What is actually true, READ at each source:
    *
-   * That is why `logger.disable()` is not a stand-in for production here — it
-   * sets the same flag through the module's own public API, so this block runs
-   * against the real production logging state.
+   * - quorum-shared's logger is a RUNTIME flag, not a compile-time strip. It
+   *   reads `__DEV__` once at module load into an `enabled` flag every method
+   *   consults (`dist/index.native.js`, not only `src`). No call disappears;
+   *   `logger.warn(...)` runs, checks the flag, returns.
+   * - This app then OVERRIDES that flag. `installLoggingPolicy`
+   *   (`services/observability/loggingPolicy.ts`, called unconditionally from
+   *   `index.js` before anything logs) sets `enabled: true, minLevel: 'warn'` in
+   *   production. So warn and error DO reach the device console in a release
+   *   build, and have since PR #227.
    *
-   * What it does NOT cover: whether the code survives Metro's minifier into the
-   * shipped bundle. Nothing running under jest can see that. `yarn
+   * So production is `enabled: true, minLevel: 'warn'`, NOT logging-off. Two
+   * arms below, and they prove different things:
+   *
+   * - the `minLevel: 'warn'` arm is the faithful one. It is the shipping
+   *   configuration, and it shows `debug` dying while `warn` survives.
+   * - the `logger.disable()` arm is STRICTER than production. It is a
+   *   robustness check: the record survives even with no logging at all.
+   *   Worth keeping, because the policy installer is one `require` at an entry
+   *   point and a refactor could drop it — but it is not evidence about the
+   *   build shipping today.
+   *
+   * None of this weakens the case for the record. A console line needs a cable
+   * and `adb logcat` to read, so it reaches a developer and never a user. The
+   * justification is a log's REACH, not its absence.
+   *
+   * What this block does NOT cover: whether the code survives Metro's minifier
+   * into the shipped bundle. Nothing under jest can see that — `yarn
    * check:release-bundle` is the separate instrument for it.
    */
   const silenced: jest.SpyInstance[] = [];
@@ -498,13 +514,17 @@ describe('the record still gets written in the build where logging is dead', () 
   });
 
   afterEach(() => {
-    // The flag is module-global and would otherwise leak into every later test
-    // in this file, silently turning them into production-mode runs too.
-    logger.enable();
+    // Restore BOTH fields to the shared logger's own defaults under jest, not
+    // just `enabled`. The config is module-global, and an arm that lowered
+    // `minLevel` would otherwise leave every later test in this file quietly
+    // running at a level it never asked for.
+    logger.configure({ enabled: true, minLevel: 'log' });
     silenced.forEach((spy) => spy.mockRestore());
   });
 
   const consoleWasReached = () => silenced.some((spy) => spy.mock.calls.length > 0);
+  const spyFor = (level: (typeof CONSOLE_LEVELS)[number]) =>
+    silenced[CONSOLE_LEVELS.indexOf(level)];
 
   it('CONTROL ARM — the console IS reached with logging on, so the silence below means something', async () => {
     // Without this arm, a console spy that could never fire would make the
@@ -517,6 +537,32 @@ describe('the record still gets written in the build where logging is dead', () 
 
     expect(logger.isEnabled()).toBe(true);
     expect(consoleWasReached()).toBe(true);
+  });
+
+  it('THE FAITHFUL ARM — in the shipping configuration, debug dies and warn survives', async () => {
+    // Exactly what installLoggingPolicy sets in production. This is the only
+    // test in the file that runs the configuration users actually get.
+    logger.configure({ enabled: true, minLevel: 'warn' });
+
+    // `off` logs at DEBUG, which this configuration discards. The record is
+    // genuinely the only thing left of that branch on the device.
+    await saveConfig({ ...publishableConfig(), allowSync: false });
+    expect(readRecord()?.outcome).toBe('off');
+    expect(consoleWasReached()).toBe(false);
+
+    // `rejected` logs at WARN, which SURVIVES. Asserted rather than assumed,
+    // because it is the fact that falsified the older framing of this block:
+    // for the failure the instrument was built for, the record is not the only
+    // trace, it is the only trace a USER can reach.
+    mockPostUserSettings.mockRejectedValue(new Error('400: invalid config missing data'));
+    await saveConfig(publishableConfig());
+
+    expect(readRecord()?.outcome).toBe('rejected');
+    expect(spyFor('warn').mock.calls.length).toBeGreaterThan(0);
+    // ...and still nothing at the levels below it, so `minLevel` is really
+    // being honoured rather than the whole config being ignored.
+    expect(spyFor('debug').mock.calls.length).toBe(0);
+    expect(spyFor('log').mock.calls.length).toBe(0);
   });
 
   it('every outcome is still recorded when the console is getting nothing', async () => {
