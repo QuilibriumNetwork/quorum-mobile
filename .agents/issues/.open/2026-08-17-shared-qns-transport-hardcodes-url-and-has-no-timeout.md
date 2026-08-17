@@ -16,6 +16,41 @@ related:
 
 # Shared's QNS transport hardcodes its URL and has no timeout
 
+## Status
+
+**The shared half shipped 2026-08-17 as quorum-shared PR #83** (`5bd3461`). The
+issue stays open because the mobile migration — the last two steps — has not
+been done, and closing it would make that work invisible.
+
+What landed: `QnsRequestOptions` (`signal`, `baseUrl`, `timeoutMs`) on both
+entry points, a per-request deadline composed with the caller's signal, and
+base-URL normalisation. Desktop consumes shared via `link:`, so **it already has
+the timeout** — the live gap named below is closed. No desktop or mobile code
+change was needed; both call sites compile untouched.
+
+Two things came out differently from the proposal above, both deliberate:
+
+- **`resolveName` does NOT accept a bare `AbortSignal`.** The proposal had both
+  entry points take the union. MEASURED with `tsc --strict`: passing a signal to
+  an options-only parameter is a compile error (TS2559), because TypeScript's
+  weak-type detection rejects an argument sharing zero fields with an
+  all-optional interface. So the silent-drop hazard the union was meant to
+  prevent does not exist, and the narrower signature is safer. Only
+  `resolveNamesBatch` carries the union, purely to keep desktop's existing call
+  site compiling.
+- **`timeoutMs` opts out via the literal `'none'`, not via `0`.** Any unusable
+  number falls back to the default and warns. `Number(unsetEnvVar)` is `NaN` and
+  `Math.max(0, budget - elapsed)` is `0`; treating either as "no deadline" would
+  have silently reintroduced the exact hang this issue is about.
+
+Verified: 683 tests in shared, 15/15 deliberate mutations caught, built artifact
+smoke-tested on real timers, desktop at 0 typecheck errors with 288 identity
+tests passing.
+
+**Remaining:** publish shared (version is still `2.1.0-43`; this repo bumps in
+separate `chore:` commits), then bump mobile and retire its chunk loop. Note the
+container swap called out under "Watch out for" lands with that step.
+
 ## What & why
 
 `@quilibrium/quorum-shared` owns the QNS network calls both clients need. Both
@@ -80,12 +115,12 @@ request.
 
 ## Steps
 
-- [ ] Add `QnsRequestOptions` and thread `baseUrl` + `timeoutMs` through
+- [x] Add `QnsRequestOptions` and thread `baseUrl` + `timeoutMs` through
       `resolveNamesBatch` and `resolveName`
-- [ ] Keep accepting a bare `AbortSignal` as the second argument, so desktop's
+- [x] Keep accepting a bare `AbortSignal` as the second argument, so desktop's
       existing `resolveNamesBatch(names, signal)` call site is untouched
-- [ ] Give `timeoutMs` a bounded default and test that a hung fetch rejects
-- [ ] Test that a caller-supplied signal and the internal deadline both abort
+- [x] Give `timeoutMs` a bounded default and test that a hung fetch rejects
+- [x] Test that a caller-supplied signal and the internal deadline both abort
 - [ ] Publish, then bump desktop and confirm it inherits the timeout
 - [ ] Bump mobile, swap `resolveClaimedNames` for `resolveNamesBatch` passing
       mobile's configured base URL, and delete mobile's chunk loop
@@ -109,11 +144,11 @@ deleting it; it should still prove the rehydrated shape cannot promote a claim.
 
 ## Definition of done
 
-- [ ] Desktop's claim lookup cannot hang indefinitely
+- [x] Desktop's claim lookup cannot hang indefinitely
 - [ ] Both clients resolve QNS through one transport, with mobile's base URL
       honoured on mobile
 - [ ] Mobile has no chunk-and-zip loop of its own
-- [ ] No behaviour change on the happy path in either client
+- [x] No behaviour change on the happy path in either client
 
 ## Out of scope
 
