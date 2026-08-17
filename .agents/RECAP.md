@@ -24,7 +24,7 @@ updated: 2026-08-17
 | 4 | [A member's profile shows somebody else's Farcaster account](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md) | Two members' identities are mixed in storage, and the UI offers to open the wrong person's external profile. |
 | 5 | [Messages DB refuses to open on identity mismatch](issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md) | The user sees empty chats and is told nothing. Indistinguishable from having lost their history. |
 | 6 | [Public invite: regenerate lies, and non-owners are offered it](issues/.open/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md) | The button claims to invalidate the old link and does not, so a shared link stays live after you believe you killed it. |
-| 7 | [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md) | Desktop's claim lookup can hang with nothing to bound it, and mobile cannot finish the consolidation until shared can carry a base URL. |
+| 7 | [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md) | **Half shipped 2026-08-17 (quorum-shared #83), so the urgent part is gone** — desktop's claim lookup can no longer hang. What is left is mobile-side cleanup and is not blocking anything: publish shared, bump, then retire mobile's own chunk-and-zip loop. Mobile imports none of those entry points today, so the bump is inert for QNS; the better reason to do it is that `2.1.0-43` predates #82's log-redaction fix. |
 
 ### Nearly done — needs a check
 
@@ -149,4 +149,4 @@ Things that are true across the whole backlog and are recorded in no single issu
 
 ---
 
-_Last updated: 2026-08-16_
+_Last updated: 2026-08-17_
