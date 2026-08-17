@@ -1,10 +1,10 @@
 ---
 type: bug
 title: "Every logger call is a no-op in production builds, and logger.debug is dead even in dev"
-status: in-progress
+status: done
 priority: high
 created: 2026-08-04
-updated: 2026-08-04
+updated: 2026-08-17
 severity: high (not a defect in itself — it removes the evidence for every OTHER defect)
 platforms: quorum-mobile (shared logger, so quorum-desktop has the same first half)
 source: found while diagnosing a silently-dropped join on a real device during the join-authentication work (detail held privately)
@@ -16,6 +16,29 @@ related:
 # The safety logs we keep adding do not exist where they are needed
 
 ## Status
+
+**2026-08-17 — `status:` corrected to `done`.** The field read `in-progress`
+while the file sat in `.done/`, which dropped the issue out of `recap`,
+`issue-cleanup` and every other automated view. The prose below is unchanged and
+still records that the release-build logcat capture was never done.
+
+**Its headline outlived its own fix, and that caused a second problem.**
+`installLoggingPolicy` means warn and error DO reach the device console in a
+release build on this client. Four comments across `services/config/` went on
+asserting the pre-fix state ("`logger.*` compiles out in release builds") for
+nearly two weeks afterwards, and that stale claim was then used to justify a
+later piece of work in PR #254 and repeated in its tests. Corrected in PR #255.
+If you cite this issue, cite what it *was*.
+
+Worth noting for anyone reading across the two repos: desktop is NOT in the same
+state. `src/utils/productionLogControl.ts` only attaches a diagnostics hatch to
+a global, and nothing calls `enable()` at startup, so the `__DEV__` default
+still stands there. Same shared logger, opposite defaults.
+
+`yarn check:release-bundle` (PR #254) now asserts that specific strings survive
+minification into a production bundle. That is adjacent evidence, not this
+issue's stated criterion — it proves presence, not that a line is emitted at
+runtime on a device.
 
 **2026-08-04 — shipped in PR #227** (`fix: warnings and errors survive a release
 build, and logger.debug works in dev`), squash-merged to master as `387bb1c`.
@@ -328,5 +351,5 @@ flag) restores full logging for a debugging session.
 - Confirm on a real release build, not by reading: the whole point of this issue
   is that reading the code is what made everyone assume the logs were there.
 
-*Last updated: 2026-08-04*
+*Last updated: 2026-08-17*
 
