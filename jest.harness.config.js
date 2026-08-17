@@ -72,6 +72,14 @@ module.exports = {
     // The services/crypto barrel re-exports both providers, so importing it
     // reaches the real modules without going through either pattern above.
     '^(.*/)?services/crypto$': '<rootDir>/dev/harness/crypto-barrel-shim.ts',
+    // The Nitro/uniffi binding itself, reached by configService's lazy
+    // `await import('../../modules/quorum-crypto/src')` for Ed448 verification.
+    // MUST stay above the '^@/(.*)$' catch-all, like the providers above.
+    //
+    // Its absence does not fail loudly: verifyConfigSignature catches the import
+    // error and returns false, so getConfig silently keeps the local config and
+    // a config-sync scenario reports a working protocol as broken. See the shim.
+    '^(.*/)?modules/quorum-crypto/src$': '<rootDir>/dev/harness/quorum-crypto-shim.ts',
 
     // ---- native modules that cannot exist in Node ----
     // Each is a real device API with no Node equivalent. Swapping them here
