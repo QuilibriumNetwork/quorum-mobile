@@ -56,18 +56,20 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { resolveBatch, type NameRecord } from '@/services/api/qnsClient';
-import { claimedNameBelongsTo } from '@/utils/verifyQnsClaim';
-import { logger } from '@quilibrium/quorum-shared';
+import { claimedNameBelongsTo, QNS_BATCH_LIMIT } from '@quilibrium/quorum-shared';
 
 /**
- * Most names the resolver accepts in one request.
+ * Re-exported so mobile's callers keep one import site while the CONSTANT has a
+ * single definition shared with desktop.
  *
- * MEASURED, not assumed: 101 names returns `400 BATCH_SIZE_EXCEEDED` for the
- * WHOLE request. So an oversized batch does not lose the excess, it loses
- * everything — every name on the screen — which is why chunking is a
- * correctness concern and not a tidiness one.
+ * It is a MEASURED server property, not a preference: 101 names returns
+ * `400 BATCH_SIZE_EXCEEDED` for the WHOLE request, so an oversized batch does
+ * not lose the excess, it loses everything — every name on the screen. That is
+ * why chunking is a correctness concern and not a tidiness one, and why two
+ * clients disagreeing about the number would be a real bug rather than a style
+ * difference.
  */
-export const QNS_BATCH_LIMIT = 100;
+export { QNS_BATCH_LIMIT };
 
 /** A row carrying an identity claim. Loose, because rows reach the UI from
  *  several queries and not all of them declare the field on their static type. */
@@ -208,9 +210,24 @@ export type ClaimExemption = (name: string, address: string) => boolean;
  * is judged against another member's record, which is precisely the confusion
  * this whole feature exists to prevent.
  *
- * A resolver failure yields an empty map rather than throwing. Fail closed on
- * the NAME: an outage must cost people their suffix, never take down the
- * surface that was rendering them.
+ * ## Rejects on failure rather than reporting everything unresolved
+ *
+ * It reads as fail-closed to catch here and return an empty map — an outage
+ * costs people their suffix, which is the correct direction. It is not, because
+ * of the one-hour `staleTime` below: a resolved value is CACHED, so a single
+ * transient blip would pin "nobody owns anything" for an hour and strip the `.q`
+ * from every legitimate owner for that hour, with nothing logged and no way for
+ * a user to tell it apart from the feature being broken.
+ *
+ * Throwing caches nothing. The visible behaviour during the outage is identical
+ * — no records, so nothing verifies, so no suffix renders — but recovery is the
+ * next mount instead of the next hour. The failure still cannot take a surface
+ * down: React Query owns the rejection, and `useClaimRecords` degrades to
+ * `NO_RECORDS`.
+ *
+ * This matches `resolveNamesBatch` in `@quilibrium/quorum-shared`, which desktop
+ * already uses and which mobile will adopt once it can carry mobile's base URL
+ * and timeout — keep the two behaviours identical until then.
  */
 export async function resolveClaimedNames(
   names: readonly string[],
@@ -219,15 +236,27 @@ export async function resolveClaimedNames(
   const out = new Map<string, NameRecord | null>();
   if (!names.length) return out;
 
-  try {
-    for (let i = 0; i < names.length; i += QNS_BATCH_LIMIT) {
-      const chunk = names.slice(i, i + QNS_BATCH_LIMIT);
-      const records = await batch(chunk);
-      chunk.forEach((name, j) => out.set(name, records?.[j] ?? null));
+  for (let i = 0; i < names.length; i += QNS_BATCH_LIMIT) {
+    const chunk = names.slice(i, i + QNS_BATCH_LIMIT);
+    const records = await batch(chunk);
+
+    // Positional alignment is the ONLY thing tying a record to a name, so a
+    // length mismatch means every pairing after the first divergence could
+    // attribute one account's key to another account's name — precisely the
+    // impersonation this feature exists to prevent. There is no safe way to
+    // guess the intended alignment, so refuse the whole response rather than
+    // pad it with nulls, which would silently mis-pair the overlap.
+    //
+    // An unregistered name is a `null` SLOT at HTTP 200, not a short array
+    // (MEASURED against the live API), so a mismatch is genuinely anomalous
+    // rather than the ordinary not-found case.
+    if (!Array.isArray(records) || records.length !== chunk.length) {
+      throw new Error(
+        `QNS batch resolve returned ${Array.isArray(records) ? records.length : 'no'} records for ${chunk.length} names`,
+      );
     }
-  } catch (e) {
-    logger.warn('[qns] claim verification lookup failed; names degrade to global', e);
-    return new Map();
+
+    chunk.forEach((name, j) => out.set(name, records[j] ?? null));
   }
 
   return out;
@@ -375,9 +404,16 @@ export const DEV_CLAIM_EXEMPTION: ClaimExemption | undefined = FakeQnsModule
  * without either copy's history explaining why.
  */
 export function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord | null> {
-  const namesKey = names.join('|');
+  // SORTED, so two surfaces holding the same claimants in a different insertion
+  // order share one cache entry instead of issuing the same request twice.
+  // `claimedNamesIn` builds the set in row order, and row order differs between
+  // a member list and a message list showing the same people — without this they
+  // are two keys for one answer. Only the KEY is sorted; the array handed to the
+  // resolver keeps its original order, since chunk composition is irrelevant to
+  // a result that comes back keyed by name.
+  const namesKey = [...names].sort().join('|');
 
-  const { data } = useQuery({
+  const { data, status } = useQuery({
     queryKey: ['qns-verify-claims', namesKey],
     queryFn: () => resolveClaimedNames(names, resolveBatch),
     enabled: names.length > 0,
@@ -386,6 +422,12 @@ export function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord
     // A retry would extend the window in which claims render unverified. They
     // degrade to the global name meanwhile, which is correct but invisible, so
     // prefer settling quickly and refreshing on the next natural cache miss.
+    //
+    // Note the transport THROWS rather than reporting every name unresolved
+    // (see `resolveClaimedNames`). That is what makes `retry: false` safe next
+    // to a one-hour `staleTime`: a swallowed error would CACHE "nobody owns
+    // anything" for that hour, whereas a rejection caches nothing and the next
+    // mount refetches.
     retry: false,
     // Carry the previous answer while a wider set resolves, or every name on
     // screen flickers whenever a new one appears. Scrolling a channel grows the
@@ -418,7 +460,32 @@ export function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord
   // so every claim renders as its global name until the query refetches. The
   // alternative — trusting a shape we cannot read — is how an unverified claim
   // would reach the screen.
-  return data instanceof Map ? data : NO_RECORDS;
+  //
+  // ## `status` is checked, and NOT because the shape might be wrong
+  //
+  // React Query does not clear `data` when a query errors — its reducer spreads
+  // the previous state and only flips `status`. So after a name set has resolved
+  // once, a FAILED REFETCH leaves the last successful records in place and
+  // `data instanceof Map` stays true.
+  //
+  // That is the correct default for almost any query, and wrong for this one.
+  // `staleTime` here is a SECURITY bound (see `useClaimRecords`' docstring): it
+  // is how long a name transferred to somebody else can still verify for its
+  // previous owner. Serving the last good map through a failure removes that
+  // bound entirely — while refetches keep failing, the old owner keeps
+  // rendering the name, with no upper limit and nothing logged.
+  //
+  // MEASURED 2026-08-17, both arms of the same probe: on a failed refetch the
+  // records map retained `size = 1` (the stale verifying record) without this
+  // check, against `size = 0` on the previous implementation, which replaced the
+  // cache with an empty map because it resolved instead of rejecting. Rejecting
+  // is still the right call — it is what stops a blip being cached for an hour —
+  // but it made this path fail OPEN, and the two changes have to land together.
+  //
+  // A placeholder-carried map still passes, since `placeholderData` reports
+  // `success`. That is intended and safe for the reason given above it: the
+  // carried map is keyed by name, so it can only ever under-show.
+  return status === 'success' && data instanceof Map ? data : NO_RECORDS;
 }
 
 /**

@@ -29,7 +29,7 @@ import { DarkTheme } from '@/theme';
 // identityProviderVerification.test.tsx / shareInviteSheetName.test.tsx rather
 // than generated fresh — deriveAddress(KEY) === PARTNER, real math, not a
 // placeholder. Needed because `claimedNameBelongsTo` runs for real below (no
-// mock on `@/utils/verifyQnsClaim`).
+// mock on `claimedNameBelongsTo`).
 const PARTNER = 'QmRxwsciKWz7fvph4PobmabjChKPZtvkBcE4oALnogXDYW';
 const KEY =
   '030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b';
@@ -47,7 +47,7 @@ jest.mock('@/services/api/qnsClient', () => ({
   resolveBatch: (names: string[]) => mockResolveBatch(names),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked — same reasoning as
+// `claimedNameBelongsTo` is deliberately NOT mocked — same reasoning as
 // shareInviteSheetName.test.tsx: the verified case must prove a genuinely
 // verified claim renders `.q`, not merely that the header trusts whatever
 // `verifiedQnsNames` already contains.

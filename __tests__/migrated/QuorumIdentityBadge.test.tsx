@@ -12,7 +12,7 @@
  *
  * The fix routes the badge through `<MemberName>`, whose `.q` only ever comes
  * from a claim `claimedNameBelongsTo` has verified — and that predicate runs
- * for REAL here (no mock on `@/utils/verifyQnsClaim`), against a genuine
+ * for REAL here (no mock on `claimedNameBelongsTo`), against a genuine
  * derivable ed448 key/address pair reused verbatim from
  * `shareInviteSheetName.test.tsx` / `identityProviderVerification.test.tsx`.
  *
@@ -41,7 +41,7 @@ import { DarkTheme } from '@/theme';
 // A genuine ed448 key/address pair, reused verbatim from
 // identityProviderVerification.test.tsx / shareInviteSheetName.test.tsx rather
 // than generated fresh — deriveAddress(KEY) === PARTNER, real math, not a
-// placeholder. Needed because claimedNameBelongsTo (utils/verifyQnsClaim.ts)
+// placeholder. Needed because claimedNameBelongsTo (@quilibrium/quorum-shared)
 // runs for real here (no mock on it below): a non-derivable placeholder
 // address would make every claim fail verification, a different, wrong test.
 const PARTNER = 'QmRxwsciKWz7fvph4PobmabjChKPZtvkBcE4oALnogXDYW';
@@ -75,8 +75,8 @@ jest.mock('@/services/api/qnsClient', () => ({
   resolveBatch: (names: string[]) => mockResolveBatch(names),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked. `claimedNameBelongsTo`
-// is the ONE predicate that decides whether a claim becomes a `.q`, and
+// `claimedNameBelongsTo` (from `@quilibrium/quorum-shared`) is deliberately NOT
+// mocked. It is the ONE predicate that decides whether a claim becomes a `.q`, and
 // letting it run for real — against the genuine KEY/PARTNER pair above — is
 // what makes the impersonation case below prove a forged claim cannot pass,
 // rather than merely proving the badge renders whatever a stubbed predicate
@@ -152,7 +152,7 @@ describe('QuorumIdentityBadge — the .q comes only from a verified claim', () =
     // for 'alice' (unchanged from the mock above) derives back to PARTNER via
     // KEY, not IMPOSTOR — the exact forgery claimedNameBelongsTo exists to
     // catch. This is the CRITICAL-finding proof: with the crypto genuinely
-    // running (no mock on @/utils/verifyQnsClaim), a claim that resolves to
+    // running (no mock on claimedNameBelongsTo), a claim that resolves to
     // the wrong address must render the global name, never a `.q`.
     mockGetUserByFarcasterFid.mockResolvedValue(linkedIdentity({ address: IMPOSTOR }));
 

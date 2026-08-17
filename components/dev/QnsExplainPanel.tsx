@@ -29,7 +29,7 @@ import { DevButton, DevButtonRow, DevPanel, DevReadout, DevRow } from '@/compone
 import { publicProfileQueryKey, type PublicProfile } from '@/hooks/useUserPublicProfile';
 import { getQuorumClient } from '@/services/api/quorumClient';
 import { resolveBatch } from '@/services/api/qnsClient';
-import { claimedNameBelongsTo } from '@/utils/verifyQnsClaim';
+import { claimedNameBelongsTo } from '@quilibrium/quorum-shared';
 import { deriveAddress } from '@/utils/deriveAddress';
 import { getAllSpaces } from '@/services/config/spaceStorage';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';

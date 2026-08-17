@@ -16,7 +16,7 @@
  *
  * ## What is real, what is mocked
  *
- * `IdentityScopeProvider` is real, and `@/utils/verifyQnsClaim` is NOT
+ * `IdentityScopeProvider` is real, and `claimedNameBelongsTo` is NOT
  * mocked — `claimedNameBelongsTo` runs for real against a genuine derivable
  * ed448 key/address pair, reused verbatim from `shareInviteSheetName.test.tsx`.
  * Only the two network seams it depends on are stubbed.
@@ -59,7 +59,7 @@ jest.mock('@/services/api/qnsClient', () => ({
   resolveBatch: (names: string[]) => mockResolveBatch(names),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked — see the file header.
+// `claimedNameBelongsTo` is deliberately NOT mocked — see the file header.
 
 import UnifiedProfileHeader from '@/components/UnifiedProfileHeader';
 

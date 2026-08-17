@@ -60,7 +60,7 @@ jest.mock('@/services/api/qnsClient', () => ({
   resolveBatch: (names: string[]) => mockResolveBatch(names),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked — the verified case
+// `claimedNameBelongsTo` is deliberately NOT mocked — the verified case
 // must prove a genuinely verified claim renders `.q`, not merely that the
 // autocomplete row trusts whatever `verifiedQnsNames` already contains.
 

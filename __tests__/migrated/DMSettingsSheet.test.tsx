@@ -68,7 +68,7 @@ jest.mock('@/hooks/chat/useSendDirectMessage', () => ({
   resetDMSession: jest.fn(),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked — the verified case
+// `claimedNameBelongsTo` is deliberately NOT mocked — the verified case
 // must prove a genuinely verified claim renders `.q`, not merely that the
 // sheet trusts whatever `verifiedQnsNames` already contains.
 

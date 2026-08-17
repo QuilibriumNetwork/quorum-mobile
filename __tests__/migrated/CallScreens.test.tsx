@@ -27,7 +27,7 @@
  * `react-native-webrtc` reaches `NativeEventEmitter` at import time (only
  * `InCallScreen` imports it, but the stub is harmless for the other two).
  * `IdentityScopeProvider` is real — the point is proving the real
- * `useResolvedName` wiring, not a stand-in for it. `@/utils/verifyQnsClaim`
+ * `useResolvedName` wiring, not a stand-in for it. `claimedNameBelongsTo`
  * is deliberately NOT mocked: the verified case must prove a genuinely
  * verified claim renders `.q`, not merely that the screen trusts whatever
  * `verifiedQnsNames` already contains.

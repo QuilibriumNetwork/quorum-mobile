@@ -14,7 +14,7 @@
  * being verifiable, and the ladder simply stopped reading it.
  *
  * So this file is Route B, deliberately with NO public profile in the fixtures
- * that test it. `@/utils/verifyQnsClaim` is left UNMOCKED throughout: the
+ * that test it. `claimedNameBelongsTo` is left UNMOCKED throughout: the
  * impersonation case below is only meaningful if the ed448 derivation genuinely
  * runs and genuinely disagrees.
  */

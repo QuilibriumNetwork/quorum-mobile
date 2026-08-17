@@ -67,7 +67,7 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked, same as
+// `claimedNameBelongsTo` is deliberately NOT mocked, same as
 // identityProviderVerification.test.tsx: the verified case below must prove a
 // genuinely verified claim renders `.q`, not merely that the screen trusts
 // whatever `verifiedQnsNames` already contains.

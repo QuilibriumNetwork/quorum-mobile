@@ -49,7 +49,7 @@ import { renderWithProviders } from '@/jest/renderWithProviders';
 // A genuine ed448 key/address pair, reused verbatim from
 // `identityProviderVerification.test.tsx` rather than generated fresh —
 // `deriveAddress(KEY) === PARTNER`, real math, not a placeholder. Needed
-// because `claimedNameBelongsTo` (`utils/verifyQnsClaim.ts`) is the ONE
+// because `claimedNameBelongsTo` (`@quilibrium/quorum-shared`) is the ONE
 // predicate that turns a claim into a `.q`, and it runs for real here (no
 // mock on it below): a non-derivable placeholder address would make every
 // claim fail verification, which is a different, wrong test.
@@ -134,8 +134,8 @@ jest.mock('@/services/api/qnsClient', () => ({
   resolveBatch: (names: string[]) => mockResolveBatch(names),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked. `claimedNameBelongsTo`
-// is the ONE predicate (`identity/identityProvider.tsx`'s `verifiedQnsNames`
+// `claimedNameBelongsTo` (from `@quilibrium/quorum-shared`) is deliberately NOT
+// mocked. It is the ONE predicate (`identity/identityProvider.tsx`'s `verifiedQnsNames`
 // computation) that decides whether a claim becomes a `.q`, and letting it run
 // for real — against the genuine KEY/PARTNER pair above — is what makes this
 // test prove a VERIFIED claim renders `alice.q`, rather than merely proving
@@ -219,7 +219,7 @@ describe('ShareInviteSheet — the contact picker resolves names', () => {
     // (unchanged from the mock above) derives back to PARTNER via KEY, not
     // IMPOSTOR — the exact forgery `claimedNameBelongsTo` exists to catch.
     // This is the CRITICAL-finding proof: with the crypto genuinely running
-    // (no mock on `@/utils/verifyQnsClaim`), a claim that resolves to the
+    // (no mock on `claimedNameBelongsTo`), a claim that resolves to the
     // wrong address must render the global name, never a `.q`.
     mockConversation = { ...mockConversation, conversationId: 'conv-2', address: IMPOSTOR };
 

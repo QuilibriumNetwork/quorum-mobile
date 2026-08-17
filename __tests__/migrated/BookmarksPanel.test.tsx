@@ -37,7 +37,7 @@
  * `react-native-safe-area-context` — reached by the always-mounted
  * `BaseModal`. `@/services/storage/mmkvAdapter` — the local DM-conversation
  * lookup for the `sourceName` fix; only `getConversationSync` is used.
- * `IdentityScopeProvider` is real. `@/utils/verifyQnsClaim` is deliberately
+ * `IdentityScopeProvider` is real. `claimedNameBelongsTo` is deliberately
  * NOT mocked — the verified case must prove a genuinely verified claim
  * renders `.q`, not merely that the row trusts whatever `verifiedQnsNames`
  * already contains.
@@ -91,7 +91,7 @@ jest.mock('@/services/storage/mmkvAdapter', () => ({
   getConversationSync: (conversationId: string) => mockGetConversationSync(conversationId),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked — see file header.
+// `claimedNameBelongsTo` is deliberately NOT mocked — see file header.
 
 import { BookmarksPanel } from '@/components/Chat/BookmarksPanel';
 

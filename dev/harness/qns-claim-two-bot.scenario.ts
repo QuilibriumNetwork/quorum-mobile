@@ -37,7 +37,7 @@
 // ⚠️ Talks to the PRODUCTION relay with throwaway accounts. See identity.ts.
 import { createBot, type MobileBot } from './bot';
 import { awaitPeer, publish, type Role } from './rendezvous';
-import { claimedNameBelongsTo } from '@/utils/verifyQnsClaim';
+import { claimedNameBelongsTo } from '@quilibrium/quorum-shared';
 import { resolveClaimedNames, stripUnverifiedNames } from '@/hooks/useVerifiedQnsNames';
 import { resolveBatch } from '@/services/api/qnsClient';
 

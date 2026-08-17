@@ -78,7 +78,7 @@ jest.mock('@/hooks/chat/useModMuteUser', () => ({
   useModMuteUser: () => ({ muteUser: jest.fn(), unmuteUser: jest.fn() }),
 }));
 
-// `@/utils/verifyQnsClaim` is deliberately NOT mocked — the verified case
+// `claimedNameBelongsTo` is deliberately NOT mocked — the verified case
 // must prove a genuinely verified claim renders `.q`, not merely that the
 // modal trusts whatever `verifiedQnsNames` already contains.
 
