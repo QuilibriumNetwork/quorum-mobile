@@ -1,11 +1,11 @@
 ---
 type: bug
 title: "Public invite: 'Generate New Link' claims to invalidate the old link, is offered to non-owners, and never propagates the URL"
-status: open
+status: in-progress
 priority: high
 ai_generated: true
 created: 2026-08-11
-updated: 2026-08-11
+updated: 2026-08-18
 ---
 
 # Public invite: 'Generate New Link' claims to invalidate the old link, is offered to non-owners, and never propagates the URL
@@ -32,7 +32,7 @@ Two strings promise invalidation:
 
 - `components/InviteModal.tsx:276` — "Anyone with this link can join. You can
   regenerate it at any time to invalidate the old link."
-- `components/SpaceSettingsModal.tsx:2441` — "This public link can be shared
+- `components/SpaceSettingsModal.tsx:2451` — "This public link can be shared
   freely. Regenerate to invalidate the old link."
 
 Regenerating produces the **byte-identical URL** and every previously-shared
@@ -49,7 +49,7 @@ Mobile has three entry points into the invite UI and gates only two:
 
 | Entry point | Gated to owner? |
 |---|---|
-| `components/SpaceSettingsModal.tsx:1445` Invites tab | Yes (`memberTabs` is Account + Members only) |
+| `components/SpaceSettingsModal.tsx:1449` Invites tab | Yes (`memberTabs` is Account + Members only) |
 | `app/(tabs)/spaces/[id]/[channelId].tsx:363` channel header | Yes (`isSpaceOwner ? handleOpenInviteModal : undefined`) |
 | `app/(tabs)/spaces/[id]/index.tsx:105` space overview banner | **No** |
 
@@ -80,9 +80,9 @@ Both generate branches fail for a non-owner:
 - **One-Time** throws "Cannot generate invites from this space. The invite pool
   was not initialized." (`services/space/inviteService.ts:137-138`) because a
   joiner's encryption state is persisted as `{ state: … }` with no `template`
-  and no `evals` (`hooks/chat/useSpaceActions.ts:556-570`). The evals pool is
+  and no `evals` (`hooks/chat/useSpaceActions.ts:551-571`). The evals pool is
   only ever produced at space creation (`services/crypto/space-session.ts:408`);
-  the WebSocket paths at `context/WebSocketContext.tsx:1107-1114` and `:2177`
+  the WebSocket paths at `context/WebSocketContext.tsx:1102-1110` and `:2172`
   merely *preserve* an existing pool, they never create one for a member.
 
 Not a security hole: the owner private key is required locally and the server
@@ -93,7 +93,7 @@ Desktop's equivalent for a non-owner is a purpose-built read-only view (link box
 + Copy + Send via DM, no generate, no republish, no one-time) at
 `quorum-desktop/src/components/modals/SpaceSettingsModal/Invites.tsx:382-470`,
 and the Invites category is only reachable for a non-owner when a public link
-actually exists (`.../SpaceSettingsModal.tsx:225-234`).
+actually exists (`.../SpaceSettingsModal.tsx:222-229`).
 
 ### 3. Generating a public link never tells anyone else about it.
 
@@ -116,7 +116,7 @@ encrypted at `:368`. Pure ordering bug on the mobile side.
   Dead import.
 - Desktop: `generateNewInviteLink` finishes with `await this.messageDB.saveSpace(space)`
   plus a `setQueryData` and no broadcast
-  (`quorum-desktop/src/services/InvitationService.ts:420-436`).
+  (`quorum-desktop/src/services/InvitationService.ts:423-427`).
 
 On both clients the new `inviteUrl` therefore stays local to the owner's device
 until the owner happens to edit the space for some unrelated reason (name, icon,
@@ -124,7 +124,7 @@ description), which broadcasts the full record.
 
 This directly undermines desktop's own non-owner Invites view, which is built
 entirely on the replicated `space.inviteUrl` and is hidden outright when it is
-absent (`.../SpaceSettingsModal.tsx:225-234`). The comment at
+absent (`.../SpaceSettingsModal.tsx:222-229`). The comment at
 `.../Invites.tsx:382-386` claims the URL is "replicated to every member's local
 Space record via the encrypted manifest" — but the manifest is what *joiners*
 fetch, not something existing members re-read.
@@ -182,15 +182,15 @@ generate/republish for owners.
   the same URL and refreshes it if people report it is not working."
 - `components/InviteModal.tsx:291` → rename the button "Generate New Link" to
   "Republish", matching desktop.
-- `components/SpaceSettingsModal.tsx:2441` → same correction.
-- While in `SpaceSettingsModal.tsx`, note the "New" button at `:2436` only clears
+- `components/SpaceSettingsModal.tsx:2451` → same correction.
+- While in `SpaceSettingsModal.tsx`, note the "New" button at `:2446` only clears
   the displayed link (`setGeneratedInviteLink(null)`) and returns the user to the
   Generate button. It does not itself regenerate. Either rename it ("Clear") or
   make it call the mutation.
 
 Match desktop's wording so both clients say the same thing:
-- `Invites.tsx:775` — "This link does not expire. Anyone with it can join your Space."
-- `Invites.tsx:819-822` — "If users report that this invite link isn't working,
+- `Invites.tsx:778` — "This link does not expire. Anyone with it can join your Space."
+- `Invites.tsx:821` — "If users report that this invite link isn't working,
   click to republish it. The link URL stays the same."
 
 ### Fix 2 — give non-owners the read-only invite view (low risk)
@@ -215,10 +215,13 @@ non-owner, mirroring desktop's
 
 **Decision (2026-08-11): no empty state — hide the entry point instead.** When
 there is no public link, a member has nothing to do in this modal, so the invite
-affordance is hidden rather than opening a dead-end screen. This is also exactly
+affordance is hidden rather than opening a dead-end screen. This is also
 desktop's rule for the Invites category
-(`quorum-desktop/src/components/modals/SpaceSettingsModal/SpaceSettingsModal.tsx:225-234`),
-so the two clients converge on one condition:
+(`quorum-desktop/src/components/modals/SpaceSettingsModal/SpaceSettingsModal.tsx:222-229`)
+— though note (found in review, 2026-08-18) desktop currently gates on
+**truthiness** (`!!space?.inviteUrl`), not `isPublicInvite()`, so desktop is
+exposed to the same `kickUser` hazard described below; the shared helper is what
+would truly converge them. Target condition on both clients:
 
 ```
 canInvite = isSpaceOwner || isPublicInvite(space.inviteUrl ?? '')
@@ -274,15 +277,15 @@ Yes, on both clients.**
 - Mobile send: `broadcastSpaceUpdate(space)` serializes the entire Space object
   (`JSON.stringify(space)`, `services/space/broadcastSpaceUpdate.ts:54`), POSTs
   the manifest, and returns a `wsEnvelope` the caller must dispatch.
-- Mobile receive: `context/WebSocketContext.tsx:1828` `case 'space-manifest'`
+- Mobile receive: `context/WebSocketContext.tsx:1823` `case 'space-manifest'`
   verifies the owner signature against the registration, decrypts with the
   config key, applies a staleness guard (`manifest.timestamp` vs the stored
-  `space.modifiedDate`), then calls `saveSpace(updatedSpace)` at `:1940` — the
+  `space.modifiedDate`), then calls `saveSpace(updatedSpace)` at `:1937` — the
   whole record, so `inviteUrl` lands.
 - Desktop send: `SpaceService.submitUpdateSpace(manifest)`
   (`src/services/SpaceService.ts:85`) takes an already-built manifest and
   enqueues the hub envelope.
-- Desktop receive: `src/services/MessageService.ts:5184` verifies, decrypts,
+- Desktop receive: `src/services/MessageService.ts:5193` verifies, decrypts,
   casts to `Space` and calls `messageDB.saveSpace(space)` plus `setQueryData`.
   Whole record.
 
@@ -326,13 +329,13 @@ eval's ephemeral key is NOT the manifest's" callout. Send only the envelope.
 2. **(3b)** Hoist the manifest object currently passed inline to
    `client.postSpaceManifest` at `:464` into a variable, and after the POST call
    `sendSpaceManifestMessage(spaceId, manifest)`
-   (`services/space/spaceMessageService.ts:~1343`) to build the WS envelope from
+   (`services/space/spaceMessageService.ts:1341`) to build the WS envelope from
    **that same manifest**. No second manifest, no ephemeral-key divergence.
 3. Dispatch the envelope through `enqueueOutbound`. Two established patterns:
-   - from the mutation hook, as `useSpaceSettings.ts:89-92` does (preferred —
-     `useGeneratePublicInvite` can call `useWebSocket()`);
+   - from the mutation hook, as `hooks/chat/useSpaceSettings.ts:89` does
+     (preferred — `useGeneratePublicInvite` can call `useWebSocket()`);
    - or thread `enqueueOutbound` into the service as a parameter, as
-     `services/space/channelBindings.ts:39-59` does.
+     `services/space/channelBindings.ts:43-55` does.
 4. Delete the now-confirmed-dead `broadcastSpaceUpdate` import at `:20`.
 
 **Desktop — `src/services/InvitationService.ts::generateNewInviteLink`:**
@@ -341,14 +344,14 @@ eval's ephemeral key is NOT the manifest's" callout. Send only the envelope.
 [`quorum-desktop/.agents/issues/.open/2026-08-11-public-invite-link-never-reaches-existing-members.md`](../../../../quorum-desktop/.agents/issues/.open/2026-08-11-public-invite-link-never-reaches-existing-members.md)
 so the two repos can be worked in parallel. Summary of that half:
 
-5. **(3b)** After `postSpaceManifest` at `:469`, call
+5. **(3b)** After `postSpaceManifest` at `:410`, call
    `submitUpdateSpace(manifest)` (`src/services/SpaceService.ts:85`) with the
    same manifest object. Desktop needs no 3a fix; its ordering is already
    correct.
 6. **Wiring check — resolved 2026-08-11:** `InvitationService` does **not** hold
    a `SpaceService` reference (`src/services/InvitationService.ts:44-67`), and
    `new InvitationService` is constructed *before* `new SpaceService`
-   (`src/components/context/MessageDB.tsx:928` vs `:1133`), so plain injection
+   (`src/components/context/MessageDB.tsx:932` vs `:1137`), so plain injection
    needs a reorder or a lazy getter. Preferred alternative: extract
    `submitUpdateSpace` into a standalone helper both services import, which
    mirrors mobile's `sendSpaceManifestMessage` and sidesteps the ordering
@@ -379,14 +382,14 @@ interop with the mobile build already in production.
 
 **Why it is safe: the fix adds no new message type and no schema change.**
 `space-manifest` is an existing hub control message that today's production
-mobile already handles (`context/WebSocketContext.tsx:1828`) and that every
+mobile already handles (`context/WebSocketContext.tsx:1823`) and that every
 rename, icon change and role grant already sends. Fix 3b only makes the invite
 path send one at a moment it currently does not. The payload shape is identical.
 
 | Combination | Result |
 |---|---|
 | New desktop → **old (production) mobile** | Old mobile receives a message type it already understands, decrypts it, and `saveSpace`s the record including `inviteUrl`. **Today's shipped mobile gains the fix for desktop-generated links without shipping anything.** |
-| New mobile → old desktop | Desktop already handles the message (`MessageService.ts:5184`). Fine. |
+| New mobile → old desktop | Desktop already handles the message (`MessageService.ts:5193`). Fine. |
 | New ↔ new | Fully fixed both directions. |
 
 Better than "additive and ignorable" — an unpatched client is an immediate
@@ -408,7 +411,7 @@ originate a link that propagates. Nothing breaks in the meantime.
 
 Mobile's receive path skips a manifest when
 `manifest.timestamp < existingSpace.modifiedDate`
-(`context/WebSocketContext.tsx:1924-1938`), then writes the record wholesale.
+(`context/WebSocketContext.tsx:1921-1935`), then writes the record wholesale.
 `generatePublicInviteLink` does not currently touch `modifiedDate`, so the
 broadcast would carry an **old** `modifiedDate` alongside a **new**
 `manifest.timestamp`. The guard passes (the timestamp is fresh), the record is
@@ -420,7 +423,7 @@ Cheap fix: set `space.modifiedDate = timestamp` at the same point as
 `space.inviteUrl`, keeping the record monotonic. Do the same on desktop.
 
 Unchecked: whether desktop's receive handler has an equivalent staleness guard.
-Only part of `MessageService.ts:5184+` was read.
+Only part of `MessageService.ts:5193+` was read.
 
 ## quorum-shared
 
@@ -465,15 +468,32 @@ version is available.
 > describing that link. Adding the two new helpers above does **not** require
 > unblocking it; keep them separate.
 
+> **Fold-in decided 2026-08-18 — canonical invite domain (tracked in the desktop
+> counterpart issue).** Desktop derives the invite-link domain from
+> `window.location` (shared `inviteDomain.ts:13-45`): test/localhost builds
+> generate test/localhost URLs, which persist in `space.inviteUrl` and — once
+> Fix 3 lands — replicate to every member as unshareable links. Mobile's
+> `VALID_INVITE_PREFIXES` (`inviteService.ts:41-50`) does not even include
+> `test.quorummessenger.com`, so such a link fails `isPublicInvite()` and hides
+> the Fix 2 member pill. Decision: shared's `getInviteUrlBase` returns the
+> production base unconditionally, matching mobile's already-hardcoded generator
+> (`inviteService.ts:68-72`); accept-side prefixes stay permissive so legacy
+> links still parse. **Mobile needs no code change.** Plan and desktop call-site
+> inventory live in the desktop counterpart issue. Side effect: this moots the
+> staging/localhost build-target question that has kept the domain-rewire issue
+> above blocked since 2026-06-09 — actually unblocking it stays a separate call.
+
 ## Readiness
 
-| Part | Ready to implement? |
+| Part | State (2026-08-18) |
 |---|---|
-| Fix 1 (copy) | Yes. Self-contained, mobile only. |
-| Fix 2 (gate + read-only member view) | Yes to code, but pointless in the field until Fix 3 lands. |
-| Fix 3a (mobile manifest ordering) | Yes. One-line move, desktop is the reference. |
-| Fix 3b (envelope, mobile side) | Yes — recon R1/R2 resolved 2026-08-11, fix shape known, wiring confirmed. |
-| Fix 3b (envelope, desktop side) | Yes — filed separately, see below. Workable in parallel. |
+| Fix 1 (copy) | **Done**, branch `fix/public-invite-propagation-and-gating`. |
+| Fix 2 (gate + read-only member view) | **Done.** Rule lives in `hooks/chat/useCanInviteToSpace.ts`, wired into all three entry points. |
+| Fix 3a (mobile manifest ordering) | **Done.** `inviteUrl` and `modifiedDate` are both set before serialization. |
+| Fix 3b (envelope, mobile side) | **Done.** Same manifest object is POSTed and enqueued; `enqueueOutbound` is a required parameter so it cannot be omitted. |
+| Fix 3b (envelope, desktop side) | Not started — filed separately, workable in parallel. |
+| Canonical invite domain (shared) | Not started — see the fold-in note above; desktop-side plan lives in the counterpart issue. |
+| Cross-client acceptance test | **Not run.** Needs both halves; this is the pass/fail criterion and no amount of unit testing substitutes for it. |
 
 **Desktop counterpart:**
 [`quorum-desktop/.agents/issues/.open/2026-08-11-public-invite-link-never-reaches-existing-members.md`](../../../../quorum-desktop/.agents/issues/.open/2026-08-11-public-invite-link-never-reaches-existing-members.md)
@@ -525,7 +545,7 @@ clarity around a feature that is currently not reaching anyone.
 
 ---
 
-*Last updated: 2026-08-11*
+*Last updated: 2026-08-18*
 
 ## Updates
 - **2026-08-11 14:09**: Fix 2 revised: keep the invite entry point for members (sharing the public link is a wanted capability), hide it only when no valid public link exists. Gate on isPublicInvite(), not truthiness — kickUser writes a quorum:// value into inviteUrl. Empty state dropped.
@@ -534,3 +554,13 @@ clarity around a feature that is currently not reaching anyone.
 - **2026-08-11 14:20**: Priority medium -> high. R2 showed the public invite link never reaches any existing member on either client, so this is a feature that does not work rather than a copy/UX polish item.
 - **2026-08-11 14:24**: Desktop counterpart filed and cross-linked: quorum-desktop/.agents/issues/.open/2026-08-11-public-invite-link-never-reaches-existing-members.md. Wiring check resolved: InvitationService has no SpaceService ref and is constructed before it (MessageDB.tsx:928 vs :1133); preferred fix is extracting submitUpdateSpace to a standalone helper. Not starting implementation today.
 - **2026-08-11 14:29**: Interop assessed: safe to ship desktop-first, no wait on a mobile release. No new message type, no schema change - space-manifest is already handled by production mobile, so unpatched mobile BENEFITS from a desktop-only ship. Nothing blocked on a quorum-shared publish either. Added: bump modifiedDate alongside inviteUrl (INFERRED risk that the record regresses the receiver's staleness watermark).
+- **2026-08-18 16:33**: Fold-in decided: invite URLs are always generated with the canonical production domain. Desktop's env-derived domains (test./localhost via shared getInviteUrlBase) persist and would replicate as unshareable links once Fix 3 lands; mobile even rejects test.* in isPublicInvite. Shared's getInviteUrlBase becomes production-only, accept prefixes stay permissive, mobile unchanged. Plan recorded in the desktop counterpart issue.
+- **2026-08-18 18:27**: Mobile Fix 1 + 2 + 3a/3b implemented on branch fix/public-invite-propagation-and-gating (4 commits). Fix 2 landed as a useCanInviteToSpace hook (owner OR isPublicInvite) wired into all three entry points; SpaceBannerHeader.onInvite made optional; InviteModal branches to a read-only member view. Two extra defects found while implementing and fixed: InviteModal loaded a stored link on truthiness so it displayed kickUser's dead quorum:// URL, and a failed republish rendered no error at all because the banner only existed in the generate view. Also: VALID_INVITE_PREFIXES pinned localhost:3000 while desktop had moved to Vite :5173, which made a real published link invisible on mobile. 1094 tests pass (25 new across 4 files); every new assertion verified red-then-green by reverting the fix. Still open: the desktop 3b half, the shared canonical-domain change, and the cross-client acceptance test which neither repo can run alone.
+
+## Review Log
+**2026-08-18 - claude-fable-5**: Re-verified all three findings against current mobile+desktop code (READ): all still valid, none implemented; refreshed drifted line refs; corrected one imprecise desktop claim
+- Fix 1 unimplemented: copy intact at InviteModal.tsx:276/:291, SpaceSettingsModal.tsx string drifted 2441->2451
+- Fix 2 unimplemented: SpaceBannerHeader.tsx:36 onInvite still required, index.tsx:105 still ungated, channelId.tsx:363 still owner-only
+- Fix 3a/3b unimplemented: inviteService.ts inviteUrl assignment still at :485 after manifest POST :464, broadcastSpaceUpdate still dead import at :20; desktop generateNewInviteLink still ends saveSpace+setQueryData with no broadcast, counterpart issue still open in desktop .open/
+- Precision fix: desktop gates Invites category on truthiness !!space?.inviteUrl (SpaceSettingsModal.tsx:222-229), not isPublicInvite as implied - same kickUser hazard the issue warns about; noted inline in Fix 2
+- Line refs refreshed: mobile WebSocketContext 1828->1823, 1940->1937, 1924-1938->1921-1935, 1107-1114->1102-1110, 2177->2172, useSpaceActions 556-570->551-571, spaceMessageService ~1343->1341, useSpaceSettings path corrected to hooks/chat/; desktop MessageService 5184->5193, InvitationService 420-436->423-427, postSpaceManifest 469->410, MessageDB 928/1133->932/1137, Invites.tsx 775->778, 819-822->821
