@@ -19,7 +19,7 @@ import { getSpace } from '@/services/config/spaceStorage';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useState, useEffect } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
@@ -44,6 +44,7 @@ export default function InviteModal({
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [generatedType, setGeneratedType] = useState<'private' | 'public' | null>(null);
   const [copied, setCopied] = useState(false);
+  const [republished, setRepublished] = useState(false);
   const [inviteType, setInviteType] = useState<'private' | 'public'>('private');
   const [hasLoadedExistingInvite, setHasLoadedExistingInvite] = useState(false);
 
@@ -82,6 +83,20 @@ export default function InviteModal({
     }
   }, [spaceId, inviteType, generateInviteMutation, generatePublicInviteMutation]);
 
+  // Republishing returns the same URL, so without a transient confirmation the
+  // button appears to do nothing at all.
+  const handleRepublish = useCallback(async () => {
+    try {
+      const result = await generatePublicInviteMutation.mutateAsync({ spaceId });
+      setInviteLink(result.inviteLink);
+      setGeneratedType('public');
+      setRepublished(true);
+      setTimeout(() => setRepublished(false), 2500);
+    } catch {
+      // The error banner above already renders the mutation's error.
+    }
+  }, [spaceId, generatePublicInviteMutation]);
+
   const handleCopyLink = useCallback(async () => {
     if (!inviteLink) return;
 
@@ -106,6 +121,7 @@ export default function InviteModal({
     setInviteLink(null);
     setGeneratedType(null);
     setCopied(false);
+    setRepublished(false);
     setInviteType('private');
     setHasLoadedExistingInvite(false);
     onClose();
@@ -115,7 +131,17 @@ export default function InviteModal({
   const hasError = generateInviteMutation.error || generatePublicInviteMutation.error;
 
   return (
-    <BaseModal visible={visible} onClose={handleClose} height={0.65} fillHeight avoidKeyboard>
+    /* The link view is far shorter than the generate view (one-line URL, two
+       actions, a callout), so a single fixed height left a large dead area under
+       the content. fillHeight is kept so the ScrollView stays bounded and can
+       still scroll at large font scales. */
+    <BaseModal
+      visible={visible}
+      onClose={handleClose}
+      height={inviteLink ? 0.5 : 0.65}
+      fillHeight
+      avoidKeyboard
+    >
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
@@ -224,20 +250,14 @@ export default function InviteModal({
             <View style={styles.linkSection}>
               <Text style={styles.linkLabel}>Invite Link</Text>
 
+              {/* One line, elided in the MIDDLE: the head shows which app the link
+                  opens and the tail keeps it visually distinct from another space's
+                  link. The full string is never something a user reads or retypes,
+                  so wrapping it over four rows only cost height and legibility. */}
               <View style={styles.linkContainer}>
-                <ScrollView
-                  style={styles.linkScroll}
-                  nestedScrollEnabled
-                  showsVerticalScrollIndicator
-                >
-                  <TextInput
-                    style={styles.linkInput}
-                    value={inviteLink}
-                    editable={false}
-                    selectTextOnFocus
-                    multiline
-                  />
-                </ScrollView>
+                <Text style={styles.linkInput} numberOfLines={1} ellipsizeMode="middle">
+                  {inviteLink}
+                </Text>
               </View>
 
               <View style={styles.linkActions}>
@@ -271,32 +291,65 @@ export default function InviteModal({
                   size={16}
                   color={generatedType === 'public' ? theme.colors.primary : (theme.colors.warning ?? '#f59e0b')}
                 />
-                <Text style={[styles.warningText, generatedType === 'public' && styles.infoText]}>
+                {/* NOT styles.infoText here: that style belongs to the generate
+                    screen's standalone description and carries textAlign:'center'
+                    plus a 24pt bottom margin, which inside this banner read as a
+                    centred paragraph with a mystery gap under it. */}
+                <Text style={[styles.warningText, generatedType === 'public' && styles.infoBannerText]}>
                   {generatedType === 'public'
-                    ? 'Anyone with this link can join. It does not expire, and republishing keeps the same URL.'
+                    ? 'Anyone with this link can join, and it does not expire.'
                     : 'This link can only be used once. Generate a new link for each person you want to invite.'}
                 </Text>
               </View>
 
-              <TouchableOpacity
-                style={styles.regenerateButton}
-                onPress={handleGenerateInvite}
-                disabled={isGenerating}
-              >
-                {isGenerating ? (
-                  <ActivityIndicator size="small" color={theme.colors.primary} />
-                ) : (
-                  <>
-                    <IconSymbol name="arrow.clockwise" size={16} color={theme.colors.primary} />
-                    {/* A public link is deterministic per space: republishing refreshes the
-                        server-side eval and manifest but yields the byte-identical URL. Only
-                        the one-time branch actually mints a new link. */}
-                    <Text style={styles.regenerateButtonText}>
-                      {generatedType === 'public' ? 'Republish' : 'Generate New Link'}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              {generatedType === 'public' ? (
+                /* Republishing is maintenance, not part of sharing: it refreshes the
+                   server-side eval and manifest and returns the byte-identical URL.
+                   Naming the SITUATION rather than the mechanism is what makes it
+                   self-explanatory — someone whose link works has no question to ask,
+                   and someone whose invitee is stuck recognises their case instantly.
+                   That is why this needs no confirmation step. */
+                <TouchableOpacity
+                  style={styles.troubleshootRow}
+                  onPress={handleRepublish}
+                  disabled={isGenerating}
+                  accessibilityRole="button"
+                  accessibilityLabel="Link not working? Republish it"
+                >
+                  {isGenerating ? (
+                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                  ) : republished ? (
+                    <>
+                      <IconSymbol
+                        name="checkmark"
+                        size={14}
+                        color={theme.colors.success ?? '#22c55e'}
+                      />
+                      <Text style={styles.troubleshootDone}>Link republished</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.troubleshootLabel}>Link not working?</Text>
+                      <Text style={styles.troubleshootAction}>Republish</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.regenerateButton}
+                  onPress={handleGenerateInvite}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? (
+                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                  ) : (
+                    <>
+                      <IconSymbol name="arrow.clockwise" size={16} color={theme.colors.primary} />
+                      <Text style={styles.regenerateButtonText}>Generate New Link</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </ScrollView>
@@ -401,6 +454,11 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     infoBanner: {
       backgroundColor: theme.colors.primary + '15',
     },
+    // Colour-only override of warningText. Deliberately does NOT reuse infoText,
+    // whose centring and bottom margin are meant for the generate screen.
+    infoBannerText: {
+      color: theme.colors.primary,
+    },
     primaryButton: {
       flexDirection: 'row',
       paddingVertical: Skin.space(14),
@@ -448,17 +506,17 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     linkContainer: {
       backgroundColor: theme.colors.surface3,
       borderRadius: Skin.radius(12),
-      padding: Skin.space(12),
+      paddingHorizontal: Skin.space(14),
+      paddingVertical: Skin.space(12),
       marginBottom: Skin.space(12),
-      maxHeight: 120,
-    },
-    linkScroll: {
-      maxHeight: 96,
+      justifyContent: 'center',
     },
     linkInput: {
       fontSize: Skin.font(13),
-      fontFamily: theme.fonts.regular.fontFamily,
+      fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
+      // See SpaceSettingsModal.inviteLinkText: explicit lineHeight prevents the
+      // mono face clipping its descenders on a single-line elided URL.
       lineHeight: Skin.font(18),
     },
     linkActions: {
@@ -516,5 +574,31 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
       color: theme.colors.primary,
+    },
+    // Subordinate on purpose: a maintenance action rendered as prominently as
+    // Copy and Share is what made users ask what it was for.
+    troubleshootRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: Skin.space(10),
+      gap: Skin.space(6),
+    },
+    troubleshootLabel: {
+      fontSize: Skin.font(13),
+      fontFamily: theme.fonts.regular.fontFamily,
+      color: theme.colors.textSubtle,
+    },
+    troubleshootAction: {
+      fontSize: Skin.font(13),
+      fontFamily: theme.fonts.medium.fontFamily,
+      fontWeight: theme.fonts.medium.fontWeight,
+      color: theme.colors.primary,
+    },
+    troubleshootDone: {
+      fontSize: Skin.font(13),
+      fontFamily: theme.fonts.medium.fontFamily,
+      fontWeight: theme.fonts.medium.fontWeight,
+      color: theme.colors.success ?? '#22c55e',
     },
   });

@@ -37,17 +37,25 @@ const INVITE_DOMAINS = {
   development: 'localhost:3000',
 };
 
-// Valid invite link prefixes for parsing
+// Valid invite link prefixes for PARSING. Deliberately broader than what this
+// client generates: a link is created by whichever client the Space owner used,
+// so refusing to parse an origin we would not have produced ourselves means
+// rejecting a perfectly valid invite from a peer.
 const VALID_INVITE_PREFIXES = [
   'https://qm.one/',
   'https://quorummessenger.com/i/',
   'https://www.quorummessenger.com/i/',
   'https://app.quorummessenger.com/#',
   'https://app.quorummessenger.com/invite/#',
-  'http://localhost:3000/',
-  'http://localhost:3000/i/',
+  'https://test.quorummessenger.com/',
   'qm.one/',
 ];
+
+// Any localhost origin, on any port. Enumerating ports here is what broke before:
+// the list pinned :3000 while the web client had long since moved to Vite's
+// :5173, so a link generated against a dev build parsed as invalid — which in
+// turn hid it from the UI that gates on isPublicInvite().
+const LOCAL_INVITE_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i;
 
 export interface InviteParams {
   spaceId: string;
@@ -198,9 +206,11 @@ export function parseInviteLink(inviteLink: string): InviteParams | null {
   const trimmed = inviteLink.trim();
 
   // Check if it matches any valid prefix
-  const isValidPrefix = VALID_INVITE_PREFIXES.some(
-    (prefix) => trimmed.startsWith(prefix) || trimmed.startsWith(prefix.replace('https://', ''))
-  );
+  const isValidPrefix =
+    LOCAL_INVITE_ORIGIN.test(trimmed) ||
+    VALID_INVITE_PREFIXES.some(
+      (prefix) => trimmed.startsWith(prefix) || trimmed.startsWith(prefix.replace('https://', ''))
+    );
 
   if (!isValidPrefix) {
     return null;
