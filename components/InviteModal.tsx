@@ -11,6 +11,7 @@ import { BaseModal } from '@/components/shared';
 import ShareInviteSheet from '@/components/ShareInviteSheet';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import {
+  getShortenedInviteLink,
   useCopyInviteLink,
   useGenerateInvite,
   useGeneratePublicInvite,
@@ -45,6 +46,7 @@ export default function InviteModal({
   const [generatedType, setGeneratedType] = useState<'private' | 'public' | null>(null);
   const [copied, setCopied] = useState(false);
   const [republished, setRepublished] = useState(false);
+  const [renewed, setRenewed] = useState(false);
   const [inviteType, setInviteType] = useState<'private' | 'public'>('private');
   const [hasLoadedExistingInvite, setHasLoadedExistingInvite] = useState(false);
 
@@ -77,6 +79,10 @@ export default function InviteModal({
         const result = await generateInviteMutation.mutateAsync({ spaceId });
         setInviteLink(result.inviteLink);
         setGeneratedType('private');
+        // Only meaningful when replacing a link already on screen; harmless on
+        // the first generate, where the link appearing is its own confirmation.
+        setRenewed(true);
+        setTimeout(() => setRenewed(false), 2000);
       }
     } catch (error) {
       // Failed to generate invite
@@ -122,6 +128,7 @@ export default function InviteModal({
     setGeneratedType(null);
     setCopied(false);
     setRepublished(false);
+    setRenewed(false);
     setInviteType('private');
     setHasLoadedExistingInvite(false);
     onClose();
@@ -177,7 +184,7 @@ export default function InviteModal({
                   onPress={() => setInviteType('private')}
                 >
                   <IconSymbol
-                    name="person.fill"
+                    name="person"
                     size={16}
                     color={inviteType === 'private' ? '#fff' : theme.colors.textMuted}
                   />
@@ -255,8 +262,8 @@ export default function InviteModal({
                   link. The full string is never something a user reads or retypes,
                   so wrapping it over four rows only cost height and legibility. */}
               <View style={styles.linkContainer}>
-                <Text style={styles.linkInput} numberOfLines={1} ellipsizeMode="middle">
-                  {inviteLink}
+                <Text style={styles.linkInput} numberOfLines={1}>
+                  {getShortenedInviteLink(inviteLink)}
                 </Text>
               </View>
 
@@ -340,8 +347,19 @@ export default function InviteModal({
                   onPress={handleGenerateInvite}
                   disabled={isGenerating}
                 >
+                  {/* Same reasoning as the settings sheet: two one-time links look
+                      identical to the eye, so success has to be stated. */}
                   {isGenerating ? (
                     <ActivityIndicator size="small" color={theme.colors.primary} />
+                  ) : renewed ? (
+                    <>
+                      <IconSymbol
+                        name="checkmark"
+                        size={16}
+                        color={theme.colors.success ?? '#22c55e'}
+                      />
+                      <Text style={styles.troubleshootDone}>New link ready</Text>
+                    </>
                   ) : (
                     <>
                       <IconSymbol name="arrow.clockwise" size={16} color={theme.colors.primary} />
@@ -513,10 +531,8 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     },
     linkInput: {
       fontSize: Skin.font(13),
-      fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
+      fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
-      // See SpaceSettingsModal.inviteLinkText: explicit lineHeight prevents the
-      // mono face clipping its descenders on a single-line elided URL.
       lineHeight: Skin.font(18),
     },
     linkActions: {

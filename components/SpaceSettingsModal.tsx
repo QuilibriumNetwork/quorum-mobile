@@ -29,6 +29,7 @@ import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import { maybeSendUpdateProfileMessage } from '@/services/space/spaceMessageService';
 import * as ImagePicker from 'expo-image-picker';
 import {
+  getShortenedInviteLink,
   isPublicInvite,
   useGenerateInvite,
   useGeneratePublicInvite,
@@ -931,6 +932,7 @@ export default function SpaceSettingsModal({
   const [generatedInviteType, setGeneratedInviteType] = useState<'private' | 'public' | null>(null);
   const [inviteRepublished, setInviteRepublished] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [inviteRenewed, setInviteRenewed] = useState(false);
   const [inviteType, setInviteType] = useState<'private' | 'public'>('private');
   const [hasLoadedExistingInvite, setHasLoadedExistingInvite] = useState(false);
 
@@ -1100,6 +1102,20 @@ export default function SpaceSettingsModal({
       Alert.alert('Error', 'Failed to republish invite link');
     }
   }, [spaceId, generatePublicInviteMutation]);
+
+  // Mints a fresh one-time link, consuming another slot from the invite pool.
+  // Separate from handleGenerateInvite only so it can report that it worked.
+  const handleNewOneTimeInvite = useCallback(async () => {
+    try {
+      const result = await generateInviteMutation.mutateAsync({ spaceId });
+      setGeneratedInviteLink(result.inviteLink);
+      setGeneratedInviteType('private');
+      setInviteRenewed(true);
+      setTimeout(() => setInviteRenewed(false), 2000);
+    } catch {
+      Alert.alert('Error', 'Failed to generate a new invite link');
+    }
+  }, [spaceId, generateInviteMutation]);
 
   // Inline success state rather than an Alert: it needs no dismissing, and it
   // matches the invite modal so the same action looks the same in both places.
@@ -2396,7 +2412,7 @@ export default function SpaceSettingsModal({
           }}
         >
           <IconSymbol
-            name="person.fill"
+            name="person"
             size={16}
             color={inviteType === 'private' ? '#fff' : theme.colors.textMuted}
           />
@@ -2472,8 +2488,11 @@ export default function SpaceSettingsModal({
       ) : (
         <View style={styles.inviteLinkContainer}>
           <View style={styles.inviteLinkBox}>
-            <Text style={styles.inviteLinkText} numberOfLines={1} ellipsizeMode="middle" selectable>
-              {generatedInviteLink}
+            {/* Display-only and pre-truncated. Not selectable: Copy and Share are
+                the ways to take the link, and a selectable multi-line field was
+                what let the box scroll and show a clipped second row. */}
+            <Text style={styles.inviteLinkText} numberOfLines={1}>
+              {getShortenedInviteLink(generatedInviteLink)}
             </Text>
           </View>
           <View style={styles.inviteLinkActions}>
@@ -2505,12 +2524,34 @@ export default function SpaceSettingsModal({
                 why it used to sit here doing nothing but clearing the display. */}
             {generatedInviteType !== 'public' && (
               <TouchableOpacity
-                style={styles.inviteLinkButton}
-                onPress={handleGenerateInvite}
+                style={[styles.inviteLinkButton, inviteRenewed && styles.inviteLinkButtonSuccess]}
+                onPress={handleNewOneTimeInvite}
                 disabled={isGeneratingInvite}
               >
-                <IconSymbol name="arrow.clockwise" size={18} color={theme.colors.primary} />
-                <Text style={styles.inviteLinkButtonText}>New link</Text>
+                {/* A fresh one-time link differs from the last only in its
+                    template and secret, which sit in the middle of the URL
+                    between a constant spaceId and a constant hubKey. Nothing the
+                    user can see distinguishes them, so this state is the ONLY
+                    signal that the tap did anything. */}
+                {isGeneratingInvite ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                ) : (
+                  <>
+                    <IconSymbol
+                      name={inviteRenewed ? 'checkmark' : 'arrow.clockwise'}
+                      size={18}
+                      color={inviteRenewed ? '#fff' : theme.colors.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.inviteLinkButtonText,
+                        inviteRenewed && styles.inviteLinkButtonTextSuccess,
+                      ]}
+                    >
+                      {inviteRenewed ? 'Ready!' : 'New link'}
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
             )}
           </View>
@@ -3332,11 +3373,8 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     },
     inviteLinkText: {
       fontSize: Skin.font(13),
-      fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
+      fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
-      // Explicit lineHeight is required, not cosmetic: the mono face reports a
-      // taller line box than its glyphs on Android, and without this a
-      // single-line, middle-elided URL renders with its descenders clipped.
       lineHeight: Skin.font(18),
     },
     inviteLinkActions: {

@@ -267,16 +267,36 @@ export function isPublicInvite(inviteLink: string): boolean {
   return !params.template && !params.secret;
 }
 
+// Tuned so the result stays on one line at the display font size without relying
+// on the platform to elide it.
+const DISPLAY_HEAD = 30;
+const DISPLAY_TAIL = 8;
+
 /**
- * Get a shortened version of the invite link for display
+ * A one-line, display-only rendering of an invite link.
+ *
+ * NOT a valid link: it is lossy on purpose. Everything that acts on a link (copy,
+ * share, join) must use the original string.
+ *
+ * Note for one-time links: the part that differs between two freshly generated
+ * ones is `template`/`secret`, which sit in the MIDDLE, between a constant
+ * spaceId and a constant hubKey. No truncation can show that two of them differ,
+ * which is why regenerating needs explicit UI feedback rather than leaving the
+ * user to compare URLs.
  */
 export function getShortenedInviteLink(inviteLink: string): string {
-  const params = parseInviteLink(inviteLink);
-  if (!params) return inviteLink;
+  const trimmed = (inviteLink ?? '').trim();
+  if (!trimmed) return '';
 
-  // Show just the domain and first 8 chars of spaceId
-  const shortSpaceId = params.spaceId.substring(0, 8);
-  return `https://app.quorummessenger.com/invite/#${shortSpaceId}...`;
+  // Protocol is noise in a display string; the host is what tells a user which
+  // app the link opens.
+  const withoutProtocol = trimmed.replace(/^https?:\/\//i, '');
+  if (withoutProtocol.length <= DISPLAY_HEAD + DISPLAY_TAIL + 1) return withoutProtocol;
+
+  // Truncated in JS rather than by Text's ellipsizeMode: `middle` is unreliable
+  // on Android for a long unbroken string, where it silently degrades to a hard
+  // clip and leaves a sliver of a second line visible inside the box.
+  return `${withoutProtocol.slice(0, DISPLAY_HEAD)}…${withoutProtocol.slice(-DISPLAY_TAIL)}`;
 }
 
 export interface GeneratePublicInviteResult {
