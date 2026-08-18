@@ -33,7 +33,14 @@ interface SpaceBannerHeaderProps {
   space: Space;
   insetTop: number;
   onBack: () => void;
-  onInvite: () => void;
+  /**
+   * Omitted for a member who cannot invite, which hides the pill entirely.
+   * Optional on purpose: while this was required, the type system stopped the
+   * caller from leaving it out, which is why this screen kept offering the
+   * invite affordance to every member long after the other entry points were
+   * gated.
+   */
+  onInvite?: () => void;
   onSettings: () => void;
   onDescriptionPress: () => void;
   /** Whole-space notifications muted — shows a bell-off marker by the name. */
@@ -108,14 +115,28 @@ export function SpaceBannerHeader({
 
       {/* ── Button row ── */}
       <View style={[styles.buttonRow, { paddingTop: insetTop + 8 }]}>
-        <FrostedPill style={{ backgroundColor: buttonBg }} onPress={onBack}>
+        <FrostedPill
+          style={{ backgroundColor: buttonBg }}
+          onPress={onBack}
+          accessibilityLabel="Back"
+        >
           <IconSymbol name="chevron.left" size={20} color={iconColor} />
         </FrostedPill>
         <View style={styles.rightButtons}>
-          <FrostedPill style={{ backgroundColor: buttonBg }} onPress={onInvite}>
-            <IconSymbol name="person.badge.plus" size={20} color={iconColor} />
-          </FrostedPill>
-          <FrostedPill style={{ backgroundColor: buttonBg }} onPress={onSettings}>
+          {onInvite && (
+            <FrostedPill
+              style={{ backgroundColor: buttonBg }}
+              onPress={onInvite}
+              accessibilityLabel="Invite people"
+            >
+              <IconSymbol name="person.badge.plus" size={20} color={iconColor} />
+            </FrostedPill>
+          )}
+          <FrostedPill
+            style={{ backgroundColor: buttonBg }}
+            onPress={onSettings}
+            accessibilityLabel="Space settings"
+          >
             <IconSymbol name="gearshape" size={20} color={iconColor} />
           </FrostedPill>
         </View>
@@ -185,11 +206,19 @@ interface FrostedPillProps {
   children: React.ReactNode;
   onPress: () => void;
   style?: object;
+  /** These are icon-only, so without this a screen reader announces nothing. */
+  accessibilityLabel: string;
 }
 
-function FrostedPill({ children, onPress, style }: FrostedPillProps) {
+function FrostedPill({ children, onPress, style, accessibilityLabel }: FrostedPillProps) {
   return (
-    <TouchableOpacity onPress={onPress} style={[styles.pill, style]} activeOpacity={0.75}>
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.pill, style]}
+      activeOpacity={0.75}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+    >
       {children}
     </TouchableOpacity>
   );

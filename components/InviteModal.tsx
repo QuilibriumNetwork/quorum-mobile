@@ -16,10 +16,11 @@ import {
   useGenerateInvite,
   useGeneratePublicInvite,
 } from '@/hooks/chat/useInviteManagement';
-import { getSpace } from '@/services/config/spaceStorage';
+import { getSpace, holdsSpaceOwnerKey } from '@/services/config/spaceStorage';
+import { isPublicInvite } from '@/services/space/inviteService';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,6 +31,24 @@ interface InviteModalProps {
   onClose: () => void;
   spaceId: string;
   spaceName: string;
+}
+
+/**
+ * `generatePublicInviteLink` and `generatePrivateInviteLink` throw implementation
+ * diagnostics that name internals ("Owner key not found for space…", "The invite
+ * pool was not initialized.") and were rendered verbatim in the error banner.
+ * Translate the two known ones. Anything unrecognised passes through unchanged,
+ * so a genuinely unexpected failure keeps the only detail we have about it.
+ */
+function friendlyInviteError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : '';
+  if (raw.includes('Owner key not found')) {
+    return 'Only a space owner can create a public invite link for this space.';
+  }
+  if (raw.includes('invite pool was not initialized')) {
+    return "One-time invite links aren't available for this space.";
+  }
+  return raw || 'Failed to generate invite';
 }
 
 export default function InviteModal({
@@ -54,14 +73,22 @@ export default function InviteModal({
   const generatePublicInviteMutation = useGeneratePublicInvite();
   const copyLinkMutation = useCopyInviteLink();
 
+  // Only an owner may mint a link. A member reaching this modal has a public
+  // link to share (the entry points are gated on exactly that), so they get a
+  // read-only view: link, Copy, Share, and nothing that would fail for them.
+  const isSpaceOwner = useMemo(() => holdsSpaceOwnerKey(spaceId), [spaceId]);
+
   // Check for existing public invite URL when modal opens
   // Only run once per modal open to avoid overriding user actions
   useEffect(() => {
     if (visible && spaceId && !hasLoadedExistingInvite) {
       const space = getSpace(spaceId);
-      if (space?.inviteUrl) {
-        // Space already has a public invite URL - show it
-        setInviteLink(space.inviteUrl);
+      // Truthiness is not enough: kickUser overwrites inviteUrl with a
+      // `quorum://join#…` value, which parses as no known invite format. Showing
+      // it here offered a dead link to Copy and Share after any kick.
+      const stored = space?.inviteUrl;
+      if (stored && isPublicInvite(stored)) {
+        setInviteLink(stored);
         setGeneratedType('public');
         setInviteType('public');
       }
@@ -145,7 +172,7 @@ export default function InviteModal({
     <BaseModal
       visible={visible}
       onClose={handleClose}
-      height={inviteLink ? 0.5 : 0.65}
+      height={!isSpaceOwner ? (inviteLink ? 0.4 : 0.35) : inviteLink ? 0.5 : 0.65}
       fillHeight
       avoidKeyboard
     >
@@ -154,7 +181,9 @@ export default function InviteModal({
         <View style={styles.header}>
           <Text style={styles.title}>Invite to {spaceName}</Text>
           <Text style={styles.subtitle}>
-            Generate a link to invite others to this space
+            {isSpaceOwner
+              ? 'Generate a link to invite others to this space'
+              : 'Share this space with someone new'}
           </Text>
         </View>
 
@@ -167,7 +196,22 @@ export default function InviteModal({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {!inviteLink ? (
+          {!inviteLink && !isSpaceOwner ? (
+            /* Should be unreachable: every entry point is gated on the same
+               `canInviteToSpace` rule, so a member only gets here when a valid
+               public link exists. Deliberately not a designed empty state —
+               just an honest line instead of a blank sheet if the link is
+               withdrawn while the modal is open. */
+            <View style={styles.generateSection}>
+              <View style={styles.iconContainer}>
+                <IconSymbol name="link" size={48} color={theme.colors.textMuted} />
+              </View>
+              <Text style={styles.infoText}>
+                This space has no invite link to share right now. Only a space
+                owner can create one.
+              </Text>
+            </View>
+          ) : !inviteLink ? (
             // Generate button
             <View style={styles.generateSection}>
               <View style={styles.iconContainer}>
@@ -229,9 +273,7 @@ export default function InviteModal({
               {hasError && (
                 <View style={styles.errorBanner}>
                   <IconSymbol name="exclamationmark.triangle.fill" size={16} color={theme.colors.danger} />
-                  <Text style={styles.errorBannerText}>
-                    {hasError instanceof Error ? hasError.message : 'Failed to generate invite'}
-                  </Text>
+                  <Text style={styles.errorBannerText}>{friendlyInviteError(hasError)}</Text>
                 </View>
               )}
 
@@ -292,24 +334,46 @@ export default function InviteModal({
                 </TouchableOpacity>
               </View>
 
-              <View style={[styles.warningBanner, generatedType === 'public' && styles.infoBanner]}>
-                <IconSymbol
-                  name={generatedType === 'public' ? 'info.circle' : 'exclamationmark.circle'}
-                  size={16}
-                  color={generatedType === 'public' ? theme.colors.primary : (theme.colors.warning ?? '#f59e0b')}
-                />
-                {/* NOT styles.infoText here: that style belongs to the generate
-                    screen's standalone description and carries textAlign:'center'
-                    plus a 24pt bottom margin, which inside this banner read as a
-                    centred paragraph with a mystery gap under it. */}
-                <Text style={[styles.warningText, generatedType === 'public' && styles.infoBannerText]}>
-                  {generatedType === 'public'
-                    ? 'Anyone with this link can join, and it does not expire.'
-                    : 'This link can only be used once. Generate a new link for each person you want to invite.'}
-                </Text>
-              </View>
+              {/* Owner-only. The callout distinguishes a public link from a
+                  one-time one, which is a distinction only whoever minted it
+                  has to make. A member has one link and two things to do with
+                  it, so the same text reads as filler. */}
+              {isSpaceOwner && (
+                <View style={[styles.warningBanner, generatedType === 'public' && styles.infoBanner]}>
+                  <IconSymbol
+                    name={generatedType === 'public' ? 'info.circle' : 'exclamationmark.circle'}
+                    size={16}
+                    color={generatedType === 'public' ? theme.colors.primary : (theme.colors.warning ?? '#f59e0b')}
+                  />
+                  {/* NOT styles.infoText here: that style belongs to the generate
+                      screen's standalone description and carries textAlign:'center'
+                      plus a 24pt bottom margin, which inside this banner read as a
+                      centred paragraph with a mystery gap under it. */}
+                  <Text style={[styles.warningText, generatedType === 'public' && styles.infoBannerText]}>
+                    {generatedType === 'public'
+                      ? 'Anyone with this link can join, and it does not expire.'
+                      : 'This link can only be used once. Generate a new link for each person you want to invite.'}
+                  </Text>
+                </View>
+              )}
 
-              {generatedType === 'public' ? (
+              {/* Republishing can fail too, and the banner in the generate view
+                  above is not rendered here — so without this the only feedback
+                  from a failed republish was the spinner stopping. */}
+              {isSpaceOwner && hasError && (
+                <View style={styles.errorBanner}>
+                  <IconSymbol
+                    name="exclamationmark.triangle.fill"
+                    size={16}
+                    color={theme.colors.danger}
+                  />
+                  <Text style={styles.errorBannerText}>{friendlyInviteError(hasError)}</Text>
+                </View>
+              )}
+
+              {/* A member may share the link but never mint one, so neither
+                  maintenance control is theirs. */}
+              {!isSpaceOwner ? null : generatedType === 'public' ? (
                 /* Republishing is maintenance, not part of sharing: it refreshes the
                    server-side eval and manifest and returns the byte-identical URL.
                    Naming the SITUATION rather than the mechanism is what makes it
