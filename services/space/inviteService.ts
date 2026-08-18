@@ -17,7 +17,7 @@ import { getQuorumClient } from '../api/quorumClient';
 import { getSpace, getSpaceKey, saveSpace } from '../config/spaceStorage';
 import { encryptionStateStorage } from '../crypto/encryption-state-storage';
 import { NativeCryptoProvider } from '../crypto/native-provider';
-import { broadcastSpaceUpdate } from './broadcastSpaceUpdate';
+import { sendSpaceManifestMessage, type SpaceManifest } from './spaceMessageService';
 import { republishSpace } from './spaceService';
 
 /**
@@ -275,6 +275,13 @@ export interface GeneratePublicInviteResult {
 }
 
 /**
+ * `enqueueOutbound` from `useWebSocket()`. Required, not optional: publishing a
+ * public link without telling existing members is the defect this parameter
+ * exists to make unrepresentable, so a caller cannot silently omit it.
+ */
+export type EnqueueOutbound = (prepare: () => Promise<string[]>) => void;
+
+/**
  * Helper to convert int64 to bytes (big-endian)
  */
 function int64ToBytes(value: number): Uint8Array {
@@ -290,7 +297,10 @@ function int64ToBytes(value: number): Uint8Array {
  * This creates a public link that stores evaluations on the server.
  * The link only contains spaceId and configKey - evaluations are fetched from server.
  */
-export async function generatePublicInviteLink(spaceId: string): Promise<GeneratePublicInviteResult> {
+export async function generatePublicInviteLink(
+  spaceId: string,
+  enqueueOutbound: EnqueueOutbound,
+): Promise<GeneratePublicInviteResult> {
   const cryptoProvider = new NativeCryptoProvider();
   const client = getQuorumClient();
 
@@ -439,6 +449,26 @@ export async function generatePublicInviteLink(spaceId: string): Promise<Generat
     throw new Error('Failed to upload invite evaluations to server');
   }
 
+  // Construct the public invite link BEFORE the manifest is serialized below.
+  // The link is deterministic from the existing config key, so it can be built
+  // as soon as that key is known.
+  const inviteLink = `${getInviteUrlBase(true)}#spaceId=${spaceId}&configKey=${configPrivateKeyHex}`;
+
+  const timestamp = Date.now();
+
+  // ORDERING IS LOAD-BEARING: the manifest is a snapshot of `space`, so both
+  // fields must be set before JSON.stringify below or the manifest we publish
+  // advertises no invite URL and a joiner fetching it lands without one.
+  // Desktop sets inviteUrl before encrypting for the same reason
+  // (InvitationService.ts:363).
+  space.inviteUrl = inviteLink;
+  // Keep the record monotonic. The receive path applies a manifest when
+  // `manifest.timestamp >= stored modifiedDate` and then writes the record
+  // wholesale (WebSocketContext.tsx:1921-1937). Broadcasting a fresh timestamp
+  // alongside a stale modifiedDate would move a member's watermark BACKWARDS,
+  // weakening the guard against the hub replaying historical log entries.
+  space.modifiedDate = timestamp;
+
   // Also upload the space manifest encrypted with the new config key
   // Use the same ephemeral key as the evals (matches desktop behavior)
   const spaceJson = JSON.stringify(space);
@@ -451,7 +481,6 @@ export async function generatePublicInviteLink(spaceId: string): Promise<Generat
   });
 
   // Sign the manifest with timestamp (matches desktop)
-  const timestamp = Date.now();
   const timestampBytes = int64ToBytes(timestamp);
   const manifestWithTimestamp = new Uint8Array([
     ...new TextEncoder().encode(manifestCiphertext),
@@ -461,14 +490,28 @@ export async function generatePublicInviteLink(spaceId: string): Promise<Generat
   const manifestSignatureBase64 = await cryptoProvider.signEd448(ownerPrivateKeyBase64, manifestPayloadBase64);
   const manifestSignatureHex = base64ToHex(manifestSignatureBase64);
 
-  await client.postSpaceManifest(spaceId, {
+  const manifest: SpaceManifest = {
     space_address: spaceId,
     space_manifest: manifestCiphertext,
     ephemeral_public_key: ephemeralPublicKeyHex,
     timestamp,
     owner_public_key: ownerKey.publicKey,
     owner_signature: manifestSignatureHex,
-  });
+  };
+
+  await client.postSpaceManifest(spaceId, manifest);
+
+  // The POST above only serves FUTURE joiners: no client ever refetches the
+  // manifest for a space it has already joined (every getSpaceManifest call site
+  // on both clients is a join or a device-restore). Existing members learn about
+  // the new URL exclusively through this control message, so without it a public
+  // link never reaches anybody but its author.
+  //
+  // Reuse the SAME manifest object rather than rebuilding one, and do not route
+  // this through broadcastSpaceUpdate: that mints its own ephemeral X448 key,
+  // which would break the invite path's deliberate alignment between the eval's
+  // ephemeral key and the manifest's.
+  enqueueOutbound(async () => [await sendSpaceManifestMessage(spaceId, manifest)]);
 
   // Remove the processed evals from the local pool (they're now on the server)
   session.evals = session.evals.slice(MAX_PUBLIC_EVALS);
@@ -478,11 +521,9 @@ export async function generatePublicInviteLink(spaceId: string): Promise<Generat
     timestamp: Date.now(),
   });
 
-  // Construct public invite link
-  const inviteLink = `${getInviteUrlBase(true)}#spaceId=${spaceId}&configKey=${configPrivateKeyHex}`;
-
-  // Update space with new invite URL
-  space.inviteUrl = inviteLink;
+  // `space` already carries inviteUrl and the bumped modifiedDate (set above, so
+  // the published manifest includes them). Persisting only now means a failed
+  // upload leaves no local record claiming a link that was never published.
   saveSpace(space);
 
   return {

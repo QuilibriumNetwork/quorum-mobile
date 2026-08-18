@@ -273,7 +273,7 @@ export default function InviteModal({
                 />
                 <Text style={[styles.warningText, generatedType === 'public' && styles.infoText]}>
                   {generatedType === 'public'
-                    ? 'Anyone with this link can join. You can regenerate it at any time to invalidate the old link.'
+                    ? 'Anyone with this link can join. It does not expire, and republishing keeps the same URL.'
                     : 'This link can only be used once. Generate a new link for each person you want to invite.'}
                 </Text>
               </View>
@@ -288,7 +288,12 @@ export default function InviteModal({
                 ) : (
                   <>
                     <IconSymbol name="arrow.clockwise" size={16} color={theme.colors.primary} />
-                    <Text style={styles.regenerateButtonText}>Generate New Link</Text>
+                    {/* A public link is deterministic per space: republishing refreshes the
+                        server-side eval and manifest but yields the byte-identical URL. Only
+                        the one-time branch actually mints a new link. */}
+                    <Text style={styles.regenerateButtonText}>
+                      {generatedType === 'public' ? 'Republish' : 'Generate New Link'}
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>

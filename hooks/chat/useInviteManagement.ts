@@ -20,6 +20,7 @@ import {
   type InviteParams,
 } from '@/services/space/inviteService';
 import { getSpace } from '@/services/config/spaceStorage';
+import { useWebSocket } from '@/context/WebSocketContext';
 
 interface GenerateInviteParams {
   spaceId: string;
@@ -64,6 +65,10 @@ interface GeneratePublicInviteResult {
  * Only space owners can generate public invites
  */
 export function useGeneratePublicInvite() {
+  // The generated URL has to reach existing members, not just the owner's own
+  // device, and that requires a hub control message on the wire.
+  const { enqueueOutbound } = useWebSocket();
+
   return useMutation({
     mutationFn: async (params: GenerateInviteParams): Promise<GeneratePublicInviteResult> => {
       const space = getSpace(params.spaceId);
@@ -71,7 +76,7 @@ export function useGeneratePublicInvite() {
         throw new Error('Space not found');
       }
 
-      const result = await generatePublicInviteLink(params.spaceId);
+      const result = await generatePublicInviteLink(params.spaceId, enqueueOutbound);
 
       return {
         inviteLink: result.inviteLink,

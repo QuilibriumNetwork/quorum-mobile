@@ -2435,6 +2435,8 @@ export default function SpaceSettingsModal({
               <IconSymbol name="square.and.arrow.up" size={18} color={theme.colors.primary} />
               <Text style={styles.inviteLinkButtonText}>Share</Text>
             </TouchableOpacity>
+            {/* Clears the displayed link and returns to the generate screen. It does
+                NOT itself regenerate anything, so it must not be labelled "New". */}
             <TouchableOpacity
               style={styles.inviteLinkButton}
               onPress={() => {
@@ -2442,13 +2444,13 @@ export default function SpaceSettingsModal({
                 setGeneratedInviteType(null);
               }}
             >
-              <IconSymbol name="arrow.clockwise" size={18} color={theme.colors.primary} />
-              <Text style={styles.inviteLinkButtonText}>New</Text>
+              <IconSymbol name="xmark" size={18} color={theme.colors.primary} />
+              <Text style={styles.inviteLinkButtonText}>Clear</Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.inviteHint}>
             {generatedInviteType === 'public'
-              ? 'This public link can be shared freely. Regenerate to invalidate the old link.'
+              ? 'This public link can be shared freely. It does not expire, and republishing keeps the same URL.'
               : 'This link can only be used once. Generate a new link for each person.'}
           </Text>
         </View>
