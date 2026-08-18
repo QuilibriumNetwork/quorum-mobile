@@ -1,29 +1,29 @@
 ---
 type: recap
 title: "Quorum Mobile — Project State"
-updated: 2026-08-17
+updated: 2026-08-18
 ---
 
 # Quorum Mobile — Project State
 
-> Last updated: 2026-08-17
+> Last updated: 2026-08-18
 
 ## Dashboard
 
-> Updated: 2026-08-17 · 73 live · 57 startable · 5 nearly done · 8 blocked
+> Updated: 2026-08-18 · 73 live · 57 startable · 5 nearly done · 8 blocked
 
-**Next step:** Fix the stale SQLCipher key left behind by Reset App Data — the next re-onboard bricks every chat on the device.
+**Next step:** Work out why this device can key none of the Spaces it imported — they arrive from the config blob and cannot be decrypted at all.
 
 ### Do next
 
 | # | Issue | Why it matters |
 |---|-------|----------------|
-| 1 | [Reset App Data leaves a stale SQLCipher key](issues/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md) | The next re-onboard cannot open the messages DB, so every chat is gone, with no way back and no explanation. |
-| 2 | [This device can key 0 of 3 Spaces it imported](issues/.open/2026-08-04-mobile-cannot-key-any-space-it-imported-from-the-config-blob.md) | Spaces arrive from the config blob unusable. The device lists them and can decrypt none of them. |
-| 3 | [Messages queued while offline are lost if the process dies](issues/.open/2026-08-01-outbound-queue-lost-on-app-restart.md) | Silent loss of something the user already pressed send on. Reads well above its `medium` grade. |
-| 4 | [A member's profile shows somebody else's Farcaster account](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md) | Two members' identities are mixed in storage, and the UI offers to open the wrong person's external profile. |
-| 5 | [Messages DB refuses to open on identity mismatch](issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md) | The user sees empty chats and is told nothing. Indistinguishable from having lost their history. |
-| 6 | [Public invite: regenerate lies, and non-owners are offered it](issues/.open/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md) | The button claims to invalidate the old link and does not, so a shared link stays live after you believe you killed it. |
+| 1 | [This device can key 0 of 3 Spaces it imported](issues/.open/2026-08-04-mobile-cannot-key-any-space-it-imported-from-the-config-blob.md) | Spaces arrive from the config blob unusable. The device lists them and can decrypt none of them. |
+| 2 | [Messages queued while offline are lost if the process dies](issues/.open/2026-08-01-outbound-queue-lost-on-app-restart.md) | Silent loss of something the user already pressed send on. Reads well above its `medium` grade. |
+| 3 | [A member's profile shows somebody else's Farcaster account](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md) | Two members' identities are mixed in storage, and the UI offers to open the wrong person's external profile. |
+| 4 | [Messages DB refuses to open on identity mismatch](issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md) | The user sees empty chats and is told nothing. Indistinguishable from having lost their history. **The trigger that made this reachable in normal use shipped as #258**, so what is left is the guard itself: it trusts a boolean flag rather than the file, and cannot count rows in a file it cannot decrypt. |
+| 5 | [Public invite: regenerate lies, and non-owners are offered it](issues/.open/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md) | The button claims to invalidate the old link and does not, so a shared link stays live after you believe you killed it. |
+| 6 | [The signing-key cache can outlive its identity](issues/.open/2026-08-18-signing-key-cache-can-outlive-the-identity-it-belongs-to.md) | Same defect #258 just fixed on the encryption key, on the Ed448 signing key. No consumer path reaches it today — every one is gated behind being authenticated — so it is latent rather than live. Filed low, but it sits in key handling, and "unreachable today" is one refactor from reachable. |
 | 7 | [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md) | **Half shipped 2026-08-17 (quorum-shared #83), so the urgent part is gone** — desktop's claim lookup can no longer hang. What is left is mobile-side cleanup and is not blocking anything: publish shared, bump, then retire mobile's own chunk-and-zip loop. Mobile imports none of those entry points today, so the bump is inert for QNS; the better reason to do it is that `2.1.0-43` predates #82's log-redaction fix. |
 
 ### Nearly done — needs a check
@@ -52,7 +52,7 @@ _Some issues are tracked privately and are not listed here._
 
 The identity migration landed. PR #249 (79 commits, 143 files, 986 tests across 105 suites) put every mobile name surface behind one verified ladder and made `.q` verification structural rather than a check bolted on upstream, shipping alongside #250 and #251. What remains of it is Task 11 plus device confirmation on a handful of fixes, which is why several files sit in the root of `issues/` rather than in `.done/`.
 
-The centre of gravity now sits on **storage and identity integrity**, which is where the Do-next list points. Three separate paths lose or lock away user data: Reset App Data poisons the SQLCipher key so the next onboard bricks every chat, an identity mismatch makes the messages DB refuse to open with no explanation, and the offline outbound queue is discarded if the process dies. Separately, one member's Farcaster account can be attributed to a different member.
+The centre of gravity now sits on **storage and identity integrity**, which is where the Do-next list points. The worst of those shipped on 2026-08-18 as #258: Reset App Data no longer leaves a stale SQLCipher key behind, so re-onboarding on the same device no longer bricks every chat. Two paths that lose or lock away user data remain — an identity mismatch still makes the messages DB refuse to open with no explanation, and the offline outbound queue is discarded if the process dies — plus a device that can key none of the Spaces it imported. Separately, one member's Farcaster account can be attributed to a different member.
 
 Two whole workstreams are stalled on things outside this repo: `.q` publishing is refused by the server for every user, and space calls cannot work because production serves no call routes. DM transport is likewise parked on a node-side fix, with client code deliberately frozen.
 

@@ -81,7 +81,6 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [DM send aborts with "WebSocket not connected" + weak failed-state UX](issues/.open/2026-07-23-dm-send-websocket-not-connected-abort-and-failed-ux.md)
 - 🐛 [DM messages silently fail to deliver (mobile ↔ desktop)](issues/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md)
 - 🐛 [DM send takes ~10-11s (production, not dev-only)](issues/.open/2026-07-24-dm-send-latency-10s-production.md)
-- 🐛 [Reset App Data leaves a stale SQLCipher key cached, so the next re-onboard bricks every chat](issues/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md)
 - 🐛 [Spaces: the hub-log write ack is received and discarded](issues/.open/2026-07-26-spaces-log-append-ack-ignored-silent-write-loss.md)
 - 🐛 [quorum-shared WS transport: uncaught reconnect rejection floods dev LogBox](issues/.open/2026-07-28-quorum-shared-ws-uncaught-rejection-logbox-flood.md)
 - 🐛 [Composer sits under the tab bar on chat entry, then snaps up](issues/.open/2026-08-01-composer-sits-under-tab-bar-on-chat-entry.md)
@@ -95,6 +94,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [Somebody else can take your name away, and nothing tells you](issues/.open/2026-08-09-a-delegated-name-can-be-revoked-and-you-are-the-last-to-know.md)
 - 🐛 [Public invite: 'Generate New Link' claims to invalidate the old link, is offered to non-owners, and never propagates the URL](issues/.open/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md)
 - 🐛 [QuorumIdentityBadge fires an uncapped fid-link lookup for every rendered cast](issues/.open/2026-08-13-quorum-identity-badge-fires-an-uncapped-fid-link-lookup-per-cast.md)
+- 🐛 [The cached Ed448 signing key can outlive the identity it belongs to, the same way the SQLCipher key did](issues/.open/2026-08-18-signing-key-cache-can-outlive-the-identity-it-belongs-to.md)
 - 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
 - 📋 [Message composer — further improvements](issues/.open/2026-06-16-message-composer-further-improvements.md)
 - 📋 [Split profile header has no visible "edit" cue](issues/.open/2026-06-16-split-profile-edit-affordance-not-discoverable.md)
@@ -153,6 +153,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [sendStickerMessage sealHubEnvelope argument swap](issues/.done/2026-07-19-sticker-sealhubenvelope-args-swapped.md)
 - 🐛 [DM receipt ticks show delivered/read for a message that never landed](issues/.done/2026-07-24-dm-false-receipt-ticks-on-undelivered-message.md)
 - 🐛 [DM sessions never confirm — the permanent re-init loop](issues/.done/2026-07-24-dm-session-confirm-row-mismatch-x3dh-every-send.md)
+- 🐛 [Reset App Data leaves a stale SQLCipher key cached, so the next re-onboard bricks every chat](issues/.done/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md)
 - 🐛 [Chat message list jumps back to the first message again — regression of the 2026-06-22 modal-jump fix](issues/.done/2026-07-27-chat-list-jumps-to-top-regression-translucent-modals.md)
 - 🐛 [Emoji panel cold open no longer lifts the message list](issues/.done/2026-07-28-emoji-panel-cold-open-no-list-lift.md)
 - 🐛 [iOS-only Space header: dead back button, "Loading…" back label, Liquid Glass capsules](issues/.done/2026-08-01-ios-space-header-back-button-dead-and-loading-label.md)
@@ -287,4 +288,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-17 17:55:32
+**Last Updated**: 2026-08-18 17:05:46
