@@ -467,11 +467,42 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signOut = useCallback(async () => {
     try {
-      // Clear all MMKV storage (spaces, channels, messages, conversations, auth state)
-      clearAllMMKVStorage();
-
-      // Clear secure storage (private keys, mnemonics, onboarding state)
-      await clearAllSecureStorage();
+      // Order matters, and it is the opposite of the obvious one.
+      //
+      // The socket stays connected through this entire teardown — nothing
+      // marks the session unauthenticated until the lines below — so an
+      // inbound message can still reach storage mid-wipe. While the Ed448
+      // key is readable, such a write re-creates the messages database
+      // encrypted under the identity being deleted, and the next cold start
+      // can no longer open it: every message surface dead, permanently,
+      // because the "refuse to wipe canonical history" guard then protects
+      // the bogus file. Wiping local data first does not help — the write
+      // lands after the wipe.
+      //
+      // Deleting the keys first closes it. Once the identity is gone no
+      // cipher key can be derived at all, so a late write fails cleanly
+      // (NoIdentityKeyError → the caller degrades to "no messages"), and the
+      // local wipe below removes anything that did land during the window.
+      // Deliberately not try/finally: if both halves threw, the `finally`
+      // block's error would replace the secure-storage one, and losing that
+      // is losing the report that the user's keys may still be on the device.
+      let wipeError: unknown = null;
+      try {
+        // Secure storage (private keys, mnemonics, onboarding state)
+        await clearAllSecureStorage();
+      } catch (e) {
+        wipeError = e;
+      }
+      try {
+        // Runs even when the wipe above failed, because the half-wiped state
+        // — identity gone, database still on disk encrypted under it — is
+        // precisely the one that bricks. MMKV storage: spaces, channels,
+        // messages, conversations, auth state.
+        clearAllMMKVStorage();
+      } catch (e) {
+        wipeError ??= e;
+      }
+      if (wipeError) throw wipeError;
 
       setUser(null);
       setAuthState('unauthenticated');

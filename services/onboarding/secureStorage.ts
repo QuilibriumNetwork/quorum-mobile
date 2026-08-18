@@ -564,4 +564,20 @@ export async function clearAllSecureStorage(): Promise<void> {
     clearOnboardingState(),
     deleteWarpcastWallet(),
   ]);
+  // Deliberately AFTER the deletes, not alongside clearKeyCache() above.
+  // messagesDb memoizes a SQLCipher key derived from the Ed448 identity, and
+  // dropping it while that identity is still readable just invites the next
+  // database touch to re-derive the same dead key. Once the keys are gone
+  // there is nothing left to re-derive from, so this is the point at which
+  // clearing it actually sticks.
+  //
+  // Lazy-required to avoid a module-load cycle (messagesDb → offline/storage
+  // → config → configService → this module), matching clearAllMMKVStorage.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const messagesDb = require('../storage/messagesDb') as typeof import('../storage/messagesDb');
+    messagesDb.clearCipherKeyCache();
+  } catch {
+    // Messages module never loaded this session — nothing cached to drop.
+  }
 }

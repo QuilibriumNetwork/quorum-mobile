@@ -81,7 +81,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [DM send aborts with "WebSocket not connected" + weak failed-state UX](issues/.open/2026-07-23-dm-send-websocket-not-connected-abort-and-failed-ux.md)
 - 🐛 [DM messages silently fail to deliver (mobile ↔ desktop)](issues/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md)
 - 🐛 [DM send takes ~10-11s (production, not dev-only)](issues/.open/2026-07-24-dm-send-latency-10s-production.md)
-- 🐛 [Reset App Data leaves a stale SQLCipher key cached, so the next re-onboard bricks every chat](issues/.open/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md)
+- 🐛 [Reset App Data leaves a stale SQLCipher key cached, so the next re-onboard bricks every chat](issues/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md)
 - 🐛 [Spaces: the hub-log write ack is received and discarded](issues/.open/2026-07-26-spaces-log-append-ack-ignored-silent-write-loss.md)
 - 🐛 [quorum-shared WS transport: uncaught reconnect rejection floods dev LogBox](issues/.open/2026-07-28-quorum-shared-ws-uncaught-rejection-logbox-flood.md)
 - 🐛 [Composer sits under the tab bar on chat entry, then snaps up](issues/.open/2026-08-01-composer-sits-under-tab-bar-on-chat-entry.md)
