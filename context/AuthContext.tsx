@@ -467,11 +467,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signOut = useCallback(async () => {
     try {
-      // Clear all MMKV storage (spaces, channels, messages, conversations, auth state)
-      clearAllMMKVStorage();
-
-      // Clear secure storage (private keys, mnemonics, onboarding state)
-      await clearAllSecureStorage();
+      // Order matters, and it is the opposite of the obvious one.
+      //
+      // The socket stays connected through this entire teardown — nothing
+      // marks the session unauthenticated until the lines below — so an
+      // inbound message can still reach storage mid-wipe. While the Ed448
+      // key is readable, such a write re-creates the messages database
+      // encrypted under the identity being deleted, and the next cold start
+      // can no longer open it: every message surface dead, permanently,
+      // because the "refuse to wipe canonical history" guard then protects
+      // the bogus file. Wiping local data first does not help — the write
+      // lands after the wipe.
+      //
+      // Deleting the keys first closes it. Once the identity is gone no
+      // cipher key can be derived at all, so a late write fails cleanly
+      // (NoIdentityKeyError → the caller degrades to "no messages"), and the
+      // local wipe below removes anything that did land during the window.
+      try {
+        // Secure storage (private keys, mnemonics, onboarding state)
+        await clearAllSecureStorage();
+      } finally {
+        // In the `finally` because the half-wiped state — identity gone,
+        // database still on disk under it — is exactly the one that bricks.
+        // MMKV storage: spaces, channels, messages, conversations, auth state.
+        clearAllMMKVStorage();
+      }
 
       setUser(null);
       setAuthState('unauthenticated');

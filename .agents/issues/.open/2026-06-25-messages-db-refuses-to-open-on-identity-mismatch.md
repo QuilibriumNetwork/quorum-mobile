@@ -7,7 +7,7 @@ updated: 2026-07-26
 severity: high (was "medium, edge-case" — a common in-app trigger was found 2026-07-26, see below)
 area: services/storage/messagesDb.ts
 related:
-  - "issues/.open/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md (the concrete trigger; answers this doc's open question)"
+  - "issues/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md (the concrete trigger; answers this doc's open question)"
 ---
 
 # Messages DB refuses to open when the file's identity key no longer matches
@@ -48,7 +48,7 @@ path**; only a reinstall / clear-app-data fixes it.
 > recreates the DB under the dead key during re-onboarding. **Reset App Data followed
 > by onboarding another account is the single most likely way a real user reaches
 > this stuck state**, and it needs none of the exotic triggers listed below. Full
-> analysis: `issues/.open/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md`.
+> analysis: `issues/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md`.
 > Reproduced on-device 2026-07-26. Severity raised medium → high accordingly.
 
 Normal `signOut → clearAllMMKVStorage → clearAllMessages` (`messagesDb.ts:648`,

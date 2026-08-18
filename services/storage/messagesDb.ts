@@ -118,8 +118,21 @@ class NoIdentityKeyError extends Error {
  * accessibility-level interactions). Doing the *real* derivation
  * async during init (when these edge cases are absent) and then
  * memoizing avoids paying that lottery on every save.
+ *
+ * Invalidation: this key belongs to ONE Ed448 identity, so it must not
+ * outlive that identity. `clearCipherKeyCache()` drops it, and both
+ * teardown paths call it — `clearAllMessages()` (sign-out) and
+ * `clearAllSecureStorage()` (the identity wipe itself). Nothing else
+ * clears it: a Keystore desync deliberately keeps the cache, because the
+ * same mnemonic re-derives the same key and the database stays readable.
  */
 let cipherKeyHexCache: string | null = null;
+
+// Bumped by every `clearCipherKeyCache()`. The async derivation captures it
+// before awaiting the keychain and refuses to commit its result if the value
+// moved, which is the only way to tell "the key I just read is current" from
+// "a wipe landed while I was waiting and I am holding a dead identity".
+let cipherKeyEpoch = 0;
 
 function deriveCipherKeyHexFromHex(hexPrivate: string): string {
   const ikm = hexToBytes(hexPrivate);
@@ -143,8 +156,16 @@ function deriveCipherKeyHexFromHex(hexPrivate: string): string {
  */
 async function ensureCipherKeyAsync(): Promise<string> {
   if (cipherKeyHexCache) return cipherKeyHexCache;
+  const epochAtRead = cipherKeyEpoch;
   const hexPrivate = await SecureStore.getItemAsync(ED448_PRIVATE_KEY_STORE_KEY, SECURE_OPTIONS);
   if (!hexPrivate) throw new NoIdentityKeyError();
+  // A wipe landed while this await was outstanding, so `hexPrivate` is the
+  // identity that just got deleted — SecureStore hadn't finished removing it
+  // when we read. Caching it would re-arm the stale key that bricked the
+  // database in the first place, just through a narrower door. Refuse
+  // instead: callers already degrade to "no messages yet", and the next
+  // attempt derives from whichever identity actually exists by then.
+  if (cipherKeyEpoch !== epochAtRead) throw new NoIdentityKeyError();
   cipherKeyHexCache = deriveCipherKeyHexFromHex(hexPrivate);
   return cipherKeyHexCache;
 }
@@ -173,6 +194,35 @@ function tryGetCipherKeySync(): string | null {
     logger.warn('[messagesDb] sync SecureStore read failed (will retry async):', e instanceof Error ? e.message : e);
     return null;
   }
+}
+
+/**
+ * Drop every piece of process-lifetime state derived from the current
+ * identity: the memoized cipher key, and the open connection that was
+ * unlocked with it. Both are keyed to one Ed448 identity and must die
+ * when it does.
+ *
+ * Does NOT touch the file — wiping data is `clearAllMessages()`'s job.
+ * Dropping the cache on its own is always safe: the next open just
+ * re-derives from whatever identity SecureStore holds at that point.
+ *
+ * Why this exists: "Reset App Data" wipes the disk but never restarts
+ * the process, so a cached key used to survive into the re-onboarding
+ * flow. The first DB touch after that then created a fresh file
+ * encrypted under the DELETED identity's key, and the following cold
+ * start could no longer open it — every message surface dead, with the
+ * "refuse to wipe canonical history" guard permanently in the way.
+ */
+export function clearCipherKeyCache(): void {
+  if (dbInstance) {
+    try { dbInstance.closeSync(); } catch { /* noop */ }
+    dbInstance = null;
+  }
+  cipherKeyHexCache = null;
+  // Invalidates any derivation currently awaiting the keychain — see the
+  // epoch check in ensureCipherKeyAsync(). The sync path needs no equivalent
+  // guard: it never awaits, so nothing can clear the cache mid-call.
+  cipherKeyEpoch += 1;
 }
 
 function openAndInit(cipherKeyHex: string): SQLite.SQLiteDatabase {
@@ -737,10 +787,10 @@ export function markRecoveryAttempted(spaceId: string): void {
  * cleanly into the fresh, newly-encrypted file.
  */
 export function clearAllMessages(): void {
-  if (dbInstance) {
-    try { dbInstance.closeSync(); } catch { /* noop */ }
-    dbInstance = null;
-  }
+  // Must come first, and must include the derived cipher key — not just
+  // the connection. The process keeps running across a reset, so a key
+  // left cached here gets used to encrypt the NEXT identity's database.
+  clearCipherKeyCache();
   try {
     SQLite.deleteDatabaseSync(DB_NAME);
   } catch {

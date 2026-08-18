@@ -1,11 +1,11 @@
 ---
 type: bug
 title: "Reset App Data leaves a stale SQLCipher key cached, so the next re-onboard bricks every chat"
-status: open
+status: in-progress
 priority: high
 ai_generated: true
 created: 2026-07-26
-updated: 2026-07-26
+updated: 2026-08-18
 related:
   - "issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md (same symptom; THIS doc is the concrete trigger its 'why can it hit live users' section was missing)"
 ---
@@ -39,28 +39,28 @@ client, while setting up the mobile↔mobile two-device DM round.
 
 `quorum-messages.db` is encrypted with an SQLCipher key derived deterministically
 (HKDF, no salt) from the user's Ed448 identity private key
-(`deriveCipherKeyHexFromHex`, `services/storage/messagesDb.ts:120`). That derived
+(`deriveCipherKeyHexFromHex`, `services/storage/messagesDb.ts:124`). That derived
 key is memoized in a module-level cache:
 
 ```ts
-// services/storage/messagesDb.ts:118
+// services/storage/messagesDb.ts:122
 let cipherKeyHexCache: string | null = null;
 ```
 
 **That cache is never invalidated.** A grep for `cipherKeyHexCache` across the module
-returns only the declaration (L118) and reads/writes inside the two derivation
-functions (L141-145, L159-164). Nothing — including `clearAllMessages()` — ever sets
+returns only the declaration (L122) and reads/writes inside the two derivation
+functions (L144-149, L162-168). Nothing — including `clearAllMessages()` — ever sets
 it back to `null`. It therefore lives as long as the JS process does.
 
 The reset chain is:
 
 | Step | Location |
 |---|---|
-| `handleResetAppData` | `components/ProfileModal.tsx:852` |
-| → `signOut()` | `context/AuthContext.tsx:467` |
+| `handleResetAppData` | `components/ProfileModal.tsx:874` |
+| → `signOut()` | `context/AuthContext.tsx:468` |
 | → `clearAllMMKVStorage()` | `services/offline/storage.ts:59` |
-| → `clearAllMessages()` — deletes the DB file, removes the migration flag | `services/storage/messagesDb.ts:696` |
-| → `clearAllSecureStorage()` — wipes the Ed448 identity | `context/AuthContext.tsx:473` |
+| → `clearAllMessages()` — deletes the DB file, removes the migration flag | `services/storage/messagesDb.ts:739` |
+| → `clearAllSecureStorage()` — wipes the Ed448 identity | `context/AuthContext.tsx:474` |
 
 Every step does the right thing on disk. But the process keeps running, and the
 **old identity's cipher key is still sitting in `cipherKeyHexCache`**. So for the
@@ -74,12 +74,12 @@ deleted:
    read) calls `getDb()` → `cipherKeyHexCache` is still hot with key(**A**) →
    `openAndInit` creates a **fresh DB file encrypted under the dead identity A**.
    The probe passes, because on a brand-new file `PRAGMA key` just stamps the
-   header (`messagesDb.ts:180-183`).
+   header (`messagesDb.ts:183-189`).
 4. `runMmkvMigration` then runs, finds zero legacy `messages:` keys (MMKV was just
-   cleared), and **re-arms the flag to `'done'`** (`messagesDb.ts:401`).
+   cleared), and **re-arms the flag to `'done'`** (`messagesDb.ts:404-405`).
 5. Next cold start: cache is empty, so the key is derived correctly from identity
    **B**, and it cannot open a file encrypted under **A**. The probe throws, the
-   flag reads `'done'`, and the case-B guard (`messagesDb.ts:349`) refuses to wipe.
+   flag reads `'done'`, and the case-B guard (`messagesDb.ts:353`) refuses to wipe.
    **Bricked.**
 
 The case-B guard is not the bug — it is behaving exactly as designed, protecting
@@ -111,12 +111,65 @@ re-onboard in the same session is the *expected* user journey — the app has no
 separate sign-out, so this is the only way to switch accounts. No device restore or
 keystore weirdness is required. Hence `priority: high` here rather than medium.
 
+## Status
+
+Fixed on branch `fix/reset-app-data-stale-cipher-key` (2026-08-18), not yet merged.
+
+The one-line fix below turned out to be necessary but **not sufficient**. An
+independent review found a second, narrower route to the identical brick, and
+verifying it surfaced a third. All three are closed on the branch:
+
+1. **The stale cache itself** — `clearAllMessages()` now calls a new
+   `clearCipherKeyCache()`, which drops both the memoized key and the open
+   connection. This is the fix described below.
+2. **A wipe landing mid-derivation** — `ensureCipherKeyAsync()` awaits the
+   keychain and used to commit whatever it got back unconditionally. A read
+   issued just before the wipe resolves just after it, re-arming the dead key
+   through a narrower door. Closed with a `cipherKeyEpoch` counter: bumped on
+   every cache clear, captured before the await, checked after, and on mismatch
+   the result is discarded (`NoIdentityKeyError`) instead of cached. The sync
+   path needs no equivalent guard — it never awaits, so nothing can clear the
+   cache mid-call.
+3. **The identity still being readable during teardown** — even with an empty
+   cache and a perfect epoch guard, `clearAllSecureStorage()`'s deletes are
+   awaited and each Android Keystore op costs 650-900ms. A write landing in that
+   window read identity A legitimately and re-created the file *after* the local
+   wipe had already run. Closed by reordering `signOut()`
+   (`context/AuthContext.tsx`): secure storage is wiped **first**, so a late
+   write fails cleanly with no identity to derive from, and the local wipe runs
+   last (in a `finally`) to remove anything that did land. The `finally` matters
+   — "identity gone, database still on disk under it" is exactly the bricking
+   state, so it must run even if the secure wipe throws.
+
+Regression coverage: `__tests__/resetAppDataCipherKey.test.ts`, 7 tests. The
+`expo-sqlite` mock simulates SQLCipher key enforcement (stamp on create, throw
+on mismatch) because plain SQLite ignores `PRAGMA key` and cannot reproduce a
+wrong-key open at all; the fakes live on `globalThis` so `jest.resetModules()`
+models "disk survives a cold start, module caches do not".
+
+Each fix was verified by reverting it in isolation and confirming the matching
+test goes red — the primary one reproduces the reported error string verbatim,
+"Refusing to wipe ... file is not a database". Full suite green (113 suites,
+1060 tests), `tsc` at its pre-existing 12-error baseline, eslint 0 errors.
+
+**Not verified on-device.** Everything above is automated-test evidence.
+
+### Desktop is not affected (checked 2026-08-18)
+
+Two independent reasons: desktop stores messages in **unencrypted IndexedDB**
+(`quorum-desktop/src/db/messages.ts:253`, opened with a fixed non-identity-scoped
+name from `src/db/dbVersion.ts:13`), so there is no identity-derived cipher key to
+go stale; and its reset path ends in `window.location.reload()`
+(`src/components/modals/UserSettingsModal/DangerZone.tsx:58`), which destroys the
+whole JS heap before a new identity can be onboarded. That also confirms the
+comment at `components/ProfileModal.tsx:911` ("Unlike desktop, nothing reloads
+here") is accurate. `quorum-shared` holds no identity-derived cache; the
+derivation machinery is local to mobile and was never factored out.
+
 ## Solution
 
-**Not yet applied** — the repo was frozen for a live two-device capture round when
-this was found.
-
-Primary fix, one line, in `clearAllMessages()` (`services/storage/messagesDb.ts:696`):
+Primary fix, in `clearAllMessages()` (`services/storage/messagesDb.ts:739`) —
+see `## Status` above for the two further fixes it turned out to need:
 
 ```ts
 export function clearAllMessages(): void {
@@ -136,21 +189,32 @@ export function clearAllMessages(): void {
 
 Key insight: `dbInstance` is already correctly torn down there. `cipherKeyHexCache`
 is the same class of process-lifetime state and was simply missed. The existing
-comment at `messagesDb.ts:130-138` reasons about the cache surviving a *Keystore
+comment at `messagesDb.ts:139-142` reasons about the cache surviving a *Keystore
 desync* (correct, and desirable) but never considers it surviving a *deliberate
 identity wipe*.
 
 Worth pairing with, as defence in depth:
 
-- Have `clearAllSecureStorage()` invalidate the messages cipher-key cache too, so
-  the cache can never outlive the key it was derived from regardless of call order.
-  `secureStorage.ts:549` already does exactly this for its own key caches via
-  `clearKeyCache()` — the messages module needs the same treatment.
-- Consider whether `runMmkvMigration` should set the flag to `'done'` when it
-  migrated *nothing* (`messagesDb.ts:401`). Marking a never-migrated empty DB as
-  holding canonical history is what converts a recoverable state into a permanent
-  one. Gating the case-B refusal on "the file actually contains rows" would make
-  the whole class of stuck states self-healing.
+- ✅ **Done on the branch.** Have `clearAllSecureStorage()` invalidate the messages
+  cipher-key cache too, so the cache can never outlive the key it was derived from
+  regardless of call order. `secureStorage.ts:549` already does exactly this for its
+  own key caches via `clearKeyCache()` — the messages module needs the same
+  treatment. (Implemented *after* the awaited deletes rather than alongside
+  `clearKeyCache()`: dropping the cache while the identity is still readable just
+  invites an immediate re-derive of the same dead key.)
+- ⏭️ **Deferred, and the suggestion below does not work as written.** Consider
+  whether `runMmkvMigration` should set the flag to `'done'` when it migrated
+  *nothing* (`messagesDb.ts:404-405`). Marking a never-migrated empty DB as holding
+  canonical history is what converts a recoverable state into a permanent one.
+  Gating the case-B refusal on "the file actually contains rows" would make the
+  whole class of stuck states self-healing — **except you cannot count rows in a
+  file you cannot decrypt**, which is precisely the state the guard fires in. Any
+  real fix needs a separate durable marker recording that the database has held
+  rows, written at migration time. That belongs to
+  `issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md`,
+  whose whole subject is the guard, and it is deliberately out of scope here: this
+  issue is about the stale cache that manufactures the bogus file, not about
+  making the guard smarter afterwards.
 
 ### Device-level workaround (verified working 2026-07-26)
 
@@ -185,4 +249,14 @@ Only ever against the `.debug` package, never the suffix-less real app. The heav
   so it defends an empty file just as fiercely as a full one — and turns a
   recoverable glitch into a permanent brick.
 
-*Last updated: 2026-07-26*
+*Last updated: 2026-08-18*
+
+## Review Log
+**2026-08-18 - claude-fable-5**: Verified against current code: bug still present, mechanism fully accurate, fix NOT applied; refreshed drifted line numbers only
+- cipherKeyHexCache (messagesDb.ts:122) still never invalidated - grep shows only declaration + derivation reads/writes, no reset anywhere
+- clearAllMessages (now messagesDb.ts:739) still tears down dbInstance but not the cipher key cache
+- case-B guard now at messagesDb.ts:353, flag re-arm on empty MMKV at 404-405 - both behave exactly as described
+- clearKeyCache (secureStorage.ts:72) still clears only its own three caches, defence-in-depth suggestion still valid
+- ProfileModal.tsx:911 comment confirms mobile reset never reloads the JS bundle, so the poisoned cache survives
+- line drift corrected: ProfileModal 852->874, AuthContext 467/473->468/474, messagesDb 118->122, 696->739, 349->353, 401->404-405
+- status stays open in .open/ - correct, nothing shipped since 2026-07-26 touches this path

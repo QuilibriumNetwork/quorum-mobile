@@ -18,7 +18,7 @@ updated: 2026-08-17
 
 | # | Issue | Why it matters |
 |---|-------|----------------|
-| 1 | [Reset App Data leaves a stale SQLCipher key](issues/.open/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md) | The next re-onboard cannot open the messages DB, so every chat is gone, with no way back and no explanation. |
+| 1 | [Reset App Data leaves a stale SQLCipher key](issues/2026-07-26-reset-app-data-stale-cipher-key-bricks-messages-db.md) | The next re-onboard cannot open the messages DB, so every chat is gone, with no way back and no explanation. |
 | 2 | [This device can key 0 of 3 Spaces it imported](issues/.open/2026-08-04-mobile-cannot-key-any-space-it-imported-from-the-config-blob.md) | Spaces arrive from the config blob unusable. The device lists them and can decrypt none of them. |
 | 3 | [Messages queued while offline are lost if the process dies](issues/.open/2026-08-01-outbound-queue-lost-on-app-restart.md) | Silent loss of something the user already pressed send on. Reads well above its `medium` grade. |
 | 4 | [A member's profile shows somebody else's Farcaster account](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md) | Two members' identities are mixed in storage, and the UI offers to open the wrong person's external profile. |
