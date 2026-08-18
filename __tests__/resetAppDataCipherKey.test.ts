@@ -258,10 +258,11 @@ describe('a wipe that lands mid-derivation', () => {
   });
 
   it('creates no database at all once the identity is gone', async () => {
-    // The property `signOut()`s ordering depends on: keys are deleted BEFORE
-    // local data, so any write landing in the remaining window cannot
-    // conjure a file. Without this, wiping local data first is useless — the
-    // late write simply recreates what was just deleted.
+    // Pins the PRECONDITION that signOut()'s ordering relies on, not the
+    // ordering itself — this passes on the unfixed code too, and that is the
+    // point: it is the property that must keep holding for deleting the keys
+    // first to be worth anything. The ordering is asserted directly in
+    // __tests__/signOutTeardownOrder.test.tsx.
     const db = coldStart();
     keychain().store.clear();
 

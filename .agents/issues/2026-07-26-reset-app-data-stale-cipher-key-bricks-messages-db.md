@@ -141,18 +141,35 @@ verifying it surfaced a third. All three are closed on the branch:
    — "identity gone, database still on disk under it" is exactly the bricking
    state, so it must run even if the secure wipe throws.
 
-Regression coverage: `__tests__/resetAppDataCipherKey.test.ts`, 7 tests. The
-`expo-sqlite` mock simulates SQLCipher key enforcement (stamp on create, throw
-on mismatch) because plain SQLite ignores `PRAGMA key` and cannot reproduce a
-wrong-key open at all; the fakes live on `globalThis` so `jest.resetModules()`
-models "disk survives a cold start, module caches do not".
+Regression coverage, 10 tests across two files:
 
-Each fix was verified by reverting it in isolation and confirming the matching
-test goes red — the primary one reproduces the reported error string verbatim,
-"Refusing to wipe ... file is not a database". Full suite green (113 suites,
-1060 tests), `tsc` at its pre-existing 12-error baseline, eslint 0 errors.
+- `__tests__/resetAppDataCipherKey.test.ts` (7) — the storage layer. Its
+  `expo-sqlite` mock simulates SQLCipher key enforcement (stamp the key on file
+  creation, throw on mismatch) because plain SQLite ignores `PRAGMA key` and
+  cannot reproduce a wrong-key open at all; the fakes live on `globalThis` so
+  `jest.resetModules()` models "disk survives a cold start, module caches do not".
+- `__tests__/signOutTeardownOrder.test.tsx` (3) — the teardown order itself, plus
+  the two error paths. The order looks backwards, so it is exactly what a later
+  refactor would "tidy up"; this fails loudly if it does.
 
-**Not verified on-device.** Everything above is automated-test evidence.
+Each fix was verified by reverting it **in isolation** and confirming only its
+own test goes red. The primary one reproduces the reported error verbatim:
+"Refusing to wipe ... file is not a database". Full suite green (114 suites,
+1063 tests), `tsc` at its pre-existing 12-error baseline, eslint 0 errors.
+
+**Not verified on-device.** Everything above is automated-test evidence. The
+on-device check worth doing before release is the original repro: reset, onboard
+a different account without killing the app, send/receive a message, then
+force-stop and relaunch. Messages should load.
+
+### Known adjacent defect, deliberately not fixed here
+
+`getPrivateKey()` (`services/onboarding/secureStorage.ts:104-109`) has the same
+shape as fix 2: it awaits SecureStore and then unconditionally repopulates
+`cachedPrivateKey` with no epoch guard, so a read in flight across a wipe can
+re-cache the deleted identity's signing key. Pre-existing, untouched by this
+branch, and a different blast radius (signing, not at-rest encryption). Worth its
+own issue rather than widening this one.
 
 ### Desktop is not affected (checked 2026-08-18)
 

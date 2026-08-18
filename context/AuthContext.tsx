@@ -483,15 +483,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // cipher key can be derived at all, so a late write fails cleanly
       // (NoIdentityKeyError → the caller degrades to "no messages"), and the
       // local wipe below removes anything that did land during the window.
+      // Deliberately not try/finally: if both halves threw, the `finally`
+      // block's error would replace the secure-storage one, and losing that
+      // is losing the report that the user's keys may still be on the device.
+      let wipeError: unknown = null;
       try {
         // Secure storage (private keys, mnemonics, onboarding state)
         await clearAllSecureStorage();
-      } finally {
-        // In the `finally` because the half-wiped state — identity gone,
-        // database still on disk under it — is exactly the one that bricks.
-        // MMKV storage: spaces, channels, messages, conversations, auth state.
-        clearAllMMKVStorage();
+      } catch (e) {
+        wipeError = e;
       }
+      try {
+        // Runs even when the wipe above failed, because the half-wiped state
+        // — identity gone, database still on disk encrypted under it — is
+        // precisely the one that bricks. MMKV storage: spaces, channels,
+        // messages, conversations, auth state.
+        clearAllMMKVStorage();
+      } catch (e) {
+        wipeError ??= e;
+      }
+      if (wipeError) throw wipeError;
 
       setUser(null);
       setAuthState('unauthenticated');
