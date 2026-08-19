@@ -35,6 +35,43 @@ it('every init envelope that attaches a name also attaches the icon (or neither)
 });
 
 /**
+ * An address stored in a NAME or ICON slot poisons identityFromMaps.ts's
+ * locallyKnownNames tier exactly like the substring(0, 8) case above (see
+ * the header comment): it enters as if it were real data, which then blocks
+ * both the honest truncated-address fallback and any real name arriving
+ * later. All six init-envelope sites below used to write
+ * `display_name: displayName || userAddress`; they were changed to the
+ * conditional spread `...(displayName ? { display_name: displayName } : {})`
+ * seen throughout this file today, which omits the field entirely rather
+ * than ever writing an address into it.
+ *
+ * The regex keys on "display_name/user_icon immediately followed by a `||`
+ * fallback whose right-hand side contains the word address" - not on a
+ * specific variable name and not on the conditional-spread syntax itself -
+ * so a harmless rename (e.g. `displayName` -> `senderDisplayName`) does not
+ * trip it, but reintroducing an `||` fallback to any *Address-named variable
+ * does, regardless of exactly how it's spelled.
+ */
+it('no init envelope falls back to the address for display_name or user_icon', () => {
+  const files = [
+    'hooks/chat/useSendDirectMessage.ts',
+    'hooks/chat/useSendDirectEmbedMessage.ts',
+  ].map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8'));
+  const addressFallbackPattern = /(display_name|user_icon)\s*:\s*[^,\n]*\|\|\s*[^,\n]*[Aa]ddress/;
+  for (const src of files) {
+    const envelopes = src.split('initEnvelope: InitializationEnvelope').slice(1);
+    // A renamed/removed field or a collapsed envelope count would make this
+    // loop find zero chunks and pass vacuously - assert it still found the
+    // six sites it exists to guard (same shape as the sibling test above).
+    expect(envelopes.length).toBeGreaterThan(0);
+    for (const chunk of envelopes) {
+      const head = chunk.slice(0, 600);
+      expect(head).not.toMatch(addressFallbackPattern);
+    }
+  }
+});
+
+/**
  * Task 8's audit found sendEncryptedMessageToAllDevices callers that fire
  * without a fresh, ledger-gated deliberate act by the local user:
  *  - WebSocketContext's DM receipt ack — a debounced ReceiptService flush.
