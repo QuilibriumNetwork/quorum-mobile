@@ -36,6 +36,7 @@ import { Alert, AppState, AppStateStatus, InteractionManager } from 'react-nativ
 
 import type { Conversation } from '@/hooks/chat/useConversations';
 import type { SelfIdentity } from '@/utils/resolveMemberName';
+import { invalidateRosterCaches } from '@/identity/invalidateRoster';
 import { parseDmProfileUpdate } from '@/services/dm/dmProfileWire';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { logDirectMessage, logMentionOrReply } from '@/services/notifications/logMentionOrReply';
@@ -1182,6 +1183,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     const memberRow = buildJoinedMemberRow(existingMember, participant, joinReceivedAt);
 
                     await adapter.saveSpaceMember(spaceId, memberRow);
+                    // A join can carry a fresh global display name/icon (see
+                    // buildJoinedMemberRow) — the name ladder needs telling.
+                    invalidateRosterCaches(queryClient, spaceId);
 
                     // Update space members cache directly (member data available from
                     // join event). Same rule as the write above: the cached row is what
@@ -2788,6 +2792,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               } as SpaceMember & { profileTimestamp: number; globalProfileTimestamp?: number; farcasterFid?: number; farcasterUsername?: string };
 
               await adapter.saveSpaceMember(spaceId, merged);
+              invalidateRosterCaches(queryClient, spaceId);
 
               // Update React Query members cache. Insert if missing.
               queryClient.setQueryData(queryKeys.spaces.members(spaceId), (old: SpaceMember[] | undefined) => {
@@ -4706,6 +4711,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             } as SpaceMember & { profileTimestamp: number; globalProfileTimestamp?: number; farcasterFid?: number; farcasterUsername?: string };
 
             await adapter.saveSpaceMember(spaceId, merged);
+            invalidateRosterCaches(queryClient, spaceId);
             // Member rows changed — refresh the verification member memo.
             batchMembersCache = null;
 
