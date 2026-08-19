@@ -1,7 +1,7 @@
 ---
 type: bug
 title: "Reset App Data leaves a stale SQLCipher key cached, so the next re-onboard bricks every chat"
-status: in-progress
+status: done
 priority: high
 ai_generated: true
 created: 2026-07-26
@@ -113,7 +113,18 @@ keystore weirdness is required. Hence `priority: high` here rather than medium.
 
 ## Status
 
-Fixed on branch `fix/reset-app-data-stale-cipher-key` (2026-08-18), not yet merged.
+**2026-08-18 — shipped in PR #258** (`fix(storage): resetting the app no longer
+bricks every chat on the next sign-in`)
+
+What landed: the reset no longer leaves a usable SQLCipher key behind for the
+identity it just deleted. Three separate routes to the same permanent brick were
+closed — the stale cache itself, a keychain read resolving across the wipe, and
+the identity still being readable while the deletes were in flight. Verified by
+10 tests whose red-on-revert was checked one fix at a time.
+
+Still open: nothing in this issue. The one remaining item, making the case-B
+guard self-healing, was never in scope here and belongs to the 2026-06-25 issue
+(see the Solution section for why its suggested approach cannot work as written).
 
 The one-line fix below turned out to be necessary but **not sufficient**. An
 independent review found a second, narrower route to the identical brick, and

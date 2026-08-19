@@ -65,6 +65,24 @@ i.e. 16 on phones — measured from the current `DrKLO/Telegram` source, not rec
 convention, and keeps a tighter ratio than desktop's 1.5 so a narrow phone column does not
 lose messages per screen.
 
+### The 17 detour, recorded so it is not repeated
+
+16 was briefly raised to 17 and then returned to 16. The reasoning that produced 17 was:
+the reporter judged 16 "slightly too small" and 18.4 "too big" at two different system font
+scales, so ~17 sat between the brackets, and 17 is iOS HIG Body.
+
+**That bracketing was measured against the wrong instrument.** Telegram was the yardstick,
+and Telegram sizes through `dp()` rather than `sp()` — it never scales with the user's font
+setting. Comparing a scale-respecting app to a scale-ignoring one, on a handset that is not
+at scale 1.0, cannot converge: at any scale above 1.0 our text is larger than Telegram's for
+*any* base that is correct at 1.0.
+
+17 then read too large on device, because raising the token also raised the name beside every
+message (see below), putting ~20px of prominent text on a 1.15 handset.
+
+Lesson: calibrate a base size at scale 1.0, against the app's own composer and desktop —
+not against a competitor on a non-default scale.
+
 Changed, all in chat rendering:
 
 - `messageText` → explicit `16/22`
@@ -93,9 +111,20 @@ Changed, all in chat rendering:
 - **A user-facing font size setting**, Telegram-style. Worth doing, but it needs a persisted
   setting, settings UI, and threading through the chat renderers — its own task.
 
+## Shipped alongside
+
+Sizing alone would have left the app rendering in whatever font each Android OEM ships, so
+the branch grew to cover that too — see
+[2026-08-19-bundle-inter-and-tokenise-the-type-scale.md](2026-08-19-bundle-inter-and-tokenise-the-type-scale.md).
+The two are one branch and one review; they are separate files only because one is a defect
+and the other is work that did not exist before.
+
+The sizes above now come from `theme.textStyles.body` / `.headline` rather than literals, so
+a future retune is one line in [theme/fonts.ts](../../theme/fonts.ts).
+
 ## Status
 
-Code change complete on branch `fix/chat-message-text-size-and-line-height`.
+Code change complete on branch `feat/bundle-inter-and-chat-typography`.
 
 - `npx tsc --noEmit` — no errors in either changed file. The errors it does report
   (`app/explore.tsx`, `components/BrowserModal.tsx`, `services/calling/*`) are pre-existing
@@ -103,13 +132,34 @@ Code change complete on branch `fix/chat-message-text-size-and-line-height`.
 - `npx eslint` on both changed files — output byte-identical before and after the change
   (verified by stashing the diff and re-running). 4 pre-existing findings, 0 new.
 
-**Not yet confirmed visually on a device.** Needs an Android screenshot from the reporter,
-then the iOS arm: checklist item 15 in
-[ios-verification-checklist.md](../docs/ios-verification-checklist.md) — the fixed-height
-`messageHeader` box holding a matching `lineHeight` is exactly the shape that fits on one
-platform and clips on the other.
+**Confirmed on Android** (Motorola Edge 50, system font scale 1.15): 16/22 was reported as
+looking good on device.
 
-Do not move this to `.done/` until both are observed.
+**Confirmed at Android's maximum font scale (1.3):** usernames render fully, no clipping.
+That test also drove a real fix — `messageHeader` pinned its height to the same number as
+the username's `lineHeight`, and React Native scales a lineHeight by the OS font scale but
+never scales a container height, so the two diverged as the user raised their text size. The
+height is now multiplied by `PixelRatio.getFontScale()`. This was pre-existing (master had
+20 in a 20 box, the same 1:1 trap) but is materially worse on iOS, where Dynamic Type reaches
+roughly 3x.
+
+**iOS remains unverified** — no iOS device available to the reporter. Checklist item 15 in
+[ios-verification-checklist.md](../docs/ios-verification-checklist.md) covers it.
+
+### Testing gotcha worth remembering
+
+Judging a size on a handset that is not at system font scale 1.0 wastes a lot of time. This
+device also has a **Motorola-specific `device_font_scale` key** alongside Android's standard
+`font_scale`; writing only the standard one leaves the Settings UI showing a stale value.
+Both must be set together:
+
+```
+adb shell settings put system font_scale 1.0
+adb shell settings put system device_font_scale 1.0
+```
+
+An app must be force-closed (not JS-reloaded) to pick up a scale change, because static
+stylesheets read it once at creation.
 
 ---
 

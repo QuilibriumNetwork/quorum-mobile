@@ -29,16 +29,23 @@ $logPath = Join-Path $repo ".agents\reports\metro-log.txt"
 $androidPackage = "com.quilibrium.quorummobile"
 $scheme = "quorummobile"
 
-# Resolve adb. Prefer PATH; fall back to the default Android SDK location.
+# Resolve adb. Prefer PATH; fall back to the SDK. ANDROID_HOME is checked before
+# %LOCALAPPDATA% because this machine's SDK lives at C:\Android\Sdk, NOT the
+# Android Studio default - the old %LOCALAPPDATA%-only fallback silently misses it.
 $adb = "adb"
 if (-not (Get-Command adb -ErrorAction SilentlyContinue)) {
-    $sdkAdb = Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools\adb.exe"
-    if (Test-Path $sdkAdb) {
+    $sdkRoots = @($env:ANDROID_HOME, $env:ANDROID_SDK_ROOT, (Join-Path $env:LOCALAPPDATA "Android\Sdk")) |
+        Where-Object { $_ }
+    $sdkAdb = $sdkRoots |
+        ForEach-Object { Join-Path $_ "platform-tools\adb.exe" } |
+        Where-Object { Test-Path $_ } |
+        Select-Object -First 1
+    if ($sdkAdb) {
         $adb = $sdkAdb
     }
     else {
         Write-Host ""
-        Write-Host "  ERROR: adb not found on PATH or at $sdkAdb" -ForegroundColor Red
+        Write-Host "  ERROR: adb not found on PATH, nor under ANDROID_HOME / %LOCALAPPDATA%\Android\Sdk" -ForegroundColor Red
         Write-Host "  Install Android platform-tools or add adb to PATH." -ForegroundColor Yellow
         Write-Host ""
         exit 1
@@ -76,11 +83,24 @@ Push-Location $repo
 try {
     # --- Emulator preflight ---------------------------------------------
     # Find a running emulator (device id starting with "emulator-").
-    $devicesRaw = & $adb devices 2>$null
-    $emulator = $devicesRaw |
-        Where-Object { $_ -match '^emulator-\d+\s+device$' } |
-        ForEach-Object { ($_ -split '\s+')[0] } |
-        Select-Object -First 1
+    #
+    # MUST poll, not ask once. The FIRST `adb devices` after a reboot also STARTS
+    # the adb server, and adb answers before that server has finished its scan of
+    # the emulator console ports - so it returns an EMPTY list while a perfectly
+    # healthy emulator is sitting there. MEASURED 2026-08-18: call #1 listed
+    # nothing, call #2 seconds later listed emulator-5554. The old single-shot
+    # check turned that race into "ERROR: No running emulator found" and this
+    # script refused to run at all.
+    & $adb start-server 2>$null | Out-Null
+    $emulator = $null
+    for ($i = 0; $i -lt 10; $i++) {
+        $emulator = & $adb devices 2>$null |
+            Where-Object { $_ -match '^emulator-\d+\s+device$' } |
+            ForEach-Object { ($_ -split '\s+')[0] } |
+            Select-Object -First 1
+        if ($emulator) { break }
+        Start-Sleep -Seconds 1
+    }
 
     if (-not $emulator) {
         Write-Host ""
@@ -113,10 +133,24 @@ try {
     # PowerShell doesn't always propagate to child Node processes, leaving
     # zombies that hold file handles on the Metro cache. Those zombies cause
     # "Waiting for Watchman watch-project" hangs and EMFILE errors.
-    $nodeProcs = Get-Process node -ErrorAction SilentlyContinue
-    if ($nodeProcs) {
-        Write-Host "  Killing $($nodeProcs.Count) orphaned node process(es)" -ForegroundColor DarkGray
-        $nodeProcs | Stop-Process -Force -ErrorAction SilentlyContinue
+    #
+    # TARGETED, never a blanket `Get-Process node | Stop-Process`. On this box a
+    # normal working session has ~50 node.exe processes (MEASURED 2026-08-18: 51,
+    # ~4.8 GB) and almost all of them are VS Code language servers and extension
+    # hosts. The old blanket kill wiped the editor's brains every single run,
+    # which is a large part of why emulator sessions "just behaved weirdly".
+    # We only take (a) whoever holds port 8081, and (b) node processes whose
+    # command line points at Metro/Expo inside THIS repo.
+    $metroPids = @()
+    Get-NetTCPConnection -State Listen -LocalPort 8081 -ErrorAction SilentlyContinue |
+        ForEach-Object { $metroPids += $_.OwningProcess }
+    Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -and $_.CommandLine -match '(metro|expo)' -and $_.CommandLine -like "*$repo*" } |
+        ForEach-Object { $metroPids += $_.ProcessId }
+    $metroPids = $metroPids | Sort-Object -Unique
+    if ($metroPids) {
+        Write-Host "  Killing $($metroPids.Count) stale Metro/Expo node process(es) (editor processes untouched)" -ForegroundColor DarkGray
+        $metroPids | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
         Start-Sleep -Milliseconds 500
     }
 
@@ -176,6 +210,31 @@ try {
     # so `yarn start` fails here. We set the env var the PowerShell way and call
     # `yarn start:lazy` (plain `expo start`) below, leaving package.json untouched.
     $env:EXPO_NO_METRO_LAZY = "1"
+
+    # THE fix that made the emulator work at all (root-caused 2026-08-18).
+    #
+    # This machine carries a PERSISTENT Windows *user* environment variable
+    # REACT_NATIVE_PACKAGER_HOSTNAME=<pc-lan-ip>, set long ago for Wi-Fi work on a
+    # physical phone. Metro reads it and advertises that LAN address as the bundle
+    # URL, so the dev client ignored whatever URL we deep-linked and fetched the
+    # bundle from the LAN IP instead. From inside the emulator that route goes out
+    # through the emulator's NAT and back to the host's own LAN address, and the
+    # chunked multipart bundle response gets mangled on the way:
+    #
+    #   java.net.ProtocolException: Expected leading [0-9a-fA-F] character but was 0xd
+    #     at okhttp3.internal.http1.Http1ExchangeCodec$ChunkedSource.readChunkSize
+    #     at com.facebook.react.devsupport.BundleDownloader.processMultipartResponse
+    #
+    # RN logs that at INFO level and shows nothing on screen, so the app just sat
+    # on "Bundling 100.0%..." forever with no visible error. That is the freeze
+    # that made every previous emulator attempt look unexplainable, and it is why
+    # `pm clear` never helped - the address was never in the app, it was here.
+    #
+    # Forcing "localhost" sends the bundle over the `adb reverse` tunnel set up
+    # above, which bypasses the emulator's NAT entirely. MEASURED after this
+    # change: bundle downloads clean, zero ProtocolException, app renders.
+    # Same lever as dev-start-mobile.ps1; only this script was missing it.
+    $env:REACT_NATIVE_PACKAGER_HOSTNAME = "localhost"
 
     # --- Auto-launch the app once Metro is up ---------------------------
     # Metro runs in the foreground (Tee-Object). Spin off a short background

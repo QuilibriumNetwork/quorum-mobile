@@ -205,21 +205,83 @@ transport bugs behaved completely differently in release.
 > LIVE id and `adb install -r` would overwrite the real app with real user data.
 > Do not remove that check.
 
-## ⚠️ The emulator scripts have never worked
+## The emulator: root-caused and working (2026-08-18)
 
-`build-emulator.ps1` and `dev-start-emulator.ps1` are logically correct and kept
-for a future attempt, but **no emulator dev session has ever succeeded on this
-machine** (as of 2026-07-25). The physical phone is the only working dev path.
+The emulator now works. It was broken for a year by **one inherited environment
+variable**, not by anything in these scripts, the AVD, or the dev client.
 
-The blocker: the installed dev client has the PC's LAN IP (`<pc-lan-ip>:8081`)
-baked in as its server URL from the first install, and ignores the `adb reverse`
-tunnel even after `pm clear`. It freezes at "Loading from <pc-lan-ip>:8081...".
+### What was actually wrong
 
-If you pick this up again, the untried lever is **`http://10.0.2.2:8081`** — the
-emulator's permanent alias for the host, which needs no `adb reverse` at all.
-Enter it manually on the dev-client home screen, or rebuild with **only** the
-emulator attached so that URL gets baked in. Don't spend time on the reverse
-tunnel; it was already verified working and is not the problem.
+This machine carries a **persistent Windows *user* environment variable**:
+
+```
+REACT_NATIVE_PACKAGER_HOSTNAME=<pc-lan-ip>
+```
+
+set long ago so a physical phone could reach Metro over Wi-Fi. Metro reads it and
+advertises **that LAN address** as the bundle URL, which overrides whatever URL you
+deep-link into the dev client. From inside the emulator that route leaves through
+the emulator's NAT and comes back to the host's own LAN address, and the chunked
+multipart bundle response is corrupted in transit:
+
+```
+java.net.ProtocolException: Expected leading [0-9a-fA-F] character but was 0xd
+  at okhttp3.internal.http1.Http1ExchangeCodec$ChunkedSource.readChunkSize
+  at com.facebook.react.devsupport.MultipartStreamReader.readAllParts
+  at com.facebook.react.devsupport.BundleDownloader.processMultipartResponse
+```
+
+React Native logs that at **INFO** level and renders nothing, so the app sat on
+`Bundling 100.0%...` forever with no visible error — while Metro cheerfully
+reported `Bundled 7193ms index.js (12193 modules)`. That mismatch is what made
+every previous attempt unexplainable.
+
+It also explains why `pm clear` never helped: **the address was never inside the
+app.** The old note in this file blamed a URL "baked into the dev client" and sent
+the next reader chasing `10.0.2.2`. That was wrong, and `10.0.2.2` is not needed.
+
+`dev-start-mobile.ps1` forces the var to `localhost` and `dev-start-mobile-wifi.ps1`
+sets it deliberately — only `dev-start-emulator.ps1` never touched it, so it alone
+inherited the LAN IP. Both emulator scripts now force `localhost`, which routes the
+bundle over `adb reverse` and skips the emulator's NAT entirely.
+
+### Two other bugs fixed at the same time
+
+- **`adb devices` was polled once.** The first call after a reboot also *starts* the
+  adb server and returns before it has scanned the emulator ports, so it reports an
+  empty list while a healthy emulator is running (MEASURED: call #1 empty, call #2
+  listed `emulator-5554`). Both scripts bailed with "No running emulator found".
+  They now `adb start-server` and poll for up to 10s.
+- **`Get-Process node | Stop-Process -Force` killed everything.** A normal session
+  here has ~50 `node.exe` processes and nearly all are VS Code language servers and
+  extension hosts (MEASURED: 51, ~4.8 GB). Every run wiped the editor's brains. Now
+  only the port-8081 holder and Metro/Expo processes belonging to this repo are killed.
+
+### Verified end to end
+
+Metro on `localhost:8081` + `adb reverse` + `Pixel_7` (x86_64, Android 36):
+bundle downloaded clean, **zero** `ProtocolException`, app rendered the onboarding
+screen, and `ReactNativeJS` logs showed live app code running (conversations fetch,
+wallet hooks). Screenshots via `adb exec-out screencap -p`.
+
+### Still worth knowing
+
+- **The AVD was raised from 2 GB to 4 GB on 2026-08-18** (`hw.ramSize=4096` in the
+  AVD's `config.ini`; the 2 GB original is kept beside it as `config.ini.bak-2gb`).
+  It was necessary: the app's own resident size is ~1 GB, which on the 2 GB AVD left
+  almost no headroom and invited the low-memory killer. MEASURED before/after, app
+  loaded: guest free 764 MB → 1.48 GB; host `qemu-system-x86_64` 3.56 GB → 5.31 GB;
+  host RAM 85% → 91% of 32 GB. If the host ever feels too tight, 3072 is a sane
+  middle ground. Note `dalvik.vm.heapsize` is already `512m` and the app carries
+  `LARGE_HEAP`, so the AVD's `vm.heapSize` is NOT the constraint — leave it alone.
+- Metro's RAM cost is identical whether you target the emulator or a phone, so the
+  ~5.3 GB of `qemu` is the emulator's true price over using the cable.
+- There are two emulator installs: `%ANDROID_HOME%\emulator\` (37.1.3) and
+  `%ANDROID_HOME%\emulator.bak-36.1.9\`. Android Studio may still boot the `.bak`
+  one. Harmless so far, but it means "the AVD you booted" and "the binary the
+  scripts would boot" can differ.
+- The emulator image has **no `curl` and no `wget`**, so you cannot test Metro
+  reachability from inside the guest that way. Launch the app and read logcat instead.
 
 ## The DM diagnostic rig
 
@@ -595,4 +657,4 @@ them.
 | `gen-android-adaptive-icon.js` | Superseded by `gen-app-icons.js` in the same 2026-06-19 commit; running it would overwrite `icon-android-adaptive.png` with the pre-redesign version. |
 | `gen-splash-logo.js` | Superseded by `gen-splash-densities.js`; running it would overwrite `splash-glyph.png` with the older build. |
 
-*Last updated: 2026-08-13*
+*Last updated: 2026-08-18*

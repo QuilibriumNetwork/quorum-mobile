@@ -35,6 +35,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
 - 📋 [Mobile Identity Resolution Implementation Plan](issues/2026-08-11-mobile-identity-resolution-plan.md)
+- 📋 [Bundle Inter, tokenise the reading surfaces, and guard the font rules](issues/2026-08-19-bundle-inter-and-tokenise-the-type-scale.md)
 
 #### Light Theme Contrast
 
@@ -290,4 +291,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-19 09:33:26
+**Last Updated**: 2026-08-19 11:50:37

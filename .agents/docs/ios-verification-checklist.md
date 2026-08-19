@@ -428,38 +428,53 @@ the row stretched, hovered, or let content show through it.
   index stops pointing at the pill row, if `externalScroll` is dropped, if the rewind stops
   firing on a section change, or if it starts firing on every render.
 
-### 15. Message body at 16/22: username row not clipped, spacing not cramped 🔲
-**▶ Ask:** "Open a Space channel and a DM. Look at a few messages, including one from
-someone with a long display name, one with a `# heading` and a ``` code block ```, and one
-that is only emoji. Is any username cut off at the top or bottom? Is the gap between the
-username line and the first line of the message about even with the gap between the message
-lines themselves?"
-**Pass:** no clipping anywhere, spacing looks even. **Fail:** say which (name clipped /
-gap too tight / gap too wide) and whether it was a channel or a DM.
+### 15. Bundled Inter renders everywhere, and nothing clips at large Dynamic Type 🔲
+**▶ Ask:** "Open a Space channel, a DM, and the Farcaster feed. First: does all the text
+look like ONE typeface, or do some labels/buttons look subtly different from the message
+text next to them? Second: is any bold text smeared or fuzzy rather than crisp? Third: in
+Settings → Accessibility → Display & Text Size, turn Larger Text up high, reopen the app,
+and check whether usernames are cut off at the top or bottom."
+**Pass:** one typeface throughout, crisp bold, no clipped names at large text.
+**Fail:** say which of the three, and where (channel / DM / feed).
 
 **Context (agent):**
-- **What/when:** message typography fix, branch `fix/chat-message-text-size-and-line-height`
-  (2026-08-19). Android-only so far.
-- **The change:** [MessagesList.tsx](../../components/Chat/MessagesList.tsx) `messageText`
-  and `linkText` gained an explicit `16/22`; they previously set neither, so RN's built-in
-  default of `14` plus the font's own leading applied. `messageUser` went `14/20 → 16/22`
-  and the fixed `messageHeader` line box went `20 → 22` to hold it. In
-  [MessageMarkdownRenderer.native.tsx](../../components/Chat/MessageMarkdownRenderer.native.tsx)
-  the heading went `17 → 20/26` and code `13 → 14`.
-- **Why iOS may differ:** this is the classic `lineHeight` platform split. Android adds
-  `includeFontPadding` above/below glyphs and centres text in the line box differently from
-  iOS, and San Francisco's ascent/descent ratios are not Roboto's. `messageHeader` is a
-  **fixed-height** box (`height: Skin.font(22)`) holding a `lineHeight: 22` `<Text>` — that
-  is exactly the shape that fits on one platform and clips on the other. The old code had
-  the same 1:1 relationship at 20, so the risk is unchanged in kind, only in magnitude.
+- **What/when:** typography + bundled font, branch `feat/bundle-inter-and-chat-typography`
+  (2026-08-19). Android-verified only; the reporter has no iOS device, so this item is the
+  ONLY iOS signal this work will get before release.
+- **The change:** the app no longer uses `'System'`. Five static Inter faces
+  (400/500/600/700/900) are bundled and registered before first paint
+  ([theme/uiFont.ts](../../theme/uiFont.ts)), and `DEFAULT_FONT_FAMILY` points at Inter.
+  Chat messages, casts, usernames and cast author names are sized from
+  `theme.textStyles.body` / `.headline` (16/22). 101 style blocks that set a weight with no
+  family were swept onto the bundled font.
+- **Why iOS may differ, part 1 — the typeface.** iOS previously rendered San Francisco,
+  which Apple tunes with optical sizing and per-size tracking; Inter has neither for free.
+  Expect a slightly different texture, and watch specifically for **faux-bold**: each weight
+  is a separate file, so if a family and weight ever name different faces the platform
+  synthesizes the gap. `yarn check:fonts` proves no such pair exists statically, but only
+  eyes can confirm the rendering.
+- **Why iOS may differ, part 2 — Dynamic Type.** `messageHeader` is a fixed-height box
+  holding a `<Text>` whose `lineHeight` React Native scales by the OS font scale. Android
+  tops out at 1.3 and **passed** with the name fully visible. iOS Dynamic Type reaches
+  roughly 3x with accessibility sizes, so it has far more headroom to expose the same
+  mechanism. The height is now `Skin.font(22) * PixelRatio.getFontScale()`, which should
+  hold, but Android could not test past 1.3.
 - **Built-in control arm:** emoji-only messages must look **identical** to before. Their
   size comes from `emojiOnlyScale × (style?.fontSize || 16)` in
   [MentionableText.tsx](../../components/Chat/MentionableText.tsx) — the fallback was
   already `16`, and the style now supplies a real `16`, so the computed value is unchanged.
   If emoji-only messages *do* change size on iOS, the problem is not this diff.
-- **If it FAILS** (name clipped): raise `messageHeader.height` rather than lowering
-  `messageUser.lineHeight` — the header height exists to stop non-text indicators
-  (warning/edited/spinner) stretching the row, so it is the value with slack in it.
+- **If it FAILS — mixed typefaces:** run `yarn check:fonts`. If it is green, the offending
+  text is not a style block it can see (an inline `style={{}}` on a `<Text>`, or a
+  third-party component) — grep the screen's file for `fontWeight` and check each has a
+  family beside it.
+- **If it FAILS — names clipped at large text:** `PixelRatio.getFontScale()` is read once
+  when the stylesheet is built, so a mid-session Dynamic Type change does not re-apply.
+  Confirm the app was **fully relaunched** before treating it as a real failure.
+- **If it FAILS — Inter does not load at all** (everything looks like San Francisco): check
+  the device log for the `[uiFont]` line. `Font.loadAsync` failures are deliberately
+  non-fatal and fall back to the platform font, so a silent failure looks exactly like "we
+  never shipped this".
 
 ---
 
