@@ -760,7 +760,10 @@ async function sendEncryptedMessage(
       // the X448 encryption keys.
       const initEnvelope: InitializationEnvelope = {
         user_address: userAddress,
-        display_name: displayName || userAddress,
+        // Omit rather than fall back to the address: the receiver stores this as a
+        // NAME, and an address stored as a name can never be corrected by the
+        // fallback ladder on their side.
+        ...(displayName ? { display_name: displayName } : {}),
         return_inbox_address: conversationInboxAddress,
         return_inbox_encryption_key: bytesToHex(conversationInboxKeypair.public_key),
         return_inbox_public_key: conversationSigningKeypair
@@ -869,7 +872,10 @@ async function sendEncryptedMessage(
 
         const initEnvelope: InitializationEnvelope = {
           user_address: userAddress,
-          display_name: displayName || userAddress,
+          // Omit rather than fall back to the address: the receiver stores this as a
+          // NAME, and an address stored as a name can never be corrected by the
+          // fallback ladder on their side.
+          ...(displayName ? { display_name: displayName } : {}),
           return_inbox_address: ourConversationInbox?.inboxAddress || deviceKeyset.inboxAddress,
           return_inbox_encryption_key: ourConversationInbox
             ? bytesToHex(ourConversationInbox.encryptionPublicKey)
@@ -1008,7 +1014,10 @@ async function buildInitEnvelopeSend(args: {
 
   const initEnvelope: InitializationEnvelope = {
     user_address: userAddress,
-    display_name: displayName || userAddress,
+    // Omit rather than fall back to the address: the receiver stores this as a
+    // NAME, and an address stored as a name can never be corrected by the
+    // fallback ladder on their side.
+    ...(displayName ? { display_name: displayName } : {}),
     return_inbox_address: returnInbox.inboxAddress,
     return_inbox_encryption_key: bytesToHex(returnInbox.encryptionPublicKey),
     return_inbox_public_key: returnInbox.signingPublicKey
@@ -1098,7 +1107,10 @@ async function buildAcceptSend(args: {
 
   const initEnvelope: InitializationEnvelope = {
     user_address: userAddress,
-    display_name: displayName || userAddress,
+    // Omit rather than fall back to the address: the receiver stores this as a
+    // NAME, and an address stored as a name can never be corrected by the
+    // fallback ladder on their side.
+    ...(displayName ? { display_name: displayName } : {}),
     return_inbox_address: returnInbox.inboxAddress,
     return_inbox_encryption_key: bytesToHex(returnInbox.encryptionPublicKey),
     return_inbox_public_key: returnInbox.signingPublicKey ? bytesToHex(returnInbox.signingPublicKey) : '',

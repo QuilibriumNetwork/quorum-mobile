@@ -3728,7 +3728,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // Save conversation to storage (creates new or updates existing)
         const existingConversation = await storage.getConversation(conversationId);
         // Get sender display name for preview
-        const senderDisplayName = userProfileFromEnvelope?.displayName || existingConversation?.displayName || senderAddress.substring(0, 8);
+        // Empty means absent. An address slice is NOT a name: it would enter the
+        // identity ladder as a locally-known name and block both the honest
+        // truncated-address fallback and a real name arriving later.
+        const senderDisplayName = userProfileFromEnvelope?.displayName || existingConversation?.displayName || '';
         // Typed preview (icon + text, no emoji) — single source of truth in
         // utils/messagePreview, which now also handles call-event.
         const messagePreview = getSpaceMessagePreview(decryptedMessage);
@@ -3770,7 +3773,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           senderAddress,
           'direct',
           '', // No icon
-          senderAddress.substring(0, 8) // Display name
+          senderDisplayName // Display name — reuse the value computed above rather
+          // than recomputing an address slice; storage.saveMessage discards this
+          // argument today (services/storage/mmkvAdapter.ts), but the batch path's
+          // equivalent call already passes the resolved name and this one should
+          // match rather than stamp an address into a name-shaped slot.
         );
 
         // Persist the DM into the notifications inbox log — the counterpart to
@@ -5059,7 +5066,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // ignore our own profile for the row identity (see the JS path's guard).
         const rowProfile = isSelfSyncEcho ? undefined : msgResult.user_profile;
         const existingConversation = await storage.getConversation(conversationId);
-        const senderDisplayName = rowProfile?.display_name || existingConversation?.displayName || resolvedSenderAddress.substring(0, 8);
+        // Empty means absent. An address slice is NOT a name: it would enter the
+        // identity ladder as a locally-known name and block both the honest
+        // truncated-address fallback and a real name arriving later.
+        const senderDisplayName = rowProfile?.display_name || existingConversation?.displayName || '';
         const senderIcon = rowProfile?.user_icon || existingConversation?.icon || '';
         // Typed preview (icon + text, no emoji) — see the live DM path above.
         const messagePreview = getSpaceMessagePreview(decryptedMessage);
