@@ -1,4 +1,6 @@
+import { logger } from '@quilibrium/quorum-shared';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
+import { truncateAddress } from '@/utils/formatAddress';
 
 /**
  * The DM reveal ledger: "this device's user has DELIBERATELY messaged this
@@ -29,7 +31,48 @@ function getStore(): MMKV {
   return store;
 }
 
-const key = (self: string, partner: string) => `${self}:${partner}`;
+/**
+ * An empty string is never a real address, and treating it as one would let
+ * two unrelated bad calls (e.g. an address read before auth finished
+ * resolving) collide on the exact same ledger key. Reject it at every entry
+ * point rather than assuming callers only ever pass a real address —
+ * Tasks 5-7 route caller-supplied strings through these functions, and the
+ * one thing this module cannot afford is discovering that assumption was
+ * wrong from a leak instead of a refusal.
+ */
+function isUsableIdentifier(value: string): boolean {
+  return value.length > 0;
+}
+
+/**
+ * INVARIANT: key(self, partner) must be injective — two different (self,
+ * partner) pairs must never produce the same stored key, or a reveal
+ * recorded for one pair would silently read back as `true` for an unrelated
+ * pair. That is a fail-OPEN path in the one module whose entire purpose is
+ * to fail CLOSED.
+ *
+ * A hand-rolled `${self}:${partner}` template is NOT injective over
+ * arbitrary strings: self="A", partner="B:C" and self="A:B", partner="C"
+ * both produce "A:B:C". Real addresses are base58 multihashes, which exclude
+ * ':', so this was not exploitable today — but nothing enforced that, and an
+ * unenforced assumption about caller input is exactly the class of bug this
+ * module exists to close off, not repeat.
+ *
+ * JSON-array encoding is injective for arbitrary strings by construction: an
+ * unescaped '"' always closes a JSON string, and JSON.stringify on an array
+ * joins elements with a literal ',' outside any string's quotes, so the
+ * boundary between self and partner can never be ambiguous. This is proved
+ * by the JSON grammar, not by scanning input for a forbidden character — a
+ * validator has to enumerate every dangerous character and stays only as
+ * safe as that enumeration; this has none to enumerate.
+ */
+const key = (self: string, partner: string) => JSON.stringify([self, partner]);
+
+// The structural prefix of every key(self, <anything>) — safe for
+// `startsWith` because JSON.stringify(self) is unique to that exact string
+// (same injectivity argument as above), so this prefix cannot be produced by
+// any other self and cannot turn a scoped sweep into a broader one.
+const selfPrefix = (self: string) => `[${JSON.stringify(self)},`;
 
 // In-memory memo so a hot path (broadcast sweep, list render) never re-reads
 // MMKV for the same pair in one session. Positive AND negative memos are safe
@@ -37,6 +80,7 @@ const key = (self: string, partner: string) => `${self}:${partner}`;
 const memo = new Map<string, boolean>();
 
 export function hasRevealedTo(selfAddress: string, partnerAddress: string): boolean {
+  if (!isUsableIdentifier(selfAddress) || !isUsableIdentifier(partnerAddress)) return false;
   const k = key(selfAddress, partnerAddress);
   const m = memo.get(k);
   if (m !== undefined) return m;
@@ -50,18 +94,38 @@ export function hasRevealedTo(selfAddress: string, partnerAddress: string): bool
 }
 
 export function recordReveal(selfAddress: string, partnerAddress: string, now: number): void {
+  // A malformed identifier can never be a real relationship — refuse the
+  // write rather than store a record under a key nothing legitimate can
+  // ever look up by its real address.
+  if (!isUsableIdentifier(selfAddress) || !isUsableIdentifier(partnerAddress)) return;
   const k = key(selfAddress, partnerAddress);
   try {
     getStore().set(k, JSON.stringify({ at: now }));
     memo.set(k, true);
-  } catch {
+  } catch (e) {
     // Storage failed: memo only. The reveal re-derives from message history
     // next launch (the reply that set it IS the history).
     memo.set(k, true);
+    // A systematic MMKV failure would otherwise degrade every device to
+    // bootstrap-only reveals (re-deriving from history on every launch) with
+    // no signal that anything is wrong. Truncated: a raw full address is
+    // identity-bearing, and debug logs get pasted into issues and chats.
+    logger.warn(
+      `[DMRevealLedger] write failed for ${truncateAddress(partnerAddress)} — reveal stays memo-only this session`,
+      e instanceof Error ? e.message : e,
+    );
   }
 }
 
 export function clearReveal(selfAddress: string, partnerAddress?: string): void {
+  // A malformed self can hold no legitimate record (recordReveal already
+  // refuses to write one under it), so refuse outright rather than compute a
+  // prefix sweep from it. Over-clearing would be safe for privacy but not
+  // for correctness — it would destroy real consent records for a self that
+  // never actually held any degenerate ones — and a flat refusal is simpler
+  // to reason about than trusting the prefix math to stay narrow for every
+  // possible malformed input, now and after future edits.
+  if (!isUsableIdentifier(selfAddress)) return;
   try {
     const s = getStore();
     if (partnerAddress) {
@@ -69,7 +133,7 @@ export function clearReveal(selfAddress: string, partnerAddress?: string): void 
       memo.delete(key(selfAddress, partnerAddress));
       return;
     }
-    const prefix = `${selfAddress}:`;
+    const prefix = selfPrefix(selfAddress);
     for (const k of s.getAllKeys()) {
       if (k.startsWith(prefix)) s.remove(k);
     }

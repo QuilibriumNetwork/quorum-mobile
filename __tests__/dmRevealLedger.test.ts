@@ -165,3 +165,122 @@ describe('fail-closed under a store that genuinely throws', () => {
     expect(fresh!.hasRevealedTo(SELF, PARTNER)).toBe(true);
   });
 });
+
+/**
+ * Finding 1: a plain `${self}:${partner}` key is not injective over
+ * arbitrary strings — self="A", partner="B:C" and self="A:B", partner="C"
+ * both produced "A:B:C". Not exploitable with real base58 addresses (they
+ * exclude ':'), but nothing enforced that, and Tasks 5-7 route
+ * caller-supplied strings through this module. The test below is written to
+ * PASS under the current (JSON-array) key encoding and FAIL under the old
+ * template — see the RED proof in the fix report for the reverted-and-run
+ * evidence.
+ */
+describe('key collision safety', () => {
+  afterEach(() => {
+    clearReveal('A');
+    clearReveal('A:B');
+  });
+
+  it('two pairs that would collide under a naive `self:partner` key do not contaminate each other', () => {
+    recordReveal('A', 'B:C', 1_000);
+    expect(hasRevealedTo('A', 'B:C')).toBe(true);
+    // Under the old `${self}:${partner}` template both pairs key to
+    // "A:B:C" — this would read true here too, for a partner who never
+    // received or sent anything.
+    expect(hasRevealedTo('A:B', 'C')).toBe(false);
+  });
+
+  it('treats an empty self or partner as unusable: hasRevealedTo fails closed and recordReveal refuses to write', () => {
+    expect(hasRevealedTo('', PARTNER)).toBe(false);
+    expect(hasRevealedTo(SELF, '')).toBe(false);
+    recordReveal('', PARTNER, 1_000);
+    expect(hasRevealedTo('', PARTNER)).toBe(false); // still false — the write was refused, not merely unread
+  });
+
+  it('clearReveal with a malformed (empty) self is a no-op and does not touch other selfs\' real records', () => {
+    recordReveal(SELF, PARTNER, 1_000);
+    clearReveal(''); // malformed self, no partner — would sweep by prefix if not guarded
+    expect(hasRevealedTo(SELF, PARTNER)).toBe(true); // untouched
+  });
+});
+
+/**
+ * Finding 2: recordReveal's catch previously swallowed a durable-write
+ * failure with no signal at all. A systematic MMKV failure would otherwise
+ * silently degrade every device to bootstrap-only reveals forever. The
+ * warning must identify which partner without logging their raw address —
+ * debug logs get pasted into issues and chats, and an address is identity-
+ * bearing data.
+ */
+describe('write-failure telemetry', () => {
+  afterEach(() => {
+    jest.dontMock('react-native-mmkv');
+    jest.resetModules();
+  });
+
+  it('logs a truncated-address warning, never the raw address, when the write throws', () => {
+    jest.resetModules();
+    jest.doMock('react-native-mmkv', () => ({
+      createMMKV: () => ({
+        getString: () => undefined,
+        set: () => {
+          throw new Error('mmkv write failed');
+        },
+        remove: () => {},
+        getAllKeys: () => [],
+      }),
+    }));
+    let fresh: typeof import('../services/dm/dmRevealLedger');
+    jest.isolateModules(() => {
+      fresh = require('../services/dm/dmRevealLedger');
+    });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      fresh!.recordReveal(SELF, PARTNER, 1_000);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const loggedText = warnSpy.mock.calls[0].map(String).join(' ');
+      expect(loggedText).not.toContain(PARTNER);
+      expect(loggedText).not.toContain(SELF);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+});
+
+/**
+ * Finding 3: clearReveal's own catch (`memo.clear()`) was the one catch
+ * branch in the module still unexercised even after the round-1 coverage —
+ * same mechanism (a genuinely throwing store), applied to the prefix-sweep
+ * path instead of a read or a write.
+ */
+describe('clearReveal fail-safe under a genuinely throwing store', () => {
+  afterEach(() => {
+    jest.dontMock('react-native-mmkv');
+    jest.resetModules();
+  });
+
+  it('recovers via memo.clear() when the store throws during the prefix sweep', () => {
+    jest.resetModules();
+    jest.doMock('react-native-mmkv', () => ({
+      createMMKV: () => ({
+        getString: () => undefined,
+        set: () => {},
+        remove: () => {},
+        getAllKeys: () => {
+          throw new Error('mmkv getAllKeys failed');
+        },
+      }),
+    }));
+    let fresh: typeof import('../services/dm/dmRevealLedger');
+    jest.isolateModules(() => {
+      fresh = require('../services/dm/dmRevealLedger');
+    });
+    fresh!.recordReveal(SELF, PARTNER, 1_000); // store.set succeeds here — memoized true
+    expect(fresh!.hasRevealedTo(SELF, PARTNER)).toBe(true);
+    expect(() => fresh!.clearReveal(SELF)).not.toThrow();
+    // Memo cleared by the catch; the fallback read also says false (nothing
+    // was ever actually stored in this mock), so the ledger settles closed.
+    expect(fresh!.hasRevealedTo(SELF, PARTNER)).toBe(false);
+  });
+});
