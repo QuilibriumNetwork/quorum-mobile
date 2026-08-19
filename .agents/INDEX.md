@@ -31,7 +31,6 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [Public invite: 'Generate New Link' claims to invalidate the old link, is offered to non-owners, and never propagates the URL](issues/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md)
 - 🐛 [Broadcast `.q` claims never reach the identity ladder](issues/2026-08-16-broadcast-q-claims-never-render-after-the-identity-migration.md)
 - 🐛 [A persisted query cache turns the claim-records Map into `{}` and crashes the channel screen](issues/2026-08-16-persisted-query-cache-turns-a-map-into-an-object-and-crashes-the-channel.md)
-- 🐛 [A Farcaster DM shows raw FIDs instead of names, in the header and on every message](issues/2026-08-19-farcaster-dm-header-and-messages-show-fids-instead-of-names.md)
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
 - 📋 [Mobile Identity Resolution Implementation Plan](issues/2026-08-11-mobile-identity-resolution-plan.md)
@@ -176,6 +175,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [Dynamic imports silently took their error branch under jest](issues/.done/2026-08-17-dynamic-imports-silently-took-their-error-branch-under-jest.md)
 - 🐛 [A widening sender set resurrects stale QNS verifications](issues/.done/2026-08-17-widening-sender-set-resurrects-stale-qns-verifications.md)
 - 🐛 [Chat message body renders at React Native's default 14 with no line height](issues/.done/2026-08-19-chat-message-text-renders-at-react-native-default-14.md)
+- 🐛 [A Farcaster DM shows raw FIDs instead of names, in the header and on every message](issues/.done/2026-08-19-farcaster-dm-header-and-messages-show-fids-instead-of-names.md)
 - 📋 [Channel reorder mutations should broadcast (not local-only)](issues/.done/2026-05-29-channel-reorder-mutations-should-broadcast.md)
 - 📋 [Port DM update-profile (identity sync over DM sessions) from desktop](issues/.done/2026-06-09-port-dm-update-profile-from-desktop.md)
 - 📋 [Task: make `primaryUsername` (and `isProfilePublic`) survive a device switch and reliably reach the published public profile](issues/.done/2026-06-10-primary-username-sync-and-publish.md)
@@ -295,4 +295,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-19 16:08:58
+**Last Updated**: 2026-08-19 16:22:28

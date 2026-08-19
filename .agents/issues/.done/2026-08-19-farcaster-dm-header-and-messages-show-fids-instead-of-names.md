@@ -1,7 +1,7 @@
 ---
 type: bug
 title: "A Farcaster DM shows raw FIDs instead of names, in the header and on every message"
-status: in-progress
+status: done
 priority: high
 ai_generated: true
 created: 2026-08-19
@@ -24,19 +24,33 @@ Reported by the operator on 2026-08-19.
 
 ## Status
 
-Fixed on `fix/farcaster-dm-shows-fid-instead-of-name`, then revised after a
-six-angle review (correctness, silent-failure, security, tests, comments,
-mobile-platform). The review found two real defects in the first cut — one of
-them a security regression the fix itself introduced — and both are now closed.
+**2026-08-19 — shipped in PR #262** (`fix(chat): a Farcaster DM shows names
+again, and a Farcaster name can no longer forge a verified .q`)
 
-Full suite 1140/1140. `tsc` unchanged at the 12 pre-existing errors. Lint on the
-touched files identical before and after (6 problems: 1 error, 5 warnings, all
-pre-existing, MEASURED by stashing and re-running).
+What landed: Farcaster senders are excluded from the Quorum member ladder and
+keep their own name, decided per sender so a bound space channel mixing casts
+with Quorum messages resolves each correctly. A Farcaster display name can no
+longer wear the reserved `.q` suffix. The linked-Quorum badge is wired into the
+1:1 Farcaster DM header, and the header bar grows rather than clipping when it
+does.
 
-Not yet confirmed on a device. That remains the gap: the tests prove the right
-string is chosen and the right guard applies, not that the two-line header lays
-out correctly on a real screen. See `.agents/docs/ios-verification-checklist.md`
-item 16.
+Written up first, then revised after a six-angle review (correctness,
+silent-failure, security, tests, comments, mobile-platform). The review found
+two real defects in the first cut — one of them a security regression the fix
+itself introduced — plus a flaw in the tests, and all are closed above.
+
+Verification: 14 new tests, each MEASURED red against the specific guard
+removed, with the pre-existing tests in the same files staying green throughout
+(a controlled arm, not just "the suite is green"). Suite 1140/1140. `tsc`
+unchanged at the 12 pre-existing errors. Lint on the touched files identical
+before and after, MEASURED by stashing and re-running.
+
+Still to confirm on a device: that the two-line header lays out correctly on a
+real screen. Tests prove the right string is chosen and the right guard applies;
+they cannot prove rendering. Tracked as item 16 in
+`ios-verification-checklist.md` rather than holding this issue open, since the
+residual risk is cosmetic, self-announcing, and already mitigated by the
+`minHeight` change.
 
 ## What the review changed
 

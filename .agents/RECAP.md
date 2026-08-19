@@ -10,7 +10,7 @@ updated: 2026-08-19
 
 ## Dashboard
 
-> Updated: 2026-08-19 · 71 live · 56 startable · 7 nearly done · 8 blocked
+> Updated: 2026-08-19 · 72 live · 58 startable · 7 nearly done · 8 blocked
 
 **Next step:** Work out why this device can key none of the Spaces it imported — they arrive from the config blob and cannot be decrypted at all.
 
