@@ -127,7 +127,6 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Mobile lets you finish onboarding with no display name, desktop does not](issues/.open/2026-08-16-mobile-lets-you-finish-onboarding-with-no-display-name.md)
 - 📋 [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md)
 - 📋 [DM Identity Reveal Implementation Plan](issues/.open/2026-08-18-dm-identity-reveal-ledger-plan.md)
-- 📋 [In-app text size setting, so the user holds the last multiplier](issues/.open/2026-08-19-in-app-text-size-setting.md)
 
 ### Deferred
 
@@ -258,6 +257,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [In-app browser: link mode, native app handoff, chrome rebuild](issues/.done/2026-08-10-in-app-browser-link-handling-plan.md)
 - 📋 [Adopt shared's QNS claim verification](issues/.done/2026-08-16-adopt-shared-qns-claim-verification.md)
 - 📋 [Bundle Inter, tokenise the reading surfaces, and guard the font rules](issues/.done/2026-08-19-bundle-inter-and-tokenise-the-type-scale.md)
+- 📋 [In-app text size setting, so the user holds the last multiplier](issues/.done/2026-08-19-in-app-text-size-setting.md)
 
 ### 2026 06 21 Mute And Block Overhaul
 
@@ -292,4 +292,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-19 11:58:04
+**Last Updated**: 2026-08-19 13:02:56

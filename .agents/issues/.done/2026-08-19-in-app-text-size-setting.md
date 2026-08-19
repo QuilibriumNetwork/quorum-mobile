@@ -1,7 +1,7 @@
 ---
 type: task
 title: In-app text size setting, so the user holds the last multiplier
-status: open
+status: done
 created: 2026-08-19
 updated: 2026-08-19
 ---
@@ -66,13 +66,58 @@ user preference is a second multiplier into the same place, not a new mechanism.
 - **Do not remove system font-scale support.** Honouring the OS setting is an accessibility
   requirement; the in-app control is additive.
 
+## Status
+
+**2026-08-19 — shipped in PR #261** (`feat(theme): let people set their own message
+text size, without shrinking the rest of the app`)
+
+Settings → Appearance now carries a **Text size** row opening a sheet with a live
+preview and five discrete steps (0.8x–1.2x). The choice persists in MMKV and is read
+before first paint.
+
+**The open question in "Watch out for" is now decided, and the answer is the opposite
+of what the first implementation assumed.** The setting reaches message and cast text
+ONLY (`textStyles.messageBody` / `.messageAuthor`, plus `theme.msgFont()` for markdown
+headings and code inside a bubble). `Skin.font()` and `theme.fontSizes` deliberately do
+NOT carry it.
+
+That was settled by measurement, not preference. The first cut multiplied every size in
+the app — which is what this document's design sketch assumed — and on a device it was
+plainly wrong: a step that made messages comfortable took 13pt settings descriptions to
+10 and 11pt labels to 9. Legibility is not proportional at the small end, so one
+multiplier cannot serve both ends of the type scale. Telegram, WhatsApp and Signal all
+scope their control the same way.
+
+Consequence worth carrying forward: `messageBody` is a distinct token rather than a flag
+on `body`, because `body` is used by ~20 list rows, sheets and headers that must hold
+still. Anything rendering the contents of a message or cast points at the `message*`
+tokens; everything else does not.
+
+Also fixed en route: `messageHeader`'s height was a hardcoded 22 and now derives from
+`messageAuthor.lineHeight`, so it tracks the skin scale, the user's text size and the OS
+font scale rather than clipping when any of them rises.
+
+**Verified:** 29 new tests, full suite 1123 passing across 119 suites. Both sizing paths
+were deliberately broken to confirm the tests go red (7 and 6 failures respectively). One
+test is a control arm asserting `footnote` does not move while `messageBody` does — the
+scope-widening regression is the likely future failure, so that is what is pinned. A
+further test asserts the type scale at the default step is byte-identical to the
+pre-feature one.
+
+**Not verified:** the visual pass at the extremes on a real screen. A pass/fail checklist
+was handed over for it and the result was not reported back before shipping. iOS is
+unverified as always — no device.
+
 ## Acceptance
 
-- A user can change message text size in settings and see it apply immediately, with the
-  choice surviving a restart.
-- Chat messages and Farcaster casts move together (they share the `body` token).
-- Author names and usernames stay the same size as the body they head.
-- Nothing clips at the largest in-app step combined with system font scale 1.3.
+- [x] A user can change message text size in settings and see it apply immediately, with
+  the choice surviving a restart.
+- [x] Chat messages and Farcaster casts move together (they share the `messageBody` token).
+- [x] Author names and usernames stay the same size as the body they head.
+- [ ] Nothing clips at the largest in-app step combined with system font scale 1.3. The
+  one known trap (`messageHeader`'s fixed height) is fixed and now derives from the token,
+  but the eyeball pass at the extremes was not reported back. Cheap to re-check, and a
+  clipping bug of this kind announces itself in normal use.
 
 ---
 

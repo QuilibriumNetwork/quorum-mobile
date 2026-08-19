@@ -10,7 +10,7 @@ updated: 2026-08-19
 
 ## Dashboard
 
-> Updated: 2026-08-19 · 72 live · 57 startable · 6 nearly done · 8 blocked
+> Updated: 2026-08-19 · 71 live · 56 startable · 7 nearly done · 8 blocked
 
 **Next step:** Work out why this device can key none of the Spaces it imported — they arrive from the config blob and cannot be decrypted at all.
 
@@ -24,7 +24,6 @@ updated: 2026-08-19
 | 4 | [Messages DB refuses to open on identity mismatch](issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md) | The user sees empty chats and is told nothing. Indistinguishable from having lost their history. **The trigger that made this reachable in normal use shipped as #258**, so what is left is the guard itself: it trusts a boolean flag rather than the file, and cannot count rows in a file it cannot decrypt. |
 | 5 | [The signing-key cache can outlive its identity](issues/.open/2026-08-18-signing-key-cache-can-outlive-the-identity-it-belongs-to.md) | Same defect #258 just fixed on the encryption key, on the Ed448 signing key. No consumer path reaches it today — every one is gated behind being authenticated — so it is latent rather than live. Filed low, but it sits in key handling, and "unreachable today" is one refactor from reachable. |
 | 6 | [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md) | **Half shipped 2026-08-17 (quorum-shared #83), so the urgent part is gone** — desktop's claim lookup can no longer hang. What is left is mobile-side cleanup and is not blocking anything: publish shared, bump, then retire mobile's own chunk-and-zip loop. Mobile imports none of those entry points today, so the bump is inert for QNS; the better reason to do it is that `2.1.0-43` predates #82's log-redaction fix. |
-| 7 | [In-app text size setting](issues/.open/2026-08-19-in-app-text-size-setting.md) | Not a defect, and ranked below the six above for that reason — but explicitly asked for, and PR #260 is the argument. A base size correct at system font scale 1.0 is always ~15% larger than a scale-ignoring app (Telegram sizes through `dp()`) on a handset set to 1.15, so no default satisfies both and the question keeps reopening. The groundwork shipped with #260: the reading surfaces already resolve through `theme.textStyles`, and `makeTextStyles` already takes a scale. |
 
 ### Nearly done — needs a check
 
@@ -34,6 +33,7 @@ updated: 2026-08-19
 - [DM self-echo: phantom row wears my identity](issues/.open/2026-06-26-dm-self-profile-overwrites-partner-row.md) — root-caused and fixed in PR #186 on 2026-07-27, with an explicit instruction not to close until the row is confirmed gone on device. Still unconfirmed, three weeks on.
 - [Verify a claimed .q name receiver-side](issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md) — shipped in PR #249 and now structural: the identity model carries verified names only, so an unverified claim has nowhere to live.
 - [QNS names and the identity coverage instrument](issues/.open/2026-08-04-qns-names-and-the-identity-coverage-instrument.md) — the surface list is done, and an audit test now fails on any file reading a raw name field, so the list cannot silently regrow.
+- [In-app text size setting](issues/.done/2026-08-19-in-app-text-size-setting.md) — shipped in PR #261, tested by 29 tests including a control arm that pins the scope. One acceptance item is unticked: the eyeball pass for clipping at the largest step combined with system font scale 1.3. The known trap (`messageHeader`'s hardcoded height) is fixed and now derives from the token, so this is a look, not an investigation.
 
 ### Blocked
 
