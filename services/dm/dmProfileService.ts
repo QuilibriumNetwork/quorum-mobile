@@ -410,6 +410,64 @@ export async function onDeliberateDmSend(
   }
 }
 
+// One auto-reveal per partner per hour. An init envelope can be REDELIVERED
+// (the receive path bounds replays but does not eliminate them), and each
+// one looks like "a new session appeared" — without this, a flapping inbox
+// turns one new device into a push storm.
+const AUTO_REVEAL_DEBOUNCE_MS = 60 * 60 * 1000;
+const autoRevealLastFired = new Map<string, number>();
+
+/** Test hook: the debounce map is process-lifetime state. */
+export function __resetAutoRevealDebounce(): void {
+  autoRevealLastFired.clear();
+}
+
+/**
+ * A partner just opened a NEW inbound session at us (their new device, or a
+ * reinstall). If the ledger says we already deliberately revealed to them,
+ * answer immediately — consent belongs to the relationship, not the session,
+ * so their fresh device should not have to wait for our next rename or
+ * reply. If the ledger says stranger: total silence.
+ *
+ * `deps` is deliberately the narrow `DMBroadcastDeps`, not `SendProfileDeps`:
+ * this is called from a long-lived receive callback in WebSocketContext.tsx
+ * that must never hold more than `{ enqueueOutbound, subscribe }` across a
+ * render (see that file's stale-closure note on `fullUserAddrRef`). The rest
+ * of what a real send needs — device keyset, api client, gate store — is
+ * assembled here via `buildSendProfileDeps`, the same shape
+ * `onDeliberateDmSend` already uses for the same reason.
+ */
+export async function autoRevealOnInboundSession(
+  partnerAddress: string,
+  payload: DMProfilePayload,
+  deps: DMBroadcastDeps,
+  getMessages: (p: {
+    spaceId: string;
+    channelId: string;
+    limit?: number;
+  }) => Promise<{ messages: { content?: { senderId?: string } }[] }>,
+): Promise<void> {
+  try {
+    const now = Date.now();
+    const last = autoRevealLastFired.get(partnerAddress) ?? 0;
+    if (now - last < AUTO_REVEAL_DEBOUNCE_MS) return;
+
+    const revealed = await ensureRevealBootstrap(payload.selfAddress, partnerAddress, getMessages);
+    if (!revealed) return;
+
+    autoRevealLastFired.set(partnerAddress, now);
+    // The gate may hold "already announced 3x" from before this session
+    // existed — that record is about OLD sessions and must not gag the new one.
+    clearDmProfileBroadcastState(payload.selfAddress, partnerAddress);
+
+    const sendDeps = await buildSendProfileDeps(deps);
+    if (!sendDeps) return;
+    await sendProfileToPartner(partnerAddress, payload, sendDeps);
+  } catch {
+    // Best-effort. The reply trigger and on-connect sweep remain as backstops.
+  }
+}
+
 /**
  * Broadcast a global profile change to every direct-DM partner with whom we
  * have (or can establish) an encryption session.

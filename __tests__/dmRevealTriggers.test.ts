@@ -8,8 +8,16 @@
  * (`ensureRevealBootstrap`) runs unmocked, deriving consent from the mocked
  * message history exactly as it would from real local history.
  */
-import { broadcastProfileToAllDMs, onDeliberateDmSend } from '../services/dm/dmProfileService';
-import { clearReveal, hasRevealedTo } from '../services/dm/dmRevealLedger';
+import {
+  broadcastProfileToAllDMs,
+  onDeliberateDmSend,
+  autoRevealOnInboundSession,
+  __resetAutoRevealDebounce,
+  buildSendProfileDeps,
+  sendProfileToPartner,
+} from '../services/dm/dmProfileService';
+import { clearReveal, hasRevealedTo, recordReveal } from '../services/dm/dmRevealLedger';
+import { MAX_SENDS_PER_IDENTITY, RESEND_INTERVAL_MS } from '../services/dm/dmProfileGate';
 
 const SELF = 'QmMeMeMeEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imzzzz';
 const FRIEND = 'QmPeerAEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imzzzz';
@@ -98,3 +106,73 @@ describe('reveal-on-reply', () => {
     expect(mockSendSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('auto-reveal on inbound new session', () => {
+  beforeEach(() => {
+    mockSendSpy.mockClear();
+    clearReveal(SELF);
+    __resetAutoRevealDebounce();
+  });
+
+  it('announces immediately to a REVEALED partner (friend on a new device)', async () => {
+    recordReveal(SELF, FRIEND, 1_000);
+    await autoRevealOnInboundSession(FRIEND, payload(), deps(), historyWithSelfMessage());
+    expect(mockSendSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays SILENT for a stranger opening a session at us', async () => {
+    await autoRevealOnInboundSession(STRANGER, payload(), deps(), inboundOnlyHistory());
+    expect(mockSendSpy).not.toHaveBeenCalled(); // ← the control arm
+  });
+
+  it('debounces per partner: a redelivered init envelope fires no second push', async () => {
+    recordReveal(SELF, FRIEND, 1_000);
+    await autoRevealOnInboundSession(FRIEND, payload(), deps(), historyWithSelfMessage());
+    await autoRevealOnInboundSession(FRIEND, payload(), deps(), historyWithSelfMessage());
+    expect(mockSendSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Task 6 gap: clearDmProfileBroadcastState-on-transition had no test that
+  // could catch its own regression. autoRevealOnInboundSession clears the
+  // same per-partner send-gate on its own trigger, so this exercises that
+  // clear through a real exhausted gate rather than reaching into storage
+  // internals: three real sends (the gate's own MAX_SENDS_PER_IDENTITY cap)
+  // exhaust it, a fourth is refused, then the auto-reveal path still gets
+  // through because it clears the exhausted record first.
+  it('clears an exhausted send-gate on the auto-reveal path too', async () => {
+    recordReveal(SELF, FRIEND, 1_000);
+    const p = payload();
+    const baseDeps = await buildSendProfileDeps(deps());
+    expect(baseDeps).not.toBeNull();
+    if (!baseDeps) return;
+
+    let t = 1_000;
+    for (let i = 0; i < MAX_SENDS_PER_IDENTITY; i++) {
+      await sendProfileToPartner(FRIEND, p, { ...baseDeps, now: t });
+      t += RESEND_INTERVAL_MS;
+    }
+    mockSendSpy.mockClear();
+
+    // Confirm the gate really is exhausted before leaning on it: a
+    // same-signature send at the same cadence is refused.
+    const blocked = await sendProfileToPartner(FRIEND, p, { ...baseDeps, now: t });
+    expect(blocked).toBe(false);
+    expect(mockSendSpy).not.toHaveBeenCalled();
+
+    await autoRevealOnInboundSession(FRIEND, p, deps(), historyWithSelfMessage());
+    expect(mockSendSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+function payload() {
+  return { selfAddress: SELF, displayName: 'Me', userIcon: 'icon' };
+}
+function deps() {
+  return { enqueueOutbound: jest.fn(), subscribe: jest.fn() };
+}
+function historyWithSelfMessage() {
+  return async () => ({ messages: [{ content: { senderId: SELF } }] });
+}
+function inboundOnlyHistory() {
+  return async () => ({ messages: [{ content: { senderId: STRANGER } }] });
+}
