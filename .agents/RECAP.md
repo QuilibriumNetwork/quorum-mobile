@@ -1,16 +1,16 @@
 ---
 type: recap
 title: "Quorum Mobile — Project State"
-updated: 2026-08-18
+updated: 2026-08-19
 ---
 
 # Quorum Mobile — Project State
 
-> Last updated: 2026-08-18
+> Last updated: 2026-08-19
 
 ## Dashboard
 
-> Updated: 2026-08-18 · 73 live · 57 startable · 5 nearly done · 8 blocked
+> Updated: 2026-08-19 · 73 live · 56 startable · 6 nearly done · 8 blocked
 
 **Next step:** Work out why this device can key none of the Spaces it imported — they arrive from the config blob and cannot be decrypted at all.
 
@@ -22,12 +22,12 @@ updated: 2026-08-18
 | 2 | [Messages queued while offline are lost if the process dies](issues/.open/2026-08-01-outbound-queue-lost-on-app-restart.md) | Silent loss of something the user already pressed send on. Reads well above its `medium` grade. |
 | 3 | [A member's profile shows somebody else's Farcaster account](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md) | Two members' identities are mixed in storage, and the UI offers to open the wrong person's external profile. |
 | 4 | [Messages DB refuses to open on identity mismatch](issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md) | The user sees empty chats and is told nothing. Indistinguishable from having lost their history. **The trigger that made this reachable in normal use shipped as #258**, so what is left is the guard itself: it trusts a boolean flag rather than the file, and cannot count rows in a file it cannot decrypt. |
-| 5 | [Public invite: regenerate lies, and non-owners are offered it](issues/.open/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md) | The button claims to invalidate the old link and does not, so a shared link stays live after you believe you killed it. |
-| 6 | [The signing-key cache can outlive its identity](issues/.open/2026-08-18-signing-key-cache-can-outlive-the-identity-it-belongs-to.md) | Same defect #258 just fixed on the encryption key, on the Ed448 signing key. No consumer path reaches it today — every one is gated behind being authenticated — so it is latent rather than live. Filed low, but it sits in key handling, and "unreachable today" is one refactor from reachable. |
-| 7 | [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md) | **Half shipped 2026-08-17 (quorum-shared #83), so the urgent part is gone** — desktop's claim lookup can no longer hang. What is left is mobile-side cleanup and is not blocking anything: publish shared, bump, then retire mobile's own chunk-and-zip loop. Mobile imports none of those entry points today, so the bump is inert for QNS; the better reason to do it is that `2.1.0-43` predates #82's log-redaction fix. |
+| 5 | [The signing-key cache can outlive its identity](issues/.open/2026-08-18-signing-key-cache-can-outlive-the-identity-it-belongs-to.md) | Same defect #258 just fixed on the encryption key, on the Ed448 signing key. No consumer path reaches it today — every one is gated behind being authenticated — so it is latent rather than live. Filed low, but it sits in key handling, and "unreachable today" is one refactor from reachable. |
+| 6 | [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md) | **Half shipped 2026-08-17 (quorum-shared #83), so the urgent part is gone** — desktop's claim lookup can no longer hang. What is left is mobile-side cleanup and is not blocking anything: publish shared, bump, then retire mobile's own chunk-and-zip loop. Mobile imports none of those entry points today, so the bump is inert for QNS; the better reason to do it is that `2.1.0-43` predates #82's log-redaction fix. |
 
 ### Nearly done — needs a check
 
+- [Public invite never reaches existing members, and non-owners are offered a dead button](issues/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md) — **the whole mobile half shipped in PR #259**: propagation, the false "invalidates the old link" copy, and the gating. What is left is not mobile work. Desktop still never broadcasts its own generated link, shared still derives the invite domain from `window.location`, and the acceptance test is inherently cross-client — one client generates, the other's members must see it appear. Unit tests cannot reach that failure mode, because it is silent: the link simply never arrives.
 - [A persisted query cache crashes the channel screen](issues/2026-08-16-persisted-query-cache-turns-a-map-into-an-object-and-crashes-the-channel.md) — shipped in PR #249 and **the only fix on that branch with no device observation behind it.** It is a crash, so check this one first: open the channel that crashed, on a fresh build.
 - [Broadcast .q claims never reach the identity ladder](issues/2026-08-16-broadcast-q-claims-never-render-after-the-identity-migration.md) — shipped in PR #249, unit-verified by 11 tests covering the impersonation refusal and the DM path. Held open deliberately.
 - [DM self-echo: phantom row wears my identity](issues/.open/2026-06-26-dm-self-profile-overwrites-partner-row.md) — root-caused and fixed in PR #186 on 2026-07-27, with an explicit instruction not to close until the row is confirmed gone on device. Still unconfirmed, three weeks on.
@@ -64,7 +64,7 @@ Two whole workstreams are stalled on things outside this repo: `.q` publishing i
 |-------|--------|-------------|------|
 | Profile screen — single pill-row navigation | 🔄 in progress | `profile-pill-navigation` (branch confirmed present 2026-08-16) | [→](issues/.open/2026-06-20-profile-pill-navigation.md) |
 
-> The six files in the root of `issues/` are **not** in flight in the working sense. Every one of them shipped in PR #248 or #249 and is held open for a device check or a remaining sub-task. They appear under "Nearly done" and "Blocked" above.
+> The seven files in the root of `issues/` are **not** in flight in the working sense. Every one of them shipped in PR #248, #249 or #259 and is held open for a device check or a remaining sub-task. They appear under "Nearly done" and "Blocked" above.
 
 ---
 

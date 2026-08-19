@@ -28,6 +28,7 @@ This is the main index for all documentation, bug reports, and task management.
 ### In Progress
 
 - 🐛 [Space calls never start, and every failed start leaves a permanent banner](issues/2026-08-10-space-calls-dead-endpoints-and-stale-banner.md)
+- 🐛 [Public invite: 'Generate New Link' claims to invalidate the old link, is offered to non-owners, and never propagates the URL](issues/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md)
 - 🐛 [Broadcast `.q` claims never reach the identity ladder](issues/2026-08-16-broadcast-q-claims-never-render-after-the-identity-migration.md)
 - 🐛 [A persisted query cache turns the claim-records Map into `{}` and crashes the channel screen](issues/2026-08-16-persisted-query-cache-turns-a-map-into-an-object-and-crashes-the-channel.md)
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
@@ -92,7 +93,6 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [The toggle is local state that never reconciles with the server](issues/.open/2026-08-06-public-profile-toggle-on-with-nothing-published.md)
 - 🐛 [`POST /users/:addr/public-profile` refuses any `primary_username`](issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md)
 - 🐛 [Somebody else can take your name away, and nothing tells you](issues/.open/2026-08-09-a-delegated-name-can-be-revoked-and-you-are-the-last-to-know.md)
-- 🐛 [Public invite: 'Generate New Link' claims to invalidate the old link, is offered to non-owners, and never propagates the URL](issues/.open/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md)
 - 🐛 [QuorumIdentityBadge fires an uncapped fid-link lookup for every rendered cast](issues/.open/2026-08-13-quorum-identity-badge-fires-an-uncapped-fid-link-lookup-per-cast.md)
 - 🐛 [The cached Ed448 signing key can outlive the identity it belongs to, the same way the SQLCipher key did](issues/.open/2026-08-18-signing-key-cache-can-outlive-the-identity-it-belongs-to.md)
 - 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
@@ -126,6 +126,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Add the global "Always sign Direct Messages" toggle to mobile settings](issues/.open/2026-08-07-no-global-always-sign-dms-toggle-on-mobile.md)
 - 📋 [Mobile lets you finish onboarding with no display name, desktop does not](issues/.open/2026-08-16-mobile-lets-you-finish-onboarding-with-no-display-name.md)
 - 📋 [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md)
+- 📋 [DM Identity Reveal Implementation Plan](issues/.open/2026-08-18-dm-identity-reveal-ledger-plan.md)
 
 ### Deferred
 
@@ -288,4 +289,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-18 17:05:46
+**Last Updated**: 2026-08-19 09:15:05

@@ -5,7 +5,7 @@ status: in-progress
 priority: high
 ai_generated: true
 created: 2026-08-11
-updated: 2026-08-18
+updated: 2026-08-19
 ---
 
 # Public invite: 'Generate New Link' claims to invalidate the old link, is offered to non-owners, and never propagates the URL
@@ -23,6 +23,50 @@ Do not implement this issue as a mobile-only change.
 Desktop reference doc: `quorum-desktop/.agents/docs/features/invite-system-analysis.md`
 (the "What Republish is actually for" callout at line 263 already flags mobile's
 caption as misleading, and was never actioned on this side).
+
+## Status
+
+**2026-08-19 — mobile half shipped in PR #259**
+(`fix(invite): a public link now reaches existing members, and members can share it`)
+
+What landed: all three findings fixed on the mobile side. `generatePublicInviteLink`
+now sets `inviteUrl` and `modifiedDate` before serialization (3a) and sends a
+`space-manifest` control message built from the *same* manifest object it POSTs
+(3b), with `enqueueOutbound` a required parameter so the broadcast cannot be
+omitted. The false "invalidate the old link" copy is gone, replaced by
+"Link not working? Republish" (1). Gating moved into
+`hooks/chat/useCanInviteToSpace.ts` and is wired into all three entry points,
+with `InviteModal` branching to a read-only member view (2).
+
+Three defects found while implementing, all fixed in the same PR:
+
+- `InviteModal` loaded a stored link on truthiness, so after any kick it
+  displayed `kickUser`'s dead `quorum://join` URL and offered it to Copy/Share —
+  the exact hazard this issue warned about, in a place the issue had not
+  identified.
+- `VALID_INVITE_PREFIXES` pinned `localhost:3000` while the web client had moved
+  to Vite's `:5173`, so a genuinely published dev link failed `isPublicInvite()`
+  and vanished behind a Generate button.
+- A failed republish rendered nothing, because the error banner existed only in
+  the generate view.
+
+Verification: 31 new tests across four files, each checked red-on-revert; full
+suite 1094 passing; typecheck and lint clean. An independent review pass traced
+the ephemeral-key alignment, the `modifiedDate` watermark, the failure ordering
+and the localhost regex (including subdomain-confusion attempts) and found no
+defects.
+
+Still open:
+
+1. **Desktop 3b** — `InvitationService.generateNewInviteLink` still saves
+   locally with no broadcast. Tracked in the desktop counterpart issue.
+2. **Canonical invite domain** — shared's `getInviteUrlBase` still derives the
+   domain from `window.location`. Mobile needs no change; desktop and shared do.
+3. **The cross-client acceptance test has NOT been run**, and it is this issue's
+   real pass/fail criterion. Neither repo can prove its half alone: the whole
+   point is that one client's broadcast reaches the other's members. Do not
+   close this issue on the mobile unit tests — they cannot reach the failure
+   mode, which is silent (the link simply never appears).
 
 ## Symptoms
 
