@@ -25,7 +25,7 @@ import { logger, type DMUpdateProfileMessage, type Message } from '@quilibrium/q
 import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
 import { getDeviceKeyset, type DeviceKeyset } from '../onboarding/secureStorage';
-import { ensureRevealBootstrap } from './dmRevealLedger';
+import { ensureRevealBootstrap, hasRevealedTo, recordReveal } from './dmRevealLedger';
 import {
   readGateRecord,
   shouldSendProfile,
@@ -369,6 +369,45 @@ export async function buildSendProfileDeps(
     toAllDeviceInfos,
     sendEncryptedMessageToAllDevices,
   };
+}
+
+/**
+ * Called after a successful chat/embed send in a DM. THE deliberate act the
+ * privacy rule keys on: replying (or initiating) is consent to be seen.
+ *
+ * On the ledger's unset->set transition the partner's send-gate is CLEARED
+ * first: the gate may be exhausted from the era when cross-client pushes
+ * were silently eaten, and an exhausted gate must not block the one reveal
+ * the user just consented to. Fire-and-forget; never throws into the send
+ * path that calls it — a failed identity push must never surface as a failed
+ * message send.
+ *
+ * Takes the same `DMBroadcastDeps` shape the two send hooks already hold
+ * (`enqueueOutbound`/`subscribe` from `useWebSocket`) and assembles the rest
+ * of `sendProfileToPartner`'s `SendProfileDeps` itself via
+ * `buildSendProfileDeps` — a send hook has no reason to know how to build a
+ * device keyset / api client / gate store just to fire this one push.
+ *
+ * If already revealed: no-op. The ledger already reflects consent, so this
+ * returns immediately without touching the gate or the wire — the common
+ * case on every message after the first reply to a given partner.
+ */
+export async function onDeliberateDmSend(
+  partnerAddress: string,
+  payload: DMProfilePayload,
+  deps: DMBroadcastDeps,
+): Promise<void> {
+  try {
+    if (hasRevealedTo(payload.selfAddress, partnerAddress)) return;
+    recordReveal(payload.selfAddress, partnerAddress, Date.now());
+    clearDmProfileBroadcastState(payload.selfAddress, partnerAddress);
+    const sendDeps = await buildSendProfileDeps(deps);
+    if (!sendDeps) return;
+    await sendProfileToPartner(partnerAddress, payload, sendDeps);
+  } catch {
+    // Never break a message send over an identity push; the on-connect
+    // sweep retries through the (now-open) gate.
+  }
 }
 
 /**

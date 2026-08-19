@@ -8,8 +8,8 @@
  * (`ensureRevealBootstrap`) runs unmocked, deriving consent from the mocked
  * message history exactly as it would from real local history.
  */
-import { broadcastProfileToAllDMs } from '../services/dm/dmProfileService';
-import { clearReveal } from '../services/dm/dmRevealLedger';
+import { broadcastProfileToAllDMs, onDeliberateDmSend } from '../services/dm/dmProfileService';
+import { clearReveal, hasRevealedTo } from '../services/dm/dmRevealLedger';
 
 const SELF = 'QmMeMeMeEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imzzzz';
 const FRIEND = 'QmPeerAEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imzzzz';
@@ -75,5 +75,26 @@ describe('broadcast sweep x reveal ledger', () => {
     const targets = mockSendSpy.mock.calls.map((c) => c[1]);
     expect(targets).toContain(FRIEND);
     expect(targets).not.toContain(STRANGER); // <- the control arm
+  });
+});
+
+describe('reveal-on-reply', () => {
+  beforeEach(() => {
+    mockSendSpy.mockClear();
+    clearReveal(SELF);
+  });
+
+  it('first deliberate send: sets the ledger and fires exactly one identity push', async () => {
+    const deps = { enqueueOutbound: jest.fn(), subscribe: jest.fn() };
+
+    await onDeliberateDmSend(STRANGER, { selfAddress: SELF, displayName: 'Me', userIcon: 'icon' }, deps);
+    expect(hasRevealedTo(SELF, STRANGER)).toBe(true);
+    expect(mockSendSpy).toHaveBeenCalledTimes(1);
+
+    // Second send in the same conversation: ledger already set -> no further push.
+    // This is the dedup arm — a version that pushed on every send would still
+    // pass the first half of this test but fail here.
+    await onDeliberateDmSend(STRANGER, { selfAddress: SELF, displayName: 'Me', userIcon: 'icon' }, deps);
+    expect(mockSendSpy).toHaveBeenCalledTimes(1);
   });
 });

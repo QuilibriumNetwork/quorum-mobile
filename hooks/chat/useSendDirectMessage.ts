@@ -657,6 +657,28 @@ export function useSendDirectMessage() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.all('direct'),
       });
+
+      // Reveal-on-reply: replying IS the deliberate act the DM privacy rule
+      // keys on. Fire-and-forget, no rejection handler attached — see
+      // onDeliberateDmSend's docstring for why this can never surface as a
+      // failed send. `user` here is the same closure-captured value already
+      // read above (senderId, user?.displayName) and in onMutate/onError; it
+      // is not a fresh context read, so there is no stale-closure risk beyond
+      // what those call sites already accept.
+      if (user?.address) {
+        void import('@/services/dm/dmProfileService').then(({ onDeliberateDmSend }) =>
+          onDeliberateDmSend(
+            recipientAddress,
+            {
+              selfAddress: user.address,
+              displayName: user.displayName || undefined,
+              userIcon: user.profileImage || undefined,
+              primaryUsername: user.primaryUsername ?? undefined,
+            },
+            { enqueueOutbound, subscribe },
+          ),
+        );
+      }
     },
 
     // No onSettled invalidate. Trust the optimistic cache + per-handler
