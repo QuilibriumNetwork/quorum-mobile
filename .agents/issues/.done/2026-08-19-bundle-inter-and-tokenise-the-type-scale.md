@@ -1,7 +1,7 @@
 ---
 type: task
 title: Bundle Inter, tokenise the reading surfaces, and guard the font rules
-status: in-progress
+status: done
 created: 2026-08-19
 updated: 2026-08-19
 ---
@@ -94,6 +94,21 @@ Failure is non-fatal by design — React Native falls back to the platform font,
 shipped before Inter existed here.
 
 ## Status
+
+**2026-08-19 — shipped in PR #260** (`feat(theme): bundle Inter so text renders the same
+everywhere, and fix message body drawing at 14`)
+
+What landed: five static Inter faces bundled and registered before first paint, 600 promoted
+to a first-class face, 101 orphan-weight blocks swept onto the bundled font, the reading
+surfaces routed through `theme.textStyles.body` / `.headline`, `Skin.fontFamily()` added for
+static skinnable stylesheets, and `yarn check:fonts` guarding both font mistakes.
+
+Still open, tracked elsewhere rather than here: **iOS is unverified** — no iOS device is
+available, and checklist item 15 in
+[ios-verification-checklist.md](../docs/ios-verification-checklist.md) is the only signal
+this work will get before release. Skins carrying an embedded font were also not exercised on
+device, and the font load time was never captured (the loader logs it; the log buffer rolled
+over before it was read).
 
 Complete on branch `feat/bundle-inter-and-chat-typography`.
 

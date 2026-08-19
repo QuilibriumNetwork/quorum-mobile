@@ -1,7 +1,7 @@
 ---
 type: bug
 title: Chat message body renders at React Native's default 14 with no line height
-status: in-progress
+status: done
 created: 2026-08-19
 updated: 2026-08-19
 ---
@@ -124,7 +124,21 @@ a future retune is one line in [theme/fonts.ts](../../theme/fonts.ts).
 
 ## Status
 
-Code change complete on branch `feat/bundle-inter-and-chat-typography`.
+**2026-08-19 — shipped in PR #260** (`feat(theme): bundle Inter so text renders the same
+everywhere, and fix message body drawing at 14`)
+
+What landed: message and link text carry an explicit 16/22 instead of falling through to
+React Native's built-in 14; usernames moved with them; markdown heading and code sizes
+followed. Confirmed on device by the reporter at system font scale 1.15, and at Android's
+maximum scale 1.3 with no clipping.
+
+The reporter still finds 16/22 slightly large **on his own handset**, which sits at font
+scale 1.15 while his comparison app (Telegram) sizes through `dp()` and never scales. That
+is a preference gap no single default can close, and it is the follow-up task's job — not a
+defect in this fix. The original defect (no size, no line height, falling back to 14) is
+closed.
+
+Code change was on branch `feat/bundle-inter-and-chat-typography`.
 
 - `npx tsc --noEmit` — no errors in either changed file. The errors it does report
   (`app/explore.tsx`, `components/BrowserModal.tsx`, `services/calling/*`) are pre-existing
