@@ -24,13 +24,20 @@
 import { logger, type DMUpdateProfileMessage, type Message } from '@quilibrium/quorum-shared';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
-import { getDeviceKeyset } from '../onboarding/secureStorage';
+import { getDeviceKeyset, type DeviceKeyset } from '../onboarding/secureStorage';
+import { ensureRevealBootstrap } from './dmRevealLedger';
 import {
   readGateRecord,
   shouldSendProfile,
   nextAttempts,
   type DmProfileGateRecord,
 } from './dmProfileGate';
+// Type-only: erased at compile time, so these carry none of the runtime cost
+// (native-module side effects, circular-import risk) that the VALUES from
+// these same modules are dynamically imported below to avoid.
+import type { UserRegistration } from '../api/quorumClient';
+import type { DeviceInfo } from '@/hooks/chat/useRecipientRegistration';
+import type { sendEncryptedMessageToAllDevices } from '@/hooks/chat/useSendDirectMessage';
 
 export interface DMProfilePayload {
   selfAddress: string;
@@ -55,6 +62,24 @@ export interface DMProfilePayload {
 export interface DMBroadcastDeps {
   enqueueOutbound: (prepareMessage: () => Promise<string[]>) => void;
   subscribe: (inboxAddresses: string[]) => Promise<void>;
+}
+
+/**
+ * Everything `sendProfileToPartner` needs beyond `partnerAddress` and
+ * `payload`. Built once per sweep in `broadcastProfileToAllDMs` (one MMKV
+ * store handle, one clock reading, one set of resolved dynamic-import
+ * bindings) and threaded through every partner in that sweep, so extracting
+ * the per-partner body out of the loop does not turn a single setup cost into
+ * a per-partner one.
+ */
+export interface SendProfileDeps extends DMBroadcastDeps {
+  store: MMKV;
+  /** One clock reading for the whole sweep — see broadcastProfileToAllDMs. */
+  now: number;
+  deviceKeyset: DeviceKeyset;
+  apiClient: { fetchUserRegistration: (address: string) => Promise<UserRegistration> };
+  toAllDeviceInfos: (registration: UserRegistration) => DeviceInfo[];
+  sendEncryptedMessageToAllDevices: typeof sendEncryptedMessageToAllDevices;
 }
 
 function generateNonce(): string {
@@ -210,6 +235,74 @@ export function clearDmProfileBroadcastState(selfAddress: string, partnerAddress
 // ── Send ─────────────────────────────────────────────────────────────────────
 
 /**
+ * Send the DM identity update to exactly one partner: dedup gate → fetch the
+ * partner's device registration → build the wire message → send → record the
+ * gate. Extracted from `broadcastProfileToAllDMs`'s loop body so Tasks 6-7 can
+ * invoke a single-partner send directly (reveal-on-reply, inbound-new-session
+ * auto-announce) without re-running the whole-sweep machinery.
+ *
+ * Returns true only once a frame was actually enqueued and the gate recorded
+ * — not merely "eligible to send" — so a caller can count real sends.
+ */
+export async function sendProfileToPartner(
+  partnerAddress: string,
+  payload: DMProfilePayload,
+  deps: SendProfileDeps,
+): Promise<boolean> {
+  const { store, now, deviceKeyset, apiClient, toAllDeviceInfos, sendEncryptedMessageToAllDevices } = deps;
+  const sig = payloadSignature(payload);
+
+  // Dedup + bounded retry. Almost always a no-op on the wire: an unchanged
+  // identity is re-sent at most MAX_SENDS_PER_IDENTITY times, spaced by
+  // RESEND_INTERVAL_MS, then never again until the signature changes.
+  const key = gateKey(payload.selfAddress, partnerAddress);
+  const { record, migrated } = readGate(store, key, now);
+  // Persist a migrated record even if we do not send, so it is anchored once
+  // and can age out from there rather than being re-anchored on every read.
+  if (migrated && record) writeGate(store, key, record);
+  if (!shouldSendProfile(record, sig, now)) return false;
+
+  try {
+    let allTargetDevices: DeviceInfo[] = [];
+    try {
+      const reg = await apiClient.fetchUserRegistration(partnerAddress);
+      if (reg) allTargetDevices = toAllDeviceInfos(reg);
+    } catch {
+      // Registration fetch failed — nothing to send this partner this round.
+    }
+    if (allTargetDevices.length === 0) return false;
+
+    const conversationId = `${partnerAddress}/${partnerAddress}`;
+    const message = buildDmProfileMessage(payload, partnerAddress);
+
+    await sendEncryptedMessageToAllDevices(
+      conversationId,
+      partnerAddress,
+      message,
+      allTargetDevices,
+      deps.enqueueOutbound,
+      deps.subscribe,
+      {
+        identityPublicKey: deviceKeyset.identityPublicKey,
+        inboxAddress: deviceKeyset.inboxAddress,
+        inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
+      },
+      payload.selfAddress,
+      payload.displayName,
+    );
+
+    // Record only after a successful enqueue so a throw retries next round.
+    // writeGate swallows storage errors on purpose — see its comment.
+    writeGate(store, key, { sig, at: now, attempts: nextAttempts(record, sig) });
+    return true;
+  } catch {
+    // Per-partner failure (no session, encrypt error) is non-fatal — the
+    // gate stays open for this partner so the next broadcast retries.
+    return false;
+  }
+}
+
+/**
  * Broadcast a global profile change to every direct-DM partner with whom we
  * have (or can establish) an encryption session.
  *
@@ -229,7 +322,7 @@ export async function broadcastProfileToAllDMs(
   // judged against the same instant rather than drifting across a long loop.
   const now = Date.now();
 
-  let deviceKeyset: Awaited<ReturnType<typeof getDeviceKeyset>>;
+  let deviceKeyset: DeviceKeyset | null;
   try {
     deviceKeyset = await getDeviceKeyset();
   } catch {
@@ -258,6 +351,18 @@ export async function broadcastProfileToAllDMs(
   const { getQuorumClient } = await import('@/services/api/quorumClient');
   const apiClient = getQuorumClient();
 
+  // Bundled once, threaded through every partner in this sweep — see the
+  // SendProfileDeps doc comment for why this is not a per-partner cost.
+  const sendDeps: SendProfileDeps = {
+    ...deps,
+    store,
+    now,
+    deviceKeyset,
+    apiClient,
+    toAllDeviceInfos,
+    sendEncryptedMessageToAllDevices,
+  };
+
   for (const conv of partners) {
     const partnerAddress = conv.address;
     // Skip rows we can't DM: missing address, ourselves, or Farcaster threads
@@ -265,58 +370,17 @@ export async function broadcastProfileToAllDMs(
     if (!partnerAddress || partnerAddress === payload.selfAddress) continue;
     if (conv.source === 'farcaster') continue;
 
-    // Dedup + bounded retry. Almost always a no-op on the wire: an unchanged
-    // identity is re-sent at most MAX_SENDS_PER_IDENTITY times, spaced by
-    // RESEND_INTERVAL_MS, then never again until the signature changes.
-    const key = gateKey(payload.selfAddress, partnerAddress);
-    const { record, migrated } = readGate(store, key, now);
-    // Persist a migrated record even if we do not send, so it is anchored once
-    // and can age out from there rather than being re-anchored on every read.
-    if (migrated && record) writeGate(store, key, record);
-    if (!shouldSendProfile(record, sig, now)) continue;
+    // Privacy: identity goes only to partners this user has DELIBERATELY
+    // messaged. A conversation row is created by a stranger's inbound
+    // message, so having a row is not consent — the reveal ledger is.
+    const revealed = await ensureRevealBootstrap(
+      payload.selfAddress,
+      partnerAddress,
+      (p) => adapter.getMessages(p),
+    );
+    if (!revealed) continue;
 
-    try {
-      let allTargetDevices: {
-        identityKey: number[];
-        signedPreKey: number[];
-        inboxAddress: string;
-        inboxEncryptionKey: number[];
-      }[] = [];
-      try {
-        const reg = await apiClient.fetchUserRegistration(partnerAddress);
-        if (reg) allTargetDevices = toAllDeviceInfos(reg);
-      } catch {
-        // Registration fetch failed — nothing to send this partner this round.
-      }
-      if (allTargetDevices.length === 0) continue;
-
-      const conversationId = `${partnerAddress}/${partnerAddress}`;
-      const message = buildDmProfileMessage(payload, partnerAddress);
-
-      await sendEncryptedMessageToAllDevices(
-        conversationId,
-        partnerAddress,
-        message,
-        allTargetDevices,
-        deps.enqueueOutbound,
-        deps.subscribe,
-        {
-          identityPublicKey: deviceKeyset.identityPublicKey,
-          inboxAddress: deviceKeyset.inboxAddress,
-          inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
-        },
-        payload.selfAddress,
-        payload.displayName,
-      );
-
-      // Record only after a successful enqueue so a throw retries next round.
-      // writeGate swallows storage errors on purpose — see its comment.
-      writeGate(store, key, { sig, at: now, attempts: nextAttempts(record, sig) });
-      sent += 1;
-    } catch {
-      // Per-partner failure (no session, encrypt error) is non-fatal — the
-      // gate stays open for this partner so the next broadcast retries.
-    }
+    if (await sendProfileToPartner(partnerAddress, payload, sendDeps)) sent += 1;
   }
 
   // The only externally visible evidence this ran. Until this line existed the
