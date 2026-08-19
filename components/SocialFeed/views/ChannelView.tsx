@@ -592,8 +592,9 @@ function createStyles(theme: AppTheme) {
     },
     castText: {
       color: theme.colors.textMain,
-      fontSize: Skin.font(15),
-      lineHeight: Skin.font(20),
+      fontFamily: theme.fonts.regular.fontFamily,
+      fontSize: Skin.font(17),
+      lineHeight: Skin.font(22),
     },
     imagePlaceholderBg: {
       backgroundColor: theme.colors.surface3,

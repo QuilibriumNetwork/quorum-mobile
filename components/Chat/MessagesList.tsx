@@ -1828,7 +1828,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: theme.colors.textStrong,
     fontFamily: theme.fonts.bold.fontFamily,
     fontWeight: theme.fonts.bold.fontWeight,
-    fontSize: Skin.font(16),
+    fontSize: Skin.font(17),
     lineHeight: Skin.font(22),
     marginRight: Skin.space(8),
     flexShrink: 1,
@@ -1846,7 +1846,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: theme.colors.textMain,
     marginTop: Skin.space(4),
     fontFamily: theme.fonts.regular.fontFamily,
-    fontSize: Skin.font(16),
+    fontSize: Skin.font(17),
     lineHeight: Skin.font(22),
   },
   messageWithLink: {
@@ -1861,7 +1861,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: theme.colors.primary,
     textDecorationLine: 'underline',
     fontFamily: theme.fonts.regular.fontFamily,
-    fontSize: Skin.font(16),
+    fontSize: Skin.font(17),
     lineHeight: Skin.font(22),
   },
   loadingText: {

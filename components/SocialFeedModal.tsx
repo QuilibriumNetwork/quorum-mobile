@@ -2805,7 +2805,7 @@ function ThreadDetailView({
             renderText={(t) => (
               <CastText
                 text={t}
-                style={{ color: theme.colors.textMain, fontSize: Skin.font(15), lineHeight: Skin.font(20) }}
+                style={{ color: theme.colors.textMain, fontFamily: theme.fonts.regular.fontFamily, fontSize: Skin.font(17), lineHeight: Skin.font(22) }}
                 theme={theme}
                 onMentionPress={handleMentionPress}
                 onChannelPress={onOpenChannel}
@@ -3761,7 +3761,7 @@ export function ProfileView({
               renderText={(t) => (
                 <CastText
                   text={t}
-                  style={{ color: theme.colors.textMain, fontSize: Skin.font(15), lineHeight: Skin.font(20) }}
+                  style={{ color: theme.colors.textMain, fontFamily: theme.fonts.regular.fontFamily, fontSize: Skin.font(17), lineHeight: Skin.font(22) }}
                   theme={theme}
                   onMentionPress={handleMentionPress}
                   onChannelPress={onOpenChannel}
@@ -4364,7 +4364,7 @@ function ChannelView({
               renderText={(t) => (
                 <CastText
                   text={t}
-                  style={{ color: theme.colors.textMain, fontSize: Skin.font(15), lineHeight: Skin.font(20) }}
+                  style={{ color: theme.colors.textMain, fontFamily: theme.fonts.regular.fontFamily, fontSize: Skin.font(17), lineHeight: Skin.font(22) }}
                   theme={theme}
                   onMentionPress={handleMentionPress}
                   onChannelPress={onOpenChannel}
@@ -8021,8 +8021,8 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     postContent: {
       color: theme.colors.textMain,
-      fontSize: Skin.font(15),
-      lineHeight: Skin.font(20),
+      fontSize: Skin.font(17),
+      lineHeight: Skin.font(22),
       fontFamily: theme.fonts.regular.fontFamily,
     },
     mediaContainer: {
