@@ -65,6 +65,8 @@ const SPACE_ID = 'space-1';
 
 let mockGetPublicProfile: jest.Mock;
 let mockResolveBatch: jest.Mock;
+/** Every address batch handed to the Apex lookup, newest call last. */
+const mockApexBatches: string[][] = [];
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -80,8 +82,16 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
+// Captures its argument rather than ignoring it. The commit filters Farcaster
+// senders out of the Apex batch too, and a mock that discards its input cannot
+// tell that apart from no filtering at all — such an assertion would pass
+// either way, which is worse than no assertion. The name must start with
+// `mock` for babel-plugin-jest-hoist to allow the factory to close over it.
 jest.mock('@/hooks/useApex', () => ({
-  useApexStatusForAddresses: () => new Set<string>(),
+  useApexStatusForAddresses: (addresses: string[]) => {
+    mockApexBatches.push(addresses);
+    return new Set<string>();
+  },
 }));
 
 jest.mock('@/context/SpaceCallContext', () => ({
@@ -211,15 +221,23 @@ function renderList(
 }
 
 beforeEach(() => {
+  mockApexBatches.length = 0;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  mockGetPublicProfile = jest.fn().mockResolvedValue({
+  // Address-AWARE, deliberately. A blanket `mockResolvedValue` answers for any
+  // argument, including a Farcaster fid — so under a reverted fix the ladder
+  // resolved a fid to "Alice Smith" and the Farcaster tests passed/failed for
+  // the wrong reason, pinning "the routing changed" rather than "the raw fid
+  // reached the screen". The server has no profile for a fid; this says so.
+  mockGetPublicProfile = jest.fn(async (address: string) =>
+    address?.startsWith('Qm') ? {
     display_name: 'Alice Smith',
     primary_username: 'alice',
     profile_image: '',
     bio: '',
     timestamp: 0,
     signature: '',
-  });
+    } : null,
+  );
   mockResolveBatch = jest.fn().mockResolvedValue([
     {
       header: { authorityKey: '0xabc', name: 'alice', parent: null, createdAt: 0, updatedAt: 0 },
@@ -297,6 +315,45 @@ describe('MessagesList — enrichment fan-out is bounded, not per-message', () =
     await new Promise((r) => setTimeout(r, 10));
     expect(mockGetPublicProfile).toHaveBeenCalledTimes(50);
   });
+
+  /**
+   * Farcaster senders must be removed BEFORE the cap is applied, not after.
+   *
+   * Filtering after slicing would pass every other test in this file and fail
+   * only here: the fids would occupy cap slots, and real Quorum members would
+   * silently lose their `.q` in exactly the busy bound channel where the cap
+   * starts to bind. The fixture puts the fids at the END of the array because
+   * `enrichableSenderAddresses` walks from the end (most recent first), so
+   * unfiltered they would take the FIRST 20 slots and displace real senders.
+   *
+   * `qnsLookupAddresses`'s own `isQuorumAddress` guard does not save us here —
+   * it screens `fid:`-prefixed conversation addresses, and these are `fc:`
+   * prefixed (a cast author) and bare (a DM sender), neither of which it
+   * matches.
+   */
+  it('drops Farcaster senders before the cap, so they cannot displace real members', async () => {
+    const quorum = Array.from({ length: 60 }, (_, i) =>
+      baseMessage({ id: `q-${i}`, userId: fakeAddress(i) }),
+    );
+    const farcaster = Array.from({ length: 20 }, (_, i) =>
+      baseMessage({ id: `f-${i}`, userId: `fc:${1000 + i}`, userName: `Caster ${i}` }),
+    );
+
+    renderList([...quorum, ...farcaster]);
+
+    // Still a full 50 REAL senders enriched, not 30.
+    await waitFor(() => expect(mockGetPublicProfile).toHaveBeenCalledTimes(50));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(mockGetPublicProfile).toHaveBeenCalledTimes(50);
+
+    const looked = mockGetPublicProfile.mock.calls.map(([a]) => a as string);
+    expect(looked.every((a) => a.startsWith('Qm'))).toBe(true);
+
+    // Same exclusion on the Apex batch, which is a separate code path.
+    const lastApexBatch = mockApexBatches[mockApexBatches.length - 1] ?? [];
+    expect(lastApexBatch).toHaveLength(60);
+    expect(lastApexBatch.some((a) => a.startsWith('fc:'))).toBe(false);
+  });
 });
 
 /**
@@ -307,9 +364,12 @@ describe('MessagesList — enrichment fan-out is bounded, not per-message', () =
  * A Farcaster sender's `userId` is a fid, not an address. Handing one to the
  * resolver does not fail loudly — no tier matches, so it falls through to the
  * truncating fallback, and `formatAddress` returns any string short enough to
- * need no truncation UNCHANGED. A fid is always short enough. The row
- * therefore rendered the raw fid where a name belongs, with every test green,
- * because nothing in the suite had ever rendered a Farcaster sender.
+ * need no truncation UNCHANGED. The threshold in `medium` mode is 11 chars
+ * (`start 6 + end 4 + 1`), which every fid in use today sits under — bare, up
+ * to 11 digits; `fid:`-prefixed, up to 7, i.e. ~10 million. Not a permanent
+ * guarantee, but far beyond Farcaster's current fid count. The row therefore
+ * rendered the raw fid where a name belongs, with every test green, because
+ * nothing in the suite had ever rendered a Farcaster sender.
  *
  * Both shapes are covered, because they look different in the data:
  *  - a Farcaster DM, where EVERY sender is a bare unprefixed fid and only the
@@ -327,41 +387,103 @@ describe('MessagesList — enrichment fan-out is bounded, not per-message', () =
 describe('MessagesList — Farcaster senders keep their Farcaster name', () => {
   it('renders the name carried on the message, not the fid, in a Farcaster DM', async () => {
     renderList(
-      [baseMessage({ userId: '1043504', userName: 'Vitalik' })],
+      [baseMessage({ userId: '9999001', userName: 'Cassie' })],
       {},
       undefined,
       true,
     );
 
-    await waitFor(() => expect(screen.getByText('Vitalik')).toBeTruthy());
-    // The exact string the truncating fallback produced before the fix.
-    expect(screen.queryByText('1043504')).toBeNull();
+    await waitFor(() => expect(screen.getByText('Cassie')).toBeTruthy());
+    // The raw fid — what the ladder's truncating fallback returns for a
+    // Farcaster id, and what shipped on screen before the fix.
+    expect(screen.queryByText('9999001')).toBeNull();
   });
 
   it('never fetches a Quorum profile for a fid', async () => {
     renderList(
-      [baseMessage({ userId: '1043504', userName: 'Vitalik' })],
+      [baseMessage({ userId: '9999001', userName: 'Cassie' })],
       {},
       undefined,
       true,
     );
 
-    await waitFor(() => expect(screen.getByText('Vitalik')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Cassie')).toBeTruthy());
     await new Promise((r) => setTimeout(r, 10));
     expect(mockGetPublicProfile).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A Farcaster `displayName` is free text its owner types. It renders in the
+   * same `messageUser` style as a Quorum name that climbed the verified ladder,
+   * so without a guard someone can set theirs to `alice.q` and be visually
+   * indistinguishable from a cryptographically verified QNS name.
+   *
+   * `hasReservedQnsSuffix` (shared) folds confusable Unicode dots before
+   * checking, so `alice․q` (U+2024 ONE DOT LEADER) must be rejected too — a
+   * hand-rolled `endsWith('.q')` would pass it straight through.
+   *
+   * Rejection falls to the NEXT tier, not to nothing: `directCastToDisplayMessage`
+   * chains to `username`, which Farcaster restricts to characters excluding
+   * dots, so it cannot wear the suffix.
+   */
+  it.each([
+    ['a plain .q claim', 'alice.q'],
+    ['a confusable-dot .q claim', 'alice․q'],
+    ['a trailing-whitespace .q claim', 'alice.q  '],
+    ['an uppercase .Q claim', 'alice.Q'],
+  ])('refuses to render %s as a Farcaster sender name', async (_label, forged) => {
+    renderList(
+      [baseMessage({ userId: '9999001', userName: forged })],
+      {},
+      undefined,
+      true,
+    );
+
+    // Nothing resembling a verified name reaches the screen. Falling back to
+    // the bare fid is the correct degradation: unhelpful, but honest, and it
+    // is what the header already does for the same input.
+    await waitFor(() => expect(screen.getByText('9999001')).toBeTruthy());
+    expect(screen.queryByText(forged)).toBeNull();
+    expect(screen.queryByText(/\.q/i)).toBeNull();
+  });
+
+  it('still renders an ordinary Farcaster name that merely contains a dot', async () => {
+    // Control arm: the guard must reject the reserved SUFFIX, not punctuation.
+    renderList(
+      [baseMessage({ userId: '9999001', userName: 'cassie.eth' })],
+      {},
+      undefined,
+      true,
+    );
+
+    await waitFor(() => expect(screen.getByText('cassie.eth')).toBeTruthy());
+  });
+
+  it('falls back to the fid rather than rendering an empty Farcaster name', async () => {
+    // `directCastToDisplayMessage` chains with `??`, which does NOT catch `''`,
+    // and `senderContext.displayName` is a REQUIRED string in the API type — so
+    // an empty-but-present value reaches here intact.
+    renderList(
+      [baseMessage({ userId: '9999001', userName: '   ' })],
+      {},
+      undefined,
+      true,
+    );
+
+    await waitFor(() => expect(screen.getByText('9999001')).toBeTruthy());
   });
 
   it('resolves Quorum senders and leaves cast authors alone in the same mixed channel', async () => {
     renderList([
       baseMessage({ id: 'msg-quorum', userId: TARGET, userName: 'Alice Smith' }),
-      baseMessage({ id: 'msg-cast', userId: 'fc:1043504', userName: 'Vitalik' }),
+      baseMessage({ id: 'msg-cast', userId: 'fc:9999001', userName: 'Cassie' }),
     ]);
 
     // The Quorum sender still climbs the full ladder to their verified `.q`...
     await waitFor(() => expect(screen.getByText('alice.q')).toBeTruthy());
     // ...while the cast author keeps Farcaster's own name.
-    expect(screen.getByText('Vitalik')).toBeTruthy();
-    expect(screen.queryByText('fc:1043504')).toBeNull();
+    expect(screen.getByText('Cassie')).toBeTruthy();
+    expect(screen.queryByText('fc:9999001')).toBeNull();
     // One distinct QUORUM sender in the list, so exactly one profile fetch —
     // the fid must not have consumed a lookup of its own.
     expect(mockGetPublicProfile).toHaveBeenCalledTimes(1);

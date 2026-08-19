@@ -476,6 +476,45 @@ and check whether usernames are cut off at the top or bottom."
   non-fatal and fall back to the platform font, so a silent failure looks exactly like "we
   never shipped this".
 
+### 16. Farcaster DM header: the linked-Quorum badge doesn't get clipped or crowd the name at larger text sizes 🔲
+**▶ Ask:** "Open a Farcaster DM with someone whose profile is merged with Quorum (there's a
+small link icon + `name.q` line under their name in the top bar). At your normal iPhone text
+size, is that second line fully visible — not clipped top or bottom, and not overlapping the
+message list below? Then go to Settings → Accessibility → Display & Text Size and raise
+Larger Text a few notches (not the max), come back to that same DM, and check again."
+**Pass:** the name and the badge line both stay fully visible and nothing overlaps the bar
+below, at both text sizes. **Fail:** note whether it's the name or the badge that clips, and
+roughly how far you had raised the slider.
+
+**Context (agent):**
+- **What/when:** commit bed2c21, `fix(chat): a Farcaster DM shows names again, not raw
+  FIDs`. Wires `QuorumIdentityBadge` into `DMChatHeader` for a 1:1 Farcaster conversation
+  whose counterparty has a merged Quorum profile — a second line under the name, inside
+  `ScreenHeader`'s fixed `HEADER_BAR_HEIGHT = 44` bar.
+- **The arithmetic:** at OS scale 1.0, name (`theme.textStyles.headline`, 16/22) plus the
+  badge (fontSize 11, no explicit `lineHeight` set in `QuorumIdentityBadge.tsx`, so its real
+  height is font-metric-dependent, estimated ~13-17px) total roughly 35-39px inside the 44px
+  bar — it fits, but with only ~3-9px of headroom on either side. `ScreenHeader.tsx`'s
+  `bar.height` is a hard constant; nothing there multiplies it by `PixelRatio.getFontScale()`,
+  unlike `MessagesList.tsx:1837`'s `messageHeader`, which was fixed to do exactly that for the
+  same bug class (`.agents/issues/.done/2026-08-19-chat-message-text-renders-at-react-native-default-14.md`).
+  Both `Text`s scale with the OS font size but the bar does not, so the two-line block likely
+  exceeds 44px well before Android's own previously-tested max of 1.3x — the estimate lands
+  around scale ~1.15-1.25, inside normal Settings, not even into accessibility sizes.
+- **Why iOS may differ:** iOS Dynamic Type's *normal* range already overlaps that estimated
+  overflow threshold, and reaches roughly 3x at accessibility sizes (see item 15) — far past
+  what Android's 1.3 cap was ever verified against for this two-line case. No `overflow:
+  hidden` is set anywhere in `ScreenHeader`, so the likely failure mode is the badge (or the
+  bottom of the name) bleeding into the message list below rather than being cleanly clipped.
+- **Also worth confirming:** the badge pops in a beat after the header first renders (it waits
+  on a `useQuorumIdentityForFid` fetch), so the header grows from one line to two live on
+  screen. Check that this doesn't read as a jarring jump.
+- **If it FAILS:** either scale `nameColumn`'s (or the whole bar's) height by
+  `PixelRatio.getFontScale()` the same way `messageHeader` does, or cap the name/badge with
+  `maxFontSizeMultiplier` so the two-line block can't exceed the room available. Also worth
+  giving `QuorumIdentityBadge`'s text an explicit `lineHeight` (currently unset) so its size is
+  a known quantity instead of platform/font-metric-dependent.
+
 ---
 
 ## Verified

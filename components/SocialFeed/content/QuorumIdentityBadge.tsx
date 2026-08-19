@@ -75,7 +75,14 @@ function createStyles(theme: AppTheme, compact: boolean) {
       // padding/spacing. No background — we just want a label.
     },
     text: {
+      // Explicit lineHeight, matching the theme's tuned tokens for these sizes
+      // (caption2 is 11/13, caption1 is 12/16). Without one, the rendered line
+      // box is whatever the platform's font metrics produce — fine in a feed
+      // row that sizes to its content, but this badge is now also drawn inside
+      // a header bar with a minimum height, and an unknown height there is the
+      // difference between fitting and overlapping the content below.
       fontSize: compact ? 11 : 12,
+      lineHeight: compact ? 13 : 16,
       color: theme.colors.accent,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: '500',

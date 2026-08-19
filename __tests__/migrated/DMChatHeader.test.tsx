@@ -89,14 +89,21 @@ function renderHeader(
 // that failed for a reason that had nothing to do with the code under test.
 beforeEach(() => {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  mockGetPublicProfile = jest.fn().mockResolvedValue({
+  // Address-AWARE, deliberately. A blanket `mockResolvedValue` answers for any
+  // argument, including a Farcaster fid — so under a reverted fix the ladder
+  // resolved a fid to "Alice Smith" and the Farcaster tests passed/failed for
+  // the wrong reason, pinning "the routing changed" rather than "the raw fid
+  // reached the screen". The server has no profile for a fid; this says so.
+  mockGetPublicProfile = jest.fn(async (address: string) =>
+    address?.startsWith('Qm') ? {
     display_name: 'Alice Smith',
     primary_username: 'alice',
     profile_image: '',
     bio: '',
     timestamp: 0,
     signature: '',
-  });
+    } : null,
+  );
   mockResolveBatch = jest.fn().mockResolvedValue([
     {
       header: { authorityKey: '0xabc', name: 'alice', parent: null, createdAt: 0, updatedAt: 0 },
@@ -134,7 +141,7 @@ describe('DMChatHeader — resolves its own name from the address prop', () => {
  * A Farcaster conversation's `address` is a synthetic `fid:<n>` string. The
  * header resolved it like any other address; no tier matched; the truncating
  * fallback returned the short string unchanged, and the bar read
- * "fid:1043504" where a name belongs. Nothing threw and nothing logged — the
+ * "fid:9999001" where a name belongs. Nothing threw and nothing logged — the
  * conversation LIST beside it went on showing the right name the whole time,
  * because it branches on `source === 'farcaster'` and this bar did not.
  *
@@ -147,30 +154,31 @@ describe('DMChatHeader — resolves its own name from the address prop', () => {
  * account is being messaged. Same rule the feed surfaces already follow.
  */
 describe('DMChatHeader — a Farcaster conversation is a different namespace', () => {
-  const FC_ADDRESS = 'fid:1043504';
+  const FC_ADDRESS = 'fid:9999001';
 
   it('renders the Farcaster name, not the synthetic fid address', async () => {
     renderHeader({
       address: FC_ADDRESS,
-      displayName: 'Vitalik',
+      displayName: 'Cassie',
       isFarcasterConversation: true,
-      farcasterFid: 1043504,
+      farcasterFid: 9999001,
     });
 
-    await waitFor(() => expect(screen.getByText('Vitalik')).toBeTruthy());
-    // The exact string the truncating fallback produced before the fix.
+    await waitFor(() => expect(screen.getByText('Cassie')).toBeTruthy());
+    // The raw fid — what the ladder's truncating fallback returns for a
+    // Farcaster id, and what shipped on screen before the fix.
     expect(screen.queryByText(FC_ADDRESS)).toBeNull();
   });
 
   it('never resolves the fid against the Quorum ladder', async () => {
     renderHeader({
       address: FC_ADDRESS,
-      displayName: 'Vitalik',
+      displayName: 'Cassie',
       isFarcasterConversation: true,
-      farcasterFid: 1043504,
+      farcasterFid: 9999001,
     });
 
-    await waitFor(() => expect(screen.getByText('Vitalik')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Cassie')).toBeTruthy());
     await new Promise((r) => setTimeout(r, 10));
     // The ladder's enrich pass would have fetched a public profile for the
     // address it was given. The fid→address link endpoint is a DIFFERENT
@@ -186,26 +194,62 @@ describe('DMChatHeader — a Farcaster conversation is a different namespace', (
 
     renderHeader({
       address: FC_ADDRESS,
-      displayName: 'Vitalik',
+      displayName: 'Cassie',
       isFarcasterConversation: true,
-      farcasterFid: 1043504,
+      farcasterFid: 9999001,
     });
 
     await waitFor(() => expect(screen.getByText('alice.q')).toBeTruthy());
     // Beside, not instead of — both are on screen at once.
-    expect(screen.getByText('Vitalik')).toBeTruthy();
-    expect(mockGetUserByFarcasterFid).toHaveBeenCalledWith(1043504);
+    expect(screen.getByText('Cassie')).toBeTruthy();
+    expect(mockGetUserByFarcasterFid).toHaveBeenCalledWith(9999001);
+  });
+
+  it('announces the linked identity to a screen reader, not only to sighted users', async () => {
+    mockGetUserByFarcasterFid = jest.fn().mockResolvedValue({
+      address: PARTNER,
+      public_profile: { display_name: 'Alice Smith', primary_username: 'alice' },
+    });
+
+    renderHeader({
+      address: FC_ADDRESS,
+      displayName: 'Cassie',
+      isFarcasterConversation: true,
+      farcasterFid: 9999001,
+    });
+
+    // The badge's text is inside the title's touchable, whose explicit
+    // accessibilityLabel suppresses announcement of its descendants — so the
+    // label itself has to carry it, or the feature is sighted-only.
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText("Open Cassie's profile. Linked Quorum identity: alice.q"),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('leaves the label alone when there is no linked identity to announce', async () => {
+    renderHeader({
+      address: FC_ADDRESS,
+      displayName: 'Cassie',
+      isFarcasterConversation: true,
+      farcasterFid: 9999001,
+    });
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Open Cassie's profile")).toBeTruthy(),
+    );
   });
 
   it('stays a plain one-line title when the fid has no linked Quorum identity', async () => {
     renderHeader({
       address: FC_ADDRESS,
-      displayName: 'Vitalik',
+      displayName: 'Cassie',
       isFarcasterConversation: true,
-      farcasterFid: 1043504,
+      farcasterFid: 9999001,
     });
 
-    await waitFor(() => expect(screen.getByText('Vitalik')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Cassie')).toBeTruthy());
     await new Promise((r) => setTimeout(r, 10));
     expect(screen.queryByText(/\.q$/)).toBeNull();
   });

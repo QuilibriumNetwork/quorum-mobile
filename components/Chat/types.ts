@@ -359,7 +359,7 @@ export function toDisplayReactions(
 /**
  * Convert shared Message to DisplayMessage
  */
-import { resolveMemberName, formatResolvedName } from '@/utils/resolveMemberName';
+import { presentName, resolveMemberName, formatResolvedName } from '@/utils/resolveMemberName';
 
 /**
  * Build a short error description for a malformed message. Goal is
@@ -568,7 +568,17 @@ export function directCastToDisplayMessage(
 ): DisplayMessage {
   const sender = message.senderContext;
   const pfpUrl = sender?.pfp?.url ?? '';
-  const senderName = sender?.displayName ?? sender?.username ?? `fid:${message.senderFid}`;
+  // `presentName` at every Farcaster name read below, for two reasons that
+  // both bite here and nowhere else in this file. These names are free text
+  // their owner types, and they render in the same style as a Quorum name that
+  // climbed the verified ladder — so an unguarded `alice.q` forges the verified
+  // marker from a namespace that has no `.q` to verify against. And `??` alone
+  // does not catch an empty string, while `displayName` is a REQUIRED field in
+  // the API type, so "present but blank" reaches us intact and would otherwise
+  // win the chain. Rejecting falls through to `username`, which Farcaster
+  // restricts to characters excluding dots, so it cannot wear the suffix.
+  const senderName =
+    presentName(sender?.displayName) ?? presentName(sender?.username) ?? `fid:${message.senderFid}`;
 
   // Determine render type based on message type
   let renderType: MessageRenderType = 'post';
@@ -580,14 +590,16 @@ export function directCastToDisplayMessage(
     systemEventType = 'join';
     // actionTargetUserContext contains who was added, senderContext is who invited them
     const target = message.actionTargetUserContext;
-    const targetName = target?.displayName ?? target?.username ?? `fid:${message.message}`;
+    const targetName =
+      presentName(target?.displayName) ?? presentName(target?.username) ?? `fid:${message.message}`;
     content = `${targetName} joined the conversation`;
   } else if (message.type === 'group_membership_removal') {
     renderType = 'system';
     systemEventType = 'leave';
     // actionTargetUserContext contains who was removed
     const target = message.actionTargetUserContext;
-    const targetName = target?.displayName ?? target?.username ?? `fid:${message.message}`;
+    const targetName =
+      presentName(target?.displayName) ?? presentName(target?.username) ?? `fid:${message.message}`;
     content = `${targetName} left the conversation`;
   } else if (message.type === 'group_name_change') {
     renderType = 'system';
@@ -642,8 +654,8 @@ export function directCastToDisplayMessage(
     displayMessage.isReply = true;
     displayMessage.replyToMessageId = message.inReplyTo.messageId;
     displayMessage.replyToAuthor =
-      message.inReplyTo.senderContext?.displayName ??
-      message.inReplyTo.senderContext?.username ??
+      presentName(message.inReplyTo.senderContext?.displayName) ??
+      presentName(message.inReplyTo.senderContext?.username) ??
       `fid:${message.inReplyTo.senderFid}`;
   }
 
@@ -667,7 +679,7 @@ export function castToDisplayMessage(cast: any, channelKey: string): DisplayMess
     // Prefix to avoid collision with Quorum message IDs
     id: `cast:${cast.hash}`,
     userId: `fc:${author.fid ?? ''}`,
-    userName: author.displayName ?? author.username ?? 'Unknown',
+    userName: presentName(author.displayName) ?? presentName(author.username) ?? 'Unknown',
     userAvatar: pfpUrl ?? '',
     timestamp: cast.timestamp ?? 0,
     timeString: '',

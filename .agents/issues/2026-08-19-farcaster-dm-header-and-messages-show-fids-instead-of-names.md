@@ -13,7 +13,7 @@ area: "Farcaster DMs / identity resolution / chat UI"
 
 ## Summary
 
-Open a DM from a Farcaster user and the conversation header reads `fid:1043504`
+Open a DM from a Farcaster user and the conversation header reads `fid:9999001`
 instead of their name, and every message row — both sides — is headed by a bare
 FID rather than a name. The DM inbox list beside it shows the correct name the
 whole time, which is what makes the defect look like a data problem when it is
@@ -24,16 +24,103 @@ Reported by the operator on 2026-08-19.
 
 ## Status
 
-Fixed on `fix/farcaster-dm-shows-fid-instead-of-name`. 8 new tests, each shown
-RED against the reverted fix and green with it; the 5 pre-existing tests in the
-same two files stayed green under that revert, so the arm is controlled. Full
-suite 1131/1131. `tsc` unchanged at the 12 pre-existing errors. Lint findings on
-the touched files identical before and after (6: 1 error, 5 warnings, all
-pre-existing).
+Fixed on `fix/farcaster-dm-shows-fid-instead-of-name`, then revised after a
+six-angle review (correctness, silent-failure, security, tests, comments,
+mobile-platform). The review found two real defects in the first cut — one of
+them a security regression the fix itself introduced — and both are now closed.
 
-Not yet confirmed on a device. That is the remaining verification: the tests
-prove the right string is chosen, not that the two-line header lays out
-correctly inside a 44px bar on a real screen.
+Full suite 1140/1140. `tsc` unchanged at the 12 pre-existing errors. Lint on the
+touched files identical before and after (6 problems: 1 error, 5 warnings, all
+pre-existing, MEASURED by stashing and re-running).
+
+Not yet confirmed on a device. That remains the gap: the tests prove the right
+string is chosen and the right guard applies, not that the two-line header lays
+out correctly on a real screen. See `.agents/docs/ios-verification-checklist.md`
+item 16.
+
+## What the review changed
+
+### 1. The first fix introduced an impersonation hole (HIGH, closed)
+
+Trusting `item.userName` for a Farcaster sender meant trusting a string its
+owner types. Both names render in the SAME `messageUser` style as a Quorum name
+that climbed the verified ladder, so setting a Farcaster display name to
+`alice.q` produced something visually identical to a cryptographically verified
+QNS name.
+
+This was strictly a regression of this fix: before it, the fid matched no tier
+and the ladder truncated it, so the attacker's string never reached the screen.
+The cosmetic bug was traded for a security one.
+
+Closed by applying `presentName` — the same guard the member ladder already
+uses, built on shared's `hasReservedQnsSuffix`, which folds confusable Unicode
+dots so `alice․q` (U+2024) is caught too. Applied at BOTH seams, deliberately:
+
+- in `types.ts`, at every Farcaster name read, so rejection falls through to
+  the next tier (`username`, which Farcaster restricts to characters excluding
+  dots and so cannot wear the suffix); and
+- in `MessagesList.tsx` at the render seam, so a future producer that forgets
+  cannot reopen it.
+
+`presentName` was exported rather than reimplemented. A second copy of a
+forgery guard is a copy that drifts.
+
+It also fixes a second defect for free: `??` chains do not catch `''`, and
+`senderContext.displayName` is a REQUIRED string in the API type, so a
+present-but-blank name reached the row and rendered as the bare fid.
+
+### 2. The badge can overflow the header bar (HIGH, closed)
+
+`ScreenHeader` set a hard `height: 44`. Text scales with the OS font-size
+setting; a declared height does not. Name lineHeight 22 plus a badge with NO
+explicit lineHeight put the two-line title within a few pixels of the bar at
+default scale, overflowing at roughly 1.15x — an ordinary Settings value, not an
+accessibility extreme. Nothing sets `overflow: hidden`, so it bleeds over the
+message list rather than clipping.
+
+Closed by `height` → `minHeight` (identical at default scale, since the tallest
+content is a 28px avatar; only differs where the old value would have
+overflowed) and by giving the badge an explicit `lineHeight` from the theme's
+tuned tokens, so its height stops being platform-font-metric-dependent.
+
+### 3. The tests proved the wrong thing (closed)
+
+MEASURED by the test reviewer: under a reverted fix the row rendered
+"Alice Smith", not the fid, because `mockGetPublicProfile` answered for any
+address including a fid. The tests were pinning "the routing changed" rather
+than "the raw fid reached the screen", and two comments claimed otherwise.
+
+The mock is now address-aware, so the revert genuinely reproduces the reported
+bug and the comments are true.
+
+### 4. A comment reasoned from the wrong contract (closed)
+
+The `farcasterFid` prop doc justified `enrich` by citing the badge's
+bounded-fan-out contract. That contract governs the public-profile fetch; the
+fid→address link lookup is a separate call that fires regardless and is capped
+nowhere. The conclusion held, the reasoning did not — and a future author
+extending this header to a badge per group participant would have been misled.
+Rewritten to separate the two calls.
+
+### 5. Screen readers could not see the badge (closed)
+
+The badge sits inside the title's touchable, whose explicit
+`accessibilityLabel` suppresses announcement of descendants — so the entire
+point of the feature was sighted-only. The label now names the linked identity,
+resolved through the ladder rather than read from the link response's
+unverified `primaryUsername`: a `.q` spoken aloud must clear the same
+verification as one drawn on screen.
+
+## Findings dismissed, and why
+
+- **`UserProfileModal`/`BlockUserModal` render `fc:9999001`** (raised HIGH).
+  Unreachable. Cast rows render only `FarcasterCastCard` — no avatar, no
+  `onUserPress` — and `FarcasterDirectMessageView` passes neither `onUserPress`
+  nor `members`, so no Farcaster id can reach either modal. Two other reviewers
+  concluded the same independently.
+- **"The working tree has the fix reverted"** (raised as urgent). A stale read:
+  that reviewer sampled the tree during the deliberate revert used to prove the
+  tests go red. Verified intact.
 
 ## Mechanism
 
@@ -59,8 +146,8 @@ No throw, no log, no empty string — just a number where a name belongs.
 
 | Surface | What it rendered | Why |
 |---|---|---|
-| DM header (`DMChatHeader.tsx:65`) | `fid:1043504` | Resolved `address`, which for a Farcaster conversation is the synthetic `fid:<n>` string built at `useFarcasterDirectCasts.ts:73` |
-| Message rows (`MessagesList.tsx`, 3 sites) | `1043504` | Resolved `item.userId`, which `directCastToDisplayMessage` sets to `String(senderFid)` (`types.ts:605`) |
+| DM header (`DMChatHeader.tsx:65`) | `fid:9999001` | Resolved `address`, which for a Farcaster conversation is the synthetic `fid:<n>` string built at `useFarcasterDirectCasts.ts:73` |
+| Message rows (`MessagesList.tsx`, 3 sites) | `9999001` | Resolved `item.userId`, which `directCastToDisplayMessage` sets to `String(senderFid)` (`types.ts:605`) |
 | Wasted lookups (`MessagesList.tsx`) | — | Every FID entered the QNS enrichment and Apex batches, which can only miss on one |
 
 The DM screen (`app/(tabs)/messages/dm/[id].tsx:396-404`) computed the correct
@@ -152,11 +239,22 @@ produced a test failing for a reason unrelated to the code under test.
 
 ## Follow-up not done here
 
-Message rows in a Farcaster DM still show no linked-identity badge. Only the
-header does. Adding it per row would reintroduce exactly the uncapped fan-out
-the open badge issue describes, and in a 1:1 DM it would repeat the same two
-identities down the whole conversation. Worth revisiting only alongside that
-issue.
+- **Message rows show no linked-identity badge.** Only the header does. Per row
+  it would reintroduce exactly the uncapped fan-out the open badge issue
+  describes, and in a 1:1 DM it would repeat the same two identities down the
+  whole conversation. Worth revisiting only alongside that issue.
+- **The synthetic first-time-DM branch can still render `fid:<n>`** — same
+  symptom, different route, pre-existing. Filed separately as
+  `.open/2026-08-19-opening-a-first-time-farcaster-dm-can-still-title-it-with-a-raw-fid.md`.
+- **No screen-level test for `app/(tabs)/messages/dm/[id].tsx`.** Every test
+  here drives `DMChatHeader`/`MessagesList` directly with hand-built props, so
+  the 14 lines of prop computation this change added to the screen are
+  unexercised. If the `conversation.type === 'direct'` gate or the `title`
+  computation regressed, nothing would catch it.
+- **`useQuorumIdentityForFid` cannot distinguish "not linked" from "lookup
+  failed"** (`retry: false`, every failure renders nothing). Pre-existing, but
+  a DM header is a context where a viewer is far likelier to read the badge's
+  absence as a fact about one specific person than a feed row is.
 
 ---
 

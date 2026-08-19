@@ -23,6 +23,7 @@ import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ScreenHeader, headerIconHitSlop } from '@/components/ui/ScreenHeader';
 import { QuorumIdentityBadge } from '@/components/SocialFeed/content/QuorumIdentityBadge';
+import { useQuorumIdentityForFid } from '@/hooks/useQuorumIdentityForFid';
 import { useResolvedName } from '@/identity';
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
@@ -45,7 +46,7 @@ interface DMChatHeaderProps {
    *  there is nothing there for the Quorum resolver to resolve — and handing
    *  it one anyway does not fail loudly: no tier matches, the truncating
    *  fallback returns the short string unchanged, and the header renders
-   *  "fid:1043504" where a name belongs. Farcaster carries its own name
+   *  "fid:9999001" where a name belongs. Farcaster carries its own name
    *  (`fc.name ?? counterParty.displayName ?? counterParty.username`), and
    *  this is it. A linked Quorum `.q` does not come from here — it is reached
    *  by resolving the ADDRESS behind the fid, and is shown as a badge next to
@@ -72,10 +73,20 @@ interface DMChatHeaderProps {
    * from `viewerContext.counterParty` even then, so gating on it alone would
    * pin one arbitrary member's Quorum identity to the whole conversation.
    *
-   * Safe to `enrich` on: the badge issues one fid→address lookup per mount and
-   * this header mounts exactly one, which is the bounded fan-out the badge's
-   * own prop doc requires of its caller. The uncapped case it warns about is a
-   * feed rendering hundreds of casts at once, not a single conversation title.
+   * Safe to `enrich` on, but the two network calls behind that word are
+   * SEPARATE and only one of them is what `enrich` governs:
+   *
+   *  1. the fid→address link lookup, which fires on mount whatever `enrich`
+   *     says, and which nothing in the app currently caps; and
+   *  2. the public-profile fetch inside the badge's own name resolution, which
+   *     is the one `enrich` gates and the one the badge's prop doc is talking
+   *     about when it demands a caller bound its fan-out.
+   *
+   * Both are bounded here for the same trivial reason rather than by that
+   * contract: this header renders one conversation, so it mounts one badge, so
+   * each call happens once. Worth stating precisely, because a future version
+   * of this bar that showed a badge per group participant would multiply BOTH
+   * — and satisfying the prop doc's `enrich` bound would not save it from (1).
    */
   farcasterFid?: number;
   onVideoCall: () => void;
@@ -116,6 +127,33 @@ export const DMChatHeader = React.memo(function DMChatHeader({
   });
   const title = isFarcasterConversation ? (displayName || 'Unknown') : resolvedQuorumName;
 
+  // The badge's own text is invisible to a screen reader: it sits inside the
+  // title's touchable, and an explicit `accessibilityLabel` on an accessible
+  // container suppresses announcement of its descendants. So the one thing the
+  // badge exists to say — that this Farcaster contact is also a known Quorum
+  // identity — reached sighted users only. Rebuilt into the label here.
+  //
+  // Both hooks repeat work the badge itself does, and neither costs a second
+  // request: the link query is keyed by fid and the name resolution by address,
+  // so react-query and the identity provider each serve the mounted badge and
+  // this call from one fetch. They run unconditionally (Rules of Hooks) and
+  // both treat an absent id as "nothing to resolve".
+  //
+  // Resolved through the ladder rather than read from the link response's own
+  // `primaryUsername`, which is an unverified server-supplied string. A `.q`
+  // spoken aloud has to have cleared the same verification as a `.q` drawn on
+  // screen, or the audible version becomes the weaker one to forge.
+  const linkedIdentity = useQuorumIdentityForFid(
+    isFarcasterConversation ? farcasterFid : undefined,
+  ).data;
+  const linkedQuorumName = useResolvedName(linkedIdentity?.address ?? '', {
+    global: true,
+    enrich: true,
+  });
+  const accessibilityLabel = linkedIdentity
+    ? `Open ${title}'s profile. Linked Quorum identity: ${linkedQuorumName}`
+    : `Open ${title}'s profile`;
+
   return (
     <ScreenHeader
       insetTop={insetTop}
@@ -129,7 +167,7 @@ export const DMChatHeader = React.memo(function DMChatHeader({
           hitSlop={8}
           style={styles.titleRow}
           accessibilityRole="button"
-          accessibilityLabel={`Open ${title}'s profile`}
+          accessibilityLabel={accessibilityLabel}
         >
           {icon ? (
             <Image source={{ uri: icon }} style={styles.avatar} />

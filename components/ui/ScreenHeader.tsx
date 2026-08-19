@@ -123,7 +123,21 @@ const createStyles = (theme: AppTheme) =>
       borderBottomColor: theme.colors.border ?? theme.colors.surface3,
     },
     bar: {
-      height: HEADER_BAR_HEIGHT,
+      // minHeight, NOT height. Text scales with the OS font-size setting; a
+      // declared height does not. At the default scale this is identical (the
+      // tallest content — a 28px avatar, a 22px title line — sits well under
+      // 44), so no existing screen moves. It only differs once content would
+      // otherwise exceed the bar, where the old fixed height let it bleed over
+      // the content below rather than clip: nothing here sets `overflow:
+      // hidden`. A two-line title (a DM header showing a linked-identity badge
+      // under the name) reaches that point at roughly a 1.15x font scale,
+      // which is an ordinary Settings value, not an accessibility extreme.
+      //
+      // Same class of bug, and the same reasoning, as the message-row header
+      // that had to start multiplying its height by `PixelRatio.getFontScale()`
+      // — but a minimum needs no scale factor at all, so there is no second
+      // copy of that arithmetic to drift.
+      minHeight: HEADER_BAR_HEIGHT,
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: Skin.space(12),

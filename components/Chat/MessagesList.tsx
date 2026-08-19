@@ -9,6 +9,7 @@ import { composerBottomBusySV } from '@/services/ui/composerPanelVisible';
 import BrowserLink from '@/components/BrowserLink';
 import { haptics } from '@/utils/haptics';
 import {
+  presentName,
   resolveMemberAvatar,
   resolveMemberBio,
 } from '@/utils/resolveMemberName';
@@ -133,7 +134,7 @@ interface MessagesListProps {
    * `DisplayMessage` reveals it — a fid and an address are both just strings.
    * Feeding a fid to the member resolver does NOT fail loudly; it finds no
    * tier and falls through to the truncating fallback, which returns a short
-   * numeric string unchanged, so the row silently renders "1043504" where a
+   * numeric string unchanged, so the row silently renders "9999001" where a
    * name belongs. Worse, a fid that happened to collide with an address would
    * render a DIFFERENT PERSON'S name.
    *
@@ -415,10 +416,25 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   // Quorum member it is deliberately ignored: that field is frozen at write
   // time, so an old row can carry a stale or forged name, and resolving it live
   // is the entire point of routing through the ladder.
+  //
+  // `presentName` is what stops that exception becoming a forgery hole. Both
+  // names render in the SAME `messageUser` style, so an unguarded Farcaster
+  // `displayName` — free text its owner types — could read `alice.q` and be
+  // indistinguishable from a verified QNS name. It also rejects an
+  // empty/whitespace name, which matters because the producers upstream chain
+  // with `??` and `senderContext.displayName` is a required (so present, but
+  // possibly empty) string.
+  //
+  // Applied HERE, at the render seam, rather than trusting every producer to
+  // have applied it: this is the one place the value becomes pixels, so a
+  // future producer that forgets cannot reintroduce the hole. The producers in
+  // `types.ts` guard too, because they chain to a next tier (`username`) that
+  // this function cannot see — so they degrade better, while this guarantees
+  // the floor.
   const resolveDisplayName = useCallback(
     (address: string, carriedName?: string) =>
       isFarcasterSender(address)
-        ? (carriedName || address)
+        ? (presentName(carriedName) ?? address)
         : formatResolvedName(resolve(address, { spaceId })),
     [isFarcasterSender, resolve, spaceId]
   );
