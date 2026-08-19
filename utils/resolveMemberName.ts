@@ -182,8 +182,24 @@ const present = (s?: string | null): string | undefined => {
  *
  * Guarding here keeps the two decisions where they belong: shared decides which
  * TIER wins, mobile decides what "we know nobody" looks like.
+ *
+ * ## Exported for FOREIGN namespaces too — Farcaster
+ *
+ * A Farcaster sender has no address, no roster and no `.q`, so their name never
+ * enters this file's member ladder. It is still rendered in the same list, in
+ * the same style, as a Quorum name that DID climb the ladder — which makes the
+ * `.q` tail forgeable from a namespace that has no `.q` to verify against. A
+ * Farcaster `displayName` is free text its owner types; setting it to `alice.q`
+ * would otherwise render identically to a cryptographically verified name.
+ *
+ * The same two rules apply there, for the same reasons, so the same function
+ * applies them: an empty/whitespace name is not a name, and one wearing the
+ * reserved suffix is not trusted. Callers chain to their own next tier on
+ * `undefined` (a Farcaster `username` cannot contain a dot, so it cannot forge
+ * the suffix). Exported rather than reimplemented — a second copy of a
+ * forgery guard is a copy that drifts.
  */
-const presentName = (s?: string | null): string | undefined => {
+export const presentName = (s?: string | null): string | undefined => {
   const t = present(s);
   if (!t) return undefined;
   return hasReservedQnsSuffix(t) ? undefined : t;

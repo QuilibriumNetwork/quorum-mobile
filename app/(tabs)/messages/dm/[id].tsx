@@ -457,10 +457,24 @@ export default function DMChatScreen() {
     <DMChatHeader
       icon={conversation.icon}
       address={conversation.address || ''}
+      // Read by the header only for a Farcaster conversation, whose address is
+      // a synthetic `fid:<n>` the Quorum resolver must never be handed. `title`
+      // is already the QNS-free `resolveConversationTitle` result on that
+      // branch, so the header, the route title, the call payloads and the
+      // profile modal all name the person identically.
+      displayName={isFarcasterConversation ? title : undefined}
       insetTop={insets.top}
       onBack={handleShowSidebars}
       onTitlePress={handleHeaderPress}
       isFarcasterConversation={isFarcasterConversation}
+      // 1:1 only — see the prop doc. A group's `farcasterFid` is whichever
+      // participant the API nominated as counterParty, which says nothing
+      // about the conversation as a whole.
+      farcasterFid={
+        isFarcasterConversation && conversation.type === 'direct'
+          ? conversation.farcasterFid
+          : undefined
+      }
       onVideoCall={handleVideoCallPress}
       onAudioCall={handleCallPress}
       onOpenSettings={() => setSettingsVisible(true)}
