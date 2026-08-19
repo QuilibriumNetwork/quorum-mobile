@@ -415,6 +415,17 @@ export async function onDeliberateDmSend(
 // one looks like "a new session appeared" — without this, a flapping inbox
 // turns one new device into a push storm.
 const AUTO_REVEAL_DEBOUNCE_MS = 60 * 60 * 1000;
+// Keyed on partnerAddress ALONE (process-global) — narrower than the reveal
+// ledger, which keys on the (self, partner) pair (see dmRevealLedger.ts).
+// On a device with multiple signed-in accounts this means a reveal that just
+// fired for account A's relationship with partner P also suppresses a
+// legitimate first reveal for account B's separate relationship with that
+// same P, for up to an hour. Left this way deliberately (matches the brief),
+// not by oversight, because it fails SAFE: it never mixes identity across
+// accounts, it only ever delays a push, and the same on-connect sweep that
+// recovers a failed send (see the early-timestamp comment below) recovers a
+// suppressed one too. Do not widen this key without confirming
+// multi-account-on-one-device is worth the extra per-pair Map churn.
 const autoRevealLastFired = new Map<string, number>();
 
 /** Test hook: the debounce map is process-lifetime state. */
@@ -455,6 +466,18 @@ export async function autoRevealOnInboundSession(
     const revealed = await ensureRevealBootstrap(payload.selfAddress, partnerAddress, getMessages);
     if (!revealed) return;
 
+    // Set the debounce stamp BEFORE the send below has even started, not
+    // after it succeeds. Tradeoff, taken deliberately: a transient failure
+    // here (no device keyset yet, registration fetch/API-client construction
+    // failure inside buildSendProfileDeps or sendProfileToPartner) costs a
+    // real, legitimate first reveal for up to an hour, because the next
+    // redelivery of the same init envelope will be debounced away too. The
+    // alternative — stamping only after a confirmed send — would let a
+    // redelivery storm re-attempt on every single envelope while the failure
+    // persists, which is exactly the push-storm this debounce exists to
+    // prevent. Fails SAFE either way (a missed reveal, never a leak), and
+    // the reply trigger plus the on-connect sweep are independent backstops
+    // that do not depend on this timestamp at all.
     autoRevealLastFired.set(partnerAddress, now);
     // The gate may hold "already announced 3x" from before this session
     // existed — that record is about OLD sessions and must not gag the new one.
