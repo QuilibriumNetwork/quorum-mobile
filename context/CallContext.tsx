@@ -92,6 +92,17 @@ export interface InitiateCallParams {
   mediaType: 'audio' | 'video';
 }
 
+/**
+ * Explicit opt-in for sendSignal: passing this is what makes a call-signal
+ * frame carry identity. Omitting it (the default for every call site except
+ * the offer and the answer) is what keeps the transport silent — see the
+ * comment inside sendSignal.
+ */
+interface CallSignalIdentity {
+  displayName?: string;
+  userIcon?: string;
+}
+
 export interface CallContextValue {
   activeCall: ActiveCall | null;
   incomingCall: IncomingCallInfo | null;
@@ -309,12 +320,16 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   }, [user, stopCircuitRotation]);
 
   // Ref for sendSignal so circuit rotation can use it without circular deps
-  const sendSignalRef = useRef<((conversationId: string, recipientAddress: string, message: Message) => Promise<void>) | null>(null);
+  const sendSignalRef = useRef<((conversationId: string, recipientAddress: string, message: Message, identity?: CallSignalIdentity) => Promise<void>) | null>(null);
 
   const sendSignal = useCallback(async (
     conversationId: string,
     recipientAddress: string,
     message: Message,
+    // Explicit opt-in only. Omitting this (every caller except the two named
+    // below) is what keeps this transport silent by default — see the
+    // comment above the send call for why that default must never invert.
+    identity?: CallSignalIdentity,
   ) => {
     if (!user || !isConnected) return;
 
@@ -342,19 +357,25 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     if (allTargetDevices.length === 0) return;
 
-    // Identity: NONE. sendSignal is the one transport for every call-signaling
-    // frame (offer, answer, ICE candidates, hangup, renegotiate, event), and
-    // several of those fire on automatic paths with no fresh human act behind
-    // them (an ICE candidate is emitted by WebRTC on its own schedule; hangup
-    // also fires from onConnectionStateChange on a dropped connection, not
+    // Identity: SILENT BY DEFAULT, two named opt-ins. sendSignal is the one
+    // transport for every call-signaling frame (offer, answer, ICE
+    // candidates, hangup, renegotiate, event). Most of those fire on
+    // automatic paths with no fresh human act behind them (an ICE candidate
+    // is emitted by WebRTC on its own schedule; hangup and the call-event log
+    // also fire from onConnectionStateChange on a dropped connection, not
     // only from a user tapping "end call"; renegotiate-answer fires from
-    // circuit rotation). Attaching a display_name/user_icon here would let a
-    // stranger who merely rings (or whose call drops) harvest identity the
-    // same way an automatic DM receipt would — see the receipt-ack transport
-    // in WebSocketContext.tsx for the twin case. A deliberately placed call
-    // does not get identity via this frame; a partner already revealed to
-    // (via a prior deliberate DM) is unaffected because the call UI reads
-    // their identity from local state, not from this outbound signal.
+    // circuit rotation) — those callers pass no `identity` and this stays
+    // exactly as silent as the automatic DM receipt-ack transport in
+    // WebSocketContext.tsx.
+    //
+    // The product model (matching what a first DM already does — the sender's
+    // identity rides the first message, the receiver's stays hidden until
+    // they reply): placing a call is the analogue of a first message, and
+    // answering one is the analogue of replying. So exactly two call sites —
+    // initiateCall's offer and acceptCall's answer — pass `identity`
+    // explicitly, opting in to both directions of the SAME mechanism a
+    // deliberate DM send uses (see the onDeliberateDmSend call below). Every
+    // other call site must keep passing nothing; do not widen this default.
     await sendEncryptedMessageToAllDevices(
       conversationId,
       recipientAddress,
@@ -368,7 +389,30 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
       },
       user.address,
+      identity?.displayName,
+      identity?.userIcon,
     );
+
+    // Record the reveal through the SAME ledger a deliberate DM send uses —
+    // never a second, parallel notion of consent. Fire-and-forget: never
+    // awaited, and onDeliberateDmSend already never throws (see its
+    // docstring) — a call must never be delayed or broken by this. It also
+    // no-ops via hasRevealedTo once the ledger is set, so re-answering the
+    // same partner on a later call costs nothing extra on the wire.
+    if (identity) {
+      const selfAddress = user.address;
+      void import('@/services/dm/dmProfileService').then(({ onDeliberateDmSend }) =>
+        onDeliberateDmSend(
+          recipientAddress,
+          {
+            selfAddress,
+            displayName: identity.displayName,
+            userIcon: identity.userIcon,
+          },
+          { enqueueOutbound, subscribe },
+        ),
+      );
+    }
   }, [user, isConnected, enqueueOutbound, subscribe]);
 
   // Keep sendSignalRef in sync for circuit rotation callbacks
@@ -530,7 +574,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         nativeCallActiveRef.current = false;
       });
 
-      await sendSignal(params.conversationId, params.recipientAddress, offerMsg);
+      // Placing a call is the analogue of a first DM: the caller's identity
+      // rides the offer, exactly as a first message's init envelope carries
+      // display_name/user_icon. See the identity comment inside sendSignal.
+      await sendSignal(params.conversationId, params.recipientAddress, offerMsg, {
+        displayName: user.displayName,
+        userIcon: user.profileImage,
+      });
 
       ringTimeoutRef.current = setTimeout(async () => {
         setActiveCall(prev => {
@@ -679,7 +729,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         sdp: answer.sdp,
       });
 
-      await sendSignal(info.conversationId, info.callerAddress, answerMsg);
+      // Answering a call is the analogue of replying to a first DM: the
+      // answer is the deliberate act that reveals our identity back to the
+      // caller. See the identity comment inside sendSignal.
+      await sendSignal(info.conversationId, info.callerAddress, answerMsg, {
+        displayName: user.displayName,
+        userIcon: user.profileImage,
+      });
 
       // Apply any ICE candidates that arrived before we accepted
       const buffered = pendingCandidatesRef.current.get(info.callId) || [];
