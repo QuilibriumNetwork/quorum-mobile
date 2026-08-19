@@ -118,6 +118,7 @@ export {
 export type { DeviceInfo } from './useRecipientRegistration';
 
 // Invite management hooks
+export { useCanInviteToSpace } from './useCanInviteToSpace';
 export {
   useGenerateInvite,
   useCopyInviteLink,

@@ -17,7 +17,7 @@ import { getQuorumClient } from '../api/quorumClient';
 import { getSpace, getSpaceKey, saveSpace } from '../config/spaceStorage';
 import { encryptionStateStorage } from '../crypto/encryption-state-storage';
 import { NativeCryptoProvider } from '../crypto/native-provider';
-import { broadcastSpaceUpdate } from './broadcastSpaceUpdate';
+import { sendSpaceManifestMessage, type SpaceManifest } from './spaceMessageService';
 import { republishSpace } from './spaceService';
 
 /**
@@ -37,17 +37,25 @@ const INVITE_DOMAINS = {
   development: 'localhost:3000',
 };
 
-// Valid invite link prefixes for parsing
+// Valid invite link prefixes for PARSING. Deliberately broader than what this
+// client generates: a link is created by whichever client the Space owner used,
+// so refusing to parse an origin we would not have produced ourselves means
+// rejecting a perfectly valid invite from a peer.
 const VALID_INVITE_PREFIXES = [
   'https://qm.one/',
   'https://quorummessenger.com/i/',
   'https://www.quorummessenger.com/i/',
   'https://app.quorummessenger.com/#',
   'https://app.quorummessenger.com/invite/#',
-  'http://localhost:3000/',
-  'http://localhost:3000/i/',
+  'https://test.quorummessenger.com/',
   'qm.one/',
 ];
+
+// Any localhost origin, on any port. Enumerating ports here is what broke before:
+// the list pinned :3000 while the web client had long since moved to Vite's
+// :5173, so a link generated against a dev build parsed as invalid — which in
+// turn hid it from the UI that gates on isPublicInvite().
+const LOCAL_INVITE_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i;
 
 export interface InviteParams {
   spaceId: string;
@@ -198,9 +206,11 @@ export function parseInviteLink(inviteLink: string): InviteParams | null {
   const trimmed = inviteLink.trim();
 
   // Check if it matches any valid prefix
-  const isValidPrefix = VALID_INVITE_PREFIXES.some(
-    (prefix) => trimmed.startsWith(prefix) || trimmed.startsWith(prefix.replace('https://', ''))
-  );
+  const isValidPrefix =
+    LOCAL_INVITE_ORIGIN.test(trimmed) ||
+    VALID_INVITE_PREFIXES.some(
+      (prefix) => trimmed.startsWith(prefix) || trimmed.startsWith(prefix.replace('https://', ''))
+    );
 
   if (!isValidPrefix) {
     return null;
@@ -257,22 +267,49 @@ export function isPublicInvite(inviteLink: string): boolean {
   return !params.template && !params.secret;
 }
 
+// Tuned so the result stays on one line at the display font size without relying
+// on the platform to elide it.
+const DISPLAY_HEAD = 30;
+const DISPLAY_TAIL = 8;
+
 /**
- * Get a shortened version of the invite link for display
+ * A one-line, display-only rendering of an invite link.
+ *
+ * NOT a valid link: it is lossy on purpose. Everything that acts on a link (copy,
+ * share, join) must use the original string.
+ *
+ * Note for one-time links: the part that differs between two freshly generated
+ * ones is `template`/`secret`, which sit in the MIDDLE, between a constant
+ * spaceId and a constant hubKey. No truncation can show that two of them differ,
+ * which is why regenerating needs explicit UI feedback rather than leaving the
+ * user to compare URLs.
  */
 export function getShortenedInviteLink(inviteLink: string): string {
-  const params = parseInviteLink(inviteLink);
-  if (!params) return inviteLink;
+  const trimmed = (inviteLink ?? '').trim();
+  if (!trimmed) return '';
 
-  // Show just the domain and first 8 chars of spaceId
-  const shortSpaceId = params.spaceId.substring(0, 8);
-  return `https://app.quorummessenger.com/invite/#${shortSpaceId}...`;
+  // Protocol is noise in a display string; the host is what tells a user which
+  // app the link opens.
+  const withoutProtocol = trimmed.replace(/^https?:\/\//i, '');
+  if (withoutProtocol.length <= DISPLAY_HEAD + DISPLAY_TAIL + 1) return withoutProtocol;
+
+  // Truncated in JS rather than by Text's ellipsizeMode: `middle` is unreliable
+  // on Android for a long unbroken string, where it silently degrades to a hard
+  // clip and leaves a sliver of a second line visible inside the box.
+  return `${withoutProtocol.slice(0, DISPLAY_HEAD)}…${withoutProtocol.slice(-DISPLAY_TAIL)}`;
 }
 
 export interface GeneratePublicInviteResult {
   inviteLink: string;
   isPublic: true;
 }
+
+/**
+ * `enqueueOutbound` from `useWebSocket()`. Required, not optional: publishing a
+ * public link without telling existing members is the defect this parameter
+ * exists to make unrepresentable, so a caller cannot silently omit it.
+ */
+export type EnqueueOutbound = (prepare: () => Promise<string[]>) => void;
 
 /**
  * Helper to convert int64 to bytes (big-endian)
@@ -290,7 +327,10 @@ function int64ToBytes(value: number): Uint8Array {
  * This creates a public link that stores evaluations on the server.
  * The link only contains spaceId and configKey - evaluations are fetched from server.
  */
-export async function generatePublicInviteLink(spaceId: string): Promise<GeneratePublicInviteResult> {
+export async function generatePublicInviteLink(
+  spaceId: string,
+  enqueueOutbound: EnqueueOutbound,
+): Promise<GeneratePublicInviteResult> {
   const cryptoProvider = new NativeCryptoProvider();
   const client = getQuorumClient();
 
@@ -439,6 +479,26 @@ export async function generatePublicInviteLink(spaceId: string): Promise<Generat
     throw new Error('Failed to upload invite evaluations to server');
   }
 
+  // Construct the public invite link BEFORE the manifest is serialized below.
+  // The link is deterministic from the existing config key, so it can be built
+  // as soon as that key is known.
+  const inviteLink = `${getInviteUrlBase(true)}#spaceId=${spaceId}&configKey=${configPrivateKeyHex}`;
+
+  const timestamp = Date.now();
+
+  // ORDERING IS LOAD-BEARING: the manifest is a snapshot of `space`, so both
+  // fields must be set before JSON.stringify below or the manifest we publish
+  // advertises no invite URL and a joiner fetching it lands without one.
+  // Desktop sets inviteUrl before encrypting for the same reason
+  // (InvitationService.ts:363).
+  space.inviteUrl = inviteLink;
+  // Keep the record monotonic. The receive path applies a manifest when
+  // `manifest.timestamp >= stored modifiedDate` and then writes the record
+  // wholesale (WebSocketContext.tsx:1921-1937). Broadcasting a fresh timestamp
+  // alongside a stale modifiedDate would move a member's watermark BACKWARDS,
+  // weakening the guard against the hub replaying historical log entries.
+  space.modifiedDate = timestamp;
+
   // Also upload the space manifest encrypted with the new config key
   // Use the same ephemeral key as the evals (matches desktop behavior)
   const spaceJson = JSON.stringify(space);
@@ -451,7 +511,6 @@ export async function generatePublicInviteLink(spaceId: string): Promise<Generat
   });
 
   // Sign the manifest with timestamp (matches desktop)
-  const timestamp = Date.now();
   const timestampBytes = int64ToBytes(timestamp);
   const manifestWithTimestamp = new Uint8Array([
     ...new TextEncoder().encode(manifestCiphertext),
@@ -461,14 +520,28 @@ export async function generatePublicInviteLink(spaceId: string): Promise<Generat
   const manifestSignatureBase64 = await cryptoProvider.signEd448(ownerPrivateKeyBase64, manifestPayloadBase64);
   const manifestSignatureHex = base64ToHex(manifestSignatureBase64);
 
-  await client.postSpaceManifest(spaceId, {
+  const manifest: SpaceManifest = {
     space_address: spaceId,
     space_manifest: manifestCiphertext,
     ephemeral_public_key: ephemeralPublicKeyHex,
     timestamp,
     owner_public_key: ownerKey.publicKey,
     owner_signature: manifestSignatureHex,
-  });
+  };
+
+  await client.postSpaceManifest(spaceId, manifest);
+
+  // The POST above only serves FUTURE joiners: no client ever refetches the
+  // manifest for a space it has already joined (every getSpaceManifest call site
+  // on both clients is a join or a device-restore). Existing members learn about
+  // the new URL exclusively through this control message, so without it a public
+  // link never reaches anybody but its author.
+  //
+  // Reuse the SAME manifest object rather than rebuilding one, and do not route
+  // this through broadcastSpaceUpdate: that mints its own ephemeral X448 key,
+  // which would break the invite path's deliberate alignment between the eval's
+  // ephemeral key and the manifest's.
+  enqueueOutbound(async () => [await sendSpaceManifestMessage(spaceId, manifest)]);
 
   // Remove the processed evals from the local pool (they're now on the server)
   session.evals = session.evals.slice(MAX_PUBLIC_EVALS);
@@ -478,11 +551,9 @@ export async function generatePublicInviteLink(spaceId: string): Promise<Generat
     timestamp: Date.now(),
   });
 
-  // Construct public invite link
-  const inviteLink = `${getInviteUrlBase(true)}#spaceId=${spaceId}&configKey=${configPrivateKeyHex}`;
-
-  // Update space with new invite URL
-  space.inviteUrl = inviteLink;
+  // `space` already carries inviteUrl and the bumped modifiedDate (set above, so
+  // the published manifest includes them). Persisting only now means a failed
+  // upload leaves no local record claiming a link that was never published.
   saveSpace(space);
 
   return {

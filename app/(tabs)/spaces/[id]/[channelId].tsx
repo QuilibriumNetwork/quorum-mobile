@@ -12,6 +12,7 @@ import { markChannelMentionsRead } from '@/services/notifications/mentionReplyLo
 import { useStartDirectMessage } from '@/hooks/chat/useStartDirectMessage';
 import { useBlockUser } from '@/hooks/chat/useBlockUser';
 import { useSpace, useSpaceMembers } from '@/hooks/chat/useSpaces';
+import { useCanInviteToSpace } from '@/hooks/chat/useCanInviteToSpace';
 import { useBookmarks } from '@/hooks/useUserConfig';
 import { getSpaceKey } from '@/services/config/spaceStorage';
 import { useTheme } from '@/theme';
@@ -83,6 +84,10 @@ export default function SpaceChannelChat() {
     if (!spaceId) return false;
     return !!getSpaceKey(spaceId, 'owner');
   }, [spaceId]);
+
+  // Wider than `isSpaceOwner`: a member may share an existing public link, so
+  // all three invite entry points share this one rule.
+  const canInvite = useCanInviteToSpace(spaceId);
 
   // Pin/delete permissions: regular channels use the role permission; read-only
   // channels ALSO grant pin/delete to managers (a role in managerRoleIds) —
@@ -360,7 +365,7 @@ export default function SpaceChannelChat() {
         onStartVideoCall={handleStartVideoCall}
         onStartAudioCall={handleStartAudioCall}
         startingCall={startingCall}
-        onInvite={isSpaceOwner ? handleOpenInviteModal : undefined}
+        onInvite={canInvite ? handleOpenInviteModal : undefined}
         onOpenSettings={handleOpenSpaceSettings}
         theme={theme}
       />

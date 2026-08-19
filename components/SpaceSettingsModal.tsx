@@ -28,7 +28,12 @@ import { useAuth, useWebSocket } from '@/context';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import { maybeSendUpdateProfileMessage } from '@/services/space/spaceMessageService';
 import * as ImagePicker from 'expo-image-picker';
-import { useGenerateInvite, useGeneratePublicInvite } from '@/hooks/chat/useInviteManagement';
+import {
+  getShortenedInviteLink,
+  isPublicInvite,
+  useGenerateInvite,
+  useGeneratePublicInvite,
+} from '@/hooks/chat/useInviteManagement';
 import {
   useAddRole,
   useDeleteRole,
@@ -925,23 +930,40 @@ export default function SpaceSettingsModal({
   // Invite state
   const [generatedInviteLink, setGeneratedInviteLink] = useState<string | null>(null);
   const [generatedInviteType, setGeneratedInviteType] = useState<'private' | 'public' | null>(null);
+  const [inviteRepublished, setInviteRepublished] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [inviteRenewed, setInviteRenewed] = useState(false);
   const [inviteType, setInviteType] = useState<'private' | 'public'>('private');
   const [hasLoadedExistingInvite, setHasLoadedExistingInvite] = useState(false);
+
+  /**
+   * The Space's stored public link, or null when it has none.
+   *
+   * `inviteUrl` is NOT reliably a public invite link: kickUser overwrites the
+   * same field with a `quorum://join#…` string, which is truthy but unusable, so
+   * a bare truthiness check would offer members a dead link to share after any
+   * kick. isPublicInvite parses it and rejects unknown schemes.
+   */
+  const storedPublicInvite = useCallback((): string | null => {
+    if (!spaceId) return null;
+    const url = getSpace(spaceId)?.inviteUrl;
+    return url && isPublicInvite(url) ? url : null;
+  }, [spaceId]);
 
   // Check for existing public invite URL when modal opens or tab changes to invites
   // Only run once per modal open to avoid overriding user actions
   useEffect(() => {
     if (visible && spaceId && activeTab === 'invites' && !hasLoadedExistingInvite) {
-      const spaceData = getSpace(spaceId);
-      if (spaceData?.inviteUrl) {
+      const existing = storedPublicInvite();
+      if (existing) {
         // Space already has a public invite URL - show it
-        setGeneratedInviteLink(spaceData.inviteUrl);
+        setGeneratedInviteLink(existing);
         setGeneratedInviteType('public');
         setInviteType('public');
       }
       setHasLoadedExistingInvite(true);
     }
-  }, [visible, spaceId, activeTab, hasLoadedExistingInvite]);
+  }, [visible, spaceId, activeTab, hasLoadedExistingInvite, storedPublicInvite]);
 
   // Directory submission
   const [directorySubmitting, setDirectorySubmitting] = useState(false);
@@ -1067,10 +1089,41 @@ export default function SpaceSettingsModal({
     }
   }, [spaceId, inviteType, generateInviteMutation, generatePublicInviteMutation]);
 
+  // Same URL comes back, so without a transient confirmation this reads as a
+  // no-op. Mirrors the invite modal's affordance so the two surfaces agree.
+  const handleRepublishInvite = useCallback(async () => {
+    try {
+      const result = await generatePublicInviteMutation.mutateAsync({ spaceId });
+      setGeneratedInviteLink(result.inviteLink);
+      setGeneratedInviteType('public');
+      setInviteRepublished(true);
+      setTimeout(() => setInviteRepublished(false), 2500);
+    } catch {
+      Alert.alert('Error', 'Failed to republish invite link');
+    }
+  }, [spaceId, generatePublicInviteMutation]);
+
+  // Mints a fresh one-time link, consuming another slot from the invite pool.
+  // Separate from handleGenerateInvite only so it can report that it worked.
+  const handleNewOneTimeInvite = useCallback(async () => {
+    try {
+      const result = await generateInviteMutation.mutateAsync({ spaceId });
+      setGeneratedInviteLink(result.inviteLink);
+      setGeneratedInviteType('private');
+      setInviteRenewed(true);
+      setTimeout(() => setInviteRenewed(false), 2000);
+    } catch {
+      Alert.alert('Error', 'Failed to generate a new invite link');
+    }
+  }, [spaceId, generateInviteMutation]);
+
+  // Inline success state rather than an Alert: it needs no dismissing, and it
+  // matches the invite modal so the same action looks the same in both places.
   const handleCopyInvite = useCallback(async () => {
     if (generatedInviteLink) {
       await Clipboard.setStringAsync(generatedInviteLink);
-      Alert.alert('Copied', 'Invite link copied to clipboard');
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
     }
   }, [generatedInviteLink]);
 
@@ -2353,11 +2406,13 @@ export default function SpaceSettingsModal({
           ]}
           onPress={() => {
             setInviteType('private');
+            // A one-time link is never persisted, so there is nothing to restore.
             setGeneratedInviteLink(null);
+            setGeneratedInviteType(null);
           }}
         >
           <IconSymbol
-            name="person.fill"
+            name="person"
             size={16}
             color={inviteType === 'private' ? '#fff' : theme.colors.textMuted}
           />
@@ -2377,7 +2432,13 @@ export default function SpaceSettingsModal({
           ]}
           onPress={() => {
             setInviteType('public');
-            setGeneratedInviteLink(null);
+            // Re-read from storage rather than blanking. The Space's public link is
+            // persisted state, not something this screen owns: clearing it here made
+            // an existing link vanish behind a "Generate" button until the modal was
+            // closed and reopened, because the loader effect only runs once per open.
+            const existing = storedPublicInvite();
+            setGeneratedInviteLink(existing);
+            setGeneratedInviteType(existing ? 'public' : null);
           }}
         >
           <IconSymbol
@@ -2396,11 +2457,16 @@ export default function SpaceSettingsModal({
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionDescription}>
-        {inviteType === 'private'
-          ? 'Generate a one-time use invite link. Each link can only be used by one person.'
-          : 'Generate a reusable public invite link. Anyone with this link can join.'}
-      </Text>
+      {/* Describes what the button will produce, so it is only meaningful before
+          one exists. Once a link is on screen the callout below it says what that
+          link does, and keeping both left two descriptions of the same thing. */}
+      {!generatedInviteLink && (
+        <Text style={styles.sectionDescription}>
+          {inviteType === 'private'
+            ? 'Generate a one-time use invite link. Each link can only be used by one person.'
+            : 'Generate a reusable public invite link. Anyone with this link can join.'}
+        </Text>
+      )}
 
       {!generatedInviteLink ? (
         <TouchableOpacity
@@ -2422,35 +2488,124 @@ export default function SpaceSettingsModal({
       ) : (
         <View style={styles.inviteLinkContainer}>
           <View style={styles.inviteLinkBox}>
-            <Text style={styles.inviteLinkText} numberOfLines={2}>
-              {generatedInviteLink}
+            {/* Display-only and pre-truncated. Not selectable: Copy and Share are
+                the ways to take the link, and a selectable multi-line field was
+                what let the box scroll and show a clipped second row. */}
+            <Text style={styles.inviteLinkText} numberOfLines={1}>
+              {getShortenedInviteLink(generatedInviteLink)}
             </Text>
           </View>
           <View style={styles.inviteLinkActions}>
-            <TouchableOpacity style={styles.inviteLinkButton} onPress={handleCopyInvite}>
-              <IconSymbol name="doc.on.doc" size={18} color={theme.colors.primary} />
-              <Text style={styles.inviteLinkButtonText}>Copy</Text>
+            <TouchableOpacity
+              style={[styles.inviteLinkButton, inviteCopied && styles.inviteLinkButtonSuccess]}
+              onPress={handleCopyInvite}
+            >
+              <IconSymbol
+                name={inviteCopied ? 'checkmark' : 'doc.on.doc'}
+                size={18}
+                color={inviteCopied ? '#fff' : theme.colors.primary}
+              />
+              <Text
+                style={[
+                  styles.inviteLinkButtonText,
+                  inviteCopied && styles.inviteLinkButtonTextSuccess,
+                ]}
+              >
+                {inviteCopied ? 'Copied!' : 'Copy'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.inviteLinkButton} onPress={handleShareInvite}>
               <IconSymbol name="square.and.arrow.up" size={18} color={theme.colors.primary} />
               <Text style={styles.inviteLinkButtonText}>Share</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.inviteLinkButton}
-              onPress={() => {
-                setGeneratedInviteLink(null);
-                setGeneratedInviteType(null);
-              }}
-            >
-              <IconSymbol name="arrow.clockwise" size={18} color={theme.colors.primary} />
-              <Text style={styles.inviteLinkButtonText}>New</Text>
-            </TouchableOpacity>
+            {/* Only offered for one-time links, where minting another one is the
+                actual next step. A public link is deterministic, so the same button
+                on that branch could only ever return the identical URL — which is
+                why it used to sit here doing nothing but clearing the display. */}
+            {generatedInviteType !== 'public' && (
+              <TouchableOpacity
+                style={[styles.inviteLinkButton, inviteRenewed && styles.inviteLinkButtonSuccess]}
+                onPress={handleNewOneTimeInvite}
+                disabled={isGeneratingInvite}
+              >
+                {/* A fresh one-time link differs from the last only in its
+                    template and secret, which sit in the middle of the URL
+                    between a constant spaceId and a constant hubKey. Nothing the
+                    user can see distinguishes them, so this state is the ONLY
+                    signal that the tap did anything. */}
+                {isGeneratingInvite ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                ) : (
+                  <>
+                    <IconSymbol
+                      name={inviteRenewed ? 'checkmark' : 'arrow.clockwise'}
+                      size={18}
+                      color={inviteRenewed ? '#fff' : theme.colors.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.inviteLinkButtonText,
+                        inviteRenewed && styles.inviteLinkButtonTextSuccess,
+                      ]}
+                    >
+                      {inviteRenewed ? 'Ready!' : 'New link'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
-          <Text style={styles.inviteHint}>
-            {generatedInviteType === 'public'
-              ? 'This public link can be shared freely. Regenerate to invalidate the old link.'
-              : 'This link can only be used once. Generate a new link for each person.'}
-          </Text>
+          {/* Same banner treatment and same words as InviteModal: one action, one
+              explanation, wherever the user happens to reach it from. */}
+          <View
+            style={[
+              styles.inviteCallout,
+              generatedInviteType === 'public' && styles.inviteCalloutInfo,
+            ]}
+          >
+            <IconSymbol
+              name={generatedInviteType === 'public' ? 'info.circle' : 'exclamationmark.circle'}
+              size={16}
+              color={
+                generatedInviteType === 'public'
+                  ? theme.colors.primary
+                  : (theme.colors.warning ?? '#f59e0b')
+              }
+            />
+            <Text
+              style={[
+                styles.inviteCalloutText,
+                generatedInviteType === 'public' && styles.inviteCalloutTextInfo,
+              ]}
+            >
+              {generatedInviteType === 'public'
+                ? 'Anyone with this link can join, and it does not expire.'
+                : 'This link can only be used once. Generate a new link for each person you want to invite.'}
+            </Text>
+          </View>
+          {generatedInviteType === 'public' && (
+            <TouchableOpacity
+              style={styles.inviteTroubleshootRow}
+              onPress={handleRepublishInvite}
+              disabled={isGeneratingInvite}
+              accessibilityRole="button"
+              accessibilityLabel="Link not working? Republish it"
+            >
+              {isGeneratingInvite ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              ) : inviteRepublished ? (
+                <>
+                  <IconSymbol name="checkmark" size={14} color={theme.colors.success ?? '#22c55e'} />
+                  <Text style={styles.inviteTroubleshootDone}>Link republished</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.inviteTroubleshootLabel}>Link not working?</Text>
+                  <Text style={styles.inviteTroubleshootAction}>Republish</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </ScrollView>
@@ -3212,12 +3367,15 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
     inviteLinkBox: {
       backgroundColor: theme.colors.surface3,
       borderRadius: Skin.radius(12),
-      padding: Skin.space(16),
+      paddingHorizontal: Skin.space(14),
+      paddingVertical: Skin.space(12),
+      justifyContent: 'center',
     },
     inviteLinkText: {
-      fontSize: Skin.font(14),
-      fontFamily: theme.fonts.mono?.fontFamily || theme.fonts.regular.fontFamily,
+      fontSize: Skin.font(13),
+      fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textMain,
+      lineHeight: Skin.font(18),
     },
     inviteLinkActions: {
       flexDirection: 'row',
@@ -3238,6 +3396,34 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontSize: Skin.font(14),
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
+      color: theme.colors.primary,
+    },
+    inviteLinkButtonSuccess: {
+      backgroundColor: theme.colors.success ?? '#22c55e',
+    },
+    inviteLinkButtonTextSuccess: {
+      color: '#fff',
+    },
+    inviteCallout: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      padding: Skin.space(12),
+      backgroundColor: (theme.colors.warning ?? '#f59e0b') + '15',
+      borderRadius: Skin.radius(8),
+      marginTop: Skin.space(12),
+      gap: Skin.space(8),
+    },
+    inviteCalloutInfo: {
+      backgroundColor: theme.colors.primary + '15',
+    },
+    inviteCalloutText: {
+      flex: 1,
+      fontSize: Skin.font(13),
+      fontFamily: theme.fonts.regular.fontFamily,
+      color: theme.colors.warning ?? '#f59e0b',
+      lineHeight: Skin.font(18),
+    },
+    inviteCalloutTextInfo: {
       color: theme.colors.primary,
     },
     inviteTypeToggle: {
@@ -3275,7 +3461,31 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets) =>
       fontFamily: theme.fonts.regular.fontFamily,
       color: theme.colors.textSubtle,
       marginTop: Skin.space(12),
-      textAlign: 'center',
+    },
+    inviteTroubleshootRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: Skin.space(10),
+      marginTop: Skin.space(4),
+      gap: Skin.space(6),
+    },
+    inviteTroubleshootLabel: {
+      fontSize: Skin.font(13),
+      fontFamily: theme.fonts.regular.fontFamily,
+      color: theme.colors.textSubtle,
+    },
+    inviteTroubleshootAction: {
+      fontSize: Skin.font(13),
+      fontFamily: theme.fonts.medium.fontFamily,
+      fontWeight: theme.fonts.medium.fontWeight,
+      color: theme.colors.primary,
+    },
+    inviteTroubleshootDone: {
+      fontSize: Skin.font(13),
+      fontFamily: theme.fonts.medium.fontFamily,
+      fontWeight: theme.fonts.medium.fontWeight,
+      color: theme.colors.success ?? '#22c55e',
     },
     dangerSection: {
       backgroundColor: theme.colors.danger + '15',

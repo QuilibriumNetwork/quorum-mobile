@@ -5,6 +5,7 @@ import { SpaceDescriptionSheet } from '@/components/SpaceDescriptionSheet';
 import { useChannels } from '@/hooks/chat/useChannels';
 import { useChannelMentionUnread } from '@/services/notifications/mentionReplyLog';
 import { useChannelMute } from '@/hooks/chat/useChannelMute';
+import { useCanInviteToSpace } from '@/hooks/chat/useCanInviteToSpace';
 import { useSpace } from '@/hooks/chat/useSpaces';
 import { useTheme, type AppTheme } from '@/theme';
 import type { EdgeInsets } from 'react-native-safe-area-context';
@@ -45,6 +46,9 @@ export default function SpaceChannelsScreen() {
   // Channel mentions/replies bubble (Level 2) derived from the read-state log —
   // the single source of truth that replaced the old integer counters.
   const { getUnreadCount } = useChannelMentionUnread();
+  // Owners can mint links; everyone else may only share one that already
+  // exists, so the pill is hidden when there is nothing to share.
+  const canInvite = useCanInviteToSpace(spaceId);
 
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [inviteVisible, setInviteVisible] = useState(false);
@@ -102,7 +106,7 @@ export default function SpaceChannelsScreen() {
         space={spaceData}
         insetTop={insets.top}
         onBack={() => router.back()}
-        onInvite={() => setInviteVisible(true)}
+        onInvite={canInvite ? () => setInviteVisible(true) : undefined}
         onSettings={() => setSettingsVisible(true)}
         onDescriptionPress={() => setDescriptionVisible(true)}
         isMuted={spaceMuted}
