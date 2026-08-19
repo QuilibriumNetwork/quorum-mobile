@@ -175,20 +175,36 @@ function baseMessage(overrides: Partial<DisplayMessage> = {}): DisplayMessage {
 // wrapper pulls a real theme out of the real provider `renderWithProviders`
 // already mounts, rather than hand-building an `AppTheme` object that could
 // drift from the real shape.
-function ThemedMessagesList(props: { messages: DisplayMessage[]; spaceId?: string }) {
+function ThemedMessagesList(props: {
+  messages: DisplayMessage[];
+  spaceId?: string;
+  isFarcasterNamespace?: boolean;
+}) {
   const { theme } = useTheme();
-  return <MessagesList messages={props.messages} theme={theme} spaceId={props.spaceId} />;
+  return (
+    <MessagesList
+      messages={props.messages}
+      theme={theme}
+      spaceId={props.spaceId}
+      isFarcasterNamespace={props.isFarcasterNamespace}
+    />
+  );
 }
 
 function renderList(
   messages: DisplayMessage[],
   rostersBySpace: Record<string, Record<string, { display_name?: string; global_display_name?: string }>> = {},
   spaceId: string | undefined = SPACE_ID,
+  isFarcasterNamespace = false,
 ) {
   return renderWithProviders(
     <QueryClientProvider client={queryClient}>
       <IdentityScopeProvider rostersBySpace={rostersBySpace} selfAddress={null}>
-        <ThemedMessagesList messages={messages} spaceId={spaceId} />
+        <ThemedMessagesList
+          messages={messages}
+          spaceId={spaceId}
+          isFarcasterNamespace={isFarcasterNamespace}
+        />
       </IdentityScopeProvider>
     </QueryClientProvider>,
   );
@@ -280,5 +296,75 @@ describe('MessagesList — enrichment fan-out is bounded, not per-message', () =
     await waitFor(() => expect(mockGetPublicProfile).toHaveBeenCalledTimes(50));
     await new Promise((r) => setTimeout(r, 10));
     expect(mockGetPublicProfile).toHaveBeenCalledTimes(50);
+  });
+});
+
+/**
+ * Farcaster senders must NOT reach the Quorum member resolver.
+ *
+ * ## The defect this pins
+ *
+ * A Farcaster sender's `userId` is a fid, not an address. Handing one to the
+ * resolver does not fail loudly — no tier matches, so it falls through to the
+ * truncating fallback, and `formatAddress` returns any string short enough to
+ * need no truncation UNCHANGED. A fid is always short enough. The row
+ * therefore rendered the raw fid where a name belongs, with every test green,
+ * because nothing in the suite had ever rendered a Farcaster sender.
+ *
+ * Both shapes are covered, because they look different in the data:
+ *  - a Farcaster DM, where EVERY sender is a bare unprefixed fid and only the
+ *    `isFarcasterNamespace` prop distinguishes them from addresses; and
+ *  - a bound space channel, where casts (`fc:`-prefixed, from
+ *    `castToDisplayMessage`) are merged into a list of real Quorum senders,
+ *    so the decision has to be made per message rather than per list.
+ *
+ * The `.q` is deliberately NOT expected here. A linked Quorum identity is
+ * reached by resolving the ADDRESS behind the fid, via the fid→address link,
+ * and is rendered as a separate badge beside the Farcaster name — see
+ * `DMChatHeader.test.tsx`. Resolving the fid itself would, at best, name
+ * nobody and, on a collision, name the WRONG PERSON.
+ */
+describe('MessagesList — Farcaster senders keep their Farcaster name', () => {
+  it('renders the name carried on the message, not the fid, in a Farcaster DM', async () => {
+    renderList(
+      [baseMessage({ userId: '1043504', userName: 'Vitalik' })],
+      {},
+      undefined,
+      true,
+    );
+
+    await waitFor(() => expect(screen.getByText('Vitalik')).toBeTruthy());
+    // The exact string the truncating fallback produced before the fix.
+    expect(screen.queryByText('1043504')).toBeNull();
+  });
+
+  it('never fetches a Quorum profile for a fid', async () => {
+    renderList(
+      [baseMessage({ userId: '1043504', userName: 'Vitalik' })],
+      {},
+      undefined,
+      true,
+    );
+
+    await waitFor(() => expect(screen.getByText('Vitalik')).toBeTruthy());
+    await new Promise((r) => setTimeout(r, 10));
+    expect(mockGetPublicProfile).not.toHaveBeenCalled();
+  });
+
+  it('resolves Quorum senders and leaves cast authors alone in the same mixed channel', async () => {
+    renderList([
+      baseMessage({ id: 'msg-quorum', userId: TARGET, userName: 'Alice Smith' }),
+      baseMessage({ id: 'msg-cast', userId: 'fc:1043504', userName: 'Vitalik' }),
+    ]);
+
+    // The Quorum sender still climbs the full ladder to their verified `.q`...
+    await waitFor(() => expect(screen.getByText('alice.q')).toBeTruthy());
+    // ...while the cast author keeps Farcaster's own name.
+    expect(screen.getByText('Vitalik')).toBeTruthy();
+    expect(screen.queryByText('fc:1043504')).toBeNull();
+    // One distinct QUORUM sender in the list, so exactly one profile fetch —
+    // the fid must not have consumed a lookup of its own.
+    expect(mockGetPublicProfile).toHaveBeenCalledTimes(1);
+    expect(mockGetPublicProfile).toHaveBeenCalledWith(TARGET);
   });
 });

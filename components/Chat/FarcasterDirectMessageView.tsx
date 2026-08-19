@@ -316,6 +316,12 @@ export function FarcasterDirectMessageView({
         onOpenFarcasterCast={onOpenFarcasterCast}
         onLinkPress={onLinkPress}
         isDM
+        // Every sender here is a Farcaster fid, not a Quorum address. Without
+        // this the list resolves each one against the Quorum member ladder,
+        // which cannot match and falls through to its truncating fallback —
+        // and a short numeric string truncates to itself, so the row silently
+        // renders the raw fid where the sender's name belongs.
+        isFarcasterNamespace
       />
 
       <ChatBottomChrome tabBarHeight={tabBarHeight} surfaceColor={theme.colors.surface1} isDark={theme.dark}>

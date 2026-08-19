@@ -123,6 +123,31 @@ interface MessagesListProps {
    *  reaction count of "1" — in a 2-person chat a single reaction count adds
    *  no information (issue #29). In spaces the count is always shown. */
   isDM?: boolean;
+  /**
+   * True when every message in this list comes from Farcaster rather than
+   * Quorum. Farcaster is a SEPARATE identity namespace: a sender is a bare
+   * `fid`, with no Quorum address, no space roster and no `.q`. Their
+   * `userId` here is therefore the fid as a string, not an address.
+   *
+   * That distinction has to be passed in, because nothing about a
+   * `DisplayMessage` reveals it — a fid and an address are both just strings.
+   * Feeding a fid to the member resolver does NOT fail loudly; it finds no
+   * tier and falls through to the truncating fallback, which returns a short
+   * numeric string unchanged, so the row silently renders "1043504" where a
+   * name belongs. Worse, a fid that happened to collide with an address would
+   * render a DIFFERENT PERSON'S name.
+   *
+   * When set, sender names come from the `userName` already on the message
+   * (Farcaster's own displayName/username, mapped in `types.ts`) and the
+   * Quorum-only enrichment passes below are skipped, since neither QNS nor
+   * Apex can ever have an entry keyed by a fid.
+   *
+   * A linked Quorum `.q` is NOT resolved here and must not be: it is reached
+   * by looking the fid up against the server's fid→address link and resolving
+   * that ADDRESS, which is what `QuorumIdentityBadge` does — and it renders
+   * the `.q` as a badge beside the Farcaster name, never in place of it.
+   */
+  isFarcasterNamespace?: boolean;
 }
 
 export interface MessagesListHandle {
@@ -344,6 +369,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   topInset = 0,
   bottomInset = 0,
   isDM = false,
+  isFarcasterNamespace = false,
 }, ref) {
   const { width: screenWidth } = useWindowDimensions();
   const MESSAGE_IMAGE_MAX_WIDTH = screenWidth - 84;
@@ -372,9 +398,29 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   // callback; only the `useNameResolver()` hook call itself lives here, at
   // the top, per the "never a hook per list item" rule.
   const { resolve, requestNames } = useNameResolver();
+  // Is this sender id a Farcaster identity rather than a Quorum address?
+  //
+  // Decided PER SENDER, not per list, because the two namespaces genuinely mix:
+  // a space channel bound to a Farcaster channel merges casts into the same
+  // stream as Quorum messages (see `castToDisplayMessage`, which marks them
+  // with an `fc:` prefix for exactly this reason). A whole-list flag would be
+  // wrong there. `isFarcasterNamespace` covers the other shape — a Farcaster
+  // DM, where senders are bare unprefixed fids and nothing in the id says so.
+  const isFarcasterSender = useCallback(
+    (userId: string) => isFarcasterNamespace || userId.startsWith('fc:'),
+    [isFarcasterNamespace]
+  );
+  // `carriedName` is the name already on the DisplayMessage. It is used ONLY
+  // for a Farcaster sender, whose id the Quorum resolver must never see. For a
+  // Quorum member it is deliberately ignored: that field is frozen at write
+  // time, so an old row can carry a stale or forged name, and resolving it live
+  // is the entire point of routing through the ladder.
   const resolveDisplayName = useCallback(
-    (address: string) => formatResolvedName(resolve(address, { spaceId })),
-    [resolve, spaceId]
+    (address: string, carriedName?: string) =>
+      isFarcasterSender(address)
+        ? (carriedName || address)
+        : formatResolvedName(resolve(address, { spaceId })),
+    [isFarcasterSender, resolve, spaceId]
   );
   const [viewerImage, setViewerImage] = useState<string | null>(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
@@ -714,9 +760,14 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   // Apex gold ring — batched "is this sender Apex-active?" lookup over the
   // distinct sender addresses of the loaded messages. Degrades silently to
   // an empty set when the server endpoint isn't live.
+  // Farcaster senders are excluded: no Apex record is keyed by a fid, so
+  // including them is a guaranteed miss on every one.
   const senderAddresses = useMemo(
-    () => Array.from(new Set(messages.map((m) => m.userId))),
-    [messages]
+    () =>
+      Array.from(new Set(messages.map((m) => m.userId))).filter(
+        (id) => !isFarcasterSender(id)
+      ),
+    [isFarcasterSender, messages]
   );
   const apexAddresses = useApexStatusForAddresses(senderAddresses);
 
@@ -739,13 +790,20 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
   // enters the loaded set. `messages` is oldest-first, so the MOST RECENTLY
   // active senders are collected by walking from the end — an overflow past
   // the cap drops the OLDEST distinct senders' `.q`, not the newest.
+  //
+  // Farcaster senders are excluded before the cap is applied: a fid can never
+  // key a QNS record, so including them would spend cap slots on certain
+  // misses AND crowd out real Quorum senders in a mixed channel. The name
+  // they would enrich is not the one that gets rendered for them anyway.
   const enrichableSenderAddresses = useMemo(() => {
     const recentFirst: { address: string }[] = [];
     for (let i = messages.length - 1; i >= 0; i--) {
-      recentFirst.push({ address: messages[i].userId });
+      const address = messages[i].userId;
+      if (isFarcasterSender(address)) continue;
+      recentFirst.push({ address });
     }
     return qnsLookupAddresses(recentFirst, MAX_QNS_LOOKUPS);
-  }, [messages]);
+  }, [isFarcasterSender, messages]);
   useEffect(() => {
     requestNames(enrichableSenderAddresses);
   }, [enrichableSenderAddresses, requestNames]);
@@ -766,7 +824,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
             }) | undefined;
             onUserPress({
               userId: item.userId,
-              userName: resolveDisplayName(item.userId),
+              userName: resolveDisplayName(item.userId, item.userName),
               userAvatar: typeof item.userAvatar === 'string' ? item.userAvatar : undefined,
               bio: member ? resolveMemberBio(member) : undefined,
               farcasterFid: member?.farcasterFid,
@@ -787,10 +845,10 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
               style={styles.messageAvatar}
               // Same name the else-branch draws, so an avatar URL that 404s
               // degrades to the identical initials rather than to something else.
-              fallbackName={resolveDisplayName(item.userId)}
+              fallbackName={resolveDisplayName(item.userId, item.userName)}
             />
           ) : (
-            <DefaultAvatar resolvedName={resolveDisplayName(item.userId)} address={item.userId} size={40} style={styles.messageAvatar} />
+            <DefaultAvatar resolvedName={resolveDisplayName(item.userId, item.userName)} address={item.userId} size={40} style={styles.messageAvatar} />
           )}
         </ApexAvatarRing>
       );
@@ -1230,7 +1288,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
             <View style={styles.messageContent}>
               {!isCompact && (
               <View style={styles.messageHeader}>
-                <Text style={styles.messageUser} numberOfLines={1}>{resolveDisplayName(item.userId)}</Text>
+                <Text style={styles.messageUser} numberOfLines={1}>{resolveDisplayName(item.userId, item.userName)}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
                 {renderUnsignedWarning(item)}
               </View>
@@ -1308,7 +1366,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
             <View style={styles.messageContent}>
               {!isCompact && (
               <View style={styles.messageHeader}>
-                <Text style={styles.messageUser} numberOfLines={1}>{resolveDisplayName(item.userId)}</Text>
+                <Text style={styles.messageUser} numberOfLines={1}>{resolveDisplayName(item.userId, item.userName)}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
                 {renderUnsignedWarning(item)}
               </View>
@@ -1436,7 +1494,7 @@ export const MessagesList = forwardRef<MessagesListHandle, MessagesListProps>(fu
             <View style={styles.messageContent}>
               {!isCompact && (
               <View style={styles.messageHeader}>
-                <Text style={styles.messageUser} numberOfLines={1}>{resolveDisplayName(item.userId)}</Text>
+                <Text style={styles.messageUser} numberOfLines={1}>{resolveDisplayName(item.userId, item.userName)}</Text>
                 <Text style={styles.messageTime}>{item.timeString}</Text>
                 {/* No per-message pinned/bookmarked glyph. Both states have a
                     dedicated surface (PinnedMessagesPanel / BookmarksPanel), and
