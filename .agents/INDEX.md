@@ -6,6 +6,7 @@ This is the main index for all documentation, bug reports, and task management.
 
 - [Floating Tab Bar + Edge-to-Edge Chrome Redesign](docs/2026-06-18-floating-tab-bar-and-edge-to-edge-redesign.md)
 - [Notification system: mobile vs desktop — deep dive + alignment plan](docs/2026-06-23-notification-system-mobile-vs-desktop.md)
+- [DM identity emission map](docs/dm-identity-emission-map.md)
 - [Inbox envelope lifecycle & the poison guard](docs/inbox-envelope-lifecycle-and-poison-guard.md)
 - [iOS UI pitfalls when you can only test on Android](docs/ios-ui-pitfalls-android-only-testing.md)
 - [iOS verification checklist](docs/ios-verification-checklist.md)
@@ -298,4 +299,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-19 21:11:02
+**Last Updated**: 2026-08-19 21:12:15
