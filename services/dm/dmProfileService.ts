@@ -66,11 +66,12 @@ export interface DMBroadcastDeps {
 
 /**
  * Everything `sendProfileToPartner` needs beyond `partnerAddress` and
- * `payload`. Built once per sweep in `broadcastProfileToAllDMs` (one MMKV
- * store handle, one clock reading, one set of resolved dynamic-import
- * bindings) and threaded through every partner in that sweep, so extracting
- * the per-partner body out of the loop does not turn a single setup cost into
- * a per-partner one.
+ * `payload`. Built by `buildSendProfileDeps` below (one MMKV store handle,
+ * one clock reading, one set of resolved dynamic-import bindings) and
+ * threaded through every partner a caller processes with it — for
+ * `broadcastProfileToAllDMs` that means built once per sweep and reused for
+ * every partner in that sweep, so extracting the per-partner body out of the
+ * loop did not turn a single setup cost into a per-partner one.
  */
 export interface SendProfileDeps extends DMBroadcastDeps {
   store: MMKV;
@@ -241,6 +242,17 @@ export function clearDmProfileBroadcastState(selfAddress: string, partnerAddress
  * invoke a single-partner send directly (reveal-on-reply, inbound-new-session
  * auto-announce) without re-running the whole-sweep machinery.
  *
+ * PRECONDITION — enforced by the caller, not here: the caller must already
+ * know it is safe to reveal identity to `partnerAddress` (via
+ * `ensureRevealBootstrap` / `hasRevealedTo` in `./dmRevealLedger`, or because
+ * the caller IS the event that establishes consent, e.g. a just-recorded
+ * deliberate send) before calling this. This function performs NO reveal-
+ * ledger check of its own — deliberately, so it stays usable by callers that
+ * have already established consent by a different route, and so there is
+ * exactly one place (the caller) that owns the consent decision. Do not add
+ * a redundant check here; a second copy of the decision is how the two
+ * copies drift.
+ *
  * Returns true only once a frame was actually enqueued and the gate recorded
  * — not merely "eligible to send" — so a caller can count real sends.
  */
@@ -303,6 +315,63 @@ export async function sendProfileToPartner(
 }
 
 /**
+ * Assemble a `SendProfileDeps` bag from just `{ enqueueOutbound, subscribe }`:
+ * resolve the device keyset, the three dynamically-imported send bindings,
+ * and the gate store — everything `sendProfileToPartner` needs beyond
+ * `partnerAddress`/`payload` but that no caller outside this file can reach
+ * on its own. `dmProfileBroadcastStore` is a private module singleton
+ * (`getStore()` above is not exported), and the three dynamic imports exist
+ * only to keep native-module-heavy hooks out of this file's top-level import
+ * graph — a caller re-doing them by hand would have to know both of those
+ * implementation details and keep them in sync with this file by hand.
+ *
+ * ONE assembly path for this setup: `broadcastProfileToAllDMs` below calls
+ * this too (once per sweep, not once per partner — see `SendProfileDeps`'s
+ * doc comment for why that matters), rather than keeping an inline copy that
+ * could drift from what a single-partner caller (Tasks 6-7: reveal-on-reply,
+ * inbound-new-session auto-announce) gets.
+ *
+ * Returns null when setup genuinely cannot proceed (no device keyset — e.g.
+ * onboarding incomplete or secure storage unavailable), so a caller gets one
+ * honest failure signal instead of a half-built deps object.
+ *
+ * Does NOT check the reveal ledger. Whether it is safe to reveal to a given
+ * partner is a per-partner decision (see `sendProfileToPartner`'s docstring
+ * for who owns it) and does not belong in a per-sweep/per-call setup step.
+ */
+export async function buildSendProfileDeps(
+  base: DMBroadcastDeps,
+): Promise<SendProfileDeps | null> {
+  // One clock reading for whatever this deps bag ends up covering — a whole
+  // sweep for broadcastProfileToAllDMs, or a single send for a Task 6/7
+  // caller — so every partner judged against it drifts from the same instant
+  // rather than from Date.now() called fresh per partner.
+  const now = Date.now();
+
+  let deviceKeyset: DeviceKeyset | null;
+  try {
+    deviceKeyset = await getDeviceKeyset();
+  } catch {
+    return null;
+  }
+  if (!deviceKeyset) return null;
+
+  const { sendEncryptedMessageToAllDevices } = await import('@/hooks/chat/useSendDirectMessage');
+  const { toAllDeviceInfos } = await import('@/hooks/chat/useRecipientRegistration');
+  const { getQuorumClient } = await import('@/services/api/quorumClient');
+
+  return {
+    ...base,
+    store: getStore(),
+    now,
+    deviceKeyset,
+    apiClient: getQuorumClient(),
+    toAllDeviceInfos,
+    sendEncryptedMessageToAllDevices,
+  };
+}
+
+/**
  * Broadcast a global profile change to every direct-DM partner with whom we
  * have (or can establish) an encryption session.
  *
@@ -318,17 +387,11 @@ export async function broadcastProfileToAllDMs(
   // Empty payload would no-op on every receiver — nothing to send.
   if (sig === '{}') return;
 
-  // One clock reading for the whole sweep, so every partner in this run is
-  // judged against the same instant rather than drifting across a long loop.
-  const now = Date.now();
-
-  let deviceKeyset: DeviceKeyset | null;
-  try {
-    deviceKeyset = await getDeviceKeyset();
-  } catch {
-    return;
-  }
-  if (!deviceKeyset) return;
+  // Built once, threaded through every partner in this sweep — see
+  // buildSendProfileDeps and SendProfileDeps's doc comments for why this is
+  // not a per-partner cost.
+  const sendDeps = await buildSendProfileDeps(deps);
+  if (!sendDeps) return;
 
   const adapter = getMMKVAdapter();
 
@@ -344,24 +407,7 @@ export async function broadcastProfileToAllDMs(
     limit: 100000,
   });
 
-  const store = getStore();
   let sent = 0;
-  const { sendEncryptedMessageToAllDevices } = await import('@/hooks/chat/useSendDirectMessage');
-  const { toAllDeviceInfos } = await import('@/hooks/chat/useRecipientRegistration');
-  const { getQuorumClient } = await import('@/services/api/quorumClient');
-  const apiClient = getQuorumClient();
-
-  // Bundled once, threaded through every partner in this sweep — see the
-  // SendProfileDeps doc comment for why this is not a per-partner cost.
-  const sendDeps: SendProfileDeps = {
-    ...deps,
-    store,
-    now,
-    deviceKeyset,
-    apiClient,
-    toAllDeviceInfos,
-    sendEncryptedMessageToAllDevices,
-  };
 
   for (const conv of partners) {
     const partnerAddress = conv.address;
