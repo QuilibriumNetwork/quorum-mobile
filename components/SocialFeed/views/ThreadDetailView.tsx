@@ -690,8 +690,9 @@ function createStyles(theme: AppTheme) {
     },
     displayName: {
       color: theme.colors.textStrong,
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
-      fontSize: Skin.font(15),
+      fontSize: Skin.font(17),
     },
     channelName: {
       color: theme.colors.accent,

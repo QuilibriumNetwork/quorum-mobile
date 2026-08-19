@@ -604,8 +604,9 @@ function createStyles(theme: AppTheme) {
     },
     castAuthorName: {
       color: theme.colors.textStrong,
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
-      fontSize: Skin.font(15),
+      fontSize: Skin.font(17),
     },
     channelLink: {
       color: theme.colors.accent,

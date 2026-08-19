@@ -8006,7 +8006,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       color: theme.colors.textStrong,
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: theme.fonts.medium.fontWeight,
-      fontSize: Skin.font(15),
+      fontSize: Skin.font(17),
     },
     channelLabel: {
       color: theme.colors.textMuted,
