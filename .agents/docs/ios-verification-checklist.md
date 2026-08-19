@@ -428,6 +428,39 @@ the row stretched, hovered, or let content show through it.
   index stops pointing at the pill row, if `externalScroll` is dropped, if the rewind stops
   firing on a section change, or if it starts firing on every render.
 
+### 15. Message body at 16/22: username row not clipped, spacing not cramped 🔲
+**▶ Ask:** "Open a Space channel and a DM. Look at a few messages, including one from
+someone with a long display name, one with a `# heading` and a ``` code block ```, and one
+that is only emoji. Is any username cut off at the top or bottom? Is the gap between the
+username line and the first line of the message about even with the gap between the message
+lines themselves?"
+**Pass:** no clipping anywhere, spacing looks even. **Fail:** say which (name clipped /
+gap too tight / gap too wide) and whether it was a channel or a DM.
+
+**Context (agent):**
+- **What/when:** message typography fix, branch `fix/chat-message-text-size-and-line-height`
+  (2026-08-19). Android-only so far.
+- **The change:** [MessagesList.tsx](../../components/Chat/MessagesList.tsx) `messageText`
+  and `linkText` gained an explicit `16/22`; they previously set neither, so RN's built-in
+  default of `14` plus the font's own leading applied. `messageUser` went `14/20 → 16/22`
+  and the fixed `messageHeader` line box went `20 → 22` to hold it. In
+  [MessageMarkdownRenderer.native.tsx](../../components/Chat/MessageMarkdownRenderer.native.tsx)
+  the heading went `17 → 20/26` and code `13 → 14`.
+- **Why iOS may differ:** this is the classic `lineHeight` platform split. Android adds
+  `includeFontPadding` above/below glyphs and centres text in the line box differently from
+  iOS, and San Francisco's ascent/descent ratios are not Roboto's. `messageHeader` is a
+  **fixed-height** box (`height: Skin.font(22)`) holding a `lineHeight: 22` `<Text>` — that
+  is exactly the shape that fits on one platform and clips on the other. The old code had
+  the same 1:1 relationship at 20, so the risk is unchanged in kind, only in magnitude.
+- **Built-in control arm:** emoji-only messages must look **identical** to before. Their
+  size comes from `emojiOnlyScale × (style?.fontSize || 16)` in
+  [MentionableText.tsx](../../components/Chat/MentionableText.tsx) — the fallback was
+  already `16`, and the style now supplies a real `16`, so the computed value is unchanged.
+  If emoji-only messages *do* change size on iOS, the problem is not this diff.
+- **If it FAILS** (name clipped): raise `messageHeader.height` rather than lowering
+  `messageUser.lineHeight` — the header height exists to stop non-text indicators
+  (warning/edited/spinner) stretching the row, so it is the value with slack in it.
+
 ---
 
 ## Verified
@@ -436,4 +469,4 @@ _(none yet — move ✅ items here with the date + tester)_
 
 ---
 
-*Last updated: 2026-08-16*
+*Last updated: 2026-08-19*

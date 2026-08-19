@@ -1820,14 +1820,16 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'baseline',
     // Fixed line box so non-text indicators (warning/edited/spinner) can't
     // stretch the row taller than the username line and widen the header→text gap.
-    height: Skin.font(20),
+    height: Skin.font(22),
   },
+  // Matches the body's 16/22: a name smaller than the message under it inverts
+  // the hierarchy, and desktop's sender name likewise inherits the 16px body.
   messageUser: {
     color: theme.colors.textStrong,
     fontFamily: theme.fonts.bold.fontFamily,
     fontWeight: theme.fonts.bold.fontWeight,
-    fontSize: Skin.font(14),
-    lineHeight: Skin.font(20),
+    fontSize: Skin.font(16),
+    lineHeight: Skin.font(22),
     marginRight: Skin.space(8),
     flexShrink: 1,
   },
@@ -1835,10 +1837,17 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: theme.colors.textSubtle,
     fontSize: Skin.font(12),
   },
+  // Size and line height are set explicitly: with neither, RN falls back to its
+  // built-in 14 and to the font's own (very tight) leading, which rendered the
+  // body smaller than the composer that produced it and than desktop's 16/24.
+  // 16/22 matches the composer input, desktop's 16px body, and the base that
+  // MentionableText's emoji tiers already assume.
   messageText: {
     color: theme.colors.textMain,
     marginTop: Skin.space(4),
     fontFamily: theme.fonts.regular.fontFamily,
+    fontSize: Skin.font(16),
+    lineHeight: Skin.font(22),
   },
   messageWithLink: {
     flexDirection: 'row',
@@ -1846,10 +1855,14 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginTop: Skin.space(4),
     flexWrap: 'wrap',
   },
+  // Sits inline with body text in the `messageWithLink` row, so it has to carry
+  // the same metrics — it is a sibling <Text>, not a child, and inherits nothing.
   linkText: {
     color: theme.colors.primary,
     textDecorationLine: 'underline',
     fontFamily: theme.fonts.regular.fontFamily,
+    fontSize: Skin.font(16),
+    lineHeight: Skin.font(22),
   },
   loadingText: {
     marginTop: Skin.space(12),

@@ -636,10 +636,13 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.textMain,
       fontFamily: theme.fonts.regular.fontFamily,
     },
+    // lineHeight must be stated: headings render as [baseTextStyle, heading], so
+    // without it they keep the body's 22 line box and a 20px glyph gets clipped.
     heading: {
       fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: 'bold',
-      fontSize: Skin.font(17),
+      fontSize: Skin.font(20),
+      lineHeight: Skin.font(26),
       marginTop: Skin.space(4),
       marginBottom: Skin.space(2),
     },
@@ -649,7 +652,9 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.textMain,
       borderRadius: Skin.radius(3),
       paddingHorizontal: Skin.space(4),
-      fontSize: Skin.font(13),
+      // One step under the 16 body: monospace reads larger at the same nominal
+      // size, so matching 16 exactly would make inline code look oversized.
+      fontSize: Skin.font(14),
     },
     codeBlock: {
       backgroundColor: theme.colors.surface4 ?? theme.colors.surface3,
@@ -657,10 +662,13 @@ const createStyles = (theme: AppTheme) =>
       padding: Skin.space(10),
       marginVertical: Skin.space(4),
     },
+    // A standalone <Text>, not a child of the body run, so it inherits no
+    // metrics — both size and line height have to be stated here.
     codeText: {
       fontFamily: 'monospace',
       color: theme.colors.textMain,
-      fontSize: Skin.font(13),
+      fontSize: Skin.font(14),
+      lineHeight: Skin.font(20),
     },
     copyButton: {
       position: 'absolute',
