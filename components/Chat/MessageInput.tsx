@@ -1421,6 +1421,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   gifBadgeText: {
     color: '#fff',
     fontSize: Skin.font(10),
+    fontFamily: theme.fonts.bold.fontFamily,
     fontWeight: 'bold',
   },
   // The single pill: rounded container holding left buttons, the growing

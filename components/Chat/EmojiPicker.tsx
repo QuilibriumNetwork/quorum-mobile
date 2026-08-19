@@ -576,6 +576,7 @@ const createStyles = (theme: AppTheme, keyboardHeight: number) => StyleSheet.cre
   },
   headerTitle: {
     fontSize: Skin.font(18),
+    fontFamily: theme.fonts.semiBold.fontFamily,
     fontWeight: '600',
     color: theme.colors.textStrong ?? theme.colors.textMain,
   },

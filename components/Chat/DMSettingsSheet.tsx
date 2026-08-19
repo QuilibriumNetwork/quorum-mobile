@@ -291,6 +291,7 @@ const createStyles = (theme: AppTheme) =>
     // Inline "Reset to global" link inside a receipt row's description.
     resetLink: {
       color: theme.colors.primary,
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
     },
     header: {

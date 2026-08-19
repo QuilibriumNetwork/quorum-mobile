@@ -638,9 +638,13 @@ const createStyles = (theme: AppTheme) =>
     },
     // lineHeight must be stated: headings render as [baseTextStyle, heading], so
     // without it they keep the body's 22 line box and a 20px glyph gets clipped.
+    // Family and weight must name the SAME face. Pairing the medium family with
+    // a bold weight used to be harmless under the system font, but with bundled
+    // per-weight faces it asks the platform to synthesize bold from Medium,
+    // which renders as smeared faux-bold.
     heading: {
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: 'bold',
+      fontFamily: theme.fonts.bold.fontFamily,
+      fontWeight: theme.fonts.bold.fontWeight,
       fontSize: Skin.font(20),
       lineHeight: Skin.font(26),
       marginTop: Skin.space(4),

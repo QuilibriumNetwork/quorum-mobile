@@ -273,6 +273,7 @@ const createStyles = (theme: AppTheme) =>
     },
     title: {
       fontSize: Skin.font(15),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textMain,
     },
@@ -306,6 +307,7 @@ const createStyles = (theme: AppTheme) =>
     joinButtonText: {
       color: '#fff',
       fontSize: Skin.font(14),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
     },
     // Compact "In call" indicator (replaces inline controls when joined)
@@ -322,6 +324,7 @@ const createStyles = (theme: AppTheme) =>
     },
     inCallText: {
       fontSize: Skin.font(14),
+      fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: '500',
       fontVariant: ['tabular-nums'] as any,
     },
@@ -335,6 +338,7 @@ const createStyles = (theme: AppTheme) =>
     },
     expandButtonText: {
       fontSize: Skin.font(13),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
     },
     qualityDot: {

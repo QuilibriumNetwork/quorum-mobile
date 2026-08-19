@@ -13,12 +13,36 @@
  */
 
 /**
- * The default font family. `'System'` is React Native's sentinel for the
- * platform's native UI font: San Francisco on iOS, and Roboto / the user's
- * chosen system font on Android (RN falls back to the device default for an
- * unrecognized family). No bundled font is used unless a skin overrides this.
+ * Faces of the bundled UI font, registered with expo-font in the root layout
+ * before first paint.
+ *
+ * Each weight is its own file and its own family name because React Native
+ * cannot drive a variable font's weight axis — Expo's docs state plainly that
+ * "variable fonts ... do not have support across all platforms" and to "use
+ * static fonts" instead. This is the one place mobile must diverge from
+ * desktop, which ships a single variable Inter and sets `font-weight`
+ * numerically.
+ *
+ * Each face is paired with its TRUE weight, not a neutral one. Synthetic
+ * ("faux") bolding is only applied when the requested weight is heavier than
+ * the face can provide — asking Inter_700Bold for 700 is a no-op, so there is
+ * no double-bolding to avoid. React Navigation's `Theme['fonts']` also requires
+ * a concrete `fontWeight`, so omitting it is not an option regardless.
  */
-export const DEFAULT_FONT_FAMILY = 'System';
+export const INTER_FACES = {
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semiBold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+  heavy: 'Inter_900Black',
+} as const;
+
+/**
+ * The family used when no skin overrides it. Previously `'System'` (San
+ * Francisco on iOS, whatever the OEM ships on Android) — which meant the app
+ * rendered differently on every Android handset and never matched desktop.
+ */
+export const DEFAULT_FONT_FAMILY = INTER_FACES.regular;
 
 /**
  * Build the weight→{family,weight} map for a given font family. A skin swaps
@@ -26,31 +50,54 @@ export const DEFAULT_FONT_FAMILY = 'System';
  * consumer picks it up. Embedded skin fonts are single-face, so all weights
  * share one family and rely on synthetic bolding (see fontLoader).
  */
-type FontFace = { fontFamily: string; fontWeight: '400' | '500' | '700' | '900' };
+type FontWeight = '400' | '500' | '600' | '700' | '900';
+
+type FontFace = { fontFamily: string; fontWeight: FontWeight };
 
 type FontMap = {
   regular: FontFace;
   medium: FontFace;
+  /** 600 is the app's most-used weight by a wide margin, so it is first-class. */
+  semiBold: FontFace;
   bold: FontFace;
   heavy: FontFace;
   /**
-   * Optional faces a skin may add. Not produced by the default map, so consumers
-   * must access them defensively (e.g. `theme.fonts.mono?.fontFamily || fallback`).
+   * Optional face a skin may add. Not produced by the default map, so consumers
+   * must access it defensively (e.g. `theme.fonts.mono?.fontFamily || fallback`).
    */
   mono?: FontFace;
-  semiBold?: FontFace;
 };
 
-export function makeFonts(fontFamily: string = DEFAULT_FONT_FAMILY): FontMap {
+/**
+ * Build the weight→face map.
+ *
+ * Pass nothing for the app's own font: each weight resolves to its own bundled
+ * Inter family, with no `fontWeight` (see INTER_FACES).
+ *
+ * Pass a family for a skin: skin fonts are single-face, so every weight shares
+ * that one family and relies on the platform synthesizing the weight.
+ */
+export function makeFonts(skinFamily?: string | null): FontMap {
+  if (!skinFamily) {
+    return {
+      regular: { fontFamily: INTER_FACES.regular, fontWeight: '400' },
+      medium: { fontFamily: INTER_FACES.medium, fontWeight: '500' },
+      semiBold: { fontFamily: INTER_FACES.semiBold, fontWeight: '600' },
+      bold: { fontFamily: INTER_FACES.bold, fontWeight: '700' },
+      heavy: { fontFamily: INTER_FACES.heavy, fontWeight: '900' },
+    };
+  }
+  const fontFamily = skinFamily;
   return {
-    regular: { fontFamily, fontWeight: '400' as const },
-    medium: { fontFamily, fontWeight: '500' as const },
-    bold: { fontFamily, fontWeight: '700' as const },
-    heavy: { fontFamily, fontWeight: '900' as const },
+    regular: { fontFamily, fontWeight: '400' },
+    medium: { fontFamily, fontWeight: '500' },
+    semiBold: { fontFamily, fontWeight: '600' },
+    bold: { fontFamily, fontWeight: '700' },
+    heavy: { fontFamily, fontWeight: '900' },
   };
 }
 
-export const fonts = makeFonts(DEFAULT_FONT_FAMILY);
+export const fonts = makeFonts();
 
 export const fontSizes = {
   xs: 10,
@@ -73,9 +120,7 @@ export const fontSizes = {
  * Or spread them with color:
  *   <Text style={[textStyles.body, { color: theme.colors.textMain }]}>
  */
-type TextStyleEntry = {
-  fontFamily: string;
-  fontWeight: '400' | '500' | '700' | '900';
+type TextStyleEntry = FontFace & {
   fontSize: number;
   lineHeight: number;
 };
@@ -85,12 +130,14 @@ type TextStyleEntry = {
  * a skin's font and `fontScale` flow through `theme.textStyles` (see
  * createTheme). The base sizes/weights match iOS HIG.
  */
-export function makeTextStyles(family: string = DEFAULT_FONT_FAMILY, scale = 1) {
+export function makeTextStyles(skinFamily?: string | null, scale = 1) {
   const px = (n: number) => Math.round(n * scale);
-  const W = { regular: '400', medium: '500', bold: '700' } as const;
-  const e = (fontWeight: '400' | '500' | '700', fontSize: number, lineHeight: number): TextStyleEntry => ({
-    fontFamily: family,
-    fontWeight,
+  // Resolve through makeFonts so each entry picks up the right bundled face
+  // (or the skin's single face plus a synthesized weight) — the type scale must
+  // not hardcode a family, or bold styles render as faux-bold regular.
+  const W = makeFonts(skinFamily);
+  const e = (face: FontFace, fontSize: number, lineHeight: number): TextStyleEntry => ({
+    ...face,
     fontSize: px(fontSize),
     lineHeight: px(lineHeight),
   });
@@ -104,7 +151,7 @@ export function makeTextStyles(family: string = DEFAULT_FONT_FAMILY, scale = 1) 
     /** 20/25 bold — tertiary titles, card headers */
     title3: e(W.bold, 20, 25),
     /** 17/22 semibold — prominent body text, list item titles */
-    headline: e(W.medium, 17, 22),
+    headline: e(W.semiBold, 17, 22),
     /** 17/22 regular — default body copy */
     body: e(W.regular, 17, 22),
     /** 16/21 regular — secondary body text */

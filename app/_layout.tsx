@@ -81,6 +81,7 @@ import { CustomThemeProvider, useTheme } from '@/theme';
 import { AppBackground } from '@/components/ui/AppBackground';
 import { getActiveSkin, getAppearancePref } from '@/services/theme/skinPrefs';
 import { ensureSkinFontLoaded } from '@/theme/skins/fontLoader';
+import { ensureUiFontLoaded } from '@/theme/uiFont';
 import { setSkinGeometry } from '@/theme/skins/geometry';
 import { bumpStyleVersion } from '@/theme/skins/skinnableStyleSheet';
 
@@ -311,16 +312,21 @@ export default function RootLayout() {
   // Appearance pref is a synchronous MMKV read — available before first paint,
   // same as the skin tokens, so a manual light/dark choice never flashes.
   const bootAppearance = React.useMemo(() => getAppearancePref(), []);
-  const [skinReady, setSkinReady] = React.useState(false);
+  // Both fonts load concurrently, and neither rejects — a font that fails to
+  // register falls back to the platform font rather than blocking launch. This
+  // gate already existed for skins; the bundled UI font joins it rather than
+  // adding a second serial wait, so it costs no extra launch time beyond the
+  // slower of the two.
+  const [fontsReady, setFontsReady] = React.useState(false);
   React.useEffect(() => {
     let cancelled = false;
-    ensureSkinFontLoaded(bootSkin).finally(() => {
-      if (!cancelled) setSkinReady(true);
+    Promise.all([ensureUiFontLoaded(), ensureSkinFontLoaded(bootSkin)]).finally(() => {
+      if (!cancelled) setFontsReady(true);
     });
     return () => { cancelled = true; };
   }, [bootSkin]);
 
-  if (!skinReady) {
+  if (!fontsReady) {
     return null;
   }
 

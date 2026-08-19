@@ -30,6 +30,7 @@
   "dependencies": {
     "@bitcoin-js/tiny-secp256k1-asmjs": "2.2.4",
     "@bitcoinerlab/secp256k1": "1.2.0",
+    "@expo-google-fonts/inter": "0.4.2",
     "@expo/vector-icons": "15.0.3",
     "@farcaster/miniapp-host-react-native": "0.1.17",
     "@kcoin/kaspa-web3.js": "1.1.4",
