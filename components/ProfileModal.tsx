@@ -14,6 +14,8 @@ import { QuorumLogoIcon } from '@/components/SocialFeed/content/QuorumLogoIcon';
 import { ApexAvatarRing, ApexIcon, APEX_GOLD } from '@/components/ui/ApexAvatarRing';
 import { useApexSubscription, type ApexSubscriptionState } from '@/hooks/useApex';
 import { SkinsModal } from '@/components/skins/SkinsModal';
+import { TextSizeModal } from '@/components/TextSizeModal';
+import { textSizeLabel } from '@/theme/textSize';
 import SyncStatusLine from '@/components/SyncStatusLine';
 import { useAuth, useWebSocket } from '@/context';
 import { useToast } from '@/context/ToastContext';
@@ -376,7 +378,7 @@ export default function ProfileModal({
   onFarcasterConnected,
   onUnmergeProfiles,
 }: ProfileModalProps) {
-  const { theme, isDark, activeSkin } = useTheme();
+  const { theme, isDark, activeSkin, textSize } = useTheme();
   const { user, signOut, updateProfile } = useAuth();
   const { enqueueOutbound, flushOutbound, subscribe } = useWebSocket();
   const { showToast } = useToast();
@@ -440,6 +442,7 @@ export default function ProfileModal({
   const [listNameModalVisible, setListNameModalVisible] = React.useState(false);
   const [nameToList, setNameToList] = React.useState<string | null>(null);
   const [skinsOpen, setSkinsOpen] = React.useState(false);
+  const [textSizeOpen, setTextSizeOpen] = React.useState(false);
   const [translateOpen, setTranslateOpen] = React.useState(false);
   const [storedTarget] = useMMKVString(K_TARGET_LANGUAGE, translationPrefsStore);
   const translationOff = isTranslationOff(storedTarget);
@@ -2430,6 +2433,14 @@ export default function ProfileModal({
                 </View>
                 <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
               </TouchableOpacity>
+              <TouchableOpacity style={styles.settingRow} onPress={() => setTextSizeOpen(true)}>
+                <IconSymbol name="textformat.size" size={20} color={theme.colors.primary} style={styles.settingIcon} />
+                <View style={styles.settingLeft}>
+                  <Text style={styles.settingLabel}>Text size</Text>
+                  <Text style={styles.settingDescription}>{textSizeLabel(textSize)}</Text>
+                </View>
+                <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
+              </TouchableOpacity>
               <TouchableOpacity style={styles.settingRow} onPress={() => setTranslateOpen(true)}>
                 <IconSymbol name="language" size={20} color={theme.colors.primary} style={styles.settingIcon} />
                 <View style={styles.settingLeft}>
@@ -2859,6 +2870,8 @@ export default function ProfileModal({
 
         <SkinsModal visible={skinsOpen} onClose={() => setSkinsOpen(false)} />
 
+        <TextSizeModal visible={textSizeOpen} onClose={() => setTextSizeOpen(false)} />
+
         <TranslateLanguageModal visible={translateOpen} onClose={() => setTranslateOpen(false)} />
 
         {/* Quorum Apex subscribe / renew */}
@@ -3024,6 +3037,8 @@ export default function ProfileModal({
       />
 
       <SkinsModal visible={skinsOpen} onClose={() => setSkinsOpen(false)} />
+
+      <TextSizeModal visible={textSizeOpen} onClose={() => setTextSizeOpen(false)} />
 
       <TranslateLanguageModal visible={translateOpen} onClose={() => setTranslateOpen(false)} />
 

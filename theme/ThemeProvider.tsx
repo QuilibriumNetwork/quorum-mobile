@@ -5,10 +5,12 @@ import type { SkinOverride } from './skins/types';
 import { ensureSkinFontLoaded } from './skins/fontLoader';
 import { setSkinGeometry } from './skins/geometry';
 import { bumpStyleVersion } from './skins/skinnableStyleSheet';
+import { DEFAULT_TEXT_SIZE, textSizeScale, type TextSizePref } from './textSize';
 import {
   saveSkin,
   setActiveSkinId,
   setAppearancePref,
+  setTextSizePref,
   type AppearancePref,
 } from '@/services/theme/skinPrefs';
 
@@ -25,6 +27,11 @@ type ThemeContextType = {
    *  use this instead of setIsDark so the choice survives restarts. */
   setAppearance: (pref: AppearancePref) => void;
   setAccentColor: (color: AccentColor) => void;
+  /** The user's text-size choice. Multiplies with the skin's `fontScale` and
+   *  with the OS font-size setting, which we keep honouring. */
+  textSize: TextSizePref;
+  /** Set + persist the text size. Applies live across the whole app. */
+  setTextSize: (pref: TextSizePref) => void;
   toggleTheme: () => void;
   /** Apply (or clear) a skin. Loads its embedded font before switching so
    *  there's no flash of the fallback font. Persists the choice. */
@@ -56,6 +63,8 @@ type ThemeProviderProps = {
   defaultAppearance?: AppearancePref;
   /** Skin resolved + font-preloaded at boot (see app/_layout.tsx). */
   defaultSkin?: SkinOverride | null;
+  /** Text-size pref restored from storage at boot (see app/_layout.tsx). */
+  defaultTextSize?: TextSizePref;
 };
 
 export const CustomThemeProvider: React.FC<ThemeProviderProps> = ({
@@ -64,6 +73,7 @@ export const CustomThemeProvider: React.FC<ThemeProviderProps> = ({
   forceTheme = null,
   defaultAppearance = 'system',
   defaultSkin = null,
+  defaultTextSize = DEFAULT_TEXT_SIZE,
 }) => {
   const deviceColorScheme = useDeviceColorScheme();
   const [isDarkOverride, setIsDarkOverride] = useState<boolean | null>(
@@ -71,6 +81,7 @@ export const CustomThemeProvider: React.FC<ThemeProviderProps> = ({
   );
   const [accentColor, setAccentColor] = useState<AccentColor>(defaultAccentColor);
   const [skin, setSkin] = useState<SkinOverride | null>(defaultSkin);
+  const [textSize, setTextSizeState] = useState<TextSizePref>(defaultTextSize);
 
   const baseIsDark = forceTheme
     ? forceTheme === 'dark'
@@ -81,7 +92,10 @@ export const CustomThemeProvider: React.FC<ThemeProviderProps> = ({
   // land on the variant the author designed for.
   const isDark = skin ? skin.base === 'dark' : baseIsDark;
 
-  const theme = useMemo(() => createTheme(isDark, accentColor, skin), [isDark, accentColor, skin]);
+  const theme = useMemo(
+    () => createTheme(isDark, accentColor, skin, textSizeScale(textSize)),
+    [isDark, accentColor, skin, textSize],
+  );
 
   const toggleTheme = useCallback(() => {
     setIsDarkOverride(prev => prev === null ? !baseIsDark : !prev);
@@ -98,6 +112,18 @@ export const CustomThemeProvider: React.FC<ThemeProviderProps> = ({
 
   const appearance: AppearancePref =
     isDarkOverride === null ? 'system' : isDarkOverride ? 'dark' : 'light';
+
+  /**
+   * Needs no `bumpStyleVersion()`, unlike the skin path below. The user's text
+   * size reaches only the `message*` tokens and `theme.msgFont()`, both of
+   * which live on the theme object, so a context re-render is enough. Static
+   * `createSkinnable` stylesheets never see it, by design — see
+   * theme/skins/geometry.ts `font()`.
+   */
+  const setTextSize = useCallback((pref: TextSizePref) => {
+    setTextSizePref(pref); // persist first
+    setTextSizeState(pref);
+  }, []);
 
   const setActiveSkin = useCallback(async (next: SkinOverride | null) => {
     if (next) {
@@ -128,10 +154,12 @@ export const CustomThemeProvider: React.FC<ThemeProviderProps> = ({
     setIsDark: setIsDarkCb,
     setAppearance,
     setAccentColor,
+    textSize,
+    setTextSize,
     toggleTheme,
     setActiveSkin,
     previewSkin,
-  }), [theme, isDark, accentColor, skin, appearance, setIsDarkCb, setAppearance, setAccentColor, toggleTheme, setActiveSkin, previewSkin]);
+  }), [theme, isDark, accentColor, skin, appearance, setIsDarkCb, setAppearance, setAccentColor, textSize, setTextSize, toggleTheme, setActiveSkin, previewSkin]);
 
   return (
     <ThemeContext.Provider value={value}>

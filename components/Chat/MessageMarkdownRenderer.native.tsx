@@ -645,8 +645,10 @@ const createStyles = (theme: AppTheme) =>
     heading: {
       fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: theme.fonts.bold.fontWeight,
-      fontSize: Skin.font(20),
-      lineHeight: Skin.font(26),
+      // msgFont, not Skin.font: this renders INSIDE a message bubble, so it has
+      // to follow the user's text-size choice like the prose around it.
+      fontSize: theme.msgFont(20),
+      lineHeight: theme.msgFont(26),
       marginTop: Skin.space(4),
       marginBottom: Skin.space(2),
     },
@@ -658,7 +660,7 @@ const createStyles = (theme: AppTheme) =>
       paddingHorizontal: Skin.space(4),
       // One step under the 16 body: monospace reads larger at the same nominal
       // size, so matching 16 exactly would make inline code look oversized.
-      fontSize: Skin.font(14),
+      fontSize: theme.msgFont(14),
     },
     codeBlock: {
       backgroundColor: theme.colors.surface4 ?? theme.colors.surface3,
@@ -671,8 +673,8 @@ const createStyles = (theme: AppTheme) =>
     codeText: {
       fontFamily: 'monospace',
       color: theme.colors.textMain,
-      fontSize: Skin.font(14),
-      lineHeight: Skin.font(20),
+      fontSize: theme.msgFont(14),
+      lineHeight: theme.msgFont(20),
     },
     copyButton: {
       position: 'absolute',

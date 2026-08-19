@@ -25,6 +25,9 @@ const createTheme = (
   isDark: boolean,
   accentColor: AccentColor = 'blue',
   skin?: SkinOverride | null,
+  /** The user's text-size choice, as a multiplier. Composes with (rather than
+   *  replaces) a skin's own `fontScale` — see theme/textSize.ts. */
+  userFontScale: number = 1,
 ): Theme & {
   colors: Theme['colors'] & {
     accent: string;
@@ -79,6 +82,7 @@ const createTheme = (
   fonts: ReturnType<typeof makeFonts>;
   fontSizes: typeof fontSizes;
   textStyles: ReturnType<typeof makeTextStyles>;
+  msgFont: (n: number) => number;
   radii: SkinRadii;
   borders: SkinBorders;
   spacing: SkinSpacing;
@@ -111,6 +115,11 @@ const createTheme = (
 
   const skinFamily = skinFontFamily(skin);
   const fonts = skinFamily ? makeFonts(skinFamily) : defaultFonts;
+
+  // A skin's fontScale is app-wide; the user's text size is NOT — it reaches
+  // message and cast text only. See makeTextStyles for why they are separate
+  // rather than one product.
+  const fontScale = skin?.fontScale ?? 1;
 
   // Named tokens flow through the same geometry scale as the app-wide
   // radius()/space()/border() helpers, so semantic tokens and raw literals
@@ -216,8 +225,14 @@ const createTheme = (
       tabBarIconInactive: isDark ? pick('textMuted', textColors.muted) : pick('textSubtle', textColors.subtle),
     },
     fonts,
-    fontSizes: scaleFontSizes(skin?.fontScale ?? 1),
-    textStyles: makeTextStyles(skinFamily ?? undefined, skin?.fontScale ?? 1),
+    fontSizes: scaleFontSizes(fontScale),
+    textStyles: makeTextStyles(skinFamily ?? undefined, fontScale, userFontScale),
+    // Message CONTENT that the messageBody/messageAuthor tokens don't cover —
+    // markdown headings, inline code, code blocks. These live inside a message
+    // bubble, so they have to follow the user's text size like the prose around
+    // them; `Skin.font()` deliberately does not, because it also sizes the
+    // chrome. Anything OUTSIDE a message bubble wants Skin.font(), not this.
+    msgFont: (n: number) => Math.round(n * fontScale * userFontScale),
     radii,
     borders,
     spacing,

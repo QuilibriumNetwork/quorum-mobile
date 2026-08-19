@@ -139,9 +139,22 @@ type TextStyleEntry = FontFace & {
  * Build the semantic type scale for a given font family + size multiplier, so
  * a skin's font and `fontScale` flow through `theme.textStyles` (see
  * createTheme). The base sizes/weights match iOS HIG.
+ *
+ * `readingScale` is the user's own text-size choice, and it applies to the
+ * `message*` entries ONLY.
+ *
+ * That narrowness is the whole design, and it was arrived at the hard way. A
+ * first cut multiplied every size in the app by the user's factor. It is the
+ * obvious reading of "make the text bigger", and on a device it is clearly
+ * wrong: 20% off a 16pt message leaves 13, which is comfortable, while 20% off
+ * an 11pt section label leaves 9, which is unreadable. Legibility does not
+ * scale proportionally at the small end, so one multiplier cannot serve both.
+ * Telegram, WhatsApp and Signal all landed in the same place — their control
+ * moves message text and leaves the chrome alone.
  */
-export function makeTextStyles(skinFamily?: string | null, scale = 1) {
+export function makeTextStyles(skinFamily?: string | null, scale = 1, readingScale = 1) {
   const px = (n: number) => Math.round(n * scale);
+  const rx = (n: number) => Math.round(n * scale * readingScale);
   // Resolve through makeFonts so each entry picks up the right bundled face
   // (or the skin's single face plus a synthesized weight) — the type scale must
   // not hardcode a family, or bold styles render as faux-bold regular.
@@ -150,6 +163,12 @@ export function makeTextStyles(skinFamily?: string | null, scale = 1) {
     ...face,
     fontSize: px(fontSize),
     lineHeight: px(lineHeight),
+  });
+  /** Same as `e`, but also carries the user's text-size choice. */
+  const r = (face: FontFace, fontSize: number, lineHeight: number): TextStyleEntry => ({
+    ...face,
+    fontSize: rx(fontSize),
+    lineHeight: rx(lineHeight),
   });
   return {
     /** 34/41 bold — large titles on list/root screens */
@@ -162,6 +181,26 @@ export function makeTextStyles(skinFamily?: string | null, scale = 1) {
     title3: e(W.bold, 20, 25),
     /** 16/22 semibold — prominent body text, list item titles, names */
     headline: e(W.semiBold, 16, 22),
+    /**
+     * 16/22 regular — chat message and Farcaster cast text. THE reading
+     * surface, and the only place the user's text-size setting reaches.
+     *
+     * Identical to `body` at the default step, and deliberately a separate
+     * token rather than a flag on `body`: `body` is used by ~20 list rows,
+     * sheets and headers that must NOT move when someone resizes their
+     * messages. Point a style here only if it renders the contents of a
+     * message or cast.
+     */
+    messageBody: r(W.regular, 16, 22),
+    /**
+     * 16/22 semibold — the name heading a message or cast.
+     *
+     * Shares `messageBody`'s size and scale on purpose. A name smaller than the
+     * text it heads inverts the hierarchy, and that bug has already shipped
+     * once (see the 2026-08-19 issues) because the two were sized separately.
+     * Move them together or not at all.
+     */
+    messageAuthor: r(W.semiBold, 16, 22),
     /**
      * 16/22 regular — default body copy, and every long-form reading surface.
      *

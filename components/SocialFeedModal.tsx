@@ -2805,7 +2805,7 @@ function ThreadDetailView({
             renderText={(t) => (
               <CastText
                 text={t}
-                style={{ ...theme.textStyles.body, color: theme.colors.textMain }}
+                style={{ ...theme.textStyles.messageBody, color: theme.colors.textMain }}
                 theme={theme}
                 onMentionPress={handleMentionPress}
                 onChannelPress={onOpenChannel}
@@ -3761,7 +3761,7 @@ export function ProfileView({
               renderText={(t) => (
                 <CastText
                   text={t}
-                  style={{ ...theme.textStyles.body, color: theme.colors.textMain }}
+                  style={{ ...theme.textStyles.messageBody, color: theme.colors.textMain }}
                   theme={theme}
                   onMentionPress={handleMentionPress}
                   onChannelPress={onOpenChannel}
@@ -4364,7 +4364,7 @@ function ChannelView({
               renderText={(t) => (
                 <CastText
                   text={t}
-                  style={{ ...theme.textStyles.body, color: theme.colors.textMain }}
+                  style={{ ...theme.textStyles.messageBody, color: theme.colors.textMain }}
                   theme={theme}
                   onMentionPress={handleMentionPress}
                   onChannelPress={onOpenChannel}
@@ -8003,7 +8003,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       gap: Skin.space(8),
     },
     authorName: {
-      ...theme.textStyles.headline,
+      ...theme.textStyles.messageAuthor,
       color: theme.colors.textStrong,
     },
     channelLabel: {
@@ -8018,7 +8018,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       marginTop: Skin.space(2),
     },
     postContent: {
-      ...theme.textStyles.body,
+      ...theme.textStyles.messageBody,
       color: theme.colors.textMain,
     },
     mediaContainer: {

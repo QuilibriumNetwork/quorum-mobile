@@ -143,7 +143,16 @@ export function border(n: number): number {
   return n * current.borderScale;
 }
 
-/** Scale a font size / line height by the active skin's fontScale. */
+/**
+ * Scale a font size / line height by the active skin's fontScale.
+ *
+ * Deliberately does NOT carry the user's text-size choice. This is the chrome
+ * path — ~1180 call sites covering labels, timestamps, descriptions, buttons,
+ * section headers — and much of it is already at 11-13, where a proportional
+ * shrink takes it below legibility. Message content uses `theme.msgFont()` or
+ * the `messageBody`/`messageAuthor` tokens instead; see theme/fonts.ts for the
+ * measurement that settled it.
+ */
 export function font(n: number): number {
   return Math.round(n * current.fontScale);
 }

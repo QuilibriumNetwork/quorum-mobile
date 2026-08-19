@@ -14,6 +14,7 @@
 import { createMMKV } from 'react-native-mmkv';
 import { validateSkin } from '@/theme/skins/validate';
 import type { SkinOverride } from '@/theme/skins/types';
+import { DEFAULT_TEXT_SIZE, isTextSizePref, type TextSizePref } from '@/theme/textSize';
 
 export const skinPrefsStore = createMMKV({ id: 'quorum-skin-prefs' });
 
@@ -101,4 +102,26 @@ export function setAppearancePref(pref: AppearancePref): void {
   // Store only an explicit override; 'system' is the absence of a key.
   if (pref === 'system') skinPrefsStore.remove(K_APPEARANCE);
   else skinPrefsStore.set(K_APPEARANCE, pref);
+}
+
+const K_TEXT_SIZE = 'textSizePref';
+
+/**
+ * User's text-size choice. Independent of skin and appearance, so it survives
+ * switching skins — a skin's own `fontScale` multiplies with it rather than
+ * replacing it.
+ *
+ * Validated on read for the same reason skins are: the store could have been
+ * written by a build whose step keys differ, and an unknown key must fall back
+ * to the default rather than resolve to scale 1 by accident somewhere later.
+ */
+export function getTextSizePref(): TextSizePref {
+  const raw = skinPrefsStore.getString(K_TEXT_SIZE);
+  return isTextSizePref(raw) ? raw : DEFAULT_TEXT_SIZE;
+}
+
+export function setTextSizePref(pref: TextSizePref): void {
+  // Store only an explicit choice; the default is the absence of a key.
+  if (pref === DEFAULT_TEXT_SIZE) skinPrefsStore.remove(K_TEXT_SIZE);
+  else skinPrefsStore.set(K_TEXT_SIZE, pref);
 }

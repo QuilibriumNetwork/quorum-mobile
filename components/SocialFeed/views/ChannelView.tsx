@@ -585,7 +585,7 @@ function createStyles(theme: AppTheme) {
       backgroundColor: theme.colors.surface3,
     },
     castAuthorName: {
-      ...theme.textStyles.headline,
+      ...theme.textStyles.messageAuthor,
       color: theme.colors.textStrong,
     },
     castAuthorMeta: {
@@ -594,7 +594,7 @@ function createStyles(theme: AppTheme) {
       marginTop: Skin.space(2),
     },
     castText: {
-      ...theme.textStyles.body,
+      ...theme.textStyles.messageBody,
       color: theme.colors.textMain,
     },
     imagePlaceholderBg: {
