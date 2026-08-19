@@ -1,6 +1,6 @@
 import type { AppTheme } from '@/theme';
 import React, { useCallback, useState, useRef, useMemo, forwardRef, useImperativeHandle, useEffect } from 'react';
-import { Image, Text, View, StyleSheet, ImageSourcePropType, ActivityIndicator, Pressable, useWindowDimensions, type ImageStyle, type StyleProp, type ScrollViewProps } from 'react-native';
+import { Image, Text, View, StyleSheet, ImageSourcePropType, ActivityIndicator, PixelRatio, Pressable, useWindowDimensions, type ImageStyle, type StyleProp, type ScrollViewProps } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, withSequence } from 'react-native-reanimated';
@@ -1820,7 +1820,15 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'baseline',
     // Fixed line box so non-text indicators (warning/edited/spinner) can't
     // stretch the row taller than the username line and widen the header→text gap.
-    height: Skin.font(22),
+    //
+    // Multiplied by the OS font scale because the username's `lineHeight` is
+    // scaled by it and this container is not, so the two diverge as the user
+    // raises their text size: at Android's top notch (1.3) the name wants ~29
+    // in a 22 box. iOS matters more here than Android — Dynamic Type reaches
+    // roughly 3x with accessibility sizes, where a fixed box clips outright.
+    // Read once at stylesheet creation; a mid-session change to the system
+    // setting lands on the next launch, same as the skin geometry above.
+    height: Skin.font(22) * PixelRatio.getFontScale(),
   },
   // Matches the body's 16/22: a name smaller than the message under it inverts
   // the hierarchy, and desktop's sender name likewise inherits the 16px body.
