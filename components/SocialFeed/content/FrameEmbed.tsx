@@ -26,6 +26,7 @@ const staticStyles = createSkinnable(() => StyleSheet.create({
   },
   buttonText: {
     fontSize: Skin.font(15),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   iconMargin: {

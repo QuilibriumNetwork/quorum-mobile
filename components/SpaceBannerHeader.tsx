@@ -286,6 +286,7 @@ const styles = StyleSheet.create({
   },
   spaceName: {
     fontSize: 20,
+    fontFamily: Skin.fontFamily('bold'),
     fontWeight: '700',
     flexShrink: 1,
   },

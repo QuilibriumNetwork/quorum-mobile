@@ -95,6 +95,7 @@ function createStyles(theme: AppTheme) {
     },
     displayName: {
       color: theme.colors.textStrong,
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       fontSize: Skin.font(14),
     },

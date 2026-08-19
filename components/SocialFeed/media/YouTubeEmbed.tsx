@@ -125,6 +125,7 @@ const staticStyles = createSkinnable(() => StyleSheet.create({
   },
   fallbackTitle: {
     fontSize: Skin.font(14),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   fallbackSub: {

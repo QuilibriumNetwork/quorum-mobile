@@ -259,6 +259,7 @@ const createStyles = (theme: AppTheme) =>
     },
     channelTagText: {
       fontSize: Skin.font(11),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.accent,
       letterSpacing: 0.3,

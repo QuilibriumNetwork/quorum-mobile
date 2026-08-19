@@ -944,6 +944,7 @@ const elStyles = createSkinnable(() => StyleSheet.create({
   },
   buttonLabel: {
     fontSize: Skin.font(15),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   input: {

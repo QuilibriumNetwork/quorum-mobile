@@ -14,6 +14,8 @@
  * static styles already don't react to live light/dark changes).
  */
 
+import { INTER_FACES } from '../fonts';
+import { skinFontFamily } from './mergeSkin';
 import type { SkinOverride } from './types';
 
 export interface Geometry {
@@ -22,9 +24,15 @@ export interface Geometry {
   spacingScale: number;
   borderScale: number;
   fontScale: number;
+  /**
+   * The skin's single embedded face, or null when the app's own bundled faces
+   * should be used. Held here so static skinnable stylesheets can resolve a
+   * font family, the same way they already resolve sizes through `font()`.
+   */
+  fontFamily: string | null;
 }
 
-const IDENTITY: Geometry = { radiusScale: 1, spacingScale: 1, borderScale: 1, fontScale: 1 };
+const IDENTITY: Geometry = { radiusScale: 1, spacingScale: 1, borderScale: 1, fontScale: 1, fontFamily: null };
 
 let current: Geometry = IDENTITY;
 
@@ -55,7 +63,23 @@ export function deriveGeometry(skin?: SkinOverride | null): Geometry {
     spacingScale: skin.spacing?.scale ?? 1,
     borderScale: skin.borders?.scale ?? 1,
     fontScale: skin.fontScale ?? 1,
+    fontFamily: skinFontFamily(skin),
   };
+}
+
+/**
+ * Resolve the family for a weight under the active skin.
+ *
+ * The counterpart to `font()` for static `createSkinnable` stylesheets, where
+ * `theme.fonts` is not in scope. Without this those blocks can only set a
+ * `fontWeight`, which leaves them rendering in the DEVICE font while themed
+ * components render in the bundled one — two typefaces in one screen.
+ *
+ * A skin ships a single face, so under a skin every weight returns that one
+ * family and the platform synthesizes the weight, matching `makeFonts`.
+ */
+export function fontFamily(face: keyof typeof INTER_FACES = 'regular'): string {
+  return current.fontFamily ?? INTER_FACES[face];
 }
 
 /** Update the active geometry. Call before applying a skin / before first paint. */

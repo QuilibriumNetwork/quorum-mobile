@@ -42,20 +42,27 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 
 # --- Resolve adb + emulator binaries ---------------------------------------
+# ANDROID_HOME is checked before %LOCALAPPDATA% because this machine's SDK lives
+# at C:\Android\Sdk, not the Android Studio default.
+$sdkRoots = @($env:ANDROID_HOME, $env:ANDROID_SDK_ROOT, (Join-Path $env:LOCALAPPDATA "Android\Sdk")) |
+    Where-Object { $_ }
+
 $adb = "adb"
 if (-not (Get-Command adb -ErrorAction SilentlyContinue)) {
-    $sdkAdb = Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools\adb.exe"
-    if (Test-Path $sdkAdb) { $adb = $sdkAdb }
+    $sdkAdb = $sdkRoots |
+        ForEach-Object { Join-Path $_ "platform-tools\adb.exe" } |
+        Where-Object { Test-Path $_ } |
+        Select-Object -First 1
+    if ($sdkAdb) { $adb = $sdkAdb }
     else {
-        Write-Host "  ERROR: adb not found on PATH or at $sdkAdb" -ForegroundColor Red
+        Write-Host "  ERROR: adb not found on PATH, nor under ANDROID_HOME / %LOCALAPPDATA%\Android\Sdk" -ForegroundColor Red
         exit 1
     }
 }
 $emulatorExe = $null
 foreach ($cand in @(
-    (Get-Command emulator -ErrorAction SilentlyContinue).Source,
-    (Join-Path $env:LOCALAPPDATA "Android\Sdk\emulator\emulator.exe")
-)) {
+    (Get-Command emulator -ErrorAction SilentlyContinue).Source
+) + ($sdkRoots | ForEach-Object { Join-Path $_ "emulator\emulator.exe" })) {
     if ($cand -and (Test-Path $cand)) { $emulatorExe = $cand; break }
 }
 
@@ -67,7 +74,17 @@ function Get-RunningEmulatorSerial {
         Select-Object -First 1
 }
 
-$serial = Get-RunningEmulatorSerial
+# Poll, don't ask once. The first `adb devices` after a reboot also STARTS the adb
+# server and returns before that server has finished scanning the emulator console
+# ports, so it reports an empty list while a healthy emulator is running.
+# MEASURED 2026-08-18: call #1 empty, call #2 listed emulator-5554.
+& $adb start-server 2>$null | Out-Null
+$serial = $null
+for ($i = 0; $i -lt 10; $i++) {
+    $serial = Get-RunningEmulatorSerial
+    if ($serial) { break }
+    Start-Sleep -Seconds 1
+}
 if (-not $serial) {
     if (-not $emulatorExe) {
         Write-Host ""
@@ -186,6 +203,14 @@ Remove-Item Env:\ORG_GRADLE_PROJECT_sideBySide -ErrorAction SilentlyContinue
 # Pin every adb call (Expo's install step) to the emulator so a connected phone
 # can't receive this x86_64 build.
 $env:ANDROID_SERIAL = $serial
+
+# `expo run:android` also starts Metro and launches the app, so it needs the same
+# hostname override as dev-start-emulator.ps1. This machine has a PERSISTENT user
+# env var REACT_NATIVE_PACKAGER_HOSTNAME=<pc-lan-ip>; inherited, it makes the dev
+# client fetch the bundle across the emulator's NAT to the host LAN address, where
+# the chunked response is corrupted and the app hangs on "Bundling 100.0%..." with
+# no on-screen error. See the long comment in dev-start-emulator.ps1.
+$env:REACT_NATIVE_PACKAGER_HOSTNAME = "localhost"
 
 Write-Host ""
 Write-Host "  Building the emulator dev build (ABI=$abi, java.io.tmpdir=$asciiTemp)." -ForegroundColor Cyan

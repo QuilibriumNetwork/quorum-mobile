@@ -54,6 +54,7 @@ function createStyles(theme: AppTheme) {
     },
     title: {
       fontSize: Skin.font(18),
+      fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: '700',
       color: theme.colors.textStrong,
     },

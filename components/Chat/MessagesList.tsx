@@ -1,6 +1,6 @@
 import type { AppTheme } from '@/theme';
 import React, { useCallback, useState, useRef, useMemo, forwardRef, useImperativeHandle, useEffect } from 'react';
-import { Image, Text, View, StyleSheet, ImageSourcePropType, ActivityIndicator, Pressable, useWindowDimensions, type ImageStyle, type StyleProp, type ScrollViewProps } from 'react-native';
+import { Image, Text, View, StyleSheet, ImageSourcePropType, ActivityIndicator, PixelRatio, Pressable, useWindowDimensions, type ImageStyle, type StyleProp, type ScrollViewProps } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, withSequence } from 'react-native-reanimated';
@@ -1820,14 +1820,21 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'baseline',
     // Fixed line box so non-text indicators (warning/edited/spinner) can't
     // stretch the row taller than the username line and widen the header→text gap.
-    height: Skin.font(20),
+    //
+    // Multiplied by the OS font scale because the username's `lineHeight` is
+    // scaled by it and this container is not, so the two diverge as the user
+    // raises their text size: at Android's top notch (1.3) the name wants ~29
+    // in a 22 box. iOS matters more here than Android — Dynamic Type reaches
+    // roughly 3x with accessibility sizes, where a fixed box clips outright.
+    // Read once at stylesheet creation; a mid-session change to the system
+    // setting lands on the next launch, same as the skin geometry above.
+    height: Skin.font(22) * PixelRatio.getFontScale(),
   },
+  // Matches the body's 16/22: a name smaller than the message under it inverts
+  // the hierarchy, and desktop's sender name likewise inherits the 16px body.
   messageUser: {
+    ...theme.textStyles.headline,
     color: theme.colors.textStrong,
-    fontFamily: theme.fonts.bold.fontFamily,
-    fontWeight: theme.fonts.bold.fontWeight,
-    fontSize: Skin.font(14),
-    lineHeight: Skin.font(20),
     marginRight: Skin.space(8),
     flexShrink: 1,
   },
@@ -1835,10 +1842,18 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: theme.colors.textSubtle,
     fontSize: Skin.font(12),
   },
+  // Size and line height are set explicitly: with neither, RN falls back to its
+  // built-in 14 and to the font's own (very tight) leading, which rendered the
+  // body smaller than the composer that produced it and than desktop's 16/24.
+  // 16/22 matches the composer input, desktop's 16px body, and the base that
+  // MentionableText's emoji tiers already assume.
+  // Sized from the `body` token, not a literal — see theme/fonts.ts. Every
+  // long-form reading surface (here and Farcaster casts) points at the same
+  // token so they cannot drift apart again.
   messageText: {
+    ...theme.textStyles.body,
     color: theme.colors.textMain,
     marginTop: Skin.space(4),
-    fontFamily: theme.fonts.regular.fontFamily,
   },
   messageWithLink: {
     flexDirection: 'row',
@@ -1846,10 +1861,12 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginTop: Skin.space(4),
     flexWrap: 'wrap',
   },
+  // Sits inline with body text in the `messageWithLink` row, so it has to carry
+  // the same metrics — it is a sibling <Text>, not a child, and inherits nothing.
   linkText: {
+    ...theme.textStyles.body,
     color: theme.colors.primary,
     textDecorationLine: 'underline',
-    fontFamily: theme.fonts.regular.fontFamily,
   },
   loadingText: {
     marginTop: Skin.space(12),

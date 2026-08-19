@@ -602,6 +602,7 @@ const styles = StyleSheet.create({
   },
   secondaryLabel: {
     fontSize: 10,
+    fontFamily: Skin.fontFamily('medium'),
     fontWeight: '500',
     textAlign: 'center',
   },

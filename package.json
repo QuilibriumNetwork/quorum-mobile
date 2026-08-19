@@ -25,11 +25,13 @@
     "postinstall": "patch-package && watchman watch-del-all 2>/dev/null; rm -rf $TMPDIR/metro-* .expo node_modules/.cache 2>/dev/null || true",
     "clean": "watchman watch-del-all 2>/dev/null; rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-* .expo node_modules/.cache 2>/dev/null; echo 'Caches cleared'",
     "harness:dm": "node dev/harness/run-two-bots.mjs",
-    "harness:qns": "node dev/harness/run-two-bots.mjs qns-claim-two-bot"
+    "harness:qns": "node dev/harness/run-two-bots.mjs qns-claim-two-bot",
+    "check:fonts": "node scripts/check-fonts.js"
   },
   "dependencies": {
     "@bitcoin-js/tiny-secp256k1-asmjs": "2.2.4",
     "@bitcoinerlab/secp256k1": "1.2.0",
+    "@expo-google-fonts/inter": "0.4.2",
     "@expo/vector-icons": "15.0.3",
     "@farcaster/miniapp-host-react-native": "0.1.17",
     "@kcoin/kaspa-web3.js": "1.1.4",

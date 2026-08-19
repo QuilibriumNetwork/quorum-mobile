@@ -208,6 +208,7 @@ function createStyles(theme: AppTheme) {
     },
     sectionLabel: {
       fontSize: Skin.font(11),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       letterSpacing: 0.5,
       textTransform: 'uppercase',
@@ -232,6 +233,7 @@ function createStyles(theme: AppTheme) {
     chipText: {
       fontSize: Skin.font(12),
       color: theme.colors.textMain,
+      fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: '500',
     },
     row: {
@@ -252,6 +254,7 @@ function createStyles(theme: AppTheme) {
     },
     rowName: {
       fontSize: Skin.font(15),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textStrong,
     },

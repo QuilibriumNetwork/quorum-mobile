@@ -268,6 +268,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   headerTitle: {
     fontSize: Skin.font(17),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   scrollContent: {
@@ -287,6 +288,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   badgeText: {
     fontSize: Skin.font(11),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   timeText: {
@@ -294,6 +296,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   title: {
     fontSize: Skin.font(20),
+    fontFamily: Skin.fontFamily('bold'),
     fontWeight: '700',
     lineHeight: Skin.font(26),
     marginBottom: Skin.space(4),
@@ -304,6 +307,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   sectionHeading: {
     fontSize: Skin.font(15),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     marginTop: Skin.space(16),
     marginBottom: Skin.space(6),
@@ -325,6 +329,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   voteCount: {
     fontSize: Skin.font(15),
+    fontFamily: Skin.fontFamily('medium'),
     fontWeight: '500',
   },
   dividerRow: {
@@ -340,6 +345,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   dividerText: {
     fontSize: Skin.font(13),
+    fontFamily: Skin.fontFamily('medium'),
     fontWeight: '500',
   },
   noComments: {
@@ -358,6 +364,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   commentAuthor: {
     fontSize: Skin.font(13),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   commentTime: {

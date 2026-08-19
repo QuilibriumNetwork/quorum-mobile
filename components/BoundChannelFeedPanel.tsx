@@ -367,6 +367,7 @@ const livePulseStyles = createSkinnable(() => StyleSheet.create({
   },
   label: {
     fontSize: Skin.font(9),
+    fontFamily: Skin.fontFamily('bold'),
     fontWeight: '700',
     letterSpacing: 0.5,
   },
@@ -397,6 +398,7 @@ function createStyles(theme: AppTheme) {
     },
     title: {
       fontSize: Skin.font(13),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
     },
     composeBtn: {
@@ -455,6 +457,7 @@ const castRowStyles = createSkinnable(() => StyleSheet.create({
   },
   author: {
     fontSize: Skin.font(13),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     flexShrink: 1,
   },

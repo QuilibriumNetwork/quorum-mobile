@@ -535,10 +535,12 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   title: {
     fontSize: Skin.font(18),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   fieldLabel: {
     fontSize: Skin.font(12),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -575,6 +577,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   submitButtonText: {
     color: '#fff',
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     fontSize: Skin.font(15),
   },

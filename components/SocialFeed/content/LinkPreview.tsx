@@ -143,6 +143,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   titleLarge: {
     color: theme.colors.textStrong,
     fontSize: Skin.font(15),
+    fontFamily: theme.fonts.semiBold.fontFamily,
     fontWeight: '600',
     marginBottom: Skin.space(4),
   },
@@ -171,6 +172,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   titleSmall: {
     color: theme.colors.textStrong,
     fontSize: Skin.font(14),
+    fontFamily: theme.fonts.semiBold.fontFamily,
     fontWeight: '600',
     marginBottom: Skin.space(4),
   },

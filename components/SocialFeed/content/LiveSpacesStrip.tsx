@@ -282,6 +282,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   label: {
     fontSize: Skin.font(12),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -333,15 +334,18 @@ const styles = createSkinnable(() => StyleSheet.create({
   livePillText: {
     color: '#fff',
     fontSize: Skin.font(10),
+    fontFamily: Skin.fontFamily('bold'),
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   listenerCount: {
     fontSize: Skin.font(12),
+    fontFamily: Skin.fontFamily('medium'),
     fontWeight: '500',
   },
   title: {
     fontSize: Skin.font(14),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     lineHeight: Skin.font(18),
   },
@@ -363,6 +367,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   hostName: {
     fontSize: Skin.font(12),
+    fontFamily: Skin.fontFamily('medium'),
     fontWeight: '500',
     marginLeft: Skin.space(8),
     flex: 1,

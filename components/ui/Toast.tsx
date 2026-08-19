@@ -202,7 +202,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets, type: string) =>
     title: {
       flex: 1,
       fontSize: Skin.font(15),
-      fontFamily: theme.fonts.semiBold?.fontFamily || theme.fonts.bold.fontFamily,
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textMain,
     },
@@ -238,7 +238,7 @@ const createStyles = (theme: AppTheme, insets: EdgeInsets, type: string) =>
     explorerLink: {
       fontSize: Skin.font(12),
       color: theme.colors.primary,
-      fontFamily: theme.fonts.medium?.fontFamily || theme.fonts.regular.fontFamily,
+      fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: '500',
     },
   });

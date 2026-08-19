@@ -99,6 +99,7 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 20,
+    fontFamily: Skin.fontFamily('bold'),
     fontWeight: '700',
     textAlign: 'center',
     flexShrink: 1,

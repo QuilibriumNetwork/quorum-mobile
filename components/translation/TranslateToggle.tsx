@@ -64,6 +64,7 @@ const styles = createSkinnable(() =>
     },
     label: {
       fontSize: Skin.font(13),
+      fontFamily: Skin.fontFamily('medium'),
       fontWeight: '500',
     },
   })

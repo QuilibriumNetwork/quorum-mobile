@@ -7,6 +7,7 @@
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import * as Skin from '@/theme/skins/geometry';
 import { QuilibriumLogoIcon } from './QuilibriumLogoIcon';
 import { QuorumLogoIcon } from './QuorumLogoIcon';
 
@@ -258,6 +259,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   wowowText: {
+    fontFamily: Skin.fontFamily('heavy'),
     fontWeight: '900',
     textAlign: 'center',
   },

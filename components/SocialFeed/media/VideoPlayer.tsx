@@ -61,6 +61,7 @@ const staticStyles = createSkinnable(() => StyleSheet.create({
   durationText: {
     color: '#fff',
     fontSize: Skin.font(12),
+    fontFamily: Skin.fontFamily('medium'),
     fontWeight: '500',
   },
   saveButton: {

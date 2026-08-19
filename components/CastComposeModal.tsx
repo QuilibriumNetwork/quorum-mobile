@@ -203,6 +203,7 @@ function createStyles(theme: AppTheme) {
     },
     title: {
       fontSize: Skin.font(15),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textStrong,
       flex: 1,
@@ -229,6 +230,7 @@ function createStyles(theme: AppTheme) {
     },
     postText: {
       color: '#fff',
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       fontSize: Skin.font(14),
     },

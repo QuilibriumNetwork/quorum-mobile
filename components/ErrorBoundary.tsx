@@ -157,6 +157,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   title: {
     fontSize: Skin.font(24),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     color: '#ffffff',
     marginBottom: Skin.space(12),
@@ -199,6 +200,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   errorTitle: {
     fontSize: Skin.font(12),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     color: '#ff6b6b',
     marginBottom: Skin.space(4),
@@ -218,6 +220,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   buttonText: {
     color: '#ffffff',
     fontSize: Skin.font(16),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
 }));

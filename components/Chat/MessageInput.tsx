@@ -1421,6 +1421,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   gifBadgeText: {
     color: '#fff',
     fontSize: Skin.font(10),
+    fontFamily: theme.fonts.bold.fontFamily,
     fontWeight: 'bold',
   },
   // The single pill: rounded container holding left buttons, the growing
@@ -1527,7 +1528,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   signingHintText: {
     fontSize: Skin.font(12),
     color: theme.colors.textSubtle,
-    fontFamily: theme.fonts.medium?.fontFamily || theme.fonts.regular.fontFamily,
+    fontFamily: theme.fonts.medium.fontFamily,
   },
   // Clips the paperclip as its width animates to 0 while composing, so the
   // icon slides out cleanly instead of overflowing the collapsing container.

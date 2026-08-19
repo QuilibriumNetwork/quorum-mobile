@@ -9,7 +9,7 @@ import type { SkinOverride } from './types';
 /**
  * The actual font family the theme uses (and the loader registers) when a skin
  * ships an embedded font. Namespaced by skin id so it never collides with the
- * bundled `AtAero` or a system font; the author's `font.family` is just a
+ * app's own bundled font or a system font; the author's `font.family` is just a
  * display label. Returns null when the skin has no embedded font, in which case
  * the theme uses the platform's native system font (see DEFAULT_FONT_FAMILY).
  */

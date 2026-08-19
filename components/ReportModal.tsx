@@ -213,6 +213,7 @@ const createStyles = (theme: AppTheme) =>
     },
     title: {
       fontSize: Skin.font(18),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textMain,
     },
