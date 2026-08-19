@@ -79,6 +79,7 @@ function createStyles(theme: AppTheme) {
     },
     title: {
       fontSize: Skin.font(22),
+      fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: '700',
       color: theme.colors.textStrong,
       textAlign: 'center',
@@ -114,6 +115,7 @@ function createStyles(theme: AppTheme) {
     },
     optionTitle: {
       fontSize: Skin.font(16),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textStrong,
     },

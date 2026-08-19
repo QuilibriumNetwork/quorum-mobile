@@ -298,6 +298,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   videoTimer: {
     color: '#fff',
     fontSize: Skin.font(15),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
     textShadowColor: 'rgba(0,0,0,0.5)',
@@ -333,6 +334,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   callerName: {
     fontSize: Skin.font(24),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     marginTop: Skin.space(12),
   },

@@ -418,6 +418,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   pageIndicatorText: {
     color: '#fff',
     fontSize: Skin.font(14),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   gallery: {

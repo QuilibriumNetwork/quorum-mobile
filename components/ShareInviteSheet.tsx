@@ -387,6 +387,7 @@ const createStyles = (theme: AppTheme, insets: { top: number; bottom: number; le
     },
     moreButtonText: {
       fontSize: Skin.font(15),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textMain,
     },

@@ -333,6 +333,7 @@ const styles = StyleSheet.create({
   },
   proposalTag: {
     fontSize: Skin.font(10),
+    fontFamily: Skin.fontFamily('bold'),
     fontWeight: '700',
     borderWidth: 1,
     borderRadius: Skin.radius(4),
@@ -348,6 +349,7 @@ const styles = StyleSheet.create({
   },
   voteBadge: {
     fontSize: Skin.font(10),
+    fontFamily: Skin.fontFamily('bold'),
     fontWeight: '700',
     borderWidth: 1,
     borderRadius: Skin.radius(4),
@@ -371,6 +373,7 @@ const styles = StyleSheet.create({
   },
   btnText: {
     color: '#fff',
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     fontSize: Skin.font(13),
   },

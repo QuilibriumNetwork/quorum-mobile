@@ -45,15 +45,18 @@ const styles = createSkinnable(() => StyleSheet.create({
   defaultSemiBold: {
     fontSize: Skin.font(16),
     lineHeight: Skin.font(24),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   title: {
     fontSize: Skin.font(32),
+    fontFamily: Skin.fontFamily('bold'),
     fontWeight: 'bold',
     lineHeight: Skin.font(32),
   },
   subtitle: {
     fontSize: Skin.font(20),
+    fontFamily: Skin.fontFamily('bold'),
     fontWeight: 'bold',
   },
   link: {

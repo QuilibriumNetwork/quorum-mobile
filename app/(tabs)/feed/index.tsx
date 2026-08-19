@@ -223,6 +223,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   title: {
     fontSize: Skin.font(18),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -252,6 +253,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   actionText: {
     fontSize: Skin.font(15),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
 }));

@@ -733,6 +733,7 @@ const createStyles = (theme: AppTheme) =>
     clearAllLabel: {
       color: theme.colors.primary,
       fontSize: Skin.font(14),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
     },
     heading: {
@@ -750,6 +751,7 @@ const createStyles = (theme: AppTheme) =>
     },
     emptyTitle: {
       fontSize: Skin.font(17),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textMain,
     },
@@ -811,6 +813,7 @@ const createStyles = (theme: AppTheme) =>
       // Explicit, and the same value the Quorum section's first line carries,
       // so both sections' leading text lines up with the avatar identically.
       lineHeight: Skin.font(LEADING_LINE_HEIGHT),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textMain,
     },
@@ -818,11 +821,13 @@ const createStyles = (theme: AppTheme) =>
     locationLine: {
       fontSize: Skin.font(15),
       lineHeight: Skin.font(LEADING_LINE_HEIGHT),
+      fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: '700',
       color: theme.colors.textMain,
     },
     locationChannel: {
       fontSize: Skin.font(14),
+      fontFamily: theme.fonts.regular.fontFamily,
       fontWeight: '400',
       color: theme.colors.textSubtle,
     },
@@ -836,6 +841,7 @@ const createStyles = (theme: AppTheme) =>
     },
     quorumAuthor: {
       color: theme.colors.textSubtle,
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
     },
     sectionHeader: {
@@ -849,6 +855,7 @@ const createStyles = (theme: AppTheme) =>
     },
     sectionHeaderLabel: {
       fontSize: Skin.font(12),
+      fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: '700',
       letterSpacing: 0.5,
       textTransform: 'uppercase',

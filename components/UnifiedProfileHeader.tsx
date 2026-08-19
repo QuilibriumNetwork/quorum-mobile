@@ -348,6 +348,7 @@ function createStyles(theme: AppTheme) {
     },
     mergedDisplayName: {
       fontSize: Skin.font(22),
+      fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: '700',
       color: theme.colors.textStrong,
     },

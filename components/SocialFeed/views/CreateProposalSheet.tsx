@@ -265,6 +265,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   sheetTitle: {
     fontSize: Skin.font(20),
+    fontFamily: Skin.fontFamily('bold'),
     fontWeight: '700',
     marginBottom: Skin.space(16),
   },
@@ -273,6 +274,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   label: {
     fontSize: Skin.font(13),
+    fontFamily: Skin.fontFamily('medium'),
     fontWeight: '500',
     marginBottom: Skin.space(6),
     marginTop: Skin.space(12),
@@ -294,6 +296,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   submitText: {
     fontSize: Skin.font(16),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
 }));

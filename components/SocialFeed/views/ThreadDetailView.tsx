@@ -689,10 +689,8 @@ function createStyles(theme: AppTheme) {
       borderColor: theme.colors.background,
     },
     displayName: {
+      ...theme.textStyles.headline,
       color: theme.colors.textStrong,
-      fontFamily: theme.fonts.semiBold.fontFamily,
-      fontWeight: '600',
-      fontSize: Skin.font(17),
     },
     channelName: {
       color: theme.colors.accent,
@@ -711,10 +709,8 @@ function createStyles(theme: AppTheme) {
       color: theme.colors.accent,
     },
     castText: {
+      ...theme.textStyles.body,
       color: theme.colors.textMain,
-      fontFamily: theme.fonts.regular.fontFamily,
-      fontSize: Skin.font(17),
-      lineHeight: Skin.font(22),
     },
     imageBg: {
       backgroundColor: theme.colors.surface3,

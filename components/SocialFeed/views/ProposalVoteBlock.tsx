@@ -149,6 +149,7 @@ const styles = StyleSheet.create({
   },
   btnText: {
     color: '#fff',
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     fontSize: Skin.font(13),
   },

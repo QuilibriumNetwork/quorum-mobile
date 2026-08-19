@@ -519,6 +519,7 @@ const styles = (theme: ReturnType<typeof useTheme>['theme']) =>
     title: {
       color: theme.colors.textStrong,
       fontSize: Skin.font(22),
+      fontFamily: Skin.fontFamily('bold'),
       fontWeight: '700',
       paddingHorizontal: Skin.space(16),
       paddingTop: Skin.space(8),

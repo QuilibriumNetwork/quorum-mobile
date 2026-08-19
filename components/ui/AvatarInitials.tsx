@@ -72,6 +72,7 @@ const styles = StyleSheet.create({
   },
   initials: {
     color: '#ffffff',
+    fontFamily: Skin.fontFamily('medium'),
     fontWeight: '500',
     textAlign: 'center',
   },

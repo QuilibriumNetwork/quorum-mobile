@@ -2805,7 +2805,7 @@ function ThreadDetailView({
             renderText={(t) => (
               <CastText
                 text={t}
-                style={{ color: theme.colors.textMain, fontFamily: theme.fonts.regular.fontFamily, fontSize: Skin.font(17), lineHeight: Skin.font(22) }}
+                style={{ ...theme.textStyles.body, color: theme.colors.textMain }}
                 theme={theme}
                 onMentionPress={handleMentionPress}
                 onChannelPress={onOpenChannel}
@@ -3761,7 +3761,7 @@ export function ProfileView({
               renderText={(t) => (
                 <CastText
                   text={t}
-                  style={{ color: theme.colors.textMain, fontFamily: theme.fonts.regular.fontFamily, fontSize: Skin.font(17), lineHeight: Skin.font(22) }}
+                  style={{ ...theme.textStyles.body, color: theme.colors.textMain }}
                   theme={theme}
                   onMentionPress={handleMentionPress}
                   onChannelPress={onOpenChannel}
@@ -4364,7 +4364,7 @@ function ChannelView({
               renderText={(t) => (
                 <CastText
                   text={t}
-                  style={{ color: theme.colors.textMain, fontFamily: theme.fonts.regular.fontFamily, fontSize: Skin.font(17), lineHeight: Skin.font(22) }}
+                  style={{ ...theme.textStyles.body, color: theme.colors.textMain }}
                   theme={theme}
                   onMentionPress={handleMentionPress}
                   onChannelPress={onOpenChannel}
@@ -8003,10 +8003,8 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       gap: Skin.space(8),
     },
     authorName: {
+      ...theme.textStyles.headline,
       color: theme.colors.textStrong,
-      fontFamily: theme.fonts.medium.fontFamily,
-      fontWeight: theme.fonts.medium.fontWeight,
-      fontSize: Skin.font(17),
     },
     channelLabel: {
       color: theme.colors.textMuted,
@@ -8020,10 +8018,8 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       marginTop: Skin.space(2),
     },
     postContent: {
+      ...theme.textStyles.body,
       color: theme.colors.textMain,
-      fontSize: Skin.font(17),
-      lineHeight: Skin.font(22),
-      fontFamily: theme.fonts.regular.fontFamily,
     },
     mediaContainer: {
       marginHorizontal: Skin.space(-16),

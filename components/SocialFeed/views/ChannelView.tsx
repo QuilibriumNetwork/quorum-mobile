@@ -432,6 +432,7 @@ const staticStyles = createSkinnable(() => StyleSheet.create({
   channelImagePlaceholderText: {
     color: '#fff',
     fontSize: Skin.font(24),
+    fontFamily: Skin.fontFamily('bold'),
     fontWeight: '700',
   },
   channelNameContainer: {
@@ -451,6 +452,7 @@ const staticStyles = createSkinnable(() => StyleSheet.create({
   miniAppButtonText: {
     color: '#fff',
     fontSize: Skin.font(15),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   castHeaderRow: {
@@ -533,6 +535,7 @@ function createStyles(theme: AppTheme) {
     channelName: {
       color: theme.colors.textStrong,
       fontSize: Skin.font(22),
+      fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: '700',
     },
     channelDescription: {
@@ -543,6 +546,7 @@ function createStyles(theme: AppTheme) {
     },
     statCount: {
       color: theme.colors.textStrong,
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       fontSize: Skin.font(15),
     },
@@ -581,10 +585,8 @@ function createStyles(theme: AppTheme) {
       backgroundColor: theme.colors.surface3,
     },
     castAuthorName: {
+      ...theme.textStyles.headline,
       color: theme.colors.textStrong,
-      fontFamily: theme.fonts.semiBold.fontFamily,
-      fontWeight: '600',
-      fontSize: Skin.font(17),
     },
     castAuthorMeta: {
       color: theme.colors.textSubtle,
@@ -592,10 +594,8 @@ function createStyles(theme: AppTheme) {
       marginTop: Skin.space(2),
     },
     castText: {
+      ...theme.textStyles.body,
       color: theme.colors.textMain,
-      fontFamily: theme.fonts.regular.fontFamily,
-      fontSize: Skin.font(17),
-      lineHeight: Skin.font(22),
     },
     imagePlaceholderBg: {
       backgroundColor: theme.colors.surface3,

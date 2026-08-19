@@ -119,6 +119,16 @@ export const fontSizes = {
  *
  * Or spread them with color:
  *   <Text style={[textStyles.body, { color: theme.colors.textMain }]}>
+ *
+ * THIS IS THE ONE PLACE THE READING SURFACES ARE SIZED. The long-form text a
+ * user actually reads — chat messages, Farcaster casts — is `body`, and the
+ * name heading each one is `headline`. Both were raw numbers scattered across
+ * call sites until 2026-08-19, which is why retuning the message size meant
+ * editing seven files and still missing some, leaving an author name smaller
+ * than the cast beneath it. Change the number here, not at the call site.
+ *
+ * A name must never end up smaller than the text it heads: `headline` and
+ * `body` share a size deliberately, so move them together.
  */
 type TextStyleEntry = FontFace & {
   fontSize: number;

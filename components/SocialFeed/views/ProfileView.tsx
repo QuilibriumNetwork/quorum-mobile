@@ -556,6 +556,7 @@ function createStyles(theme: AppTheme) {
     displayName: {
       color: theme.colors.textStrong,
       fontSize: Skin.font(22),
+      fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: '700',
     },
     username: {
@@ -575,6 +576,7 @@ function createStyles(theme: AppTheme) {
     },
     statCount: {
       color: theme.colors.textStrong,
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       fontSize: Skin.font(15),
     },
@@ -603,10 +605,8 @@ function createStyles(theme: AppTheme) {
       backgroundColor: theme.colors.surface3,
     },
     castAuthorName: {
+      ...theme.textStyles.headline,
       color: theme.colors.textStrong,
-      fontFamily: theme.fonts.semiBold.fontFamily,
-      fontWeight: '600',
-      fontSize: Skin.font(17),
     },
     channelLink: {
       color: theme.colors.accent,
@@ -618,10 +618,8 @@ function createStyles(theme: AppTheme) {
       marginTop: Skin.space(2),
     },
     castText: {
+      ...theme.textStyles.body,
       color: theme.colors.textMain,
-      fontFamily: theme.fonts.regular.fontFamily,
-      fontSize: Skin.font(17),
-      lineHeight: Skin.font(22),
     },
     imagePlaceholder: {
       backgroundColor: theme.colors.surface3,

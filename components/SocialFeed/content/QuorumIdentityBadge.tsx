@@ -77,6 +77,7 @@ function createStyles(theme: AppTheme, compact: boolean) {
     text: {
       fontSize: compact ? 11 : 12,
       color: theme.colors.accent,
+      fontFamily: theme.fonts.medium.fontFamily,
       fontWeight: '500',
     },
   });

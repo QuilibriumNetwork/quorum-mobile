@@ -440,10 +440,12 @@ const styles = createSkinnable(() => StyleSheet.create({
   topBarTitle: {
     color: '#fff',
     fontSize: Skin.font(17),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   audioTopBarTitle: {
     fontSize: Skin.font(17),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   topBarMeta: {
@@ -577,6 +579,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   moreParticipantsText: {
     fontSize: Skin.font(16),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   audioControls: {

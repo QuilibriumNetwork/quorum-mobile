@@ -79,6 +79,7 @@ function createStyles(theme: AppTheme) {
     },
     title: {
       fontSize: Skin.font(18),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textStrong,
       textAlign: 'center',
@@ -91,6 +92,7 @@ function createStyles(theme: AppTheme) {
     },
     warn: {
       fontSize: Skin.font(13),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.accent,
       textAlign: 'center',

@@ -242,6 +242,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   tabText: {
     fontSize: Skin.font(15),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   tabUnderline: {
@@ -260,6 +261,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   createButtonText: {
     fontSize: Skin.font(13),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   list: {
@@ -286,6 +288,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   badgeText: {
     fontSize: Skin.font(11),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   timeText: {
@@ -293,6 +296,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   cardTitle: {
     fontSize: Skin.font(15),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     lineHeight: Skin.font(20),
   },
@@ -317,6 +321,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   voteCount: {
     fontSize: Skin.font(13),
+    fontFamily: Skin.fontFamily('medium'),
     fontWeight: '500',
   },
   authorText: {

@@ -1413,11 +1413,13 @@ const styles = createSkinnable(() => StyleSheet.create({
   statePillText: {
     color: '#fff',
     fontSize: Skin.font(11),
+    fontFamily: Skin.fontFamily('bold'),
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   title: {
     fontSize: Skin.font(18),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
   },
   closeButton: {
@@ -1432,6 +1434,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   sectionLabel: {
     fontSize: Skin.font(12),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -1519,6 +1522,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   stagePromptText: {
     flex: 1,
     fontSize: Skin.font(14),
+    fontFamily: Skin.fontFamily('medium'),
     fontWeight: '500',
   },
   stagePromptButton: {

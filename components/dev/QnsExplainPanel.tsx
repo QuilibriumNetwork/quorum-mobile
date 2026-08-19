@@ -194,6 +194,7 @@ export function QnsExplainPanel() {
     verdict: {
       color: theme.colors.textMain,
       fontSize: Skin.font(14),
+      fontFamily: Skin.fontFamily('bold'),
       fontWeight: '700',
       marginBottom: Skin.space(4),
     },

@@ -171,6 +171,7 @@ function createStyles(theme: AppTheme) {
     },
     title: {
       fontSize: Skin.font(18),
+      fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: '700',
       color: theme.colors.textStrong,
     },
@@ -194,6 +195,7 @@ function createStyles(theme: AppTheme) {
     },
     sectionLabel: {
       fontSize: Skin.font(11),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       letterSpacing: 0.5,
       textTransform: 'uppercase',
@@ -224,6 +226,7 @@ function createStyles(theme: AppTheme) {
     },
     rowName: {
       fontSize: Skin.font(15),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textStrong,
     },

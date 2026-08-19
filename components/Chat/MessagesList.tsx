@@ -1825,11 +1825,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   // Matches the body's 16/22: a name smaller than the message under it inverts
   // the hierarchy, and desktop's sender name likewise inherits the 16px body.
   messageUser: {
+    ...theme.textStyles.headline,
     color: theme.colors.textStrong,
-    fontFamily: theme.fonts.bold.fontFamily,
-    fontWeight: theme.fonts.bold.fontWeight,
-    fontSize: Skin.font(17),
-    lineHeight: Skin.font(22),
     marginRight: Skin.space(8),
     flexShrink: 1,
   },
@@ -1842,12 +1839,13 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   // body smaller than the composer that produced it and than desktop's 16/24.
   // 16/22 matches the composer input, desktop's 16px body, and the base that
   // MentionableText's emoji tiers already assume.
+  // Sized from the `body` token, not a literal — see theme/fonts.ts. Every
+  // long-form reading surface (here and Farcaster casts) points at the same
+  // token so they cannot drift apart again.
   messageText: {
+    ...theme.textStyles.body,
     color: theme.colors.textMain,
     marginTop: Skin.space(4),
-    fontFamily: theme.fonts.regular.fontFamily,
-    fontSize: Skin.font(17),
-    lineHeight: Skin.font(22),
   },
   messageWithLink: {
     flexDirection: 'row',
@@ -1858,11 +1856,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   // Sits inline with body text in the `messageWithLink` row, so it has to carry
   // the same metrics — it is a sibling <Text>, not a child, and inherits nothing.
   linkText: {
+    ...theme.textStyles.body,
     color: theme.colors.primary,
     textDecorationLine: 'underline',
-    fontFamily: theme.fonts.regular.fontFamily,
-    fontSize: Skin.font(17),
-    lineHeight: Skin.font(22),
   },
   loadingText: {
     marginTop: Skin.space(12),

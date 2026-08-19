@@ -450,6 +450,7 @@ function createStyles(theme: AppTheme) {
     },
     title: {
       fontSize: Skin.font(20),
+      fontFamily: theme.fonts.bold.fontFamily,
       fontWeight: '700',
       color: theme.colors.textStrong,
       textAlign: 'center',
@@ -488,6 +489,7 @@ function createStyles(theme: AppTheme) {
     },
     fieldLabel: {
       fontSize: Skin.font(13),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
       color: theme.colors.textSubtle,
     },
@@ -527,6 +529,7 @@ function createStyles(theme: AppTheme) {
     },
     buttonLabel: {
       fontSize: Skin.font(15),
+      fontFamily: theme.fonts.semiBold.fontFamily,
       fontWeight: '600',
     },
   });

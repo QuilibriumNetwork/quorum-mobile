@@ -89,6 +89,7 @@ const styles = createSkinnable(() => StyleSheet.create({
   },
   callerName: {
     fontSize: Skin.font(28),
+    fontFamily: Skin.fontFamily('semiBold'),
     fontWeight: '600',
     marginTop: Skin.space(16),
   },
