@@ -59,8 +59,8 @@ device serial. `_env.ps1` loads it and is dot-sourced by the PowerShell scripts;
 |--------|---------------|
 | `build-app.ps1` | Native rebuild + install on the phone (arm64 only by default) |
 | `build-prod-variant.ps1` | RELEASE build installed as a third `.preview` package id |
-| `build-emulator.ps1` | Emulator build (x86_64, plain package id) — **see the emulator warning** |
-| `dev-start-emulator.ps1` | Metro + adb reverse + auto-launch for an emulator — **see the emulator warning** |
+| `build-emulator.ps1` | Emulator build (x86_64, plain package id). Boots an AVD if none is running |
+| `dev-start-emulator.ps1` | Metro + adb reverse + auto-launch on a **already-running** emulator. `-ResetCache` for a cold rebuild |
 | `allow-metro-firewall.ps1` | One-time: open inbound TCP 8081 for the Wi-Fi path |
 
 ### DM diagnostic rig (tied to open upstream issue #183)
@@ -256,6 +256,41 @@ bundle over `adb reverse` and skips the emulator's NAT entirely.
   here has ~50 `node.exe` processes and nearly all are VS Code language servers and
   extension hosts (MEASURED: 51, ~4.8 GB). Every run wiped the editor's brains. Now
   only the port-8081 holder and Metro/Expo processes belonging to this repo are killed.
+
+### Round 2 (2026-08-19) — why it still "hung" for the operator after round 1
+
+Round 1 fixed the bundle URL, but runs still looked broken **for the operator and not for
+the agent**. Four more bugs, all found by reading a real failing run:
+
+- **`pm list packages` was asked before the package manager was awake**, so it reported
+  `WARNING: ...is not installed` for an app that *is* installed. That flag gated the
+  auto-launch, so the script started Metro and then deliberately did nothing. Metro only
+  bundles when a client asks, and no client ever launched — so it printed nothing **forever**.
+  That is not a slow build, it is a build that never starts, and it is the true source of
+  "it hangs every time". Now: poll for PM readiness, and a genuinely missing app is a **hard
+  error** that refuses to start Metro rather than a warning it continues past.
+- **Cold build on every single run**, from two independent causes: a hardcoded
+  `--reset-cache` *and* an unconditional wipe of `%LOCALAPPDATA%\Temp\metro-cache`. Removing
+  only one would have changed nothing. Both are now behind `-ResetCache`.
+  MEASURED back to back: **93.9s cold → 5.9s warm, a 13x difference.**
+- **The log-lock check ran before the stale-Metro kill**, so a leftover Metro holding
+  `metro-log.txt` made the script `exit 1` *before* reaching the code that kills that exact
+  process — and the error text recommended the blanket `Get-Process node | Stop-Process`.
+  The kill now runs first, and a still-locked log falls back to a per-PID file instead of
+  being a hard blocker.
+- **`Tee-Object` on PowerShell 5.1 writes UTF-16LE** (it has no `-Encoding` parameter there,
+  verified on this box). Every grep of `metro-log.txt` saw `S t a r t i n g   M e t r o` and
+  matched nothing, silently breaking the "read the log instead of asking a human" workflow.
+  Now written as UTF-8.
+
+**The real lesson: the failure mode was indistinguishable from the working mode.** Every
+outcome — building, broken, and gave-up — looked like an empty terminal, so a healthy 94s
+build got Ctrl+C'd as a hang. The script now states which path it is on and how long the
+silence will last, and every known failure prints a specific line.
+
+**Known gap:** `Write-Host` bypasses the pipeline, so the preflight lines appear on the console
+but NOT in `metro-log.txt`. A run that dies during preflight leaves an empty log. Ask the
+operator to paste the console text in that case.
 
 ### Verified end to end
 
@@ -657,4 +692,4 @@ them.
 | `gen-android-adaptive-icon.js` | Superseded by `gen-app-icons.js` in the same 2026-06-19 commit; running it would overwrite `icon-android-adaptive.png` with the pre-redesign version. |
 | `gen-splash-logo.js` | Superseded by `gen-splash-densities.js`; running it would overwrite `splash-glyph.png` with the older build. |
 
-*Last updated: 2026-08-18*
+*Last updated: 2026-08-19*

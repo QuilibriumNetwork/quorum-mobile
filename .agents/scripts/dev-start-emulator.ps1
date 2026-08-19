@@ -3,7 +3,13 @@
 # For a physical phone (QR / LAN), use dev-start-mobile.ps1 instead.
 #
 # Usage (from the repo root terminal):
-#   .\.agents\scripts\dev-start-emulator.ps1
+#   .\.agents\scripts\dev-start-emulator.ps1                # warm cache, ~10s to first bundle
+#   .\.agents\scripts\dev-start-emulator.ps1 -ResetCache    # cold rebuild, ~75s
+#
+# The emulator must already be RUNNING and past its home screen. This script does
+# not boot one - build-emulator.ps1 does that. If the app isn't installed on the
+# emulator, this stops with an error rather than starting a Metro with nothing
+# attached to it.
 #
 # What it does that the mobile script doesn't:
 #   - Verifies an emulator is actually running (adb devices).
@@ -20,6 +26,21 @@
 #   3. In the emulator: press R twice (or Ctrl+M -> Reload).
 #
 # That guarantees a clean log file every time.
+
+param(
+    # Throw away Metro's transformer cache and rebuild the bundle from scratch.
+    #
+    # OFF BY DEFAULT, deliberately. This used to be hardcoded on, and it is the
+    # single biggest reason emulator runs "felt hung": MEASURED 2026-08-19 on this
+    # project, cold bundle 75.6s vs warm 7.2s - a 10x tax paid on EVERY run, during
+    # which the terminal prints nothing at all. Silence that long is indistinguishable
+    # from a crash, so a genuinely working run looked broken.
+    #
+    # Use it only when Metro is serving stale code: after a dep change, a
+    # metro.config.js/babel.config.js edit, or a branch switch that alters
+    # node_modules. A normal JS/TS edit does NOT need it - fast refresh handles that.
+    [switch]$ResetCache
+)
 
 . "$PSScriptRoot\_env.ps1"
 $logPath = Join-Path $repo ".agents\reports\metro-log.txt"
@@ -52,6 +73,39 @@ if (-not (Get-Command adb -ErrorAction SilentlyContinue)) {
     }
 }
 
+# Kill orphaned Metro/Node processes from previous sessions. Ctrl+C in PowerShell
+# doesn't always propagate to child Node processes, leaving zombies that hold file
+# handles on the Metro cache AND on the log file below. Those zombies cause
+# "Waiting for Watchman watch-project" hangs and EMFILE errors.
+#
+# TARGETED, never a blanket `Get-Process node | Stop-Process`. On this box a normal
+# working session has ~50 node.exe processes (MEASURED 2026-08-18: 51, ~4.8 GB) and
+# almost all of them are VS Code language servers and extension hosts. The old
+# blanket kill wiped the editor's brains every single run. We take only (a) whoever
+# holds port 8081, and (b) node processes whose command line points at Metro/Expo
+# inside THIS repo.
+#
+# RUNS BEFORE THE LOG HANDLING, deliberately. It used to run much later, so a stale
+# Metro still holding metro-log.txt made the script exit at the lock check below -
+# BEFORE reaching the code that would have killed that very process. The script
+# could not recover from a state it already knew how to fix, and its error text
+# then recommended the blanket kill. OBSERVED 2026-08-19.
+function Stop-StaleMetro {
+    $metroPids = @()
+    Get-NetTCPConnection -State Listen -LocalPort 8081 -ErrorAction SilentlyContinue |
+        ForEach-Object { $metroPids += $_.OwningProcess }
+    Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -and $_.CommandLine -match '(metro|expo)' -and $_.CommandLine -like "*$repo*" } |
+        ForEach-Object { $metroPids += $_.ProcessId }
+    $metroPids = $metroPids | Sort-Object -Unique
+    if ($metroPids) {
+        Write-Host "  Killing $($metroPids.Count) stale Metro/Expo node process(es) (editor processes untouched)" -ForegroundColor DarkGray
+        $metroPids | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+        Start-Sleep -Milliseconds 800
+    }
+}
+Stop-StaleMetro
+
 # Make sure the reports folder exists
 $reportsDir = Split-Path $logPath -Parent
 if (-not (Test-Path $reportsDir)) {
@@ -61,22 +115,22 @@ if (-not (Test-Path $reportsDir)) {
 # Wipe old log (force, ignore if missing or locked)
 Remove-Item $logPath -Force -ErrorAction SilentlyContinue
 
-# If another Metro process is holding the log file open, we can't delete it.
-# Detect that and surface a clear message instead of starting on top of stale logs.
+# If something STILL holds the log open after the kill above, fall back to a
+# per-run log file rather than refusing to start. A locked log file is a trivial
+# problem and must never be the reason a dev session can't begin - the previous
+# behaviour was `exit 1`, which turned a stale file handle into a hard blocker.
+$logLocked = $false
 if (Test-Path $logPath) {
     try {
         $fs = [System.IO.File]::Open($logPath, 'Open', 'ReadWrite', 'None')
         $fs.Close()
         Remove-Item $logPath -Force -ErrorAction SilentlyContinue
     }
-    catch {
-        Write-Host ""
-        Write-Host "  ERROR: .agents\reports\metro-log.txt is locked by another process." -ForegroundColor Red
-        Write-Host "  Another Metro instance is probably still running." -ForegroundColor Yellow
-        Write-Host "  Close that terminal, or run: Get-Process node | Stop-Process -Force" -ForegroundColor Yellow
-        Write-Host ""
-        exit 1
-    }
+    catch { $logLocked = $true }
+}
+if ($logLocked) {
+    $logPath = Join-Path $reportsDir ("metro-log-{0}.txt" -f $PID)
+    Write-Host "  metro-log.txt is still locked; logging to $(Split-Path $logPath -Leaf) instead." -ForegroundColor DarkYellow
 }
 
 Push-Location $repo
@@ -118,41 +172,55 @@ try {
     & $adb -s $emulator reverse tcp:8081 tcp:8081 | Out-Null
     Write-Host "  adb reverse tcp:8081 -> Metro reachable at localhost:8081 inside emulator" -ForegroundColor DarkGray
 
-    # Confirm the dev build is installed; warn (don't fail) if not.
-    $installed = & $adb -s $emulator shell pm list packages 2>$null | Select-String $androidPackage
-    if (-not $installed) {
-        Write-Host ""
-        Write-Host "  WARNING: $androidPackage is not installed on this emulator." -ForegroundColor Yellow
-        Write-Host "  Build & install it once with:  yarn android" -ForegroundColor Yellow
-        Write-Host "  Metro will still start, but there's no app to connect yet." -ForegroundColor Yellow
-        Write-Host ""
+    # Confirm the dev build is installed.
+    #
+    # MUST wait for the package manager first. `pm list packages` answers with an
+    # EMPTY list for a while after boot, before PackageManager is serving queries -
+    # so asking too early reports "not installed" for an app that is installed.
+    # That false negative is not cosmetic: $installed gates the auto-launch below,
+    # so the script would start Metro and then deliberately do nothing, forever,
+    # with no error. OBSERVED 2026-08-19 on a freshly booted emulator: run #1 said
+    # "not installed" and never launched; run #2 seconds later found it fine.
+    # That is the whole reason emulator runs "hang for no reason".
+    #
+    # Probe for ANY package to prove PM is up, then look for ours.
+    $pmReady = $false
+    for ($i = 0; $i -lt 30; $i++) {
+        $pkgList = & $adb -s $emulator shell pm list packages 2>$null
+        if ($pkgList -and ($pkgList | Where-Object { $_ -match '^package:' })) {
+            $pmReady = $true
+            break
+        }
+        if ($i -eq 0) { Write-Host "  Waiting for the emulator's package manager..." -ForegroundColor DarkGray }
+        Start-Sleep -Seconds 1
     }
+    $installed = $pmReady -and ($pkgList | Select-String -SimpleMatch $androidPackage)
+
+    if (-not $pmReady) {
+        Write-Host ""
+        Write-Host "  ERROR: the emulator's package manager never answered (30s)." -ForegroundColor Red
+        Write-Host "  The emulator is probably still booting. Wait for the home screen, then re-run." -ForegroundColor Yellow
+        Write-Host ""
+        exit 1
+    }
+    if (-not $installed) {
+        # Hard stop, NOT a warning. Without the app there is nothing to auto-launch,
+        # so continuing just produces a silent Metro that looks like a hang. The old
+        # code printed a warning and carried on, which is how that silence happened.
+        Write-Host ""
+        Write-Host "  ERROR: $androidPackage is not installed on $emulator." -ForegroundColor Red
+        Write-Host "  Install it once with:   .\.agents\scripts\build-emulator.ps1" -ForegroundColor Yellow
+        Write-Host "  Then re-run this script." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  (Not starting Metro - there would be nothing to connect to it.)" -ForegroundColor DarkGray
+        Write-Host ""
+        exit 1
+    }
+    Write-Host "  Dev build present: $androidPackage" -ForegroundColor DarkGray
 
     # --- Metro hardening (same as mobile script) ------------------------
-    # Kill orphaned Metro/Node processes from previous sessions. Ctrl+C in
-    # PowerShell doesn't always propagate to child Node processes, leaving
-    # zombies that hold file handles on the Metro cache. Those zombies cause
-    # "Waiting for Watchman watch-project" hangs and EMFILE errors.
-    #
-    # TARGETED, never a blanket `Get-Process node | Stop-Process`. On this box a
-    # normal working session has ~50 node.exe processes (MEASURED 2026-08-18: 51,
-    # ~4.8 GB) and almost all of them are VS Code language servers and extension
-    # hosts. The old blanket kill wiped the editor's brains every single run,
-    # which is a large part of why emulator sessions "just behaved weirdly".
-    # We only take (a) whoever holds port 8081, and (b) node processes whose
-    # command line points at Metro/Expo inside THIS repo.
-    $metroPids = @()
-    Get-NetTCPConnection -State Listen -LocalPort 8081 -ErrorAction SilentlyContinue |
-        ForEach-Object { $metroPids += $_.OwningProcess }
-    Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -and $_.CommandLine -match '(metro|expo)' -and $_.CommandLine -like "*$repo*" } |
-        ForEach-Object { $metroPids += $_.ProcessId }
-    $metroPids = $metroPids | Sort-Object -Unique
-    if ($metroPids) {
-        Write-Host "  Killing $($metroPids.Count) stale Metro/Expo node process(es) (editor processes untouched)" -ForegroundColor DarkGray
-        $metroPids | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
-        Start-Sleep -Milliseconds 500
-    }
+    # (Stale Metro/Expo processes were already killed near the top, before the log
+    # file was touched - see Stop-StaleMetro and the note about ordering there.)
 
     # Reset Watchman. A stuck Watchman server is the usual cause of the
     # endless "Waiting for Watchman watch-project (Ns)..." loop.
@@ -162,8 +230,18 @@ try {
         watchman shutdown-server 2>$null | Out-Null
     }
 
-    # Wipe the Metro transformer cache before starting. Prevents EMFILE
-    # errors caused by cache file accumulation across sessions.
+    # Wipe the Metro transformer cache. ONLY under -ResetCache.
+    #
+    # This used to run unconditionally, which made -ResetCache impossible to opt
+    # out of: even without `--reset-cache` on the command line, the cache dir was
+    # already gone, so Metro printed "Bundler cache is empty, rebuilding" and paid
+    # the full 75.6s cold build EVERY run (vs 7.2s warm). Two independent
+    # mechanisms were forcing cold builds; this was the one that actually bit.
+    #
+    # The justification was "prevents EMFILE errors from cache accumulation", but
+    # the REAL EMFILE fix is the fs.promises concurrency cap set below (this
+    # script's own comment says so). Wiping the cache is belt-and-braces on top of
+    # it, and a 10x slowdown on every single run is far too high a price for that.
     #
     # RENAME first, delete in the background - never delete in-line. A direct
     # `Remove-Item -Recurse -Force` walks tens of thousands of small files and
@@ -171,7 +249,12 @@ try {
     # hangs with no escape but force-closing the terminal (which then orphans a
     # Metro holding port 8081). Same fix as the two dev-start-mobile scripts.
     $metroCache = Join-Path $env:LOCALAPPDATA "Temp\metro-cache"
-    if (Test-Path $metroCache) {
+    # Record the REAL cache state, so the timing hint below reports what will
+    # actually happen rather than just echoing the switch. Without this the script
+    # said "Warm cache, expect ~10s" and then took 94s, because the cache had been
+    # wiped by an earlier run - misleading feedback is worse than none.
+    $cacheWasPresent = Test-Path $metroCache
+    if ($ResetCache -and $cacheWasPresent) {
         $cacheParent = Split-Path $metroCache -Parent
         $staleName   = "metro-cache-stale-$PID"
         try {
@@ -270,8 +353,39 @@ try {
     Write-Host "  Stop with Ctrl+C. To restart with a clean log: Up arrow, Enter." -ForegroundColor Cyan
     Write-Host "  In the emulator, reload with R,R (or Ctrl+M -> Reload)." -ForegroundColor Cyan
     Write-Host ""
+
+    # SAY HOW LONG THE SILENCE WILL LAST. Metro prints nothing at all while it
+    # bundles, and this project takes 75.6s cold / 7.2s warm (MEASURED 2026-08-19).
+    # Without this line there is no way to tell a working run from a dead one, which
+    # is exactly how working runs got Ctrl+C'd and reported as hangs.
+    if ($ResetCache -or -not $cacheWasPresent) {
+        $why = if ($ResetCache) { "-ResetCache" } else { "no Metro cache on disk" }
+        Write-Host "  COLD build ($why). Expect 90-120s of NO OUTPUT before 'Android Bundled ...'." -ForegroundColor Yellow
+        Write-Host "  MEASURED on this project: 93.9s for 12209 modules, slower under load." -ForegroundColor DarkGray
+    } else {
+        Write-Host "  Warm cache. Expect ~10-20s of no output, then 'Android Bundled ...'." -ForegroundColor Green
+        Write-Host "  (Serving stale code? Re-run with -ResetCache.)" -ForegroundColor DarkGray
+    }
+    Write-Host "  Silence until that line is NORMAL. It is not a hang. Don't Ctrl+C." -ForegroundColor DarkGray
+    Write-Host ""
+
     # start:lazy = plain `expo start` (no inline POSIX env prefix); env vars set above.
-    yarn start:lazy --reset-cache --max-workers 2 2>&1 | Tee-Object -FilePath $logPath
+    $metroArgs = @('start:lazy', '--max-workers', '2')
+    if ($ResetCache) { $metroArgs += '--reset-cache' }
+
+    # Write the log as UTF-8, NOT via Tee-Object.
+    #
+    # PowerShell 5.1's Tee-Object has no -Encoding parameter and writes UTF-16LE
+    # (VERIFIED on this box: PS 5.1.26100, Tee-Object exposes no Encoding param).
+    # Every tool that later reads metro-log.txt - grep, ripgrep, an agent - then
+    # sees "S t a r t i n g   M e t r o" and finds nothing. That silently breaks
+    # the "read the teed log instead of asking a human to watch the console"
+    # workflow. Out-File -Encoding utf8 keeps the console output identical while
+    # making the file actually greppable.
+    yarn @metroArgs 2>&1 | ForEach-Object {
+        $_
+        $_ | Out-File -FilePath $logPath -Append -Encoding utf8
+    }
 }
 finally {
     Pop-Location
