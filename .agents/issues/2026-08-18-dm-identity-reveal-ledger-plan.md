@@ -1,10 +1,10 @@
 ---
 type: task
 title: "DM identity: fix the cross-client dialect break, then make identity reveal an explicit, privacy-gated ledger"
-status: open
+status: in-progress
 priority: high
 created: 2026-08-18
-updated: 2026-08-18
+updated: 2026-08-19
 area: DM identity / privacy / cross-client parity
 repos: quorum-mobile (this plan), quorum-desktop (mirror section §D — its own PR), quorum-shared (no change required for Tasks 1-8; wire-shape convergence is an open question §Q)
 related:
@@ -17,6 +17,66 @@ related:
 # DM Identity Reveal Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+## Status
+
+**All 8 tasks implemented and reviewed, 2026-08-19, on branch
+`feat/dm-identity-reveal-ledger` (13 commits, `a701116..1b03b41`). Not yet
+merged. The §V device lanes have NOT been run — that is what remains.**
+
+Gates MEASURED at branch completion:
+`npx jest` 125 suites / 1180 tests all passing (baseline 119/1140) ·
+`npx tsc --noEmit` exactly 12 pre-existing errors (unchanged) ·
+`yarn lint` 302 errors / 173 warnings (unchanged).
+
+Every task was implemented by a fresh agent, then reviewed by an independent
+one, with fix rounds until clean, then a whole-branch review. Verdict: READY TO
+MERGE, no Critical findings, no ungated identity-emission path found.
+
+### What changed versus this plan as written
+
+- **§P's emission table stands, but the operator restated the rule** (2026-08-19)
+  and it now governs where the two differ: *"The sender of the DM's identity IS
+  shown to the receiver. It's just the receiver's identity that is not shown
+  until they reply (unless they already had previous conversations/sessions with
+  the same sender."* Initiating is itself the consent; the asymmetry is
+  deliberate.
+- **Calls were brought under that rule**, which this plan did not cover.
+  `sendSignal` in `context/CallContext.tsx` now takes an explicit opt-in identity
+  parameter defaulting to silence. Placing a call (offer) and answering one
+  (answer) attach identity and record the reveal through `onDeliberateDmSend`;
+  the other six signal sites (ICE ×2, hangup, event, renegotiation, circuit
+  rotation) attach nothing.
+- **Task 8's audit found a real, previously-live leak** the plan had not
+  predicted: `hooks/chat/useDeleteConversationSignal.ts` sent your `display_name`
+  to a never-replied stranger when you deleted their conversation, via the
+  `accept`-shaped session envelope, with no ledger check anywhere in that path.
+  Fixed.
+- **Task 4's Step 5 RED proof was unfalsifiable as specified.** The jest MMKV
+  mock wraps a plain `Map` that cannot throw, so `hasRevealedTo`'s catch branch
+  was unreachable from any test — flipping the fail direction left the suite
+  green. Tests that make storage genuinely throw were added; the proof now fires.
+- **`sendProfileToPartner`'s signature is wider than §Task 5 specified.**
+  It takes `SendProfileDeps`, and `buildSendProfileDeps(base: DMBroadcastDeps)`
+  is the seam single-partner callers use. Tasks 6 and 7 keep the narrow public
+  signature this plan specified and call the builder internally.
+- **Task 3 touched 9 sites, not 7** — an unbriefed third `substring(0, 8)` at
+  the old line 3773 turned out to be a discarded `saveMessage` argument.
+
+### Deliberately NOT done (filed separately)
+
+- `issues/.open/2026-08-19-self-rename-name-stale-outside-websocket-context.md`
+- `issues/.open/2026-08-19-batch-decrypt-path-skips-auto-reveal-for-call-frames.md`
+- `issues/.open/2026-08-19-fire-and-forget-dynamic-imports-lack-catch.md`
+- §D (the desktop mirror) and §Q (the wire-shape and `request-profile` questions)
+  remain open, exactly as this plan scoped them.
+
+### What still needs a human on a device
+
+The §V lanes below, plus one new call-specific lane derived from the batch-path
+finding. No automated test on this branch can cover real sockets, real push
+delivery, or cross-device timing. **V4 is the control arm for the entire privacy
+design: if it fails, stop, the rule is broken.**
 
 **Goal:** A DM partner's name and avatar reach every device that is *entitled* to them — and never reach anyone who is not — across all four client pairings (mobile↔mobile, mobile↔desktop, desktop↔mobile, desktop↔desktop).
 
