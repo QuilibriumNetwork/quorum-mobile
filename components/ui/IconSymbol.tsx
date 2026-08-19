@@ -81,6 +81,7 @@ const SF_TO_TABLER = {
   'circle': tabler('IconCircle', 'IconCircleFilled'),
   'paintbrush': tabler('IconBrush'),
   'paintpalette': tabler('IconPalette', 'IconPaletteFilled'),
+  'textformat.size': tabler('IconTextSize'),
   'square.grid.2x2': tabler('IconLayoutGrid'),
   'square.grid.2x2.fill': tabler('IconLayoutGrid'),
   'rectangle.grid.2x2': tabler('IconLayoutGrid'),

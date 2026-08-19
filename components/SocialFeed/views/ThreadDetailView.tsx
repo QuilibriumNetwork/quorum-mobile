@@ -689,7 +689,7 @@ function createStyles(theme: AppTheme) {
       borderColor: theme.colors.background,
     },
     displayName: {
-      ...theme.textStyles.headline,
+      ...theme.textStyles.messageAuthor,
       color: theme.colors.textStrong,
     },
     channelName: {
@@ -709,7 +709,7 @@ function createStyles(theme: AppTheme) {
       color: theme.colors.accent,
     },
     castText: {
-      ...theme.textStyles.body,
+      ...theme.textStyles.messageBody,
       color: theme.colors.textMain,
     },
     imageBg: {

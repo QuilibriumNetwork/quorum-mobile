@@ -79,7 +79,7 @@ import { retryPushPrefsSyncIfDirty } from '@/services/notifications/pushPrefsSyn
 import { registerBackgroundNotificationTask } from '@/services/notifications/pushReceivedTask';
 import { CustomThemeProvider, useTheme } from '@/theme';
 import { AppBackground } from '@/components/ui/AppBackground';
-import { getActiveSkin, getAppearancePref } from '@/services/theme/skinPrefs';
+import { getActiveSkin, getAppearancePref, getTextSizePref } from '@/services/theme/skinPrefs';
 import { ensureSkinFontLoaded } from '@/theme/skins/fontLoader';
 import { ensureUiFontLoaded } from '@/theme/uiFont';
 import { setSkinGeometry } from '@/theme/skins/geometry';
@@ -300,6 +300,11 @@ export default function RootLayout() {
   // before revealing the UI, so a skinned launch never flashes the default
   // theme/font. Tokens (colors/radii/borders) apply instantly; only the font
   // is async, so the splash is held until it's ready.
+  // The user's text size is a synchronous MMKV read too, so it is available
+  // before first paint and message text never renders at the default and then
+  // reflows. It needs no module-level side effect: unlike the skin geometry it
+  // only reaches themed styles, which read it from the theme object.
+  const bootTextSize = React.useMemo(() => getTextSizePref(), []);
   const bootSkin = React.useMemo(() => {
     const skin = getActiveSkin();
     setSkinGeometry(skin); // before any static StyleSheet evaluates
@@ -362,7 +367,7 @@ export default function RootLayout() {
         },
       }}
     >
-      <CustomThemeProvider defaultAccentColor="blue" defaultSkin={bootSkin} defaultAppearance={bootAppearance}>
+      <CustomThemeProvider defaultAccentColor="blue" defaultSkin={bootSkin} defaultAppearance={bootAppearance} defaultTextSize={bootTextSize}>
         <StorageProvider>
           <AuthProvider>
             <AuthAwareApiProvider>

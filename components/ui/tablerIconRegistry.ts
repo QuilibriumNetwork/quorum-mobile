@@ -249,6 +249,7 @@ import IconShieldFilled from '@tabler/icons-react-native/IconShieldFilled';
 import IconShieldLock from '@tabler/icons-react-native/IconShieldLock';
 import IconShieldLockFilled from '@tabler/icons-react-native/IconShieldLockFilled';
 import IconShieldX from '@tabler/icons-react-native/IconShieldX';
+import IconSkull from '@tabler/icons-react-native/IconSkull';
 import IconSparkles from '@tabler/icons-react-native/IconSparkles';
 import IconSparklesFilled from '@tabler/icons-react-native/IconSparklesFilled';
 import IconSpeakerphone from '@tabler/icons-react-native/IconSpeakerphone';
@@ -268,6 +269,7 @@ import IconTagFilled from '@tabler/icons-react-native/IconTagFilled';
 import IconTagOff from '@tabler/icons-react-native/IconTagOff';
 import IconTank from '@tabler/icons-react-native/IconTank';
 import IconTarget from '@tabler/icons-react-native/IconTarget';
+import IconTextSize from '@tabler/icons-react-native/IconTextSize';
 import IconThumbDown from '@tabler/icons-react-native/IconThumbDown';
 import IconThumbDownFilled from '@tabler/icons-react-native/IconThumbDownFilled';
 import IconThumbUp from '@tabler/icons-react-native/IconThumbUp';
@@ -529,6 +531,7 @@ export const TablerIcons = {
   IconShieldLock,
   IconShieldLockFilled,
   IconShieldX,
+  IconSkull,
   IconSparkles,
   IconSparklesFilled,
   IconSpeakerphone,
@@ -548,6 +551,7 @@ export const TablerIcons = {
   IconTagOff,
   IconTank,
   IconTarget,
+  IconTextSize,
   IconThumbDown,
   IconThumbDownFilled,
   IconThumbUp,

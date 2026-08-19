@@ -1821,19 +1821,25 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     // Fixed line box so non-text indicators (warning/edited/spinner) can't
     // stretch the row taller than the username line and widen the header→text gap.
     //
-    // Multiplied by the OS font scale because the username's `lineHeight` is
-    // scaled by it and this container is not, so the two diverge as the user
-    // raises their text size: at Android's top notch (1.3) the name wants ~29
-    // in a 22 box. iOS matters more here than Android — Dynamic Type reaches
-    // roughly 3x with accessibility sizes, where a fixed box clips outright.
-    // Read once at stylesheet creation; a mid-session change to the system
-    // setting lands on the next launch, same as the skin geometry above.
-    height: Skin.font(22) * PixelRatio.getFontScale(),
+    // Derived from the username's OWN line height rather than a literal 22, so
+    // the box tracks every multiplier that moves the name — the skin's
+    // fontScale and the user's in-app text size are both already baked into
+    // `messageAuthor`. A hardcoded 22 silently clipped the name the moment
+    // either of those went up.
+    //
+    // The OS font scale is applied on top because RN scales `lineHeight` by it
+    // at render time while this container is a raw layout number. At Android's
+    // top notch (1.3) the name wants ~29 in a 22 box. iOS matters more here —
+    // Dynamic Type reaches roughly 3x with accessibility sizes, where a fixed
+    // box clips outright. Read once at stylesheet creation; a mid-session
+    // change to the system setting lands on the next launch, same as the skin
+    // geometry above.
+    height: theme.textStyles.messageAuthor.lineHeight * PixelRatio.getFontScale(),
   },
   // Matches the body's 16/22: a name smaller than the message under it inverts
   // the hierarchy, and desktop's sender name likewise inherits the 16px body.
   messageUser: {
-    ...theme.textStyles.headline,
+    ...theme.textStyles.messageAuthor,
     color: theme.colors.textStrong,
     marginRight: Skin.space(8),
     flexShrink: 1,
@@ -1851,7 +1857,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   // long-form reading surface (here and Farcaster casts) points at the same
   // token so they cannot drift apart again.
   messageText: {
-    ...theme.textStyles.body,
+    ...theme.textStyles.messageBody,
     color: theme.colors.textMain,
     marginTop: Skin.space(4),
   },
@@ -1864,7 +1870,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   // Sits inline with body text in the `messageWithLink` row, so it has to carry
   // the same metrics — it is a sibling <Text>, not a child, and inherits nothing.
   linkText: {
-    ...theme.textStyles.body,
+    ...theme.textStyles.messageBody,
     color: theme.colors.primary,
     textDecorationLine: 'underline',
   },
