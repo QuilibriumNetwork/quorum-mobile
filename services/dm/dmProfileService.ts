@@ -301,6 +301,7 @@ export async function sendProfileToPartner(
       },
       payload.selfAddress,
       payload.displayName,
+      payload.userIcon,
     );
 
     // Record only after a successful enqueue so a throw retries next round.

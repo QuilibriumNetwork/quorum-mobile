@@ -342,6 +342,19 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     if (allTargetDevices.length === 0) return;
 
+    // Identity: NONE. sendSignal is the one transport for every call-signaling
+    // frame (offer, answer, ICE candidates, hangup, renegotiate, event), and
+    // several of those fire on automatic paths with no fresh human act behind
+    // them (an ICE candidate is emitted by WebRTC on its own schedule; hangup
+    // also fires from onConnectionStateChange on a dropped connection, not
+    // only from a user tapping "end call"; renegotiate-answer fires from
+    // circuit rotation). Attaching a display_name/user_icon here would let a
+    // stranger who merely rings (or whose call drops) harvest identity the
+    // same way an automatic DM receipt would — see the receipt-ack transport
+    // in WebSocketContext.tsx for the twin case. A deliberately placed call
+    // does not get identity via this frame; a partner already revealed to
+    // (via a prior deliberate DM) is unaffected because the call UI reads
+    // their identity from local state, not from this outbound signal.
     await sendEncryptedMessageToAllDevices(
       conversationId,
       recipientAddress,
@@ -355,7 +368,6 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
       },
       user.address,
-      user.displayName,
     );
   }, [user, isConnected, enqueueOutbound, subscribe]);
 

@@ -200,6 +200,12 @@ export function useEditDirectMessage() {
 
         // A DM edit is a DM to the same partner, so it is an equally valid
         // carrier for pending acks. Copy, never mutate — see withPiggybackedAcks.
+        //
+        // Identity: kept. This can only target a message WE authored, which
+        // means a prior deliberate chat/embed send to this exact partner
+        // already succeeded and already recorded the reveal (onDeliberateDmSend) —
+        // so attaching identity here discloses nothing the partner does not
+        // already have.
         await sendEncryptedMessageToAllDevices(
           params.conversationId,
           params.recipientAddress,
@@ -214,6 +220,7 @@ export function useEditDirectMessage() {
           },
           senderId,
           user?.displayName,
+          user?.profileImage,
         );
       } catch (err) {
         logger.debug('[useEditDirectMessage] edit-message send failed (local edit stands)', err);

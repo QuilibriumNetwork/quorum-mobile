@@ -6159,6 +6159,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
         if (allTargetDevices.length === 0) return;
 
+        // Identity: NONE. This is the automatic receipt/ack transport
+        // (ReceiptService's debounced flush) — never a human act. Attaching a
+        // display_name/user_icon here is exactly the harvest-by-messaging
+        // hole the DM privacy rule exists to close: a stranger messages us,
+        // our client acks automatically, and the ack must not carry our face.
         await sendEncryptedMessageToAllDevices(
           `${partnerAddress}/${partnerAddress}`,
           partnerAddress,
@@ -6172,13 +6177,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
           },
           senderId,
-          user?.displayName,
         );
       } catch (err) {
         logger.debug('[DM-receipts] ack send failed', err);
       }
     },
-    [enqueueOutbound, subscribe, user?.displayName],
+    [enqueueOutbound, subscribe],
   );
   sendDmReceiptAckRef.current = sendDmReceiptAck;
 

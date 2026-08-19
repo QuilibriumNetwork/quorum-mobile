@@ -188,7 +188,8 @@ export function useSendDirectEmbedMessage() {
           inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
         },
         senderId,
-        user?.displayName
+        user?.displayName,
+        user?.profileImage
       );
 
       return { ...message, sendStatus: 'sent' };
@@ -431,7 +432,8 @@ async function sendEncryptedEmbedMessage(
     inboxEncryptionPublicKey: number[];
   },
   userAddress: string,
-  displayName?: string
+  displayName?: string,
+  userIcon?: string
 ): Promise<void> {
   // Import the NativeCryptoProvider for encryption
   const { NativeCryptoProvider } = await import(
@@ -503,6 +505,7 @@ async function sendEncryptedEmbedMessage(
         // NAME, and an address stored as a name can never be corrected by the
         // fallback ladder on their side.
         ...(displayName ? { display_name: displayName } : {}),
+        ...(userIcon ? { user_icon: userIcon } : {}),
         return_inbox_address: conversationInboxAddress,
         return_inbox_encryption_key: bytesToHex(conversationInboxKeypair.public_key),
         return_inbox_public_key: conversationSigningKeypair
@@ -616,6 +619,7 @@ async function sendEncryptedEmbedMessage(
           // NAME, and an address stored as a name can never be corrected by the
           // fallback ladder on their side.
           ...(displayName ? { display_name: displayName } : {}),
+          ...(userIcon ? { user_icon: userIcon } : {}),
           return_inbox_address: ourConversationInbox?.inboxAddress || deviceKeyset.inboxAddress,
           return_inbox_encryption_key: ourConversationInbox
             ? bytesToHex(ourConversationInbox.encryptionPublicKey)

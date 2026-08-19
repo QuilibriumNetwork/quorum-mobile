@@ -122,6 +122,16 @@ export function useDeleteConversationSignal() {
           inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
         };
 
+        // Identity: NONE. A conversation row exists on inbound messages alone
+        // (a stranger who messaged us, never replied to), so this control
+        // message can be the very FIRST frame we ever send them — before the
+        // reveal ledger has recorded any consent (that only happens via
+        // onDeliberateDmSend, on a successful chat/embed send). Tapping
+        // "delete conversation" is a human act, but it is not the deliberate
+        // messaging act the privacy rule keys on — if anything it is the
+        // opposite signal — so attaching identity here would let a spammer
+        // learn our name/avatar simply by messaging us and having us delete
+        // the conversation to get rid of it.
         const sendControl = (message: Message) =>
           sendEncryptedMessageToAllDevices(
             conversationId,
@@ -132,7 +142,6 @@ export function useDeleteConversationSignal() {
             subscribe,
             deviceInfo,
             senderId,
-            user?.displayName,
           );
 
         // Send both control messages over the same resolved device set. Each is
@@ -142,6 +151,6 @@ export function useDeleteConversationSignal() {
         logger.debug('[useDeleteConversationSignal] send failed (local delete stands)', err);
       }
     },
-    [user?.address, user?.displayName, enqueueOutbound, subscribe, apiClient],
+    [user?.address, enqueueOutbound, subscribe, apiClient],
   );
 }
