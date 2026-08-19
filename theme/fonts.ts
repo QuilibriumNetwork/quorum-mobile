@@ -160,10 +160,18 @@ export function makeTextStyles(skinFamily?: string | null, scale = 1) {
     title2: e(W.bold, 22, 28),
     /** 20/25 bold — tertiary titles, card headers */
     title3: e(W.bold, 20, 25),
-    /** 17/22 semibold — prominent body text, list item titles */
-    headline: e(W.semiBold, 17, 22),
-    /** 17/22 regular — default body copy */
-    body: e(W.regular, 17, 22),
+    /** 16/22 semibold — prominent body text, list item titles, names */
+    headline: e(W.semiBold, 16, 22),
+    /**
+     * 16/22 regular — default body copy, and every long-form reading surface.
+     *
+     * 16 rather than the 17 iOS HIG nominates for Body: 17 was tried and read
+     * too large on a device, because a name at the same size sits beside it and
+     * most users are on a system font scale above 1.0, which multiplies both.
+     * 16 also matches the composer input and desktop, so what you type, what
+     * you read, and what you see on the web client are one size.
+     */
+    body: e(W.regular, 16, 22),
     /** 16/21 regular — secondary body text */
     callout: e(W.regular, 16, 21),
     /** 15/20 regular — subheadlines, preview text */
