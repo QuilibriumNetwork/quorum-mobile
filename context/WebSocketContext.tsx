@@ -36,6 +36,7 @@ import { Alert, AppState, AppStateStatus, InteractionManager } from 'react-nativ
 
 import type { Conversation } from '@/hooks/chat/useConversations';
 import type { SelfIdentity } from '@/utils/resolveMemberName';
+import { parseDmProfileUpdate } from '@/services/dm/dmProfileWire';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { logDirectMessage, logMentionOrReply } from '@/services/notifications/logMentionOrReply';
 import { summarizeInbound } from '@/services/observability/redactInbound';
@@ -721,27 +722,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // should stop processing it), false otherwise.
   const applyDmProfileUpdate = useCallback(
     async (decryptedMessage: Message, senderAddress: string): Promise<boolean> => {
-      const content = decryptedMessage.content as
-        | {
-            type?: string;
-            senderId?: string;
-            displayName?: string;
-            userIcon?: string;
-            bio?: string;
-            // The partner's elected primary QNS name, bare. A CLAIM — stored
-            // inert and resolved before it can render. See the merge below.
-            primaryUsername?: string;
-          }
-        | undefined;
-      if (content?.type !== 'dm-update-profile') return false;
+      const parsed = parseDmProfileUpdate(decryptedMessage);
+      if (!parsed) return false;
 
       // Anti-spoof: the claimed senderId must match the cryptographically
       // authenticated envelope sender. On mismatch we still consume the
       // message (return true → never persisted as a post), just don't apply it.
       // Mirrors desktop's "return true even on mismatch".
-      if (content.senderId && content.senderId !== senderAddress) {
+      if (parsed.senderId && parsed.senderId !== senderAddress) {
         logger.warn('[DMProfile] dropped dm-update-profile with mismatched senderId', {
-          claimed: content.senderId?.slice(0, 8),
+          claimed: parsed.senderId?.slice(0, 8),
           envelope: senderAddress.slice(0, 8),
         });
         return true;
@@ -757,16 +747,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // the space update-profile handler and desktop's handleDMProfileUpdate.
       const merged: Conversation = {
         ...existing,
-        ...(content.displayName ? { displayName: content.displayName } : {}),
-        ...(content.userIcon ? { icon: content.userIcon } : {}),
-        ...(content.bio !== undefined ? { bio: content.bio } : {}),
+        ...(parsed.displayName ? { displayName: parsed.displayName } : {}),
+        ...(parsed.userIcon ? { icon: parsed.userIcon } : {}),
+        ...(parsed.bio !== undefined ? { bio: parsed.bio } : {}),
         // Stored under `claimed_` and never as `primary_username`, so it cannot
         // render on a surface that skips verification — the conversation title
         // and the notification preview both resolve names without one. It
         // becomes visible only by being promoted, after it resolves back to
         // this partner. Presence rule: '' is an un-election and must clear.
-        ...(content.primaryUsername !== undefined
-          ? { claimed_primary_username: content.primaryUsername }
+        ...(parsed.primaryUsername !== undefined
+          ? { claimed_primary_username: parsed.primaryUsername }
           : {}),
       } as Conversation;
       await storage.saveConversation(merged);
