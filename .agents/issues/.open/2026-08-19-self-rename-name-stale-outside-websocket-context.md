@@ -47,6 +47,54 @@ READ, 2026-08-19:
 - `services/space/spaceService.ts:300`
 - `services/space/spaceService.ts:989`
 
+## CONFIRMED ON DEVICE, 2026-08-20 — this is no longer a theory
+
+Reproduced by the operator on the Android emulator, live session, no reload:
+
+> Changed the per-space display name in **Space Settings → Account**. In the
+> channel messages and in the member list, the name shown was still the GLOBAL
+> one. The per-space override did not appear until the app was restarted.
+
+That is `components/SpaceSettingsModal.tsx` — READ at `:696`, the write path
+invalidates exactly one cache:
+
+```ts
+await adapter.saveSpaceMember(spaceId, merged as never);
+queryClient.invalidateQueries({ queryKey: queryKeys.spaces.members(spaceId) });
+// ← no invalidateRosterCaches(queryClient, spaceId)
+```
+
+The comment directly above it explains the members invalidation and is correct
+as far as it goes; it simply predates the `['identity-roster', spaceId]` cache
+that names are actually read from. So the write lands, the avatar path
+refreshes, and the name keeps serving the previous value.
+
+**Severity is higher than "medium" implies for this site specifically.** A
+per-space nickname is a feature whose entire observable effect is the name
+changing. Until a restart, it appears to do nothing at all.
+
+## A second, probably separate bug found in the same session
+
+The **placeholder** of that same Display-name field showed a STALE GLOBAL NAME —
+the operator's previous global name, after they had already changed it and while
+the space member list correctly showed the NEW one.
+
+READ: the placeholder is `selfNamePlaceholder(selfResolved, user, …)`
+(`SpaceSettingsModal.tsx:1732`), which returns `user.displayName` unless a
+verified `.q` exists (`utils/resolveSelfName.ts:109-114`). So it renders
+`AuthContext`'s `user.displayName`.
+
+That should NOT be stale: `AuthContext.updateProfile` (`:514-521`) updates state
+AND persists to MMKV in the same call, and `SpaceSettingsModal` depends on
+`user?.displayName` in its memo deps (`:845`), so it is not a stale closure.
+
+**So the interesting question is which path the global rename actually took.**
+If it did not go through `updateProfile`, the identity maps and `AuthContext`
+have diverged, and every surface reading `user.*` directly is stale — a wider
+problem than the roster invalidation above. UNRESOLVED: needs the exact screen
+the global rename was made from before anything is concluded. Do NOT fix this
+one by patching the placeholder; that would paper over a divergence.
+
 ## Why this probably affects the user's OWN rename
 
 `identity/identityFromMaps.ts:90` states it explicitly:
