@@ -59,11 +59,83 @@ describe('DM self-echo guards', () => {
     expect(trimmedLines).toContain(guard);
   });
 
-  it('gates delete-conversation-self on the ref in BOTH receive paths', () => {
-    const gate =
+  it('gates delete-conversation-self on the CRYPTO sender in BOTH receive paths', () => {
+    // ⚠️ THIS IS A SECURITY GATE, NOT A CORRECTNESS ONE.
+    //
+    // `selfContent.senderId` is plaintext the SENDER WROTE. On its own it is
+    // not a gate but a suggestion: any peer could seal a frame claiming to be
+    // us, and this device would delete the conversation and every message in
+    // it. The payload half is still required (it identifies a genuine
+    // self-sync signal), but it must be ANDed with the address the crypto
+    // layer authenticated, which no sender can forge:
+    //
+    //   fallback path → `authenticatedDmSender`, captured pre-rewrite
+    //   batch path    → `isSelfSyncEcho`, derived from the pre-rewrite sender
+    //
+    // Asserted as source text for the same reason as the guards above: these
+    // live inside two ~2000-line websocket callbacks with no drivable harness.
+
+    // If this goes red: the payload-only form is back, and ANY PEER CAN WIPE
+    // THE CONVERSATION. That is the vulnerability, not a style regression.
+    const payloadOnlyGate =
       'const isSelfSender = !!selfContent.senderId && selfContent.senderId === fullUserAddrRef.current;';
-    // One in handleIncomingMessage (fallback path), one in applyDMGroupResults.
-    expect(trimmedLines.filter((line) => line === gate)).toHaveLength(2);
+    expect(trimmedLines.filter((line) => line === payloadOnlyGate)).toHaveLength(0);
+
+    // Both gates still exist...
+    expect(trimmedLines.filter((line) => line === 'const isSelfSender =')).toHaveLength(2);
+    // ...and each carries its crypto-authenticated half. Red here means the
+    // fallback path lost `authenticatedDmSender`...
+    expect(
+      trimmedLines.filter((line) => line === 'authenticatedDmSender === fullUserAddrRef.current;')
+    ).toHaveLength(1);
+    // ...or the batch path lost `isSelfSyncEcho`.
+    expect(trimmedLines.filter((line) => line === 'isSelfSyncEcho;')).toHaveLength(1);
+  });
+
+  it('stamps the authenticated sender on BOTH receive saves, AFTER the spread', () => {
+    // ⚠️ THE GAP THIS CLOSES, measured 2026-08-20: deleting BOTH stamp lines
+    // outright left 39/39 tests green across every DM test file. The gate
+    // assertions above cover the delete path's READ side; nothing covered the
+    // WRITE side that feeds the reveal ledger. So the ledger could silently
+    // start seeing no provenance at all, and no test would notice.
+    //
+    // Ordering is the security half. `decryptedMessage` is JSON the sender
+    // authored, so it can contain `authenticatedSenderId`. Spread LAST, the
+    // attacker's value wins and the marker becomes attacker-chosen while still
+    // looking authoritative — strictly worse than having no marker.
+    const stamps = [
+      'authenticatedSenderId: authenticatedDmSender || undefined,', // JS path
+      'authenticatedSenderId: senderAddress || undefined,', // batch path
+    ];
+
+    // Red on any of these means, in order: a receive-path stamp was deleted;
+    // it was duplicated so the index below is ambiguous; or it moved above the
+    // spread, which is the attacker-wins ordering.
+    const spreadAboveEachStamp = stamps.map((stamp) => {
+      const occurrences = trimmedLines.filter((l) => l === stamp).length;
+      const at = trimmedLines.indexOf(stamp);
+      // Bounded lookback: these literals are ~12 lines, so 30 is generous
+      // without reaching a neighbouring one.
+      const window = at === -1 ? [] : trimmedLines.slice(Math.max(0, at - 30), at);
+      return { stamp, occurrences, spreadIsAbove: window.includes('...decryptedMessage,') };
+    });
+
+    expect(spreadAboveEachStamp).toEqual(
+      stamps.map((stamp) => ({ stamp, occurrences: 1, spreadIsAbove: true }))
+    );
+  });
+
+  it('space saves strip the marker instead of inheriting it from the wire', () => {
+    // Space frames are an unvalidated cast of attacker-authored JSON. Nothing
+    // reads a marker on a space row today, so this is defence in depth — but
+    // enforcing the rule only on DM paths leaves "no wire value ever survives"
+    // true by coincidence rather than by construction.
+    expect(
+      trimmedLines.filter((l) => l === 'authenticatedSenderId: undefined,')
+    ).toHaveLength(1); // the live path's named literal
+    expect(
+      source.includes('channelId, authenticatedSenderId: undefined } as StoredMessage')
+    ).toBe(true); // the batch path's inline literal
   });
 
   it('introduces no new self-comparison against the stale closure', () => {

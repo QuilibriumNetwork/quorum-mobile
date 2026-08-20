@@ -39,32 +39,82 @@ describe('ledger basics', () => {
 });
 
 describe('messagesContainSelfAuthored (pure bootstrap predicate)', () => {
-  it('finds a self-authored message', () => {
-    const msgs = [
-      { content: { senderId: PARTNER } },
-      { content: { senderId: SELF } },
-    ];
-    expect(messagesContainSelfAuthored(msgs, SELF)).toBe(true);
+  // A stored row. The two fields are deliberately independent, because that
+  // split IS the vulnerability this predicate was hardened against:
+  //   content.senderId      — plaintext THE SENDER WROTE. Attacker-controlled.
+  //   authenticatedSenderId — stamped at persist time from the crypto layer.
+  // `content` is a real PostMessage rather than a stub: the point of these
+  // tests is that the predicate IGNORES it, so it has to be present and
+  // well-formed for that to mean anything.
+  const row = (claimed: string, authenticated?: string) => ({
+    content: { type: 'post' as const, senderId: claimed, text: 'hi' },
+    ...(authenticated === undefined ? {} : { authenticatedSenderId: authenticated }),
   });
+
+  it('finds a self-authored message', () => {
+    expect(messagesContainSelfAuthored([row(PARTNER, PARTNER), row(SELF, SELF)], SELF)).toBe(true);
+  });
+
   it('is false for inbound-only history (a stranger who messaged us)', () => {
-    expect(messagesContainSelfAuthored([{ content: { senderId: PARTNER } }], SELF)).toBe(false);
+    expect(messagesContainSelfAuthored([row(PARTNER, PARTNER)], SELF)).toBe(false);
     expect(messagesContainSelfAuthored([], SELF)).toBe(false);
+  });
+
+  it('REJECTS a forged row that merely CLAIMS our senderId', () => {
+    // The exploit, as a unit test. A stranger sends an ordinary post with
+    // content.senderId set to the victim's address. It is stored, and while
+    // this predicate read that field it returned true — flipping the ledger
+    // and leaking the victim's real name on the next profile sweep.
+    expect(messagesContainSelfAuthored([row(SELF, PARTNER)], SELF)).toBe(false);
+    expect(messagesContainSelfAuthored([row(PARTNER, PARTNER), row(SELF, PARTNER)], SELF)).toBe(
+      false,
+    );
+  });
+
+  it('IGNORES content.senderId entirely — it is not even consulted', () => {
+    // The inverse, which pins the actual rule. If anyone reintroduces a
+    // senderId pre-filter "for speed", this goes red.
+    expect(messagesContainSelfAuthored([row(PARTNER, SELF)], SELF)).toBe(true);
+  });
+
+  it('fails CLOSED on a row with no marker (history predating the field)', () => {
+    expect(messagesContainSelfAuthored([row(SELF)], SELF)).toBe(false);
+    expect(messagesContainSelfAuthored([row(SELF, '')], SELF)).toBe(false);
+  });
+
+  it('fails CLOSED on a degenerate self address', () => {
+    expect(messagesContainSelfAuthored([row(SELF, SELF)], '')).toBe(false);
   });
 });
 
 describe('ensureRevealBootstrap', () => {
   it('derives a reveal from history exactly once, then serves the ledger', async () => {
     const getMessages = jest.fn().mockResolvedValue({
-      messages: [{ content: { senderId: SELF } }],
+      messages: [{ authenticatedSenderId: SELF }],
     });
     expect(await ensureRevealBootstrap(SELF, PARTNER, getMessages)).toBe(true);
     expect(await ensureRevealBootstrap(SELF, PARTNER, getMessages)).toBe(true);
     expect(getMessages).toHaveBeenCalledTimes(1); // second call hit the ledger
   });
 
+  it('a FORGED history never bootstraps the ledger', async () => {
+    // The exploit end to end. The only row claiming our address is one a
+    // stranger sent; the marker records what the crypto layer authenticated.
+    // The bootstrap must not flip, and must persist nothing — a persisted
+    // true would be permanent consent obtained by sending one message.
+    const getMessages = jest.fn().mockResolvedValue({
+      messages: [
+        { content: { senderId: PARTNER }, authenticatedSenderId: PARTNER },
+        { content: { senderId: SELF }, authenticatedSenderId: PARTNER },
+      ],
+    });
+    expect(await ensureRevealBootstrap(SELF, PARTNER, getMessages)).toBe(false);
+    expect(hasRevealedTo(SELF, PARTNER)).toBe(false);
+  });
+
   it('stays false (and does NOT persist a negative) for inbound-only history', async () => {
     const getMessages = jest.fn().mockResolvedValue({
-      messages: [{ content: { senderId: PARTNER } }],
+      messages: [{ authenticatedSenderId: PARTNER }],
     });
     expect(await ensureRevealBootstrap(SELF, PARTNER, getMessages)).toBe(false);
     // A later reply can still flip it — negative is never persisted.

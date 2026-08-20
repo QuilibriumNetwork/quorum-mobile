@@ -27,6 +27,7 @@ import { getDeviceKeyset, getPrivateKey, getPublicKey } from '@/services/onboard
 import { deriveAddress } from '@/services/onboarding/keyService';
 import { logger, queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope } from '@quilibrium/quorum-shared';
 import type { Message } from '@quilibrium/quorum-shared';
+import type { StoredMessage } from '@/services/dm/storedMessage';
 import { NativeSigningProvider } from '@/services/crypto/native-signing-provider';
 import { withPiggybackedAcks } from '@/services/dm/piggybackAcks';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -467,7 +468,7 @@ export function useSendDirectMessage() {
       variables._messageId = messageId;
       variables._createdDate = createdDate;
 
-      const optimisticMessage: Message = {
+      const optimisticMessage: StoredMessage = {
         messageId,
         channelId: recipientAddress,
         spaceId: recipientAddress,
@@ -484,6 +485,12 @@ export function useSendDirectMessage() {
         },
         reactions: [],
         mentions: { memberIds: [], roleIds: [], channelIds: [] },
+        // Our own send, so we are provably the author — this is the row the
+        // reveal ledger reads back as "I deliberately messaged this person".
+        // Only stamped when we actually have an address: `senderId` above falls
+        // back to 'unknown', and a marker holding a placeholder is worse than
+        // no marker, since readers treat absent as "unproven" and fail closed.
+        ...(user?.address ? { authenticatedSenderId: user.address } : {}),
         sendStatus: 'sending',
         // Add reply metadata for display purposes
         ...(repliesToMessageId && replyToAuthorAddress
@@ -623,6 +630,14 @@ export function useSendDirectMessage() {
               }
             : { ...message };
           delete (persisted as Record<string, unknown>).sendStatus;
+          // Re-stamped rather than inherited: the `{ ...message }` branch above
+          // builds from what mutationFn returned, which does not carry the
+          // marker the optimistic copy had. Without this, a successful send
+          // could persist the final row WITHOUT provenance and silently lose
+          // the consent record the optimistic save had already written.
+          if (user?.address) {
+            (persisted as Record<string, unknown>).authenticatedSenderId = user.address;
+          }
 
           await storage.saveMessage(
             persisted,

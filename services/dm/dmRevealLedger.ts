@@ -1,6 +1,7 @@
 import { logger } from '@quilibrium/quorum-shared';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { truncateAddress } from '@/utils/formatAddress';
+import type { StoredMessageView } from './storedMessage';
 
 /**
  * The DM reveal ledger: "this device's user has DELIBERATELY messaged this
@@ -145,12 +146,34 @@ export function clearReveal(selfAddress: string, partnerAddress?: string): void 
   }
 }
 
-/** Pure: does this page of a DM's history contain a message we authored? */
+/**
+ * Pure: does this page of a DM's history contain a message we authored?
+ *
+ * ⚠️ `content.senderId` IS NOT EVIDENCE AND IS NOT READ HERE. It is plaintext
+ * the sending client writes, and the receive path persists it verbatim, so a
+ * stranger can store a row on this device whose payload names US as the author.
+ * While this function read that field, one such message flipped the ledger and
+ * the next profile sweep handed the attacker the victim's real name. MEASURED
+ * on desktop 2026-08-20 against the production relay; mobile carried the
+ * identical scan.
+ *
+ * The only field consulted is `authenticatedSenderId`, stamped at persist time
+ * from what the crypto layer authenticated and never taken off the wire (see
+ * `Message.authenticatedSenderId` in quorum-shared, and the two stamps in
+ * WebSocketContext, both written AFTER the spread of the wire message so a
+ * forged payload value cannot survive).
+ *
+ * ⚠️ ABSENT MEANS UNKNOWN, NOT SAFE. Rows written before the marker existed
+ * carry nothing and cannot prove authorship. Fail-safe by design: the cost is a
+ * partner waiting for one more deliberate send from this device, which is the
+ * per-device posture this module already documents above.
+ */
 export function messagesContainSelfAuthored(
-  messages: readonly { content?: { senderId?: string } }[],
+  messages: readonly StoredMessageView[],
   selfAddress: string,
 ): boolean {
-  return messages.some((m) => m?.content?.senderId === selfAddress);
+  if (!isUsableIdentifier(selfAddress) || !Array.isArray(messages)) return false;
+  return messages.some((m) => m?.authenticatedSenderId === selfAddress);
 }
 
 /** How much history the one-time bootstrap scans. One page, newest-first: a
@@ -171,7 +194,7 @@ export async function ensureRevealBootstrap(
     spaceId: string;
     channelId: string;
     limit?: number;
-  }) => Promise<{ messages: { content?: { senderId?: string } }[] }>,
+  }) => Promise<{ messages: StoredMessageView[] }>,
 ): Promise<boolean> {
   if (hasRevealedTo(selfAddress, partnerAddress)) return true;
   try {
