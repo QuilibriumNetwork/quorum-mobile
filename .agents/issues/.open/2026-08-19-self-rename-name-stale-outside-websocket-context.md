@@ -126,21 +126,50 @@ write can actually change a name slot. Task 2 deliberately skipped four
 confirming each spreads an already-correct row and mutates only
 `inbox_address` / `isKicked`. Some of these seven may be the same shape.
 
-## Reproduction to run first
+## Reproduction A — CONFIRMED on device 2026-08-20 (per-space name)
 
-1. Open a space you are a member of on mobile.
-2. Change your own display name via the profile edit modal.
+This is the one that has actually been run. It is the **per-space** rename, in
+Space Settings, not the global rename the original filing guessed at.
+
+1. Open a Space you are a member of on mobile.
+2. **Space Settings → Account → "Your Profile in This Space" → Display name.**
+   Set a per-space name and save.
+3. Watch the channel messages and your own row in the member list.
+
+**Pass:** the per-space name appears within seconds.
+**FAIL — observed:** both keep showing the global name. It only appears after an
+app restart.
+
+Site: `components/SpaceSettingsModal.tsx:696`.
+
+> **Not observed either way: the avatar.** The original filing predicted "avatar
+> updates, name does not". Only the name half has been tested. Do not repeat the
+> avatar claim as fact until someone checks it.
+
+## Reproduction B — NOT yet run (global name)
+
+The original hypothesis, still unconfirmed. Different site, same shape.
+
+1. Open a Space you are a member of on mobile.
+2. Change your **global** display name via the profile edit modal.
 3. Watch your own row in the member list.
 
-**Pass:** name and avatar both update within seconds.
-**Fail (expected today):** avatar updates, name does not, until the app is restarted.
+**Fail (predicted):** the name does not update until restart.
+
+> ⚠️ Running this lane is currently confounded by
+> `issues/.open/2026-08-20-config-sync-silently-reverts-a-display-name-rename.md`,
+> which can revert a global rename outright. Settle that one first, or you cannot
+> tell "the cache did not refresh" from "the value was overwritten".
 
 ## Status
 
-Open, not started. Found during the whole-branch review of the DM identity
-reveal ledger branch, filed rather than fixed there because none of that plan's
-eight tasks touch these files and widening the branch late would have been scope
-creep.
+Open, not started. **Reproduction A confirmed on the Android emulator by the
+operator, 2026-08-20**, upgrading this from INFERRED to MEASURED for the
+`SpaceSettingsModal` site. The other six sites remain unverified individually.
+
+Found during the whole-branch review of the DM identity reveal ledger branch,
+filed rather than fixed there because none of that plan's eight tasks touch these
+files and widening the branch late would have been scope creep.
 
 ---
 *Last updated: 2026-08-19*

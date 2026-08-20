@@ -577,11 +577,20 @@ try {
 }
 finally {
     # Never leave an orphaned Metro holding port 8081 - that orphan is what makes
-    # the NEXT run look broken.
+    # the NEXT run look broken, and it holds ~1.6 GB of RAM until something kills it.
+    #
+    # MUST kill the whole TREE. `Start-Process yarn.cmd` gives us the yarn/cmd
+    # wrapper's PID, but the real Metro is a node.exe GRANDCHILD. Stop-Process on
+    # the wrapper alone leaves that node alive and still bound to 8081 - OBSERVED
+    # 2026-08-20: PID 27804 node.exe still listening, its parent already gone.
+    # taskkill /T walks the tree; the port sweep afterwards catches anything that
+    # had already been reparented and so was invisible to /T.
     if ($metroProc -and -not $metroProc.HasExited) {
         Write-Host ""
         Write-Host "  Stopping Metro..." -ForegroundColor DarkGray
-        Stop-Process -Id $metroProc.Id -Force -ErrorAction SilentlyContinue
+        & taskkill.exe /PID $metroProc.Id /T /F 2>$null | Out-Null
     }
+    Get-NetTCPConnection -State Listen -LocalPort 8081 -ErrorAction SilentlyContinue |
+        ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
     Pop-Location
 }
