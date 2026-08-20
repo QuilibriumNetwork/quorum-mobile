@@ -1304,6 +1304,12 @@ then chose to display it". Those fail for different reasons. V1-V3 remain manual
 
 ## §D. Desktop mirror (separate PR in quorum-desktop)
 
+> **Now has its own plan:** `quorum-desktop/.agents/issues/.open/2026-08-20-dm-identity-reveal-desktop-and-shared-plan.md`
+> — four tasks, fourteen verified evidence anchors, and a harness strategy this section
+> did not know was possible. **Work from that file, not from this section**, which is kept
+> only as the summary that produced it. Two anchors quoted below (`~3679`, `~4037` for the
+> inbound init branches) were themselves stale and are corrected there to `:4513` / `:4589`.
+
 **This section was verified against the desktop source on 2026-08-19**, replacing the
 predictions it originally contained. Two of the four items turned out to be worse than
 guessed. Everything below is READ from `quorum-desktop` at the line numbers given.
