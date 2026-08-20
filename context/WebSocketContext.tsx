@@ -2920,12 +2920,22 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
             // Regular message types (post, embed, sticker, join, leave, kick, etc.)
             // Save message to storage
-            await storage.saveMessage(
-              {
+            const spaceRowToSave: StoredMessage = {
                 ...spaceMessage,
                 spaceId,
                 channelId,
-              },
+                // Defence in depth. `spaceMessage` is an unvalidated cast of
+                // attacker-authored JSON, so it can carry this field; stripping
+                // it AFTER the spread means a space frame can never smuggle in
+                // an authorship marker. Not reachable today (the only readers
+                // key on a DM conversation, where spaceId === channelId === a
+                // user address, which a real spaceId never equals) — but the
+                // invariant is "no wire value ever survives", and enforcing it
+                // only on the DM paths leaves that true by coincidence.
+                authenticatedSenderId: undefined,
+            };
+            await storage.saveMessage(
+              spaceRowToSave,
               spaceMessage.createdDate || Date.now(),
               spaceId,
               'space',
@@ -4851,7 +4861,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
           // Regular message - save and update cache
           await storage.saveMessage(
-            { ...spaceMessage, spaceId, channelId },
+            // `authenticatedSenderId: undefined` after the spread — see the
+            // live path's equivalent strip.
+            { ...spaceMessage, spaceId, channelId, authenticatedSenderId: undefined } as StoredMessage,
             spaceMessage.createdDate || Date.now(),
             spaceId, 'space',
             space?.iconUrl || '',

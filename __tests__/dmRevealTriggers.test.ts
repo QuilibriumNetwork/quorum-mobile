@@ -181,13 +181,3 @@ function historyWithSelfMessage() {
 function inboundOnlyHistory() {
   return async () => ({ messages: [{ authenticatedSenderId: STRANGER }] });
 }
-/**
- * A stranger's message that CLAIMS we wrote it — the forgery. Its payload names
- * us; the crypto layer says otherwise, and the marker records the crypto layer.
- * History like this must never bootstrap a reveal.
- */
-function forgedHistory() {
-  return async () => ({
-    messages: [{ content: { senderId: SELF }, authenticatedSenderId: STRANGER }],
-  });
-}
