@@ -427,21 +427,73 @@ try {
     $bundleUrl = "http://127.0.0.1:8081/index.bundle?platform=android&dev=true&minify=false"
     $warmFile  = Join-Path $env:TEMP "qm-prewarm-$PID.bundle"
     Write-Host "  Pre-building the bundle (so the app never waits on it)." -ForegroundColor DarkGray
-    Write-Host "  This is the long step: 2-5 minutes, and it prints nothing until done." -ForegroundColor DarkGray
-    Write-Host "  It is NOT stuck. Metro's progress is in $(Split-Path $logPath -Leaf) if you want to watch." -ForegroundColor DarkGray
+    # PowerShell's own download progress overlay is suppressed: we render Metro's
+    # real module-count progress below instead, which is the useful number.
+    $prevProgressPref = $ProgressPreference
+    $ProgressPreference = 'SilentlyContinue'
     $swWarm = [System.Diagnostics.Stopwatch]::StartNew()
-    try {
-        Invoke-WebRequest -Uri $bundleUrl -OutFile $warmFile -UseBasicParsing -TimeoutSec 600
-        $swWarm.Stop()
+
+    # Download ASYNCHRONOUSLY so the foreground can render Metro's real progress.
+    #
+    # A blocking Invoke-WebRequest here is what hid the progress bar: Metro runs in
+    # the background with stdout going to the log, so while this thread is parked on
+    # the download nothing reads that log and the operator sees a frozen screen. The
+    # async task lets us poll Metro's own "x% (n/total)" lines out of the log and
+    # redraw them on one line, which is the bar you get on a physical device.
+    $wcWarm  = New-Object System.Net.WebClient
+    $warmTask = $wcWarm.DownloadFileTaskAsync($bundleUrl, $warmFile)
+
+    $progPos  = 0
+    $lastPct  = ''
+    $warmFail = $null
+    while (-not $warmTask.IsCompleted) {
+        try {
+            $fs = [System.IO.File]::Open($logPath, 'Open', 'Read', 'ReadWrite')
+            if ($fs.Length -gt $progPos) {
+                $fs.Seek($progPos, 'Begin') | Out-Null
+                $sr  = New-Object System.IO.StreamReader($fs)
+                $new = $sr.ReadToEnd()
+                $progPos = $fs.Length
+                $sr.Close()
+                # Metro emits e.g. "Android .\index.js  62.5% (7640/12223)". Take the
+                # most recent one in this chunk.
+                $m = [regex]::Matches($new, '(\d{1,3}(?:\.\d+)?)%\s*\((\d+)/(\d+)\)')
+                if ($m.Count -gt 0) { $lastPct = $m[$m.Count - 1] }
+            }
+            $fs.Close()
+        } catch { }
+
+        if ($lastPct) {
+            $pct   = [double]$lastPct.Groups[1].Value
+            $done  = $lastPct.Groups[2].Value
+            $total = $lastPct.Groups[3].Value
+            $fill  = [int]([math]::Round($pct / 100 * 30))
+            $bar   = ('#' * $fill) + ('-' * (30 - $fill))
+            Write-Host ("`r  Bundling [{0}] {1,5:N1}% ({2}/{3})  {4:N0}s   " -f `
+                        $bar, $pct, $done, $total, $swWarm.Elapsed.TotalSeconds) -NoNewline -ForegroundColor Cyan
+        } else {
+            Write-Host ("`r  Starting the bundler... {0:N0}s   " -f $swWarm.Elapsed.TotalSeconds) -NoNewline -ForegroundColor DarkGray
+        }
+
+        if ($swWarm.Elapsed.TotalSeconds -gt 600) { $warmFail = "timed out after 600s"; break }
+        Start-Sleep -Milliseconds 300
+    }
+    Write-Host ""   # end the progress line
+
+    $swWarm.Stop()
+    if (-not $warmFail -and $warmTask.IsFaulted) {
+        $warmFail = $warmTask.Exception.GetBaseException().Message
+    }
+    if ($warmFail) {
+        Write-Host "  Pre-build failed: $warmFail" -ForegroundColor DarkYellow
+        Write-Host "  Continuing anyway - the launch retries below can still recover." -ForegroundColor DarkGray
+    }
+    else {
         $mb = [math]::Round((Get-Item $warmFile).Length / 1MB, 1)
         Write-Host ("  Bundle ready: {0} MB in {1:N0}s." -f $mb, $swWarm.Elapsed.TotalSeconds) -ForegroundColor Green
     }
-    catch {
-        $swWarm.Stop()
-        Write-Host "  Pre-build failed: $($_.Exception.Message)" -ForegroundColor DarkYellow
-        Write-Host "  Continuing anyway - the launch retries below can still recover." -ForegroundColor DarkGray
-    }
-    finally { Remove-Item $warmFile -Force -ErrorAction SilentlyContinue }
+    Remove-Item $warmFile -Force -ErrorAction SilentlyContinue
+    $ProgressPreference = $prevProgressPref
 
     # --- Launch the app, VERIFY it, retry if it didn't take ----------------
     $launchUrl = "$scheme`://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081"
