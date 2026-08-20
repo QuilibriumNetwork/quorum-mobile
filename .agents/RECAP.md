@@ -1,16 +1,16 @@
 ---
 type: recap
 title: "Quorum Mobile — Project State"
-updated: 2026-08-19
+updated: 2026-08-20
 ---
 
 # Quorum Mobile — Project State
 
-> Last updated: 2026-08-19
+> Last updated: 2026-08-20
 
 ## Dashboard
 
-> Updated: 2026-08-20 · 78 live · 63 startable · 7 nearly done · 8 blocked
+> Updated: 2026-08-20 · 79 live · 63 startable · 7 nearly done · 9 blocked
 
 **Next step:** Work out why this device can key none of the Spaces it imported — they arrive from the config blob and cannot be decrypted at all.
 
@@ -43,6 +43,7 @@ updated: 2026-08-19
 - [DM frames undecryptable, mobile to desktop](issues/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md) — the remaining root causes are node-side. DM send and handshake code is deliberately frozen; see Standing caveats.
 - [Remaining TypeScript errors needing lead review](issues/.open/2026-06-15-noble-v2-api-mismatch.md) — 23 errors left untouched on purpose; crypto, native-module and messaging territory.
 - [Space-manifest sync architecture](issues/.deferred/2026-06-13-space-manifest-sync-architecture-improvement.md) — whole-object last-write-wins clobbers concurrent edits. Awaiting a lead decision on merge granularity.
+- [Drop the local StoredMessage shim](issues/.open/2026-08-20-drop-the-local-storedmessage-shim-once-shared-publishes.md) — **new 2026-08-20.** PR #264 declared a shared type locally so this repo could ship without waiting on a quorum-shared release. Gated on that release: the field is in shared `master` but this repo pins a published version that predates it. Small and mechanical once unblocked, and the issue carries a one-line check for whether the gate has lifted.
 
 _Full list of every issue: [INDEX.md](INDEX.md)._
 

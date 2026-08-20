@@ -133,6 +133,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Mobile lets you finish onboarding with no display name, desktop does not](issues/.open/2026-08-16-mobile-lets-you-finish-onboarding-with-no-display-name.md)
 - 📋 [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md)
 - 📋 [`void import(...).then(...)` without a `.catch()`](issues/.open/2026-08-19-fire-and-forget-dynamic-imports-lack-catch.md)
+- 📋 [Delete `services/dm/storedMessage.ts` after the next quorum-shared release](issues/.open/2026-08-20-drop-the-local-storedmessage-shim-once-shared-publishes.md)
 
 ### Deferred
 
@@ -300,4 +301,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-20 14:26:27
+**Last Updated**: 2026-08-20 16:53:08
