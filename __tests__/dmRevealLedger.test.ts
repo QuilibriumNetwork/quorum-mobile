@@ -43,8 +43,11 @@ describe('messagesContainSelfAuthored (pure bootstrap predicate)', () => {
   // split IS the vulnerability this predicate was hardened against:
   //   content.senderId      — plaintext THE SENDER WROTE. Attacker-controlled.
   //   authenticatedSenderId — stamped at persist time from the crypto layer.
+  // `content` is a real PostMessage rather than a stub: the point of these
+  // tests is that the predicate IGNORES it, so it has to be present and
+  // well-formed for that to mean anything.
   const row = (claimed: string, authenticated?: string) => ({
-    content: { senderId: claimed },
+    content: { type: 'post' as const, senderId: claimed, text: 'hi' },
     ...(authenticated === undefined ? {} : { authenticatedSenderId: authenticated }),
   });
 

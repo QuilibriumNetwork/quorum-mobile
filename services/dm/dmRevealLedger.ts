@@ -1,6 +1,7 @@
 import { logger } from '@quilibrium/quorum-shared';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { truncateAddress } from '@/utils/formatAddress';
+import type { StoredMessageView } from './storedMessage';
 
 /**
  * The DM reveal ledger: "this device's user has DELIBERATELY messaged this
@@ -168,7 +169,7 @@ export function clearReveal(selfAddress: string, partnerAddress?: string): void 
  * per-device posture this module already documents above.
  */
 export function messagesContainSelfAuthored(
-  messages: readonly { authenticatedSenderId?: string }[],
+  messages: readonly StoredMessageView[],
   selfAddress: string,
 ): boolean {
   if (!isUsableIdentifier(selfAddress) || !Array.isArray(messages)) return false;
@@ -193,7 +194,7 @@ export async function ensureRevealBootstrap(
     spaceId: string;
     channelId: string;
     limit?: number;
-  }) => Promise<{ messages: { authenticatedSenderId?: string }[] }>,
+  }) => Promise<{ messages: StoredMessageView[] }>,
 ): Promise<boolean> {
   if (hasRevealedTo(selfAddress, partnerAddress)) return true;
   try {

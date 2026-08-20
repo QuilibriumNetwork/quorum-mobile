@@ -39,6 +39,7 @@ import type { SelfIdentity } from '@/utils/resolveMemberName';
 import type { DMProfilePayload } from '@/services/dm/dmProfileService';
 import { invalidateRosterCaches } from '@/identity/invalidateRoster';
 import { parseDmProfileUpdate } from '@/services/dm/dmProfileWire';
+import type { StoredMessage } from '@/services/dm/storedMessage';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { logDirectMessage, logMentionOrReply } from '@/services/notifications/logMentionOrReply';
 import { summarizeInbound } from '@/services/observability/redactInbound';
@@ -3802,20 +3803,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
         // Save message to storage
         // For DMs, we use senderAddress as both spaceId and channelId
+        const rowToSave: StoredMessage = {
+          ...decryptedMessage,
+          spaceId: senderAddress,
+          channelId: senderAddress,
+          // ⚠️ AFTER the spread, and it must stay that way. decryptedMessage
+          // is JSON the sender authored, so a peer can put this field in
+          // their own payload; spreading it last would let them name
+          // themselves as anyone. `authenticatedDmSender` is the true
+          // pre-rewrite sender from the crypto layer (captured just above the
+          // self-sync rewrite) — deliberately NOT `senderAddress`, which that
+          // rewrite repoints at the RECIPIENT for our own echoed messages.
+          authenticatedSenderId: authenticatedDmSender || undefined,
+        };
         await storage.saveMessage(
-          {
-            ...decryptedMessage,
-            spaceId: senderAddress,
-            channelId: senderAddress,
-            // ⚠️ AFTER the spread, and it must stay that way. decryptedMessage
-            // is JSON the sender authored, so a peer can put this field in
-            // their own payload; spreading it last would let them name
-            // themselves as anyone. `authenticatedDmSender` is the true
-            // pre-rewrite sender from the crypto layer (see line ~3517) —
-            // deliberately NOT `senderAddress`, which the self-sync branch
-            // above repoints at the RECIPIENT for our own echoed messages.
-            authenticatedSenderId: authenticatedDmSender || undefined,
-          },
+          rowToSave,
           decryptedMessage.createdDate || Date.now(),
           senderAddress,
           'direct',
@@ -5466,18 +5468,19 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
 
         // Save message
+        const batchRowToSave: StoredMessage = {
+          ...decryptedMessage,
+          spaceId: resolvedSenderAddress,
+          channelId: resolvedSenderAddress,
+          // ⚠️ AFTER the spread — see the JS path's equivalent stamp.
+          // `senderAddress` here is the PRE-rewrite value captured at the top
+          // of this block, so it is the crypto layer's answer; on a self-sync
+          // echo it is correctly us. `resolvedSenderAddress` is post-rewrite
+          // and would name the recipient instead.
+          authenticatedSenderId: senderAddress || undefined,
+        };
         await storage.saveMessage(
-          {
-            ...decryptedMessage,
-            spaceId: resolvedSenderAddress,
-            channelId: resolvedSenderAddress,
-            // ⚠️ AFTER the spread — see the JS path's equivalent stamp.
-            // `senderAddress` here is the PRE-rewrite value captured at the top
-            // of this block, so it is the crypto layer's answer; on a self-sync
-            // echo it is correctly us. `resolvedSenderAddress` is post-rewrite
-            // and would name the recipient instead.
-            authenticatedSenderId: senderAddress || undefined,
-          },
+          batchRowToSave,
           decryptedMessage.createdDate || Date.now(),
           resolvedSenderAddress, 'direct', senderIcon, senderDisplayName
         );
