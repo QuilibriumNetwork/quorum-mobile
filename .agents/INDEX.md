@@ -35,7 +35,6 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
 - 📋 [Mobile Identity Resolution Implementation Plan](issues/2026-08-11-mobile-identity-resolution-plan.md)
-- 📋 [DM Identity Reveal Implementation Plan](issues/2026-08-18-dm-identity-reveal-ledger-plan.md)
 
 #### Light Theme Contrast
 
@@ -264,6 +263,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Scoped "Clear" in the Notifications tab, including Farcaster](issues/.done/2026-08-05-scoped-clear-notifications-including-farcaster.md)
 - 📋 [In-app browser: link mode, native app handoff, chrome rebuild](issues/.done/2026-08-10-in-app-browser-link-handling-plan.md)
 - 📋 [Adopt shared's QNS claim verification](issues/.done/2026-08-16-adopt-shared-qns-claim-verification.md)
+- 📋 [DM Identity Reveal Implementation Plan](issues/.done/2026-08-18-dm-identity-reveal-ledger-plan.md)
 - 📋 [Bundle Inter, tokenise the reading surfaces, and guard the font rules](issues/.done/2026-08-19-bundle-inter-and-tokenise-the-type-scale.md)
 - 📋 [In-app text size setting, so the user holds the last multiplier](issues/.done/2026-08-19-in-app-text-size-setting.md)
 
@@ -300,4 +300,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-20 14:15:12
+**Last Updated**: 2026-08-20 14:26:27

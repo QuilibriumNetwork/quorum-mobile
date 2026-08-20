@@ -64,8 +64,14 @@ app-example
 
 # Logs and captures. Regenerated every run; carry account/machine names and,
 # in transport traces, real key material.
+#
+# The trailing `*` on the `-log.txt` rule is load-bearing: the dev scripts
+# redirect stderr to a SIDECAR (`metro-log.txt.err`), which `*-log.txt` does not
+# match. One such file reached master as a tracked 0-byte artifact, and because
+# a running Metro holds it open on Windows, git then could not check out any
+# commit that touched it — `git pull` aborted until the handle was released.
 .agents/**/*.log
-.agents/**/*-log.txt
+.agents/**/*-log.txt*
 .agents/**/logs/
 .agents/**/captures/
 

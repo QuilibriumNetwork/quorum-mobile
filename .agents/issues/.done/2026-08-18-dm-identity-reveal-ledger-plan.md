@@ -1,10 +1,10 @@
 ---
 type: task
 title: "DM identity: fix the cross-client dialect break, then make identity reveal an explicit, privacy-gated ledger"
-status: in-progress
+status: done
 priority: high
 created: 2026-08-18
-updated: 2026-08-19
+updated: 2026-08-20
 area: DM identity / privacy / cross-client parity
 repos: quorum-mobile (Tasks 1-8, shipped), quorum-desktop (§D — five items, verified against source 2026-08-19, NOT started; D1 is required to complete the mobile work), quorum-shared (§S — one small typed field plus a documented envelope shape, NOT started)
 related:
@@ -20,9 +20,48 @@ related:
 
 ## Status
 
+**2026-08-20 — SHIPPED in PR #263** (`fix(dm): a desktop rename reaches mobile
+again, and identity only reaches partners you chose to message`), squash-merged
+to `master` as `755cd93`. 24 commits.
+
+What landed: mobile's whole half of this plan. Tasks 1-8 complete — the
+dual-dialect parser, the roster invalidation, the address-out-of-name-slots fix,
+the persisted reveal ledger, the consent-filtered broadcast sweep,
+reveal-on-reply, auto-reveal to a known partner's new device, and identity on
+init envelopes only for deliberate sends. Two live privacy leaks closed along the
+way, one of which (the delete-conversation signal) this plan had not predicted.
+
+**V4 was automated rather than run by hand** — `yarn harness:reveal`
+(`dev/harness/dm-reveal-two-bot.scenario.ts`), two headless mobile clients
+against the production relay. GREEN as shipped, and MEASURED red-on-revert:
+disabling the sweep's consent filter produces `broadcast to 1/1 partner(s)` with
+the name arriving on the stranger. See §V.
+
+Also verified on the Android emulator, 2026-08-20: the self-overwrites-partner
+trap was NOT re-tripped, and the removal of address-as-name did not leave blank
+names (the render layer still falls back to a truncated address —
+`identity/useResolvedName.ts:47-52`, covered by 14 passing tests).
+
+**Still open, and deliberately not in this repo's scope:**
+
+- **§D and §S moved to their own plan**, now that they have been verified against
+  the desktop source rather than guessed at:
+  `quorum-desktop/.agents/issues/.open/2026-08-20-dm-identity-reveal-desktop-and-shared-plan.md`.
+  Four tasks, fourteen evidence anchors. **D1 matters most: this branch fixed
+  desktop → mobile only. mobile → desktop is still broken**, and worse than the
+  bug this fixed — desktop persists the frame as a ghost message rather than
+  dropping it.
+- **§V lanes V1-V3 remain manual**, and are blocked on D1: with mobile → desktop
+  broken, a cross-client failure has two indistinguishable explanations.
+- The three follow-ups listed below, plus two more bugs found while verifying on
+  device (neither caused by this work):
+  `issues/.open/2026-08-20-config-sync-silently-reverts-a-display-name-rename.md`
+  and the device-confirmed half of the self-rename issue.
+
+### Historical — state at branch completion, before merge
+
 **All 8 tasks implemented and reviewed, 2026-08-19, on branch
-`feat/dm-identity-reveal-ledger` (13 commits, `a701116..1b03b41`). Not yet
-merged. The §V device lanes have NOT been run — that is what remains.**
+`feat/dm-identity-reveal-ledger`.**
 
 Gates MEASURED at branch completion:
 `npx jest` 125 suites / 1180 tests all passing (baseline 119/1140) ·
