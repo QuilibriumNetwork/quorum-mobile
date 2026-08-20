@@ -319,74 +319,217 @@ try {
     # Same lever as dev-start-mobile.ps1; only this script was missing it.
     $env:REACT_NATIVE_PACKAGER_HOSTNAME = "localhost"
 
-    # --- Auto-launch the app once Metro is up ---------------------------
-    # Metro runs in the foreground (Tee-Object). Spin off a short background
-    # job that waits for port 8081 to answer, then fires the dev-client deep
-    # link so the app opens and connects without any manual tapping.
-    if ($installed) {
-        $launchUrl = "$scheme`://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081"
-        Start-Job -ScriptBlock {
-            param($adb, $emulator, $pkg, $url)
-            for ($i = 0; $i -lt 60; $i++) {
-                try {
-                    $c = New-Object System.Net.Sockets.TcpClient
-                    $c.Connect("127.0.0.1", 8081)
-                    $c.Close()
-                    break
-                }
-                catch { Start-Sleep -Seconds 1 }
-            }
-            # Re-assert the reverse tunnel (survives across adb restarts).
-            & $adb -s $emulator reverse tcp:8081 tcp:8081 | Out-Null
-            # Force-stop the stale com.quorum build, which also registers the
-            # quorummobile:// scheme and would otherwise win an ambiguous launch.
-            & $adb -s $emulator shell am force-stop com.quorum | Out-Null
-            # Launch the CURRENT build's component explicitly (-n) so the deep
-            # link can't resolve to the wrong package.
-            & $adb -s $emulator shell am start -n "$pkg/.MainActivity" -a android.intent.action.VIEW -d $url | Out-Null
-        } -ArgumentList $adb, $emulator, $androidPackage, $launchUrl | Out-Null
-        Write-Host "  App will auto-launch on $emulator when Metro is ready." -ForegroundColor DarkGray
-    }
-
     Write-Host ""
-    Write-Host "  Starting Metro (2 workers, fs.promises concurrency capped). Logs -> .agents\reports\metro-log.txt" -ForegroundColor Cyan
-    Write-Host "  Stop with Ctrl+C. To restart with a clean log: Up arrow, Enter." -ForegroundColor Cyan
-    Write-Host "  In the emulator, reload with R,R (or Ctrl+M -> Reload)." -ForegroundColor Cyan
-    Write-Host ""
-
-    # SAY HOW LONG THE SILENCE WILL LAST. Metro prints nothing at all while it
-    # bundles, and this project takes 75.6s cold / 7.2s warm (MEASURED 2026-08-19).
-    # Without this line there is no way to tell a working run from a dead one, which
-    # is exactly how working runs got Ctrl+C'd and reported as hangs.
+    Write-Host "  Starting Metro (2 workers, fs.promises concurrency capped). Logs -> $(Split-Path $logPath -Leaf)" -ForegroundColor Cyan
+    # Be honest about the wait, because a wrong estimate is as bad as none.
+    #
+    # The on-disk cache speeds up module TRANSFORMS, but Metro rebuilds its module
+    # graph from scratch on every start, so the first bundle after launching Metro
+    # is slow no matter what. MEASURED 2026-08-20 with a fully warm disk cache:
+    # 196s. The 6-8s figures seen earlier were reloads against an ALREADY-RUNNING
+    # Metro, which is a different thing and must not be quoted as startup cost.
     if ($ResetCache -or -not $cacheWasPresent) {
         $why = if ($ResetCache) { "-ResetCache" } else { "no Metro cache on disk" }
-        Write-Host "  COLD build ($why). Expect 90-120s of NO OUTPUT before 'Android Bundled ...'." -ForegroundColor Yellow
-        Write-Host "  MEASURED on this project: 93.9s for 12209 modules, slower under load." -ForegroundColor DarkGray
+        Write-Host "  COLD ($why): first bundle can take 3-5 minutes." -ForegroundColor Yellow
     } else {
-        Write-Host "  Warm cache. Expect ~10-20s of no output, then 'Android Bundled ...'." -ForegroundColor Green
-        Write-Host "  (Serving stale code? Re-run with -ResetCache.)" -ForegroundColor DarkGray
+        Write-Host "  Warm disk cache: first bundle still takes ~2-4 minutes." -ForegroundColor Yellow
+        Write-Host "  (Metro rebuilds its graph on every start. Reloads after this are seconds.)" -ForegroundColor DarkGray
     }
-    Write-Host "  Silence until that line is NORMAL. It is not a hang. Don't Ctrl+C." -ForegroundColor DarkGray
     Write-Host ""
 
-    # start:lazy = plain `expo start` (no inline POSIX env prefix); env vars set above.
+    # --- Metro runs in the BACKGROUND, this script orchestrates -------------
+    #
+    # It used to be the other way round: Metro held the foreground and the app
+    # launch was a fire-and-forget `Start-Job` that reported nothing. That job was
+    # the single remaining source of "it works for one person and not another",
+    # for two reasons, BOTH observed in a real failing run on 2026-08-20:
+    #
+    #   1. It waited for a bare TCP connect on 8081. Metro BINDS the port well
+    #      before it can serve a bundle, so the app was fired at a server that
+    #      wasn't ready, failed to fetch, and landed on DevLauncherErrorActivity -
+    #      the dev-client error screen. Logged at 11:27:08 launch -> 11:27:23
+    #      error screen. Pure race, which is exactly why it landed differently on
+    #      different runs.
+    #   2. It reported neither success nor failure. A later run never launched the
+    #      app at all and Metro simply sat idle forever with zero bundle requests,
+    #      indistinguishable from a slow build.
+    #
+    # Foreground orchestration fixes the class, not the instance: we can wait for
+    # REAL readiness (/status), verify the app actually came up, retry when it
+    # didn't, and say plainly which happened.
     $metroArgs = @('start:lazy', '--max-workers', '2')
     if ($ResetCache) { $metroArgs += '--reset-cache' }
 
-    # Write the log as UTF-8, NOT via Tee-Object.
+    # -RedirectStandardOutput writes the child's raw UTF-8 bytes straight to disk,
+    # which also sidesteps PS 5.1's Tee-Object writing UTF-16LE and making the log
+    # unsearchable.
+    $errPath   = "$logPath.err"
+    $metroProc = Start-Process -FilePath "yarn.cmd" -ArgumentList $metroArgs `
+                    -NoNewWindow -PassThru `
+                    -RedirectStandardOutput $logPath -RedirectStandardError $errPath
+
+    # --- Wait for Metro to be genuinely ready ------------------------------
+    # /status returning "packager-status:running" is the real signal. A TCP
+    # connect is not - see the note above.
+    # Read /status with WebClient.DownloadString, NOT Invoke-WebRequest.
     #
-    # PowerShell 5.1's Tee-Object has no -Encoding parameter and writes UTF-16LE
-    # (VERIFIED on this box: PS 5.1.26100, Tee-Object exposes no Encoding param).
-    # Every tool that later reads metro-log.txt - grep, ripgrep, an agent - then
-    # sees "S t a r t i n g   M e t r o" and finds nothing. That silently breaks
-    # the "read the teed log instead of asking a human to watch the console"
-    # workflow. Out-File -Encoding utf8 keeps the console output identical while
-    # making the file actually greppable.
-    yarn @metroArgs 2>&1 | ForEach-Object {
-        $_
-        $_ | Out-File -FilePath $logPath -Append -Encoding utf8
+    # On PowerShell 5.1, `Invoke-WebRequest -UseBasicParsing` hands back .Content as
+    # a Byte[] for this response, so `-match 'packager-status:running'` compares
+    # against the literal text "112 97 99 107 ..." and can NEVER match. VERIFIED on
+    # this box. That would have burned the full 180s timeout and then reported a
+    # failure against a perfectly healthy Metro - i.e. a brand new silent hang, of
+    # exactly the kind this whole script is meant to stop. DownloadString always
+    # returns a string.
+    function Test-MetroReady {
+        try {
+            $wc = New-Object System.Net.WebClient
+            return ($wc.DownloadString("http://127.0.0.1:8081/status") -match 'packager-status:running')
+        } catch { return $false }
+    }
+
+    Write-Host "  Waiting for Metro to be ready..." -ForegroundColor DarkGray -NoNewline
+    $metroReady = $false
+    for ($i = 0; $i -lt 180; $i++) {
+        if ($metroProc.HasExited) { break }
+        if (Test-MetroReady) { $metroReady = $true; break }
+        if ($i % 5 -eq 4) { Write-Host "." -ForegroundColor DarkGray -NoNewline }
+        Start-Sleep -Seconds 1
+    }
+    Write-Host ""
+
+    if (-not $metroReady) {
+        Write-Host ""
+        Write-Host "  ERROR: Metro never became ready." -ForegroundColor Red
+        if ($metroProc.HasExited) { Write-Host "  The Metro process exited (code $($metroProc.ExitCode))." -ForegroundColor Yellow }
+        Write-Host "  Last lines of $(Split-Path $logPath -Leaf):" -ForegroundColor Yellow
+        Get-Content $logPath -Tail 15 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" }
+        Get-Content $errPath -Tail 10 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkYellow }
+        exit 1
+    }
+    Write-Host "  Metro is ready and serving." -ForegroundColor Green
+
+    # --- Pre-build the bundle BEFORE the app asks for it -------------------
+    #
+    # This is the actual fix for the launches that "randomly" failed.
+    # `packager-status:running` only means Metro's HTTP server is up; the bundle
+    # does not exist yet and is built on first request. The dev client asks, waits,
+    # gives up, and lands on DevLauncherErrorActivity - while Metro carries on
+    # building in the background. That is why a later attempt succeeds and why the
+    # old fire-once launch worked perhaps one time in three.
+    #
+    # MEASURED 2026-08-20 before this change: attempts 1 and 2 hit the error screen,
+    # attempt 3 succeeded at "Bundled 6853ms" - i.e. it only worked once the build
+    # the earlier attempts had triggered was finished.
+    #
+    # Requesting the bundle from the host first means the app's very first request
+    # is served from a finished build. -OutFile avoids materialising ~30 MB of
+    # JavaScript as a PowerShell string.
+    $bundleUrl = "http://127.0.0.1:8081/index.bundle?platform=android&dev=true&minify=false"
+    $warmFile  = Join-Path $env:TEMP "qm-prewarm-$PID.bundle"
+    Write-Host "  Pre-building the bundle (so the app never waits on it)." -ForegroundColor DarkGray
+    Write-Host "  This is the long step: 2-5 minutes, and it prints nothing until done." -ForegroundColor DarkGray
+    Write-Host "  It is NOT stuck. Metro's progress is in $(Split-Path $logPath -Leaf) if you want to watch." -ForegroundColor DarkGray
+    $swWarm = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        Invoke-WebRequest -Uri $bundleUrl -OutFile $warmFile -UseBasicParsing -TimeoutSec 600
+        $swWarm.Stop()
+        $mb = [math]::Round((Get-Item $warmFile).Length / 1MB, 1)
+        Write-Host ("  Bundle ready: {0} MB in {1:N0}s." -f $mb, $swWarm.Elapsed.TotalSeconds) -ForegroundColor Green
+    }
+    catch {
+        $swWarm.Stop()
+        Write-Host "  Pre-build failed: $($_.Exception.Message)" -ForegroundColor DarkYellow
+        Write-Host "  Continuing anyway - the launch retries below can still recover." -ForegroundColor DarkGray
+    }
+    finally { Remove-Item $warmFile -Force -ErrorAction SilentlyContinue }
+
+    # --- Launch the app, VERIFY it, retry if it didn't take ----------------
+    $launchUrl = "$scheme`://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081"
+    $appUp     = $false
+
+    for ($attempt = 1; $attempt -le 3 -and -not $appUp; $attempt++) {
+        Write-Host "  Launching the app (attempt $attempt of 3)..." -ForegroundColor DarkGray
+
+        # Re-assert the reverse tunnel; it does not survive an adb server restart.
+        & $adb -s $emulator reverse tcp:8081 tcp:8081 | Out-Null
+        # Force-stop BOTH the current build and the legacy com.quorum one, which
+        # also registers the quorummobile:// scheme and would win an ambiguous launch.
+        & $adb -s $emulator shell am force-stop com.quorum         | Out-Null
+        & $adb -s $emulator shell am force-stop $androidPackage    | Out-Null
+        Start-Sleep -Seconds 1
+        # Clear logcat AFTER the force-stops, immediately before launching.
+        # Clearing it earlier let the teardown of the PREVIOUS attempt's error
+        # activity land in the buffer, so the next attempt would "detect" an error
+        # screen that had already gone - a false failure that burns a retry.
+        & $adb -s $emulator logcat -c 2>$null | Out-Null
+        # Launch the CURRENT build's component explicitly (-n) so the deep link
+        # cannot resolve to the wrong package.
+        & $adb -s $emulator shell am start -n "$androidPackage/.MainActivity" `
+              -a android.intent.action.VIEW -d $launchUrl | Out-Null
+
+        # Success = the app process is alive AND Metro actually served a bundle.
+        # Process-alive alone is not enough: the dev-client error screen is also
+        # a live process, and that is precisely the state that used to look fine.
+        $deadline = (Get-Date).AddSeconds($(if ($ResetCache -or -not $cacheWasPresent) { 180 } else { 90 }))
+        while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+
+            $onErrorScreen = & $adb -s $emulator logcat -d 2>$null |
+                Select-String -SimpleMatch 'DevLauncherErrorActivity' -Quiet
+            if ($onErrorScreen) {
+                Write-Host "  Dev-client error screen detected - the bundle fetch failed. Retrying." -ForegroundColor DarkYellow
+                break
+            }
+
+            $bundled = Select-String -Path $logPath -Pattern 'Android Bundled \d+ms' -Quiet -ErrorAction SilentlyContinue
+            if ($bundled) {
+                $proc = & $adb -s $emulator shell pidof $androidPackage 2>$null
+                if ($proc) { $appUp = $true; break }
+            }
+        }
+    }
+
+    Write-Host ""
+    if ($appUp) {
+        $line = (Select-String -Path $logPath -Pattern 'Android Bundled \d+ms.*' -ErrorAction SilentlyContinue |
+                 Select-Object -Last 1).Matches.Value
+        Write-Host "  READY. App is running on $emulator. $line" -ForegroundColor Green
+    } else {
+        Write-Host "  WARNING: the app did not come up after 3 attempts." -ForegroundColor Red
+        Write-Host "  Metro IS running, so this is a launch problem, not a bundler problem." -ForegroundColor Yellow
+        Write-Host "  Check the emulator screen, then see $(Split-Path $logPath -Leaf)." -ForegroundColor Yellow
+    }
+    Write-Host ""
+    Write-Host "  Streaming Metro output. Ctrl+C stops Metro and exits." -ForegroundColor Cyan
+    Write-Host "  In the emulator, reload with R,R (or Ctrl+M -> Reload)." -ForegroundColor Cyan
+    Write-Host ""
+
+    # --- Stream the log to the console until Metro exits or Ctrl+C ---------
+    # Replaces the old foreground pipe. Same visible behaviour for the operator.
+    $pos = 0
+    while (-not $metroProc.HasExited) {
+        try {
+            $fs = [System.IO.File]::Open($logPath, 'Open', 'Read', 'ReadWrite')
+            if ($fs.Length -gt $pos) {
+                $fs.Seek($pos, 'Begin') | Out-Null
+                $sr = New-Object System.IO.StreamReader($fs)
+                $new = $sr.ReadToEnd()
+                $pos = $fs.Length
+                $sr.Close()
+                if ($new) { Write-Host $new -NoNewline }
+            }
+            $fs.Close()
+        } catch { }
+        Start-Sleep -Milliseconds 400
     }
 }
 finally {
+    # Never leave an orphaned Metro holding port 8081 - that orphan is what makes
+    # the NEXT run look broken.
+    if ($metroProc -and -not $metroProc.HasExited) {
+        Write-Host ""
+        Write-Host "  Stopping Metro..." -ForegroundColor DarkGray
+        Stop-Process -Id $metroProc.Id -Force -ErrorAction SilentlyContinue
+    }
     Pop-Location
 }
