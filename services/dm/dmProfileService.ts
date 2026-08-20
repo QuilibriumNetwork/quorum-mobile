@@ -457,7 +457,7 @@ export async function autoRevealOnInboundSession(
     spaceId: string;
     channelId: string;
     limit?: number;
-  }) => Promise<{ messages: { content?: { senderId?: string } }[] }>,
+  }) => Promise<{ messages: { authenticatedSenderId?: string }[] }>,
 ): Promise<void> {
   try {
     const now = Date.now();

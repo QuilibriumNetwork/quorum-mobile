@@ -59,11 +59,37 @@ describe('DM self-echo guards', () => {
     expect(trimmedLines).toContain(guard);
   });
 
-  it('gates delete-conversation-self on the ref in BOTH receive paths', () => {
-    const gate =
+  it('gates delete-conversation-self on the CRYPTO sender in BOTH receive paths', () => {
+    // ⚠️ THIS IS A SECURITY GATE, NOT A CORRECTNESS ONE.
+    //
+    // `selfContent.senderId` is plaintext the SENDER WROTE. On its own it is
+    // not a gate but a suggestion: any peer could seal a frame claiming to be
+    // us, and this device would delete the conversation and every message in
+    // it. The payload half is still required (it identifies a genuine
+    // self-sync signal), but it must be ANDed with the address the crypto
+    // layer authenticated, which no sender can forge:
+    //
+    //   fallback path → `authenticatedDmSender`, captured pre-rewrite
+    //   batch path    → `isSelfSyncEcho`, derived from the pre-rewrite sender
+    //
+    // Asserted as source text for the same reason as the guards above: these
+    // live inside two ~2000-line websocket callbacks with no drivable harness.
+
+    // If this goes red: the payload-only form is back, and ANY PEER CAN WIPE
+    // THE CONVERSATION. That is the vulnerability, not a style regression.
+    const payloadOnlyGate =
       'const isSelfSender = !!selfContent.senderId && selfContent.senderId === fullUserAddrRef.current;';
-    // One in handleIncomingMessage (fallback path), one in applyDMGroupResults.
-    expect(trimmedLines.filter((line) => line === gate)).toHaveLength(2);
+    expect(trimmedLines.filter((line) => line === payloadOnlyGate)).toHaveLength(0);
+
+    // Both gates still exist...
+    expect(trimmedLines.filter((line) => line === 'const isSelfSender =')).toHaveLength(2);
+    // ...and each carries its crypto-authenticated half. Red here means the
+    // fallback path lost `authenticatedDmSender`...
+    expect(
+      trimmedLines.filter((line) => line === 'authenticatedDmSender === fullUserAddrRef.current;')
+    ).toHaveLength(1);
+    // ...or the batch path lost `isSelfSyncEcho`.
+    expect(trimmedLines.filter((line) => line === 'isSelfSyncEcho;')).toHaveLength(1);
   });
 
   it('introduces no new self-comparison against the stale closure', () => {

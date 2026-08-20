@@ -3692,7 +3692,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // also receives the fan-out but must NEVER delete our copy.
         if ((decryptedMessage.content?.type as string) === 'delete-conversation-self') {
           const selfContent = decryptedMessage.content as { senderId?: string; conversationAddress?: string };
-          const isSelfSender = !!selfContent.senderId && selfContent.senderId === fullUserAddrRef.current;
+          // ⚠️ BOTH conditions are required, and the second one is the gate.
+          //
+          // `selfContent.senderId` is plaintext THE SENDER WROTE, so on its own
+          // it is not a gate but a suggestion: any peer could seal a frame
+          // claiming to be us and this device would wipe the conversation and
+          // every message in it. `authenticatedDmSender` is the pre-rewrite
+          // address the crypto layer authenticated, which no sender can forge.
+          //
+          // The payload check is kept as well: it is what distinguishes a real
+          // self-sync signal from any other frame our own device might send.
+          const isSelfSender =
+            !!selfContent.senderId &&
+            selfContent.senderId === fullUserAddrRef.current &&
+            !!authenticatedDmSender &&
+            authenticatedDmSender === fullUserAddrRef.current;
 
           // Always clear the processed control message from the inbox (self or not).
           deleteProcessedEnvelope(message.inboxAddress, message.timestamp);
@@ -3793,6 +3807,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             ...decryptedMessage,
             spaceId: senderAddress,
             channelId: senderAddress,
+            // ⚠️ AFTER the spread, and it must stay that way. decryptedMessage
+            // is JSON the sender authored, so a peer can put this field in
+            // their own payload; spreading it last would let them name
+            // themselves as anyone. `authenticatedDmSender` is the true
+            // pre-rewrite sender from the crypto layer (see line ~3517) —
+            // deliberately NOT `senderAddress`, which the self-sync branch
+            // above repoints at the RECIPIENT for our own echoed messages.
+            authenticatedSenderId: authenticatedDmSender || undefined,
           },
           decryptedMessage.createdDate || Date.now(),
           senderAddress,
@@ -5061,7 +5083,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // is self. Runs before the conversation-save so it can't resurrect a row.
         if ((decryptedMessage.content?.type as string) === 'delete-conversation-self') {
           const selfContent = decryptedMessage.content as { senderId?: string; conversationAddress?: string };
-          const isSelfSender = !!selfContent.senderId && selfContent.senderId === fullUserAddrRef.current;
+          // ⚠️ BOTH conditions required — see the JS path's equivalent gate.
+          // `isSelfSyncEcho` is derived from the PRE-rewrite `senderAddress`,
+          // i.e. the sender the crypto layer authenticated, so it is the half
+          // an attacker cannot forge. The payload check alone let any peer wipe
+          // this conversation.
+          const isSelfSender =
+            !!selfContent.senderId &&
+            selfContent.senderId === fullUserAddrRef.current &&
+            isSelfSyncEcho;
 
           // Always clear the processed control message from the inbox (self or not).
           const originalSelfMsg = batch.find(m => m.timestamp === msgResult.timestamp);
@@ -5437,7 +5467,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
         // Save message
         await storage.saveMessage(
-          { ...decryptedMessage, spaceId: resolvedSenderAddress, channelId: resolvedSenderAddress },
+          {
+            ...decryptedMessage,
+            spaceId: resolvedSenderAddress,
+            channelId: resolvedSenderAddress,
+            // ⚠️ AFTER the spread — see the JS path's equivalent stamp.
+            // `senderAddress` here is the PRE-rewrite value captured at the top
+            // of this block, so it is the crypto layer's answer; on a self-sync
+            // echo it is correctly us. `resolvedSenderAddress` is post-rewrite
+            // and would name the recipient instead.
+            authenticatedSenderId: senderAddress || undefined,
+          },
           decryptedMessage.createdDate || Date.now(),
           resolvedSenderAddress, 'direct', senderIcon, senderDisplayName
         );

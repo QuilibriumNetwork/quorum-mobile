@@ -484,6 +484,12 @@ export function useSendDirectMessage() {
         },
         reactions: [],
         mentions: { memberIds: [], roleIds: [], channelIds: [] },
+        // Our own send, so we are provably the author — this is the row the
+        // reveal ledger reads back as "I deliberately messaged this person".
+        // Only stamped when we actually have an address: `senderId` above falls
+        // back to 'unknown', and a marker holding a placeholder is worse than
+        // no marker, since readers treat absent as "unproven" and fail closed.
+        ...(user?.address ? { authenticatedSenderId: user.address } : {}),
         sendStatus: 'sending',
         // Add reply metadata for display purposes
         ...(repliesToMessageId && replyToAuthorAddress
@@ -623,6 +629,14 @@ export function useSendDirectMessage() {
               }
             : { ...message };
           delete (persisted as Record<string, unknown>).sendStatus;
+          // Re-stamped rather than inherited: the `{ ...message }` branch above
+          // builds from what mutationFn returned, which does not carry the
+          // marker the optimistic copy had. Without this, a successful send
+          // could persist the final row WITHOUT provenance and silently lose
+          // the consent record the optimistic save had already written.
+          if (user?.address) {
+            (persisted as Record<string, unknown>).authenticatedSenderId = user.address;
+          }
 
           await storage.saveMessage(
             persisted,

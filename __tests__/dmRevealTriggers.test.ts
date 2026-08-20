@@ -50,8 +50,13 @@ jest.mock('@/services/storage/mmkvAdapter', () => ({
       ],
     }),
     // Bootstrap history: we authored a message with FRIEND, none with STRANGER.
+    // Keyed on `authenticatedSenderId` — the marker stamped at persist time
+    // from the crypto layer — NOT on content.senderId, which any sender writes.
     getMessages: jest.fn(async ({ spaceId }: { spaceId: string }) => ({
-      messages: spaceId === FRIEND ? [{ content: { senderId: SELF } }] : [{ content: { senderId: STRANGER } }],
+      messages:
+        spaceId === FRIEND
+          ? [{ authenticatedSenderId: SELF }]
+          : [{ authenticatedSenderId: STRANGER }],
     })),
   }),
 }));
@@ -171,8 +176,18 @@ function deps() {
   return { enqueueOutbound: jest.fn(), subscribe: jest.fn() };
 }
 function historyWithSelfMessage() {
-  return async () => ({ messages: [{ content: { senderId: SELF } }] });
+  return async () => ({ messages: [{ authenticatedSenderId: SELF }] });
 }
 function inboundOnlyHistory() {
-  return async () => ({ messages: [{ content: { senderId: STRANGER } }] });
+  return async () => ({ messages: [{ authenticatedSenderId: STRANGER }] });
+}
+/**
+ * A stranger's message that CLAIMS we wrote it — the forgery. Its payload names
+ * us; the crypto layer says otherwise, and the marker records the crypto layer.
+ * History like this must never bootstrap a reveal.
+ */
+function forgedHistory() {
+  return async () => ({
+    messages: [{ content: { senderId: SELF }, authenticatedSenderId: STRANGER }],
+  });
 }
