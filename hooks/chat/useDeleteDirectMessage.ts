@@ -21,6 +21,7 @@ import { logger, queryKeys } from '@quilibrium/quorum-shared';
 import type { Message, RemoveMessage } from '@quilibrium/quorum-shared';
 import { sendEncryptedMessageToAllDevices } from './useSendDirectMessage';
 import { withPiggybackedAcks } from '@/services/dm/piggybackAcks';
+import { ensureRevealBootstrap } from '@/services/dm/dmRevealLedger';
 
 export interface UseDeleteDirectMessageParams {
   conversationId: string;
@@ -114,6 +115,24 @@ export function useDeleteDirectMessage() {
 
         if (allTargetDevices.length === 0) return params.messageId;
 
+        // Identity: gated on THIS DEVICE's own reveal ledger, not assumed.
+        // "Can only target a message we authored" is not proof by itself —
+        // onDeliberateDmSend is only called by the device that PERFORMED a
+        // send (useSendDirectMessage.ts / useSendDirectEmbedMessage.ts's
+        // onSuccess), so a message the local user authored can still be
+        // sitting on a DIFFERENT device of theirs (synced via the all-devices
+        // fan-out) whose own ledger was never set. ensureRevealBootstrap
+        // covers exactly that: it re-derives consent from local history (a
+        // self-authored message in this conversation, which this device DOES
+        // have — it is the very message being deleted) when the ledger has
+        // not recorded it directly, and fails CLOSED on any error. Where it
+        // returns false, attach nothing.
+        const revealed = await ensureRevealBootstrap(
+          senderId,
+          params.recipientAddress,
+          (p) => storage.getMessages(p),
+        );
+
         // A DM delete is a DM to the same partner, so it is an equally valid
         // carrier for pending acks. Copy, never mutate — see withPiggybackedAcks.
         await sendEncryptedMessageToAllDevices(
@@ -129,7 +148,8 @@ export function useDeleteDirectMessage() {
             inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
           },
           senderId,
-          user?.displayName,
+          revealed ? user?.displayName : undefined,
+          revealed ? user?.profileImage : undefined,
         );
       } catch (err) {
         logger.debug('[useDeleteDirectMessage] remove-message send failed (local delete stands)', err);

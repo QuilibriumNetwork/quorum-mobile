@@ -24,13 +24,20 @@
 import { logger, type DMUpdateProfileMessage, type Message } from '@quilibrium/quorum-shared';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
-import { getDeviceKeyset } from '../onboarding/secureStorage';
+import { getDeviceKeyset, type DeviceKeyset } from '../onboarding/secureStorage';
+import { ensureRevealBootstrap, hasRevealedTo, recordReveal } from './dmRevealLedger';
 import {
   readGateRecord,
   shouldSendProfile,
   nextAttempts,
   type DmProfileGateRecord,
 } from './dmProfileGate';
+// Type-only: erased at compile time, so these carry none of the runtime cost
+// (native-module side effects, circular-import risk) that the VALUES from
+// these same modules are dynamically imported below to avoid.
+import type { UserRegistration } from '../api/quorumClient';
+import type { DeviceInfo } from '@/hooks/chat/useRecipientRegistration';
+import type { sendEncryptedMessageToAllDevices } from '@/hooks/chat/useSendDirectMessage';
 
 export interface DMProfilePayload {
   selfAddress: string;
@@ -55,6 +62,25 @@ export interface DMProfilePayload {
 export interface DMBroadcastDeps {
   enqueueOutbound: (prepareMessage: () => Promise<string[]>) => void;
   subscribe: (inboxAddresses: string[]) => Promise<void>;
+}
+
+/**
+ * Everything `sendProfileToPartner` needs beyond `partnerAddress` and
+ * `payload`. Built by `buildSendProfileDeps` below (one MMKV store handle,
+ * one clock reading, one set of resolved dynamic-import bindings) and
+ * threaded through every partner a caller processes with it — for
+ * `broadcastProfileToAllDMs` that means built once per sweep and reused for
+ * every partner in that sweep, so extracting the per-partner body out of the
+ * loop did not turn a single setup cost into a per-partner one.
+ */
+export interface SendProfileDeps extends DMBroadcastDeps {
+  store: MMKV;
+  /** One clock reading for the whole sweep — see broadcastProfileToAllDMs. */
+  now: number;
+  deviceKeyset: DeviceKeyset;
+  apiClient: { fetchUserRegistration: (address: string) => Promise<UserRegistration> };
+  toAllDeviceInfos: (registration: UserRegistration) => DeviceInfo[];
+  sendEncryptedMessageToAllDevices: typeof sendEncryptedMessageToAllDevices;
 }
 
 function generateNonce(): string {
@@ -210,6 +236,263 @@ export function clearDmProfileBroadcastState(selfAddress: string, partnerAddress
 // ── Send ─────────────────────────────────────────────────────────────────────
 
 /**
+ * Send the DM identity update to exactly one partner: dedup gate → fetch the
+ * partner's device registration → build the wire message → send → record the
+ * gate. Extracted from `broadcastProfileToAllDMs`'s loop body so Tasks 6-7 can
+ * invoke a single-partner send directly (reveal-on-reply, inbound-new-session
+ * auto-announce) without re-running the whole-sweep machinery.
+ *
+ * PRECONDITION — enforced by the caller, not here: the caller must already
+ * know it is safe to reveal identity to `partnerAddress` (via
+ * `ensureRevealBootstrap` / `hasRevealedTo` in `./dmRevealLedger`, or because
+ * the caller IS the event that establishes consent, e.g. a just-recorded
+ * deliberate send) before calling this. This function performs NO reveal-
+ * ledger check of its own — deliberately, so it stays usable by callers that
+ * have already established consent by a different route, and so there is
+ * exactly one place (the caller) that owns the consent decision. Do not add
+ * a redundant check here; a second copy of the decision is how the two
+ * copies drift.
+ *
+ * Returns true only once a frame was actually enqueued and the gate recorded
+ * — not merely "eligible to send" — so a caller can count real sends.
+ */
+export async function sendProfileToPartner(
+  partnerAddress: string,
+  payload: DMProfilePayload,
+  deps: SendProfileDeps,
+): Promise<boolean> {
+  const { store, now, deviceKeyset, apiClient, toAllDeviceInfos, sendEncryptedMessageToAllDevices } = deps;
+  const sig = payloadSignature(payload);
+
+  // Dedup + bounded retry. Almost always a no-op on the wire: an unchanged
+  // identity is re-sent at most MAX_SENDS_PER_IDENTITY times, spaced by
+  // RESEND_INTERVAL_MS, then never again until the signature changes.
+  const key = gateKey(payload.selfAddress, partnerAddress);
+  const { record, migrated } = readGate(store, key, now);
+  // Persist a migrated record even if we do not send, so it is anchored once
+  // and can age out from there rather than being re-anchored on every read.
+  if (migrated && record) writeGate(store, key, record);
+  if (!shouldSendProfile(record, sig, now)) return false;
+
+  try {
+    let allTargetDevices: DeviceInfo[] = [];
+    try {
+      const reg = await apiClient.fetchUserRegistration(partnerAddress);
+      if (reg) allTargetDevices = toAllDeviceInfos(reg);
+    } catch {
+      // Registration fetch failed — nothing to send this partner this round.
+    }
+    if (allTargetDevices.length === 0) return false;
+
+    const conversationId = `${partnerAddress}/${partnerAddress}`;
+    const message = buildDmProfileMessage(payload, partnerAddress);
+
+    await sendEncryptedMessageToAllDevices(
+      conversationId,
+      partnerAddress,
+      message,
+      allTargetDevices,
+      deps.enqueueOutbound,
+      deps.subscribe,
+      {
+        identityPublicKey: deviceKeyset.identityPublicKey,
+        inboxAddress: deviceKeyset.inboxAddress,
+        inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
+      },
+      payload.selfAddress,
+      payload.displayName,
+      payload.userIcon,
+    );
+
+    // Record only after a successful enqueue so a throw retries next round.
+    // writeGate swallows storage errors on purpose — see its comment.
+    writeGate(store, key, { sig, at: now, attempts: nextAttempts(record, sig) });
+    return true;
+  } catch {
+    // Per-partner failure (no session, encrypt error) is non-fatal — the
+    // gate stays open for this partner so the next broadcast retries.
+    return false;
+  }
+}
+
+/**
+ * Assemble a `SendProfileDeps` bag from just `{ enqueueOutbound, subscribe }`:
+ * resolve the device keyset, the three dynamically-imported send bindings,
+ * and the gate store — everything `sendProfileToPartner` needs beyond
+ * `partnerAddress`/`payload` but that no caller outside this file can reach
+ * on its own. `dmProfileBroadcastStore` is a private module singleton
+ * (`getStore()` above is not exported), and the three dynamic imports exist
+ * only to keep native-module-heavy hooks out of this file's top-level import
+ * graph — a caller re-doing them by hand would have to know both of those
+ * implementation details and keep them in sync with this file by hand.
+ *
+ * ONE assembly path for this setup: `broadcastProfileToAllDMs` below calls
+ * this too (once per sweep, not once per partner — see `SendProfileDeps`'s
+ * doc comment for why that matters), rather than keeping an inline copy that
+ * could drift from what a single-partner caller (Tasks 6-7: reveal-on-reply,
+ * inbound-new-session auto-announce) gets.
+ *
+ * Returns null when setup genuinely cannot proceed (no device keyset — e.g.
+ * onboarding incomplete or secure storage unavailable), so a caller gets one
+ * honest failure signal instead of a half-built deps object.
+ *
+ * Does NOT check the reveal ledger. Whether it is safe to reveal to a given
+ * partner is a per-partner decision (see `sendProfileToPartner`'s docstring
+ * for who owns it) and does not belong in a per-sweep/per-call setup step.
+ */
+export async function buildSendProfileDeps(
+  base: DMBroadcastDeps,
+): Promise<SendProfileDeps | null> {
+  // One clock reading for whatever this deps bag ends up covering — a whole
+  // sweep for broadcastProfileToAllDMs, or a single send for a Task 6/7
+  // caller — so every partner judged against it drifts from the same instant
+  // rather than from Date.now() called fresh per partner.
+  const now = Date.now();
+
+  let deviceKeyset: DeviceKeyset | null;
+  try {
+    deviceKeyset = await getDeviceKeyset();
+  } catch {
+    return null;
+  }
+  if (!deviceKeyset) return null;
+
+  const { sendEncryptedMessageToAllDevices } = await import('@/hooks/chat/useSendDirectMessage');
+  const { toAllDeviceInfos } = await import('@/hooks/chat/useRecipientRegistration');
+  const { getQuorumClient } = await import('@/services/api/quorumClient');
+
+  return {
+    ...base,
+    store: getStore(),
+    now,
+    deviceKeyset,
+    apiClient: getQuorumClient(),
+    toAllDeviceInfos,
+    sendEncryptedMessageToAllDevices,
+  };
+}
+
+/**
+ * Called after a successful chat/embed send in a DM. THE deliberate act the
+ * privacy rule keys on: replying (or initiating) is consent to be seen.
+ *
+ * On the ledger's unset->set transition the partner's send-gate is CLEARED
+ * first: the gate may be exhausted from the era when cross-client pushes
+ * were silently eaten, and an exhausted gate must not block the one reveal
+ * the user just consented to. Fire-and-forget; never throws into the send
+ * path that calls it — a failed identity push must never surface as a failed
+ * message send.
+ *
+ * Takes the same `DMBroadcastDeps` shape the two send hooks already hold
+ * (`enqueueOutbound`/`subscribe` from `useWebSocket`) and assembles the rest
+ * of `sendProfileToPartner`'s `SendProfileDeps` itself via
+ * `buildSendProfileDeps` — a send hook has no reason to know how to build a
+ * device keyset / api client / gate store just to fire this one push.
+ *
+ * If already revealed: no-op. The ledger already reflects consent, so this
+ * returns immediately without touching the gate or the wire — the common
+ * case on every message after the first reply to a given partner.
+ */
+export async function onDeliberateDmSend(
+  partnerAddress: string,
+  payload: DMProfilePayload,
+  deps: DMBroadcastDeps,
+): Promise<void> {
+  try {
+    if (hasRevealedTo(payload.selfAddress, partnerAddress)) return;
+    recordReveal(payload.selfAddress, partnerAddress, Date.now());
+    clearDmProfileBroadcastState(payload.selfAddress, partnerAddress);
+    const sendDeps = await buildSendProfileDeps(deps);
+    if (!sendDeps) return;
+    await sendProfileToPartner(partnerAddress, payload, sendDeps);
+  } catch {
+    // Never break a message send over an identity push; the on-connect
+    // sweep retries through the (now-open) gate.
+  }
+}
+
+// One auto-reveal per partner per hour. An init envelope can be REDELIVERED
+// (the receive path bounds replays but does not eliminate them), and each
+// one looks like "a new session appeared" — without this, a flapping inbox
+// turns one new device into a push storm.
+const AUTO_REVEAL_DEBOUNCE_MS = 60 * 60 * 1000;
+// Keyed on partnerAddress ALONE (process-global) — narrower than the reveal
+// ledger, which keys on the (self, partner) pair (see dmRevealLedger.ts).
+// On a device with multiple signed-in accounts this means a reveal that just
+// fired for account A's relationship with partner P also suppresses a
+// legitimate first reveal for account B's separate relationship with that
+// same P, for up to an hour. Left this way deliberately (matches the brief),
+// not by oversight, because it fails SAFE: it never mixes identity across
+// accounts, it only ever delays a push, and the same on-connect sweep that
+// recovers a failed send (see the early-timestamp comment below) recovers a
+// suppressed one too. Do not widen this key without confirming
+// multi-account-on-one-device is worth the extra per-pair Map churn.
+const autoRevealLastFired = new Map<string, number>();
+
+/** Test hook: the debounce map is process-lifetime state. */
+export function __resetAutoRevealDebounce(): void {
+  autoRevealLastFired.clear();
+}
+
+/**
+ * A partner just opened a NEW inbound session at us (their new device, or a
+ * reinstall). If the ledger says we already deliberately revealed to them,
+ * answer immediately — consent belongs to the relationship, not the session,
+ * so their fresh device should not have to wait for our next rename or
+ * reply. If the ledger says stranger: total silence.
+ *
+ * `deps` is deliberately the narrow `DMBroadcastDeps`, not `SendProfileDeps`:
+ * this is called from a long-lived receive callback in WebSocketContext.tsx
+ * that must never hold more than `{ enqueueOutbound, subscribe }` across a
+ * render (see that file's stale-closure note on `fullUserAddrRef`). The rest
+ * of what a real send needs — device keyset, api client, gate store — is
+ * assembled here via `buildSendProfileDeps`, the same shape
+ * `onDeliberateDmSend` already uses for the same reason.
+ */
+export async function autoRevealOnInboundSession(
+  partnerAddress: string,
+  payload: DMProfilePayload,
+  deps: DMBroadcastDeps,
+  getMessages: (p: {
+    spaceId: string;
+    channelId: string;
+    limit?: number;
+  }) => Promise<{ messages: { content?: { senderId?: string } }[] }>,
+): Promise<void> {
+  try {
+    const now = Date.now();
+    const last = autoRevealLastFired.get(partnerAddress) ?? 0;
+    if (now - last < AUTO_REVEAL_DEBOUNCE_MS) return;
+
+    const revealed = await ensureRevealBootstrap(payload.selfAddress, partnerAddress, getMessages);
+    if (!revealed) return;
+
+    // Set the debounce stamp BEFORE the send below has even started, not
+    // after it succeeds. Tradeoff, taken deliberately: a transient failure
+    // here (no device keyset yet, registration fetch/API-client construction
+    // failure inside buildSendProfileDeps or sendProfileToPartner) costs a
+    // real, legitimate first reveal for up to an hour, because the next
+    // redelivery of the same init envelope will be debounced away too. The
+    // alternative — stamping only after a confirmed send — would let a
+    // redelivery storm re-attempt on every single envelope while the failure
+    // persists, which is exactly the push-storm this debounce exists to
+    // prevent. Fails SAFE either way (a missed reveal, never a leak), and
+    // the reply trigger plus the on-connect sweep are independent backstops
+    // that do not depend on this timestamp at all.
+    autoRevealLastFired.set(partnerAddress, now);
+    // The gate may hold "already announced 3x" from before this session
+    // existed — that record is about OLD sessions and must not gag the new one.
+    clearDmProfileBroadcastState(payload.selfAddress, partnerAddress);
+
+    const sendDeps = await buildSendProfileDeps(deps);
+    if (!sendDeps) return;
+    await sendProfileToPartner(partnerAddress, payload, sendDeps);
+  } catch {
+    // Best-effort. The reply trigger and on-connect sweep remain as backstops.
+  }
+}
+
+/**
  * Broadcast a global profile change to every direct-DM partner with whom we
  * have (or can establish) an encryption session.
  *
@@ -225,17 +508,11 @@ export async function broadcastProfileToAllDMs(
   // Empty payload would no-op on every receiver — nothing to send.
   if (sig === '{}') return;
 
-  // One clock reading for the whole sweep, so every partner in this run is
-  // judged against the same instant rather than drifting across a long loop.
-  const now = Date.now();
-
-  let deviceKeyset: Awaited<ReturnType<typeof getDeviceKeyset>>;
-  try {
-    deviceKeyset = await getDeviceKeyset();
-  } catch {
-    return;
-  }
-  if (!deviceKeyset) return;
+  // Built once, threaded through every partner in this sweep — see
+  // buildSendProfileDeps and SendProfileDeps's doc comments for why this is
+  // not a per-partner cost.
+  const sendDeps = await buildSendProfileDeps(deps);
+  if (!sendDeps) return;
 
   const adapter = getMMKVAdapter();
 
@@ -251,12 +528,7 @@ export async function broadcastProfileToAllDMs(
     limit: 100000,
   });
 
-  const store = getStore();
   let sent = 0;
-  const { sendEncryptedMessageToAllDevices } = await import('@/hooks/chat/useSendDirectMessage');
-  const { toAllDeviceInfos } = await import('@/hooks/chat/useRecipientRegistration');
-  const { getQuorumClient } = await import('@/services/api/quorumClient');
-  const apiClient = getQuorumClient();
 
   for (const conv of partners) {
     const partnerAddress = conv.address;
@@ -265,58 +537,17 @@ export async function broadcastProfileToAllDMs(
     if (!partnerAddress || partnerAddress === payload.selfAddress) continue;
     if (conv.source === 'farcaster') continue;
 
-    // Dedup + bounded retry. Almost always a no-op on the wire: an unchanged
-    // identity is re-sent at most MAX_SENDS_PER_IDENTITY times, spaced by
-    // RESEND_INTERVAL_MS, then never again until the signature changes.
-    const key = gateKey(payload.selfAddress, partnerAddress);
-    const { record, migrated } = readGate(store, key, now);
-    // Persist a migrated record even if we do not send, so it is anchored once
-    // and can age out from there rather than being re-anchored on every read.
-    if (migrated && record) writeGate(store, key, record);
-    if (!shouldSendProfile(record, sig, now)) continue;
+    // Privacy: identity goes only to partners this user has DELIBERATELY
+    // messaged. A conversation row is created by a stranger's inbound
+    // message, so having a row is not consent — the reveal ledger is.
+    const revealed = await ensureRevealBootstrap(
+      payload.selfAddress,
+      partnerAddress,
+      (p) => adapter.getMessages(p),
+    );
+    if (!revealed) continue;
 
-    try {
-      let allTargetDevices: {
-        identityKey: number[];
-        signedPreKey: number[];
-        inboxAddress: string;
-        inboxEncryptionKey: number[];
-      }[] = [];
-      try {
-        const reg = await apiClient.fetchUserRegistration(partnerAddress);
-        if (reg) allTargetDevices = toAllDeviceInfos(reg);
-      } catch {
-        // Registration fetch failed — nothing to send this partner this round.
-      }
-      if (allTargetDevices.length === 0) continue;
-
-      const conversationId = `${partnerAddress}/${partnerAddress}`;
-      const message = buildDmProfileMessage(payload, partnerAddress);
-
-      await sendEncryptedMessageToAllDevices(
-        conversationId,
-        partnerAddress,
-        message,
-        allTargetDevices,
-        deps.enqueueOutbound,
-        deps.subscribe,
-        {
-          identityPublicKey: deviceKeyset.identityPublicKey,
-          inboxAddress: deviceKeyset.inboxAddress,
-          inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
-        },
-        payload.selfAddress,
-        payload.displayName,
-      );
-
-      // Record only after a successful enqueue so a throw retries next round.
-      // writeGate swallows storage errors on purpose — see its comment.
-      writeGate(store, key, { sig, at: now, attempts: nextAttempts(record, sig) });
-      sent += 1;
-    } catch {
-      // Per-partner failure (no session, encrypt error) is non-fatal — the
-      // gate stays open for this partner so the next broadcast retries.
-    }
+    if (await sendProfileToPartner(partnerAddress, payload, sendDeps)) sent += 1;
   }
 
   // The only externally visible evidence this ran. Until this line existed the

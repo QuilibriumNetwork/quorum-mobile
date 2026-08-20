@@ -101,6 +101,46 @@ desktop → mobile run, in an order jest does not guarantee.
 
 `HARNESS_OFFLINE=1 yarn harness` skips everything networked.
 
+## DM identity privacy (`yarn harness:reveal`)
+
+The control arm for the DM reveal rule: **a stranger who messages you must not
+learn your name; reply once and they must.**
+
+```
+[reveal b] precondition strangerRow=true ledgerClear=true
+[DMProfileSync] broadcast to 0/1 partner(s) — all deduped or unreachable
+[reveal a] RESULT phase1(leak)="" must_not_be="renamed-23823232"
+                | phase2(control)="reveal-bot-b" must_be="reveal-bot-b"
+                | preconditions row=true ledgerClear=true
+[reveal a] PASS — hidden from a stranger, revealed on reply
+```
+
+Two arms, and the second is what makes the first mean anything. A dead bench, a
+broken relay, or a bot that never paired all produce "the stranger learned
+nothing" — which reads as a pass. Phase 2 proves the same pair, wire and code
+*can* carry a name, so phase 1's silence is a decision rather than a failure.
+
+The preconditions are equally load-bearing. `strangerRow=true` says the sweep
+had something to leak to; `row=true` on A says an inbound update could have been
+observed if one had come. Either being false makes the run vacuous, so both are
+asserted rather than assumed. The first version of this scenario failed exactly
+there: `useSendDirectMessage` only ever UPDATES a conversation row (`if
+(conversation)`), never creates one — the app creates it in the UI, in
+`useStartDirectMessage`. So a bot that only sent had no row, and could not have
+seen a leak even if one were pushed. Hence `bot.startConversation()`.
+
+**MEASURED 2026-08-20, both directions.** Disabling the `ensureRevealBootstrap`
+filter in `broadcastProfileToAllDMs` turned phase 1 RED on the production relay
+(`broadcast to 1/1 partner(s)`, and A's stored row became the renamed value);
+restoring it turned it GREEN. The guard is therefore doing the work, not sitting
+inert beside it.
+
+Both bots are mobile **on purpose**. Pairing against desktop would make a
+failure unreadable, because desktop cannot parse mobile's wrapped
+`dm-update-profile` at all (`MessageService.ts:907` tests `raw.type` and never
+`raw.content.type`), so "no name arrived" would have two indistinguishable
+explanations.
+
 ## The measurement
 
 `yarn harness:dm` starts **two processes**, one bot each, pairs them through a

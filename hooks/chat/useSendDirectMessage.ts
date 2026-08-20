@@ -417,6 +417,7 @@ export function useSendDirectMessage() {
         },
         senderId,
         user?.displayName,
+        user?.profileImage,
         // Flip the bubble to 'sent' only when the message actually transmits
         // (fires inside the socket-OPEN drain). Until then it stays 'sending',
         // so an offline/queued message is never shown as sent.
@@ -657,6 +658,28 @@ export function useSendDirectMessage() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.all('direct'),
       });
+
+      // Reveal-on-reply: replying IS the deliberate act the DM privacy rule
+      // keys on. Fire-and-forget, no rejection handler attached — see
+      // onDeliberateDmSend's docstring for why this can never surface as a
+      // failed send. `user` here is the same closure-captured value already
+      // read above (senderId, user?.displayName) and in onMutate/onError; it
+      // is not a fresh context read, so there is no stale-closure risk beyond
+      // what those call sites already accept.
+      if (user?.address) {
+        void import('@/services/dm/dmProfileService').then(({ onDeliberateDmSend }) =>
+          onDeliberateDmSend(
+            recipientAddress,
+            {
+              selfAddress: user.address,
+              displayName: user.displayName || undefined,
+              userIcon: user.profileImage || undefined,
+              primaryUsername: user.primaryUsername ?? undefined,
+            },
+            { enqueueOutbound, subscribe },
+          ),
+        );
+      }
     },
 
     // No onSettled invalidate. Trust the optimistic cache + per-handler
@@ -686,7 +709,8 @@ async function sendEncryptedMessage(
     inboxEncryptionPublicKey: number[];
   },
   userAddress: string,
-  displayName?: string
+  displayName?: string,
+  userIcon?: string
 ): Promise<void> {
   const { NativeCryptoProvider } = await import(
     '@/services/crypto/native-provider'
@@ -760,7 +784,11 @@ async function sendEncryptedMessage(
       // the X448 encryption keys.
       const initEnvelope: InitializationEnvelope = {
         user_address: userAddress,
-        display_name: displayName || userAddress,
+        // Omit rather than fall back to the address: the receiver stores this as a
+        // NAME, and an address stored as a name can never be corrected by the
+        // fallback ladder on their side.
+        ...(displayName ? { display_name: displayName } : {}),
+        ...(userIcon ? { user_icon: userIcon } : {}),
         return_inbox_address: conversationInboxAddress,
         return_inbox_encryption_key: bytesToHex(conversationInboxKeypair.public_key),
         return_inbox_public_key: conversationSigningKeypair
@@ -869,7 +897,11 @@ async function sendEncryptedMessage(
 
         const initEnvelope: InitializationEnvelope = {
           user_address: userAddress,
-          display_name: displayName || userAddress,
+          // Omit rather than fall back to the address: the receiver stores this as a
+          // NAME, and an address stored as a name can never be corrected by the
+          // fallback ladder on their side.
+          ...(displayName ? { display_name: displayName } : {}),
+          ...(userIcon ? { user_icon: userIcon } : {}),
           return_inbox_address: ourConversationInbox?.inboxAddress || deviceKeyset.inboxAddress,
           return_inbox_encryption_key: ourConversationInbox
             ? bytesToHex(ourConversationInbox.encryptionPublicKey)
@@ -966,6 +998,7 @@ async function buildInitEnvelopeSend(args: {
   deviceKeyset: { identityPublicKey: number[]; inboxAddress: string };
   userAddress: string;
   displayName?: string;
+  userIcon?: string;
   cryptoProvider: {
     encryptInboxMessage(request: {
       inbox_public_key: number[];
@@ -983,6 +1016,7 @@ async function buildInitEnvelopeSend(args: {
     deviceKeyset,
     userAddress,
     displayName,
+    userIcon,
     cryptoProvider,
   } = args;
 
@@ -1008,7 +1042,11 @@ async function buildInitEnvelopeSend(args: {
 
   const initEnvelope: InitializationEnvelope = {
     user_address: userAddress,
-    display_name: displayName || userAddress,
+    // Omit rather than fall back to the address: the receiver stores this as a
+    // NAME, and an address stored as a name can never be corrected by the
+    // fallback ladder on their side.
+    ...(displayName ? { display_name: displayName } : {}),
+    ...(userIcon ? { user_icon: userIcon } : {}),
     return_inbox_address: returnInbox.inboxAddress,
     return_inbox_encryption_key: bytesToHex(returnInbox.encryptionPublicKey),
     return_inbox_public_key: returnInbox.signingPublicKey
@@ -1074,6 +1112,7 @@ async function buildAcceptSend(args: {
   deviceKeyset: { identityPublicKey: number[]; inboxAddress: string };
   userAddress: string;
   displayName?: string;
+  userIcon?: string;
   cryptoProvider: {
     generateX448(): Promise<{ public_key: number[]; private_key: number[] }>;
     encryptInboxMessage(request: {
@@ -1083,7 +1122,7 @@ async function buildAcceptSend(args: {
     }): Promise<string>;
   };
 }): Promise<{ sealed: string; announced: boolean } | null> {
-  const { conversationId, message, state, deviceKeyset, userAddress, displayName, cryptoProvider } = args;
+  const { conversationId, message, state, deviceKeyset, userAddress, displayName, userIcon, cryptoProvider } = args;
   const sendingInbox = state.sendingInbox;
   if (!sendingInbox?.inbox_address || !sendingInbox.inbox_encryption_key) return null;
 
@@ -1098,7 +1137,11 @@ async function buildAcceptSend(args: {
 
   const initEnvelope: InitializationEnvelope = {
     user_address: userAddress,
-    display_name: displayName || userAddress,
+    // Omit rather than fall back to the address: the receiver stores this as a
+    // NAME, and an address stored as a name can never be corrected by the
+    // fallback ladder on their side.
+    ...(displayName ? { display_name: displayName } : {}),
+    ...(userIcon ? { user_icon: userIcon } : {}),
     return_inbox_address: returnInbox.inboxAddress,
     return_inbox_encryption_key: bytesToHex(returnInbox.encryptionPublicKey),
     return_inbox_public_key: returnInbox.signingPublicKey ? bytesToHex(returnInbox.signingPublicKey) : '',
@@ -1168,6 +1211,7 @@ export async function sendEncryptedMessageToAllDevices(
   },
   userAddress: string,
   displayName?: string,
+  userIcon?: string,
   onFlushed?: () => void
 ): Promise<void> {
   // Import the NativeCryptoProvider for encryption
@@ -1264,6 +1308,7 @@ export async function sendEncryptedMessageToAllDevices(
         deviceKeyset,
         userAddress,
         displayName,
+        userIcon,
         cryptoProvider,
       });
       if (sealed) {
@@ -1300,6 +1345,7 @@ export async function sendEncryptedMessageToAllDevices(
           deviceKeyset,
           userAddress,
           displayName,
+          userIcon,
           cryptoProvider,
         });
         if (accept) {
@@ -1335,6 +1381,7 @@ export async function sendEncryptedMessageToAllDevices(
           deviceKeyset,
           userAddress,
           displayName,
+          userIcon,
           cryptoProvider,
         });
         if (sealed) {

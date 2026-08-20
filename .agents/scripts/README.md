@@ -292,6 +292,38 @@ silence will last, and every known failure prints a specific line.
 but NOT in `metro-log.txt`. A run that dies during preflight leaves an empty log. Ask the
 operator to paste the console text in that case.
 
+### Round 3 (2026-08-20) — the launch itself was a coin flip
+
+Rounds 1 and 2 made the script *say* what it was doing, but sessions still failed for
+the operator. The remaining fault was the auto-launch, and it was worse than a race:
+
+- **`packager-status:running` does not mean the bundle exists.** It means Metro's HTTP
+  server is listening. The bundle is built on first request. The dev client asked, waited,
+  timed out, and landed on `DevLauncherErrorActivity` — while Metro carried on building in
+  the background. A later attempt then succeeded against the finished build.
+  **MEASURED: attempts 1 and 2 hit the error screen, attempt 3 succeeded.** The old code
+  fired **once** and reported nothing, so it worked roughly one time in three.
+- **The fix is to pre-build the bundle from the host before launching the app**, so the
+  app's first request is served from a finished build. After that change the app came up
+  on **attempt 1 with no retries**, 0 `ProtocolException`, 0 error screens.
+- The old launch was a fire-and-forget `Start-Job` that reported neither success nor
+  failure. Metro now runs in the **background** and the script orchestrates in the
+  foreground: wait for real readiness, pre-build, launch, verify the process is alive
+  **and** a bundle was served, retry up to 3x, then print `READY` or a specific warning.
+  Metro output is streamed to the console as before, and a `finally` block stops Metro so
+  no orphan is left holding port 8081.
+
+**Two traps found while building this, both worth remembering:**
+
+- `Invoke-WebRequest -UseBasicParsing` on **PowerShell 5.1 returns `.Content` as `Byte[]`**
+  for this endpoint, so `-match 'packager-status:running'` compares against the literal text
+  `112 97 99 107...` and can never match. That silently turned a healthy Metro into a
+  180-second timeout. Use `WebClient.DownloadString`, which always returns a string.
+- **Startup cost was being quoted wrongly.** The 6-8s bundle times are *reloads against an
+  already-running Metro*. The first bundle after Metro **starts** rebuilds the module graph
+  from scratch and takes **~196s even with a fully warm disk cache**. Quoting the reload
+  figure as the startup figure is how a working run gets mistaken for a hang.
+
 ### Verified end to end
 
 Metro on `localhost:8081` + `adb reverse` + `Pixel_7` (x86_64, Android 36):
@@ -692,4 +724,4 @@ them.
 | `gen-android-adaptive-icon.js` | Superseded by `gen-app-icons.js` in the same 2026-06-19 commit; running it would overwrite `icon-android-adaptive.png` with the pre-redesign version. |
 | `gen-splash-logo.js` | Superseded by `gen-splash-densities.js`; running it would overwrite `splash-glyph.png` with the older build. |
 
-*Last updated: 2026-08-19*
+*Last updated: 2026-08-20*

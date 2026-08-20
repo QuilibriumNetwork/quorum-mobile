@@ -188,7 +188,8 @@ export function useSendDirectEmbedMessage() {
           inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
         },
         senderId,
-        user?.displayName
+        user?.displayName,
+        user?.profileImage
       );
 
       return { ...message, sendStatus: 'sent' };
@@ -379,6 +380,28 @@ export function useSendDirectEmbedMessage() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.all('direct'),
       });
+
+      // Reveal-on-reply: replying IS the deliberate act the DM privacy rule
+      // keys on. Fire-and-forget, no rejection handler attached — see
+      // onDeliberateDmSend's docstring for why this can never surface as a
+      // failed send. `user` here is the same closure-captured value already
+      // read above (senderId, user?.displayName) and in onMutate; it is not
+      // a fresh context read, so there is no stale-closure risk beyond what
+      // those call sites already accept.
+      if (user?.address) {
+        void import('@/services/dm/dmProfileService').then(({ onDeliberateDmSend }) =>
+          onDeliberateDmSend(
+            recipientAddress,
+            {
+              selfAddress: user.address,
+              displayName: user.displayName || undefined,
+              userIcon: user.profileImage || undefined,
+              primaryUsername: user.primaryUsername ?? undefined,
+            },
+            { enqueueOutbound, subscribe },
+          ),
+        );
+      }
     },
 
     // No onSettled invalidate (see useSendDirectMessage).
@@ -409,7 +432,8 @@ async function sendEncryptedEmbedMessage(
     inboxEncryptionPublicKey: number[];
   },
   userAddress: string,
-  displayName?: string
+  displayName?: string,
+  userIcon?: string
 ): Promise<void> {
   // Import the NativeCryptoProvider for encryption
   const { NativeCryptoProvider } = await import(
@@ -477,7 +501,11 @@ async function sendEncryptedEmbedMessage(
 
       const initEnvelope: InitializationEnvelope = {
         user_address: userAddress,
-        display_name: displayName || userAddress,
+        // Omit rather than fall back to the address: the receiver stores this as a
+        // NAME, and an address stored as a name can never be corrected by the
+        // fallback ladder on their side.
+        ...(displayName ? { display_name: displayName } : {}),
+        ...(userIcon ? { user_icon: userIcon } : {}),
         return_inbox_address: conversationInboxAddress,
         return_inbox_encryption_key: bytesToHex(conversationInboxKeypair.public_key),
         return_inbox_public_key: conversationSigningKeypair
@@ -587,7 +615,11 @@ async function sendEncryptedEmbedMessage(
 
         const initEnvelope: InitializationEnvelope = {
           user_address: userAddress,
-          display_name: displayName || userAddress,
+          // Omit rather than fall back to the address: the receiver stores this as a
+          // NAME, and an address stored as a name can never be corrected by the
+          // fallback ladder on their side.
+          ...(displayName ? { display_name: displayName } : {}),
+          ...(userIcon ? { user_icon: userIcon } : {}),
           return_inbox_address: ourConversationInbox?.inboxAddress || deviceKeyset.inboxAddress,
           return_inbox_encryption_key: ourConversationInbox
             ? bytesToHex(ourConversationInbox.encryptionPublicKey)

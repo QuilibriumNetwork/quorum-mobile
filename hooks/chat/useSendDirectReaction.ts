@@ -147,8 +147,7 @@ export function useSendDirectReaction() {
           inboxAddress: deviceKeyset.inboxAddress,
           inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
         },
-        senderId,
-        user?.displayName
+        senderId
       );
 
       return message;
@@ -316,8 +315,7 @@ export function useRemoveDirectReaction() {
           inboxAddress: deviceKeyset.inboxAddress,
           inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
         },
-        senderId,
-        user?.displayName
+        senderId
       );
 
       return message;
@@ -458,6 +456,11 @@ export async function sendEncryptedControlMessage(
 /**
  * Thin wrapper over sendEncryptedControlMessage, kept for the reaction call
  * sites' signature (the extra args were never used by the transport).
+ *
+ * Deliberately takes no displayName/identity: a reaction only ever rides an
+ * existing session (see the hasSession/finalRecipientInfo guard above), so
+ * sendEncryptedControlMessage never builds an init envelope for it. There is
+ * nowhere for an identity argument to go — do not re-add one.
  */
 async function sendEncryptedReaction(
   conversationId: string,
@@ -477,8 +480,7 @@ async function sendEncryptedReaction(
     inboxAddress: string;
     inboxEncryptionPublicKey: number[];
   },
-  _userAddress: string,
-  _displayName?: string
+  _userAddress: string
 ): Promise<void> {
   await sendEncryptedControlMessage(conversationId, recipientAddress, message, enqueueOutbound);
 }

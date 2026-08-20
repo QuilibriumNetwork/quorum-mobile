@@ -6,6 +6,7 @@ This is the main index for all documentation, bug reports, and task management.
 
 - [Floating Tab Bar + Edge-to-Edge Chrome Redesign](docs/2026-06-18-floating-tab-bar-and-edge-to-edge-redesign.md)
 - [Notification system: mobile vs desktop — deep dive + alignment plan](docs/2026-06-23-notification-system-mobile-vs-desktop.md)
+- [DM identity emission map](docs/dm-identity-emission-map.md)
 - [Inbox envelope lifecycle & the poison guard](docs/inbox-envelope-lifecycle-and-poison-guard.md)
 - [iOS UI pitfalls when you can only test on Android](docs/ios-ui-pitfalls-android-only-testing.md)
 - [iOS verification checklist](docs/ios-verification-checklist.md)
@@ -34,6 +35,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
 - 📋 [Mobile Identity Resolution Implementation Plan](issues/2026-08-11-mobile-identity-resolution-plan.md)
+- 📋 [DM Identity Reveal Implementation Plan](issues/2026-08-18-dm-identity-reveal-ledger-plan.md)
 
 #### Light Theme Contrast
 
@@ -95,8 +97,11 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [Somebody else can take your name away, and nothing tells you](issues/.open/2026-08-09-a-delegated-name-can-be-revoked-and-you-are-the-last-to-know.md)
 - 🐛 [QuorumIdentityBadge fires an uncapped fid-link lookup for every rendered cast](issues/.open/2026-08-13-quorum-identity-badge-fires-an-uncapped-fid-link-lookup-per-cast.md)
 - 🐛 [The cached Ed448 signing key can outlive the identity it belongs to, the same way the SQLCipher key did](issues/.open/2026-08-18-signing-key-cache-can-outlive-the-identity-it-belongs-to.md)
+- 🐛 [The batch receive path short-circuits past the auto-reveal for `call-*` frames](issues/.open/2026-08-19-batch-decrypt-path-skips-auto-reveal-for-call-frames.md)
 - 🐛 [Farcaster DM: in-conversation pfps fall back to initials on a fresh device](issues/.open/2026-08-19-farcaster-dm-pfps-fall-back-to-initials-inside-the-conversation.md)
 - 🐛 [Opening a first-time Farcaster DM can still title it with a raw FID](issues/.open/2026-08-19-opening-a-first-time-farcaster-dm-can-still-title-it-with-a-raw-fid.md)
+- 🐛 [Six `saveSpaceMember` sites still skip the identity-roster invalidation](issues/.open/2026-08-19-self-rename-name-stale-outside-websocket-context.md)
+- 🐛 [Renaming yourself on one client gets undone by the other client's synced config](issues/.open/2026-08-20-config-sync-silently-reverts-a-display-name-rename.md)
 - 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
 - 📋 [Message composer — further improvements](issues/.open/2026-06-16-message-composer-further-improvements.md)
 - 📋 [Split profile header has no visible "edit" cue](issues/.open/2026-06-16-split-profile-edit-affordance-not-discoverable.md)
@@ -128,7 +133,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Add the global "Always sign Direct Messages" toggle to mobile settings](issues/.open/2026-08-07-no-global-always-sign-dms-toggle-on-mobile.md)
 - 📋 [Mobile lets you finish onboarding with no display name, desktop does not](issues/.open/2026-08-16-mobile-lets-you-finish-onboarding-with-no-display-name.md)
 - 📋 [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md)
-- 📋 [DM Identity Reveal Implementation Plan](issues/.open/2026-08-18-dm-identity-reveal-ledger-plan.md)
+- 📋 [`void import(...).then(...)` without a `.catch()`](issues/.open/2026-08-19-fire-and-forget-dynamic-imports-lack-catch.md)
 
 ### Deferred
 
@@ -295,4 +300,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-19 16:22:28
+**Last Updated**: 2026-08-20 14:15:12

@@ -36,6 +36,9 @@ import { Alert, AppState, AppStateStatus, InteractionManager } from 'react-nativ
 
 import type { Conversation } from '@/hooks/chat/useConversations';
 import type { SelfIdentity } from '@/utils/resolveMemberName';
+import type { DMProfilePayload } from '@/services/dm/dmProfileService';
+import { invalidateRosterCaches } from '@/identity/invalidateRoster';
+import { parseDmProfileUpdate } from '@/services/dm/dmProfileWire';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { logDirectMessage, logMentionOrReply } from '@/services/notifications/logMentionOrReply';
 import { summarizeInbound } from '@/services/observability/redactInbound';
@@ -721,27 +724,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // should stop processing it), false otherwise.
   const applyDmProfileUpdate = useCallback(
     async (decryptedMessage: Message, senderAddress: string): Promise<boolean> => {
-      const content = decryptedMessage.content as
-        | {
-            type?: string;
-            senderId?: string;
-            displayName?: string;
-            userIcon?: string;
-            bio?: string;
-            // The partner's elected primary QNS name, bare. A CLAIM — stored
-            // inert and resolved before it can render. See the merge below.
-            primaryUsername?: string;
-          }
-        | undefined;
-      if (content?.type !== 'dm-update-profile') return false;
+      const parsed = parseDmProfileUpdate(decryptedMessage);
+      if (!parsed) return false;
 
       // Anti-spoof: the claimed senderId must match the cryptographically
       // authenticated envelope sender. On mismatch we still consume the
       // message (return true → never persisted as a post), just don't apply it.
       // Mirrors desktop's "return true even on mismatch".
-      if (content.senderId && content.senderId !== senderAddress) {
+      if (parsed.senderId && parsed.senderId !== senderAddress) {
         logger.warn('[DMProfile] dropped dm-update-profile with mismatched senderId', {
-          claimed: content.senderId?.slice(0, 8),
+          claimed: parsed.senderId?.slice(0, 8),
           envelope: senderAddress.slice(0, 8),
         });
         return true;
@@ -757,16 +749,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // the space update-profile handler and desktop's handleDMProfileUpdate.
       const merged: Conversation = {
         ...existing,
-        ...(content.displayName ? { displayName: content.displayName } : {}),
-        ...(content.userIcon ? { icon: content.userIcon } : {}),
-        ...(content.bio !== undefined ? { bio: content.bio } : {}),
+        ...(parsed.displayName ? { displayName: parsed.displayName } : {}),
+        ...(parsed.userIcon ? { icon: parsed.userIcon } : {}),
+        ...(parsed.bio !== undefined ? { bio: parsed.bio } : {}),
         // Stored under `claimed_` and never as `primary_username`, so it cannot
         // render on a surface that skips verification — the conversation title
         // and the notification preview both resolve names without one. It
         // becomes visible only by being promoted, after it resolves back to
         // this partner. Presence rule: '' is an un-election and must clear.
-        ...(content.primaryUsername !== undefined
-          ? { claimed_primary_username: content.primaryUsername }
+        ...(parsed.primaryUsername !== undefined
+          ? { claimed_primary_username: parsed.primaryUsername }
           : {}),
       } as Conversation;
       await storage.saveConversation(merged);
@@ -1192,6 +1184,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     const memberRow = buildJoinedMemberRow(existingMember, participant, joinReceivedAt);
 
                     await adapter.saveSpaceMember(spaceId, memberRow);
+                    // A join can carry a fresh global display name/icon (see
+                    // buildJoinedMemberRow) — the name ladder needs telling.
+                    invalidateRosterCaches(queryClient, spaceId);
 
                     // Update space members cache directly (member data available from
                     // join event). Same rule as the write above: the cached row is what
@@ -2798,6 +2793,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               } as SpaceMember & { profileTimestamp: number; globalProfileTimestamp?: number; farcasterFid?: number; farcasterUsername?: string };
 
               await adapter.saveSpaceMember(spaceId, merged);
+              invalidateRosterCaches(queryClient, spaceId);
 
               // Update React Query members cache. Insert if missing.
               queryClient.setQueryData(queryKeys.spaces.members(spaceId), (old: SpaceMember[] | undefined) => {
@@ -3129,6 +3125,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             authenticatedDmSender = conversationId.split('/')[0];
             userProfileFromEnvelope = sessionResult.userProfile;
 
+            // A brand-new inbound session — the "friend's new device" case.
+            // Uses the session-authenticated sender, never a payload-declared
+            // one: a spoofed senderId here could trigger a reveal for an
+            // address the caller does not control.
+            if (authenticatedDmSender !== fullUserAddrRef.current) {
+              autoRevealRef.current?.(authenticatedDmSender);
+            }
+
             // The message should now be properly decrypted plaintext JSON
             decryptedMessage = JSON.parse(sessionResult.message) as Message;
 
@@ -3282,6 +3286,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     }));
                     decryptedText = confirmResult.message;
                     userProfileFromEnvelope = confirmResult.userProfile;
+                    // Session just CONFIRMED (we initiated; this is the
+                    // peer's first init-wrapped reply) — the authenticated
+                    // partner is the address this conversation was built
+                    // from, not any payload-declared sender.
+                    const confirmedSender = conversationId.split('/')[0];
+                    if (confirmedSender !== fullUserAddrRef.current) {
+                      autoRevealRef.current?.(confirmedSender);
+                    }
                   } else if (hasExistingSession) {
                     // === Use existing session to decrypt ===
                     // The message is wrapped in InitEnvelope but we already have a session
@@ -3407,6 +3419,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     conversationId = sessionResult.conversationId;
                     decryptedText = sessionResult.message;
                     userProfileFromEnvelope = sessionResult.userProfile;
+
+                    // First message from this sender on our conversation
+                    // inbox — a brand-new inbound session, same case as the
+                    // device-inbox init path above.
+                    const newSessionSender = conversationId.split('/')[0];
+                    if (newSessionSender !== fullUserAddrRef.current) {
+                      autoRevealRef.current?.(newSessionSender);
+                    }
 
                     // Subscribe to our conversation inbox for receiving future replies
                     if (sessionResult.ourConversationInbox) {
@@ -3733,7 +3753,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // Save conversation to storage (creates new or updates existing)
         const existingConversation = await storage.getConversation(conversationId);
         // Get sender display name for preview
-        const senderDisplayName = userProfileFromEnvelope?.displayName || existingConversation?.displayName || senderAddress.substring(0, 8);
+        // Empty means absent. An address slice is NOT a name: it would enter the
+        // identity ladder as a locally-known name and block both the honest
+        // truncated-address fallback and a real name arriving later.
+        const senderDisplayName = userProfileFromEnvelope?.displayName || existingConversation?.displayName || '';
         // Typed preview (icon + text, no emoji) — single source of truth in
         // utils/messagePreview, which now also handles call-event.
         const messagePreview = getSpaceMessagePreview(decryptedMessage);
@@ -3775,7 +3798,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           senderAddress,
           'direct',
           '', // No icon
-          senderAddress.substring(0, 8) // Display name
+          senderDisplayName // Display name — reuse the value computed above rather
+          // than recomputing an address slice; storage.saveMessage discards this
+          // argument today (services/storage/mmkvAdapter.ts), but the batch path's
+          // equivalent call already passes the resolved name and this one should
+          // match rather than stamp an address into a name-shaped slot.
         );
 
         // Persist the DM into the notifications inbox log — the counterpart to
@@ -4716,6 +4743,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             } as SpaceMember & { profileTimestamp: number; globalProfileTimestamp?: number; farcasterFid?: number; farcasterUsername?: string };
 
             await adapter.saveSpaceMember(spaceId, merged);
+            invalidateRosterCaches(queryClient, spaceId);
             // Member rows changed — refresh the verification member memo.
             batchMembersCache = null;
 
@@ -5062,8 +5090,19 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // type must NOT bump the row's preview/timestamp. On a self-sync echo
         // ignore our own profile for the row identity (see the JS path's guard).
         const rowProfile = isSelfSyncEcho ? undefined : msgResult.user_profile;
+        // A user_profile-carrying result is this batch path's init-variant
+        // marker (mirrors userProfileFromEnvelope on the JS path above): a
+        // (re)established inbound session. senderAddress is the pre-rewrite,
+        // session-authenticated sender computed above — isSelfSyncEcho
+        // already proves it isn't us.
+        if (!isSelfSyncEcho && msgResult.user_profile) {
+          autoRevealRef.current?.(senderAddress);
+        }
         const existingConversation = await storage.getConversation(conversationId);
-        const senderDisplayName = rowProfile?.display_name || existingConversation?.displayName || resolvedSenderAddress.substring(0, 8);
+        // Empty means absent. An address slice is NOT a name: it would enter the
+        // identity ladder as a locally-known name and block both the honest
+        // truncated-address fallback and a real name arriving later.
+        const senderDisplayName = rowProfile?.display_name || existingConversation?.displayName || '';
         const senderIcon = rowProfile?.user_icon || existingConversation?.icon || '';
         // Typed preview (icon + text, no emoji) — see the live DM path above.
         const messagePreview = getSpaceMessagePreview(decryptedMessage);
@@ -6120,6 +6159,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
         if (allTargetDevices.length === 0) return;
 
+        // Identity: NONE. This is the automatic receipt/ack transport
+        // (ReceiptService's debounced flush) — never a human act. Attaching a
+        // display_name/user_icon here is exactly the harvest-by-messaging
+        // hole the DM privacy rule exists to close: a stranger messages us,
+        // our client acks automatically, and the ack must not carry our face.
         await sendEncryptedMessageToAllDevices(
           `${partnerAddress}/${partnerAddress}`,
           partnerAddress,
@@ -6133,13 +6177,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             inboxEncryptionPublicKey: deviceKeyset.inboxEncryptionPublicKey,
           },
           senderId,
-          user?.displayName,
         );
       } catch (err) {
         logger.debug('[DM-receipts] ack send failed', err);
       }
     },
-    [enqueueOutbound, subscribe, user?.displayName],
+    [enqueueOutbound, subscribe],
   );
   sendDmReceiptAckRef.current = sendDmReceiptAck;
 
@@ -6521,6 +6564,67 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // cursor. No peer-to-peer sync; new joiners only see messages sent after
   // they joined.
 
+  // Self's identity in the exact `DMProfilePayload` shape both DM identity
+  // pushes need: the on-connect rebroadcast sweep below and the
+  // inbound-new-session auto-reveal effect right after it. One
+  // construction — two hand-built copies is exactly how the signature-gate
+  // and the reveal push would drift apart.
+  //
+  // Reads `user` from render scope, not a ref. That is safe here even
+  // though the value flows into the auto-reveal ref-closure below: this
+  // function itself is only ever CALLED from inside an effect that reruns
+  // on every render (the auto-reveal reassignment effect) or on the
+  // relevant user fields changing (the on-connect sweep) — never from
+  // inside the long-lived, mount-once receive callbacks. See
+  // `fullUserAddrRef`'s comment above for why those may never read `user`
+  // directly.
+  function buildSelfProfilePayload(): DMProfilePayload | null {
+    if (!user?.address) return null;
+    const displayName = user.displayName || user.username;
+    const userIcon = user.profileImage;
+    return {
+      selfAddress: user.address,
+      displayName: displayName || undefined,
+      userIcon: userIcon || undefined,
+      // Sent unconditionally, '' included: an un-election has to reach the
+      // partner or their client keeps rendering the dropped name. Mirrors
+      // the on-connect sweep's own primaryUsername handling below.
+      primaryUsername: user.primaryUsername ?? NO_PRIMARY_NAME,
+    };
+  }
+
+  // Ref, not a closure: the receive callbacks (handleIncomingMessage,
+  // applyDMGroupResults) are created once with `useCallback(..., [])` and
+  // never recreated, so any state they read directly is frozen at mount —
+  // the stale-user bug class this file has already shipped once (see
+  // `fullUserAddrRef` above). This effect has NO dependency array on
+  // purpose: it must reassign the ref's target on EVERY render so the
+  // closure handed out always captures the latest
+  // `buildSelfProfilePayload`/`enqueueOutbound`/`subscribe`, while the
+  // receive callbacks only ever call `autoRevealRef.current?.(...)`.
+  const autoRevealRef = useRef<(partnerAddress: string) => void>(() => {});
+  useEffect(() => {
+    autoRevealRef.current = (partnerAddress: string) => {
+      const self = fullUserAddrRef.current;
+      if (!self || !partnerAddress || partnerAddress === self) return;
+      const payload = buildSelfProfilePayload();
+      if (!payload) return;
+      // Fire-and-forget, no rejection handler attached — same posture as
+      // the reveal-on-reply call sites in useSendDirectMessage /
+      // useSendDirectEmbedMessage: autoRevealOnInboundSession never throws
+      // (it has its own internal try/catch), and this must never delay or
+      // break the message-receive path that triggers it.
+      void import('../services/dm/dmProfileService').then(({ autoRevealOnInboundSession }) =>
+        autoRevealOnInboundSession(
+          partnerAddress,
+          payload,
+          { enqueueOutbound, subscribe },
+          (p) => getMMKVAdapter().getMessages(p),
+        ),
+      );
+    };
+  });
+
   // Per-launch profile re-broadcast, fingerprinted on the broadcast-
   // relevant user fields. Heals the case where the user joined a space
   // before setting their profile (join control message captured empty
@@ -6662,19 +6766,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // gated to the public-profile path, matching the space rebroadcast.
         try {
           const { broadcastProfileToAllDMs } = await import('../services/dm/dmProfileService');
-          await broadcastProfileToAllDMs(
-            {
-              selfAddress: user.address,
-              displayName: displayName || undefined,
-              userIcon: userIcon || undefined,
-              // Sent unconditionally, '' included: an un-election has to reach
-              // the partner or their client keeps rendering the dropped name.
-              // This is the only route a `.q` has into a DM — the publish that
-              // was meant to carry it is refused by the server.
-              primaryUsername: user.primaryUsername ?? NO_PRIMARY_NAME,
-            },
-            { enqueueOutbound, subscribe },
-          );
+          // Same payload buildSelfProfilePayload() assembles for the
+          // auto-reveal push below — see its comment for why this is one
+          // shared construction rather than two. Guaranteed non-null here:
+          // this effect already returned above when `!user?.address`.
+          const payload = buildSelfProfilePayload();
+          if (payload) {
+            await broadcastProfileToAllDMs(payload, { enqueueOutbound, subscribe });
+          }
         } catch {
           // DM rebroadcast best-effort; never affects the space rebroadcast.
         }

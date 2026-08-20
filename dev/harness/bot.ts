@@ -91,6 +91,22 @@ export interface MobileBot {
   waitForConnected(timeoutMs?: number): Promise<void>;
   /** Send a DM through mobile's real useSendDirectMessage mutation. */
   send(toAddress: string, text: string): Promise<void>;
+  /**
+   * Create the local conversation row for a partner, as opening a DM does.
+   *
+   * The send hook does NOT create this row — `useSendDirectMessage` guards its
+   * write with `if (conversation)` and only ever UPDATES an existing one. In
+   * the app the row is created first, by the UI: `useStartDirectMessage` (and
+   * NewConversationModal) persist it when you open the conversation, before any
+   * message is sent. This mirrors that storage write, which is the one piece of
+   * the UI layer the bot has to stand in for.
+   *
+   * It matters beyond tidiness: the receive path DROPS a `dm-update-profile`
+   * for a partner it holds no row for (WebSocketContext, applyDmProfileUpdate),
+   * so a bot that only ever sent would silently be unable to observe an
+   * inbound identity update at all.
+   */
+  startConversation(partnerAddress: string): Promise<void>;
   /** Registration as the relay currently reports it — device count included. */
   registration(): Promise<UserRegistration | null>;
   /**
@@ -274,6 +290,18 @@ export async function createBot(
         recipientAddress: toAddress,
         text,
       });
+    },
+    startConversation: async (partnerAddress: string) => {
+      // Same fields useStartDirectMessage writes — empty icon/displayName are
+      // its own placeholders, back-filled later by whatever identity arrives.
+      await adapter.saveConversation({
+        conversationId: conversationIdFor(partnerAddress),
+        address: partnerAddress,
+        type: 'direct',
+        timestamp: Date.now(),
+        icon: '',
+        displayName: '',
+      } as Parameters<typeof adapter.saveConversation>[0]);
     },
     registration: async () =>
       (await getQuorumClient().fetchUserRegistration(identity.address, {

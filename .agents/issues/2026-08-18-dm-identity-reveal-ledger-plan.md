@@ -1,12 +1,12 @@
 ---
 type: task
 title: "DM identity: fix the cross-client dialect break, then make identity reveal an explicit, privacy-gated ledger"
-status: open
+status: in-progress
 priority: high
 created: 2026-08-18
-updated: 2026-08-18
+updated: 2026-08-19
 area: DM identity / privacy / cross-client parity
-repos: quorum-mobile (this plan), quorum-desktop (mirror section §D — its own PR), quorum-shared (no change required for Tasks 1-8; wire-shape convergence is an open question §Q)
+repos: quorum-mobile (Tasks 1-8, shipped), quorum-desktop (§D — five items, verified against source 2026-08-19, NOT started; D1 is required to complete the mobile work), quorum-shared (§S — one small typed field plus a documented envelope shape, NOT started)
 related:
   - "quorum-desktop/.agents/issues/2026-08-01-dm-partner-identity-lost-on-established-sessions.md (the established-session measurement this plan builds on)"
   - "quorum-desktop/.agents/issues/2026-08-01-space-member-identity-announce-on-connect.md (§7 names receiver-driven as the best shape — that is future work F, not this plan)"
@@ -17,6 +17,66 @@ related:
 # DM Identity Reveal Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+## Status
+
+**All 8 tasks implemented and reviewed, 2026-08-19, on branch
+`feat/dm-identity-reveal-ledger` (13 commits, `a701116..1b03b41`). Not yet
+merged. The §V device lanes have NOT been run — that is what remains.**
+
+Gates MEASURED at branch completion:
+`npx jest` 125 suites / 1180 tests all passing (baseline 119/1140) ·
+`npx tsc --noEmit` exactly 12 pre-existing errors (unchanged) ·
+`yarn lint` 302 errors / 173 warnings (unchanged).
+
+Every task was implemented by a fresh agent, then reviewed by an independent
+one, with fix rounds until clean, then a whole-branch review. Verdict: READY TO
+MERGE, no Critical findings, no ungated identity-emission path found.
+
+### What changed versus this plan as written
+
+- **§P's emission table stands, but the operator restated the rule** (2026-08-19)
+  and it now governs where the two differ: *"The sender of the DM's identity IS
+  shown to the receiver. It's just the receiver's identity that is not shown
+  until they reply (unless they already had previous conversations/sessions with
+  the same sender."* Initiating is itself the consent; the asymmetry is
+  deliberate.
+- **Calls were brought under that rule**, which this plan did not cover.
+  `sendSignal` in `context/CallContext.tsx` now takes an explicit opt-in identity
+  parameter defaulting to silence. Placing a call (offer) and answering one
+  (answer) attach identity and record the reveal through `onDeliberateDmSend`;
+  the other six signal sites (ICE ×2, hangup, event, renegotiation, circuit
+  rotation) attach nothing.
+- **Task 8's audit found a real, previously-live leak** the plan had not
+  predicted: `hooks/chat/useDeleteConversationSignal.ts` sent your `display_name`
+  to a never-replied stranger when you deleted their conversation, via the
+  `accept`-shaped session envelope, with no ledger check anywhere in that path.
+  Fixed.
+- **Task 4's Step 5 RED proof was unfalsifiable as specified.** The jest MMKV
+  mock wraps a plain `Map` that cannot throw, so `hasRevealedTo`'s catch branch
+  was unreachable from any test — flipping the fail direction left the suite
+  green. Tests that make storage genuinely throw were added; the proof now fires.
+- **`sendProfileToPartner`'s signature is wider than §Task 5 specified.**
+  It takes `SendProfileDeps`, and `buildSendProfileDeps(base: DMBroadcastDeps)`
+  is the seam single-partner callers use. Tasks 6 and 7 keep the narrow public
+  signature this plan specified and call the builder internally.
+- **Task 3 touched 9 sites, not 7** — an unbriefed third `substring(0, 8)` at
+  the old line 3773 turned out to be a discarded `saveMessage` argument.
+
+### Deliberately NOT done (filed separately)
+
+- `issues/.open/2026-08-19-self-rename-name-stale-outside-websocket-context.md`
+- `issues/.open/2026-08-19-batch-decrypt-path-skips-auto-reveal-for-call-frames.md`
+- `issues/.open/2026-08-19-fire-and-forget-dynamic-imports-lack-catch.md`
+- §D (the desktop mirror) and §Q (the wire-shape and `request-profile` questions)
+  remain open, exactly as this plan scoped them.
+
+### What still needs a human on a device
+
+The §V lanes below, plus one new call-specific lane derived from the batch-path
+finding. No automated test on this branch can cover real sockets, real push
+delivery, or cross-device timing. **V4 is the control arm for the entire privacy
+design: if it fails, stop, the rule is broken.**
 
 **Goal:** A DM partner's name and avatar reach every device that is *entitled* to them — and never reach anyone who is not — across all four client pairings (mobile↔mobile, mobile↔desktop, desktop↔mobile, desktop↔desktop).
 
@@ -1201,27 +1261,190 @@ nothing, which is what keeps the privacy rule intact."
 | V1 (dialect, live) | Desktop user renames while `adb logcat` runs | NO new `consuming without saving … dm-update-profile` line; the DM row shows the new name+pfp without reload |
 | V2 (space, live) | Desktop user renames | Name AND avatar change in the space on mobile within seconds, no app restart |
 | V3 (new device, live — the operator's original scenario) | Fresh emulator onboard → message a long-standing partner | Partner's name+pfp appear within ~10s of the partner's client processing the init (auto-reveal), before any reply |
-| V4 (stranger control, live) | Fresh throwaway account messages an existing user; existing user does NOT reply | Stranger's device shows address + initials only — before AND after the existing user renames. Then the user replies once → identity appears |
+| V4 (stranger control) | **AUTOMATED — `yarn harness:reveal`** | See below |
 | V5 (regression) | mobile↔mobile rename propagation | unchanged (wrapped dialect end-to-end) |
 | V6 (suite) | `npx jest`, `npx tsc --noEmit`, `yarn lint` | green / baseline |
 
-V4 is the control arm for the entire privacy design: if it fails, stop shipping, the rule is broken. The cross-client lanes (V1-V4) currently need a desktop client running; the repo's real-relay config-sync harness (`0ae0c0d` lineage) is the natural home for automating V3/V4 later — file that as its own task if manual rounds exceed two.
+### V4 is automated as of 2026-08-20
 
-## §D. Desktop mirror (separate PR in quorum-desktop — the lead-dev conversation)
+`dev/harness/dm-reveal-two-bot.scenario.ts`, run with `yarn harness:reveal`. Two headless
+mobile clients, one per process, mobile's real client code on both sides, the **production
+relay** in between. A is a stranger who messages B; B renames without replying; A must not
+learn the name; B then replies once and A must.
 
-Same design, four changes, all anchored:
+It was planned as a manual device lane and should not go back to being one. The manual
+version is n=1, unrepeatable, needs two accounts and a person, and observes a rendered
+screen rather than what actually crossed the wire.
 
-1. **Accept the wrapped dialect** at the 1d intercept (`MessageService.ts` ~907): also match `decryptedContent?.content?.type === 'dm-update-profile'` and feed the same `handleDMProfileUpdate`. Today mobile's push is not intercepted there at all — verify what the fall-through does to it (ghost row risk) and pin it in a test.
-2. **Reveal ledger mirror**, persisted like `profileSendGate` records; bootstrap from IndexedDB history ("any message authored by self in this conversation").
-3. **Filter `broadcastProfileToAllDMs`** (~695) with the ledger — desktop has the same stranger leak.
-4. **Auto-reveal on inbound init/confirm** (the branches at ~3679 and ~4037 already know the authenticated sender) with the same 1h debounce; **audit** that receipts/typing (`sendEphemeralDMControl`, ReceiptService) never attach identity — READ: today they do not; keep it that way and pin it.
+**MEASURED 2026-08-20, both directions.** GREEN as shipped. Disabling the
+`ensureRevealBootstrap` filter in `broadcastProfileToAllDMs` turned phase 1 RED
+(`broadcast to 1/1 partner(s)`; A's stored row became the renamed value); restoring it
+turned it GREEN. So the assertion can fail, which is the only reason a green means
+anything.
 
-## §Q. Open questions for the Lead Dev (none block PR-1/PR-2)
+Two design points worth keeping if this is ever edited:
 
-1. **Canonical wire shape** for `dm-update-profile` in `quorum-shared` — pick one (flat matches the receipt family; wrapped matches Message plumbing), receivers stay liberal for one release cycle either way.
-2. **Future work F — receiver-driven `request-profile`** (a new control type in shared): the deterministic backstop for every remaining miss; must be ledger-gated on the responder side. Desktop's cadence research already ranked it best-shape; it is a wire change and therefore a sign-off.
-3. **Deleting a conversation:** should it `clearReveal` for that partner (un-consent)? Product call; one line either way.
-4. **Scope assumption to confirm:** the reveal rule is DM-only — in a Space, joining is the consent and members see each other freely. Everything above assumes yes.
+- **Phase 2 is the control arm, not a bonus.** A dead bench, a broken relay or an unpaired
+  bot all produce "the stranger learned nothing", which reads as a pass. Phase 2 proves the
+  same pair and wire *can* carry a name, so phase 1's silence is a decision.
+- **The preconditions are asserted, not assumed.** The first version of the scenario failed
+  on exactly this: `useSendDirectMessage` only UPDATES a conversation row (`if
+  (conversation)`) and never creates one — the app creates it in the UI
+  (`useStartDirectMessage`). A bot that only sent held no row, and the receive path drops an
+  identity update for a partner it has no row for, so a leak could not have been observed
+  even if pushed. Hence `bot.startConversation()`.
+
+Both bots are mobile deliberately: pairing against desktop would make a failure unreadable
+while §D1 stands, since desktop cannot parse mobile's wrapped dialect at all.
+
+**Still needs a human, on the emulator (which works — confirmed 2026-08-20):** whether the
+name and avatar actually *render*. The harness asserts on the stored conversation row, which
+is deliberate — it separates "the value survived the wire and the merge" from "the resolver
+then chose to display it". Those fail for different reasons. V1-V3 remain manual.
+
+## §D. Desktop mirror (separate PR in quorum-desktop)
+
+> **Now has its own plan:** `quorum-desktop/.agents/issues/.open/2026-08-20-dm-identity-reveal-desktop-and-shared-plan.md`
+> — four tasks, fourteen verified evidence anchors, and a harness strategy this section
+> did not know was possible. **Work from that file, not from this section**, which is kept
+> only as the summary that produced it. Two anchors quoted below (`~3679`, `~4037` for the
+> inbound init branches) were themselves stale and are corrected there to `:4513` / `:4589`.
+
+**This section was verified against the desktop source on 2026-08-19**, replacing the
+predictions it originally contained. Two of the four items turned out to be worse than
+guessed. Everything below is READ from `quorum-desktop` at the line numbers given.
+
+**The mobile branch fixed desktop→mobile only. mobile→desktop is still broken, and D1
+is not optional — without it the mobile work is half-delivered.**
+
+### D1. Desktop cannot parse the wrapped dialect, and does not merely drop it
+
+`interceptControlMessages` (`src/services/MessageService.ts:847`) binds
+`const raw = decryptedContent as any` at `:855` and its 1d branch tests
+`raw.type === 'dm-update-profile'` at `:907`. **It never looks at `raw.content.type`.**
+
+Mobile's `buildDmProfileMessage` (`services/dm/dmProfileService.ts:99`) emits a full
+`Message` envelope with no top-level `type` and the payload under `content`. So on
+desktop the 1d test is false, `interceptControlMessages` returns false, and control
+reaches **`saveMessage` at `:6399`** (and the sibling decrypt path at `:4196`).
+
+- READ: the frame is **persisted to IndexedDB as a message in that DM**, carrying a real
+  `messageId` (`dm-profile-<nonce>`). This is a ghost row, not a silent drop — strictly
+  worse than the desktop→mobile failure the mobile branch fixed, which at least consumed
+  the frame cleanly.
+- NOT MEASURED: whether it draws a visible bubble, and whether it bumps the conversation
+  preview / unread state. Check the renderer's unknown-`content.type` behaviour and
+  `db.saveMessage`'s conversation upsert before sizing the fix.
+
+**Fix:** match `decryptedContent?.content?.type === 'dm-update-profile'` as well and feed
+the same `handleDMProfileUpdate`. Mobile's `parseDmProfileUpdate`
+(`services/dm/dmProfileWire.ts`) is the reference implementation and its
+wrapped-wins-over-flat precedence should be mirrored. Pin the ghost-row case in a test:
+assert `saveMessage` is NOT called for a wrapped profile frame.
+
+### D2. Desktop has no reveal ledger at all
+
+MEASURED 2026-08-19: `grep -rl "RevealLedger\|hasRevealedTo\|ensureRevealBootstrap"` over
+`src/` and `.agents/` returns **zero files**. Nothing on desktop implements §P.
+
+Port `services/dm/dmRevealLedger.ts`. Its five exports are the contract. Two properties
+must survive the port or the design is not the design:
+
+- **fail CLOSED** — storage error or malformed identifier reads as *not revealed*. This is
+  deliberately the OPPOSITE posture from `src/utils/dmProfileGate.ts`, which fails OPEN.
+  Do not unify them.
+- **injective key encoding** — `JSON.stringify([self, partner])`, not `${self}:${partner}`.
+
+Bootstrap from IndexedDB history ("any message in this conversation authored by self"),
+mirroring `ensureRevealBootstrap`. Never persist a negative.
+
+### D3. `broadcastProfileToAllDMs` has the same stranger leak, live today
+
+`src/services/MessageService.ts:677`, loop at `:696`. It enumerates
+`getConversations({ type: 'direct' })` and pushes identity to **every row**. The only gate
+is the `dmProfileGate` dedup at `:715`, which suppresses a byte-identical *resend* and says
+nothing about consent.
+
+A conversation row is created by a **stranger's inbound message**. So on desktop today,
+changing your display name announces you to people you have never replied to — the exact
+leak closed on mobile in Task 5, reproduced there as `broadcast to 2/2 partner(s)` with the
+stranger in `targets`. `rebroadcastProfileToAllDMsOnConnect` at `:768` calls the same
+function on every reconnect, so it fires without any user action at all.
+
+**Fix:** filter each partner through the ledger's bootstrap, as mobile's sweep does.
+
+### D4. Auto-reveal, plus an audit to keep
+
+Wire auto-reveal on inbound init/confirm — the branches at `~3679` and `~4037` already hold
+the authenticated sender — with the same 1h debounce mobile uses.
+
+Then **audit and pin** that automatic frames stay identity-free. READ 2026-08-19: today
+they do. `sendEphemeralDMControl` (`:630`) forwards a `TypingMessage` unchanged; the
+delivery-ack and read-ack branches (`:861`, `:873`) carry no profile fields. That is the
+invariant from §P — an automatic frame reveals nothing, ever — and it is currently held by
+accident rather than by a test.
+
+### D5. Desktop's send-side init is a different shape — do not assume mobile's fix ports
+
+Mobile's Task 8 worked because mobile hand-attaches `display_name` / `user_icon` to its
+init envelopes in `useSendDirectMessage.ts`, so gating them is a local edit. Desktop's
+outgoing identity rides `secureChannel`'s `user_profile` on the init-carrying variant of
+the decrypt union (see the comment at `:754-758`), which is produced by the crypto layer
+during session establishment, not assembled per-message by app code.
+
+The `display_name` fields at `:3844-3848` and `:3868-3873` are **local DB writes recording
+the partner's identity onto the conversation row**, not the outgoing wire envelope. Do not
+"fix" them.
+
+**Consequence:** D5 is a design question, not a port. Under §P, initiating IS consent, so
+identity on a *first outbound* init is correct and needs no gate. Confirm that desktop
+never sends an init-carrying frame without a deliberate user act behind it. If it can, that
+is a lead-dev conversation about the crypto layer, not an app-level patch.
+
+### Suggested order
+
+D1 first and alone — it is a receive-path change, it is the half of the mobile work that
+is currently undelivered, and it is provable in isolation. D2+D3 next as one PR (the ledger
+is useless until something consults it, and the sweep is the live leak). D4 after. D5 is a
+question to answer before it is a task.
+
+## §S. quorum-shared
+
+One change, small, and it is the reason two clients drifted in the first place.
+
+**`src/types/message.ts:51-57`** declares `DMUpdateProfileMessage` with exactly
+`senderId`, `type`, `displayName`, `userIcon`, `bio`. Two gaps:
+
+1. **`primaryUsername` is missing.** Mobile sends it (`dmProfileService.ts:117-119`) via an
+   `as DMUpdateProfileMessage` cast, with a comment acknowledging the field is additive and
+   untyped — the same pattern the space broadcast uses for its `global*` slots. Desktop's
+   `handleDMProfileUpdate` therefore cannot see it even once D1 lands. Add it as optional.
+2. **The type describes fields but not the envelope.** Nothing in shared says whether the
+   payload travels flat or wrapped, which is precisely how the two clients shipped opposite
+   answers without either being wrong. Whatever §Q1 decides, write it down here as a
+   comment on the type, next to the fields it governs.
+
+Nothing else in shared needs to change. The reveal ledger is per-device local state and has
+no business in a shared package; the two clients' storage layers (MMKV vs IndexedDB) have
+nothing in common to factor out.
+
+## §Q. Open questions for the Lead Dev
+
+1. **Canonical wire shape** for `dm-update-profile` — pick one (flat matches the receipt
+   family; wrapped matches `Message` plumbing), receivers stay liberal for one release
+   cycle either way. **Now urgent rather than academic:** §D1 shows the ambiguity is not a
+   tidiness issue, it produces persisted ghost rows on desktop. Record the answer in
+   shared per §S2.
+2. **Future work F — receiver-driven `request-profile`** (a new control type in shared):
+   the deterministic backstop for every remaining miss; must be ledger-gated on the
+   responder side. Desktop's cadence research already ranked it best-shape; it is a wire
+   change and therefore a sign-off.
+3. **Deleting a conversation:** should it `clearReveal` for that partner (un-consent)?
+   Product call; one line either way.
+4. **Scope assumption to confirm:** the reveal rule is DM-only — in a Space, joining is the
+   consent and members see each other freely. Everything above assumes yes.
+5. **Desktop's init-carrying frames (§D5):** can `secureChannel` emit one without a
+   deliberate user act? If yes, §P is not enforceable on desktop at the app layer.
 
 ---
-*Last updated: 2026-08-18*
+*Last updated: 2026-08-19*
