@@ -380,7 +380,23 @@ export function useClaimRecords(names: string[]): ClaimRecords {
 
   const { data, status } = useQuery({
     queryKey: ['qns-verify-claims', namesKey],
-    queryFn: () => resolveClaimedNames(names),
+    // The `signal` is React Query's, and passing it is what lets a superseded
+    // lookup be dropped instead of running to completion for an answer nobody
+    // will read. Scrolling a channel widens the sender set, which changes the
+    // key, which is exactly when this happens.
+    //
+    // It is NOT a substitute for the transport's deadline and does not overlap
+    // with it: this fires when the query becomes unused, never on elapsed time,
+    // so a hung request on a screen the user is still looking at is bounded
+    // only by the deadline. The two compose inside `qnsRequest`.
+    //
+    // Safe next to the fail-closed rules below, MEASURED rather than reasoned —
+    // see `claimRecordsAbortSupersededLookup.test.tsx`. React Query treats a
+    // cancellation as a REVERT, not an error: the query keeps whatever state it
+    // had, so a lookup that never succeeded stays `pending` with no data and
+    // has nothing to carry forward. That is the case that would have been
+    // dangerous, and it is the one pinned.
+    queryFn: ({ signal }) => resolveClaimedNames(names, { signal }),
     enabled: names.length > 0,
     staleTime: 60 * 60 * 1000,
     gcTime: 24 * 60 * 60 * 1000,

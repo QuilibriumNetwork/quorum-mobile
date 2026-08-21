@@ -1254,8 +1254,9 @@ export async function resolveBatch(names: string[]): Promise<(NameRecord | null)
  */
 export async function resolveClaimedNames(
   names: readonly string[],
+  opts: { signal?: AbortSignal } = {},
 ): Promise<QnsBatchResult> {
-  return resolveNamesBatch([...names], { baseUrl: QNS_API_BASE_URL });
+  return resolveNamesBatch([...names], { baseUrl: QNS_API_BASE_URL, signal: opts.signal });
 }
 
 export async function reverseLookup(keyOrAddress: string): Promise<string[]> {
