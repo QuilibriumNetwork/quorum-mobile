@@ -3,9 +3,57 @@ type: bug
 title: "Remaining TypeScript errors needing lead-dev review"
 status: open
 created: 2026-06-15
+updated: 2026-08-21
 ---
 
 # Remaining TypeScript errors needing lead-dev review
+
+## Status
+
+**Updated 2026-08-21. The count is 11, not the 23 described below.** The original text is
+left intact as the record of what was reported to the lead dev; read it through this section.
+
+Most of the reduction is recorded in
+`.agents/reports/2026-07-31-typescript-error-inventory.md`, which triaged every error and
+took the count 28 → 11. That report is the authoritative source; this issue is the request
+for a decision.
+
+**Still open — the only three items that remain (11 errors):**
+
+| Section below | Site | Errors | Blocked on |
+|---|---|---|---|
+| 1 | `services/calling/farcaster-link.ts:41-42` | 3 | What the verifier expects. See note below. |
+| 2 | `services/calling/webrtc-manager.ts:111-169` | 7 | Nothing technical. Confirmed TYPE-ONLY. |
+| 4 | `app/explore.tsx:6` | 1 | Product decision: delete or repoint. |
+
+**Recorded as fixed** in the 2026-07-31 report: `keyService.ts:89` (section 1),
+`native-call.ts` (section 2), `farcasterClient.ts` (section 4), the `WebSocketContext`
+`MessageHandler` (section 3), plus all ten `dev/harness` errors.
+
+**No longer in `tsc` output, but not explicitly recorded as fixed anywhere** — verify before
+assuming, they may have moved rather than been fixed: `configService.ts:7` (section 1), and
+all of section 3 except the `MessageHandler` item (`WebSocketContext.tsx:3591` `DeviceKeyset`,
+`useSendDirectMessage.ts:1010-1011`, `spaceMessageService.ts:440` and `:830`).
+
+### Two corrections to the text below
+
+- **Section 2, `webrtc-manager`: the "may or may not fire at runtime" question is settled.**
+  The handlers ARE created at runtime, via `defineEventAttribute` from `event-target-shim`
+  (`react-native-webrtc`'s own `src/RTCPeerConnection.ts:823-832`). They are absent from the
+  shipped `.d.ts` only because TypeScript cannot see a runtime-defined accessor. The code is
+  correct; this is cosmetics in the live call path, and the 2026-07-31 report rates it the
+  lowest-value item in the backlog.
+- **Section 1, `farcaster-link`: worse than "broken at runtime".** All three call sites in
+  `components/ProfileModal.tsx` (around lines 709, 1088, 1202) wrap the call in `try/catch` →
+  `logger.warn` → publish the profile without the link. Nothing surfaces to the user, so the
+  bidirectional link has silently never been generated. That makes this the highest-value item
+  here, not merely the riskiest.
+
+Section 4's `app/explore.tsx` reading below is correct and re-verified 2026-08-21: there is no
+`explore` route under `app/(tabs)/` (it holds `account`, `feed`, `messages`, `profile`,
+`spaces`, `wallet`), and nothing links to `/explore` except the file itself.
+
+---
 
 Report in Discord for lead dev to see
 
@@ -37,4 +85,4 @@ Deps are on `@noble/curves@2.0.1` / `@noble/ciphers@2.1.1`; these call sites sti
 - **`app/explore.tsx:6`** — redirects to `/(tabs)/explore`, which doesn't exist (tabs are feed/spaces/messages/profile/wallet/account). Nothing references this legacy route. Pick a real target or delete the file. Left it as a product decision.
 - **`services/farcasterClient.ts:1327`** — `rawFrame.body` read but `body` isn't on the frame type (`{ name?, iconUrl?, url? }`). Either the type is missing `body` or the read is wrong.
 
-*Last updated: 2026-06-15*
+*Last updated: 2026-08-21*
