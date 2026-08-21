@@ -22,6 +22,14 @@ import { extractYouTubeMatchesFromText, YouTubeEmbed, parseYouTubeUrl } from '@/
 import { MentionAutocomplete, getMentionInfo, replaceMention, type MentionInfo } from '@/components/SocialFeed/MentionAutocomplete';
 import { GovernanceView, ProposalDetailView } from '@/components/SocialFeed/views';
 import { ProposalVoteBlock } from '@/components/SocialFeed/views/ProposalVoteBlock';
+import { ThreadElisionRow } from '@/components/SocialFeed/ThreadElisionRow';
+import {
+  buildThreadUnit,
+  collapseSelfChains,
+  type FeedPostWithChain,
+  type ThreadUnitItem,
+} from '@/components/SocialFeed/threadUnit';
+import { useFeedThreadAncestors } from '@/hooks/useFeedThreadAncestors';
 import { useHegemonyGovernance } from '@/hooks/useHegemonyGovernance';
 import type { ChannelCast as GovernanceChannelCast, CastReply as GovernanceCastReply } from '@/services/governance/governanceClient';
 import { parseVote as parseGovernanceVote } from '@/services/governance/governanceClient';
@@ -1542,6 +1550,20 @@ function ParentContextLine({
         <View style={{ padding: Skin.space(8), gap: Skin.space(2) }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
             <IconSymbol name="arrowshape.turn.up.left" color={theme.colors.textMuted} size={12} />
+            {/* The parent author's identity stays visible even in the mini
+                preview — a PFP, not just a handle (thread-visibility rule:
+                a user's identity never disappears because their post is
+                rendered as part of another interaction). */}
+            <CachedAvatar
+              source={parentCast.author.pfpUrl ? { uri: parentCast.author.pfpUrl } : null}
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: Skin.circleOrSquare(9),
+                backgroundColor: theme.colors.surface3,
+              }}
+              fallbackName={parentCast.author.displayName || parentCast.author.username}
+            />
             <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(12) }}>
               replying to <Text style={{ color: theme.colors.accent }}>{handle}</Text>
             </Text>
@@ -1589,18 +1611,34 @@ function ParentContextLine({
         </Text>
       ) : (
         // showUserContext, mini-preview-still-loading, or showGenericReply
-        <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13), flex: 1 }}>
-          replying to{' '}
-          <Text style={{ color: theme.colors.accent }}>
-            {cast.parentAuthor?.username
-              ? `@${cast.parentAuthor.username}`
-              : resolvedParent?.username
-                ? `@${resolvedParent.username}`
-                : parentFid
-                  ? `fid:${parentFid}`
-                  : 'cast'}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6), flex: 1 }}>
+          {/* Keep the parent author's PFP visible whenever we can resolve
+              one, so "who is being replied to" is readable at a glance. */}
+          {resolvedParent?.pfpUrl && (
+            <CachedAvatar
+              source={{ uri: resolvedParent.pfpUrl }}
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: Skin.circleOrSquare(9),
+                backgroundColor: theme.colors.surface3,
+              }}
+              fallbackName={resolvedParent.displayName || resolvedParent.username}
+            />
+          )}
+          <Text style={{ color: theme.colors.textSubtle, fontSize: Skin.font(13), flexShrink: 1 }}>
+            replying to{' '}
+            <Text style={{ color: theme.colors.accent }}>
+              {cast.parentAuthor?.username
+                ? `@${cast.parentAuthor.username}`
+                : resolvedParent?.username
+                  ? `@${resolvedParent.username}`
+                  : parentFid
+                    ? `fid:${parentFid}`
+                    : 'cast'}
+            </Text>
           </Text>
-        </Text>
+        </View>
       )}
     </View>
   );
@@ -4731,6 +4769,13 @@ interface FeedPostCardProps {
    *  the parent card of a reply pair (which may itself be a reply) so tapping
    *  it opens the thread focused on it, not its grandparent. */
   openOwnThread?: boolean;
+  /** Where this card sits inside a stacked feed thread unit. When set (and not
+   *  'only'), the card renders in thread-gutter layout: the avatar moves into
+   *  a left gutter column carrying the vertical connector line that ties the
+   *  parent's PFP to the reply's PFP (Twitter-style), and the card body flows
+   *  beside it. 'first' draws the line below the avatar, 'last' above it,
+   *  'middle' both. Undefined/'only' renders the standard full-width card. */
+  threadPosition?: 'only' | 'first' | 'middle' | 'last';
 }
 
 // Square media-grid cell — used by the "Media" filter to render the
@@ -5021,6 +5066,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
   suppressParentContext = false,
   hideBottomBorder = false,
   openOwnThread = false,
+  threadPosition,
 }: FeedPostCardProps) {
   const queryClient = useQueryClient();
   const navigateToThread = useCallback(() => {
@@ -5077,77 +5123,77 @@ const FeedPostCard = React.memo(function FeedPostCard({
   const castColor = castSurface.background && !castSurface.backgroundIsImage ? castSurface.background : undefined;
   const castImage = castSurface.backgroundIsImage ? castSurface.background : undefined;
 
-  return (
-    <View
-      style={[
-        styles.postCard,
-        castColor ? { backgroundColor: castColor } : null,
-        castImage ? { backgroundColor: 'transparent', overflow: 'hidden' } : null,
-        hideBottomBorder ? { borderBottomWidth: 0 } : null,
-      ]}
+  // Thread-gutter layout: inside a stacked feed unit the avatar moves into a
+  // left column that carries the vertical connector line between the parent's
+  // PFP and the reply's PFP, and the whole card body flows beside it.
+  const inThreadUnit = threadPosition !== undefined && threadPosition !== 'only';
+  const showLineAbove = threadPosition === 'middle' || threadPosition === 'last';
+  const showLineBelow = threadPosition === 'first' || threadPosition === 'middle';
+
+  const avatarBlock = (
+    <TouchableOpacity
+      onPress={navigateToProfile}
+      style={inThreadUnit ? styles.threadAvatarContainer : styles.avatarContainer}
     >
-      {castImage && (
-        <ExpoImage
-          source={{ uri: castImage }}
-          style={[StyleSheet.absoluteFill, { opacity: castSurface.opacity }]}
-          contentFit={castSurface.fit === 'contain' ? 'contain' : 'cover'}
+      <ApexAvatarRing active={authorIsApex} size={44}>
+        {/* CachedAvatar, not a bare ExpoImage: this row used to fall back to
+            the shared Quorum mark, so every photoless author in the feed
+            rendered as the same blue square. `memory-disk` is kept because
+            this is the long feed people scroll back through. */}
+        <CachedAvatar
+          source={post.authorAvatar ? { uri: post.authorAvatar } : null}
+          style={styles.avatar}
+          fallbackName={post.authorName}
           cachePolicy="memory-disk"
         />
-      )}
-      <Pressable onPress={navigateToThread} style={styles.postHeader}>
-        <TouchableOpacity onPress={navigateToProfile} style={styles.avatarContainer}>
-          <ApexAvatarRing active={authorIsApex} size={44}>
-            {/* CachedAvatar, not a bare ExpoImage: this row used to fall back to
-                the shared Quorum mark, so every photoless author in the feed
-                rendered as the same blue square. `memory-disk` is kept because
-                this is the long feed people scroll back through. */}
-            <CachedAvatar
-              source={post.authorAvatar ? { uri: post.authorAvatar } : null}
-              style={styles.avatar}
-              fallbackName={post.authorName}
-              cachePolicy="memory-disk"
-            />
-          </ApexAvatarRing>
-          {!isFollowing && post.authorFid > 0 && (
-            <TouchableOpacity
-              style={[styles.followButton, { backgroundColor: theme.colors.primary }]}
-              onPress={() => onFollow(post.authorFid)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <IconSymbol name="plus" size={10} color="#fff" />
-            </TouchableOpacity>
-          )}
+      </ApexAvatarRing>
+      {!isFollowing && post.authorFid > 0 && (
+        <TouchableOpacity
+          style={[styles.followButton, { backgroundColor: theme.colors.primary }]}
+          onPress={() => onFollow(post.authorFid)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <IconSymbol name="plus" size={10} color="#fff" />
         </TouchableOpacity>
-        <View style={styles.postAuthor}>
-          <View style={styles.authorRow}>
-            <TouchableOpacity onPress={navigateToProfile}>
-              <Text style={styles.authorName}>{post.authorName}</Text>
-            </TouchableOpacity>
-            {post.isPro && (
-              <IconSymbol name="star.fill" color={theme.colors.warning} size={14} />
-            )}
-            <ChannelBadge
-              channelSlug={post.channel}
-              parentUrl={post.parentUrl}
-              theme={theme}
-              onOpenChannel={onOpenChannel}
-            />
-          </View>
-          <Text style={styles.authorHandle}>
-            {post.authorHandle} • {post.time}
-          </Text>
-        </View>
-        <CastOverflowButton
-          castHash={post.hash}
-          authorFid={post.authorFid}
-          authorUsername={post.username}
-          castText={post.content}
-          onReport={onReport}
-          onDelete={onDelete}
-          theme={theme}
-        />
-      </Pressable>
+      )}
+    </TouchableOpacity>
+  );
 
+  const headerMeta = (
+    <>
+      <View style={styles.postAuthor}>
+        <View style={styles.authorRow}>
+          <TouchableOpacity onPress={navigateToProfile}>
+            <Text style={styles.authorName}>{post.authorName}</Text>
+          </TouchableOpacity>
+          {post.isPro && (
+            <IconSymbol name="star.fill" color={theme.colors.warning} size={14} />
+          )}
+          <ChannelBadge
+            channelSlug={post.channel}
+            parentUrl={post.parentUrl}
+            theme={theme}
+            onOpenChannel={onOpenChannel}
+          />
+        </View>
+        <Text style={styles.authorHandle}>
+          {post.authorHandle} • {post.time}
+        </Text>
+      </View>
+      <CastOverflowButton
+        castHash={post.hash}
+        authorFid={post.authorFid}
+        authorUsername={post.username}
+        castText={post.content}
+        onReport={onReport}
+        onDelete={onDelete}
+        theme={theme}
+      />
+    </>
+  );
+
+  const bodyContent = (
+    <>
       {!suppressParentContext && (
         <ParentContextLine
           cast={{
@@ -5180,7 +5226,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
       )}
 
       {post.mediaUrls.length > 0 && (
-        <View style={styles.mediaContainer}>
+        <View style={[styles.mediaContainer, inThreadUnit && styles.mediaContainerFlush]}>
           {post.mediaUrls.length === 1 ? (
             <AutoHeightImage
               uri={post.mediaUrls[0]}
@@ -5200,7 +5246,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
       )}
 
       {post.videos.length > 0 && (
-        <View style={styles.mediaContainer}>
+        <View style={[styles.mediaContainer, inThreadUnit && styles.mediaContainerFlush]}>
           {post.videos.map((video, index) => (
             video.url && (
               <VideoPlayer
@@ -5218,7 +5264,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
       )}
 
       {post.frameEmbeds.length > 0 && (
-        <View style={styles.mediaContainer}>
+        <View style={[styles.mediaContainer, inThreadUnit && styles.mediaContainerFlush]}>
           {post.frameEmbeds.map((frame, index) => (
             <FrameEmbed
               key={index}
@@ -5381,14 +5427,55 @@ const FeedPostCard = React.memo(function FeedPostCard({
           </TouchableOpacity>
         )}
       </View>
+    </>
+  );
+
+  return (
+    <View
+      style={[
+        styles.postCard,
+        castColor ? { backgroundColor: castColor } : null,
+        castImage ? { backgroundColor: 'transparent', overflow: 'hidden' } : null,
+        hideBottomBorder ? { borderBottomWidth: 0 } : null,
+      ]}
+    >
+      {castImage && (
+        <ExpoImage
+          source={{ uri: castImage }}
+          style={[StyleSheet.absoluteFill, { opacity: castSurface.opacity }]}
+          contentFit={castSurface.fit === 'contain' ? 'contain' : 'cover'}
+          cachePolicy="memory-disk"
+        />
+      )}
+      {inThreadUnit ? (
+        <View style={styles.threadRow}>
+          <View style={styles.threadGutter}>
+            {/* Connector stubs extend through the card's vertical padding
+                (negative offsets) so adjacent cards in a unit read as one
+                continuous avatar-to-avatar line. */}
+            {showLineAbove && <View style={[styles.threadLine, styles.threadLineAbove]} />}
+            {avatarBlock}
+            {showLineBelow && <View style={[styles.threadLine, styles.threadLineBelow]} />}
+          </View>
+          <View style={styles.threadBody}>
+            <Pressable onPress={navigateToThread} style={styles.threadHeader}>
+              {headerMeta}
+            </Pressable>
+            {bodyContent}
+          </View>
+        </View>
+      ) : (
+        <>
+          <Pressable onPress={navigateToThread} style={styles.postHeader}>
+            {avatarBlock}
+            {headerMeta}
+          </Pressable>
+          {bodyContent}
+        </>
+      )}
     </View>
   );
 });
-
-/** A feed row that may carry a collapsed self-reply chain (root-first). When
- *  `__chain` is set the row renders the whole chain as one unit; the row's own
- *  identity/fields are the chain root's (see collapseSelfChains). */
-type FeedPostWithChain = FeedPost & { __chain?: FeedPost[] };
 
 interface FeedReplyCardProps extends FeedPostCardProps {
   /** Live interaction-state maps, so each promoted/chained cast resolves its
@@ -5437,25 +5524,20 @@ const FeedReplyCard = React.memo(function FeedReplyCard({
   const baseChain = hasChain ? chain! : [post];
   const root = baseChain[0];
 
-  // A lone reply promotes the cast it replied to into the primary card (fetch
-  // it, one level). A chain keeps its own root as the header — we don't hoist a
-  // different author's cast above the user's thread; the root's own
-  // ParentContextLine still notes what it replied to.
-  const rootParentFid = root.parentAuthorFid;
-  const canFetchParent =
-    !hasChain &&
-    !!root.parentHash &&
-    Number.isFinite(rootParentFid) &&
-    (rootParentFid as number) > 0;
-  const { data: parentCast } = useFarcasterCast(
-    canFetchParent ? root.parentHash : undefined,
-    canFetchParent ? rootParentFid : undefined,
-    { enabled: canFetchParent, gcTime: 10 * 60 * 1000 },
+  // A lone reply hydrates up to MAX_ANCESTOR_FETCHES ancestors (nearest
+  // first) so the unit can show `root … parent reply`. A chain keeps its own
+  // root as the unit anchor — we don't hoist a different author's cast above
+  // the user's thread; the root's own ParentContextLine still notes what it
+  // replied to — so chains never fetch.
+  const { ancestors, rootKnown } = useFeedThreadAncestors(
+    { parentHash: root.parentHash, parentAuthorFid: root.parentAuthorFid },
+    !hasChain,
   );
 
-  // A lone cast whose parent (if any) hasn't resolved — render it unchanged so
-  // its own ParentContextLine still shows while the parent loads.
-  if (!parentCast && baseChain.length === 1) {
+  // A lone cast with no resolved ancestors (non-reply, URL-parent, or parent
+  // still loading) — render it unchanged so its own ParentContextLine still
+  // shows while the parent loads.
+  if (ancestors.length === 0 && baseChain.length === 1) {
     return (
       <FeedPostCard
         {...shared}
@@ -5467,113 +5549,71 @@ const FeedReplyCard = React.memo(function FeedReplyCard({
     );
   }
 
-  const casts = parentCast
-    ? [normalizedCastToFeedPost(parentCast), ...baseChain]
-    : baseChain;
+  // Root-first conversation slice ending at the cast that earned this feed
+  // slot, capped to MAX_VISIBLE_THREAD_POSTS cards by buildThreadUnit (the
+  // collapsed middle becomes one elision row).
+  const fullChain = hasChain
+    ? baseChain
+    : [...[...ancestors].reverse().map(normalizedCastToFeedPost), ...baseChain];
+  const unit = buildThreadUnit(fullChain, hasChain ? true : rootKnown);
+  const tip = fullChain[fullChain.length - 1];
+  const lastCastIndex = unit.length - 1; // buildThreadUnit always ends on the tip cast
 
   return (
     <View>
-      {casts.map((cast, i) => {
-        const isPrimary = i === 0;
-        const isLast = i === casts.length - 1;
-        const card = (
+      {unit.map((item: ThreadUnitItem, i) => {
+        if (item.kind === 'elision') {
+          // Collapsed context. Tapping opens the tip's full thread, where
+          // the whole ancestor chain is visible.
+          return (
+            <ThreadElisionRow
+              key={`elision-${i}`}
+              theme={theme}
+              onPress={() =>
+                shared.onNavigateToThread(
+                  tip.username,
+                  tip.hash,
+                  false,
+                  feedPostToCastPlaceholder(tip),
+                )
+              }
+            />
+          );
+        }
+        const cast = item.post;
+        const hasItemAbove = i > 0;
+        const hasItemBelow = i < unit.length - 1;
+        return (
           <FeedPostCard
+            key={cast.hash}
             {...shared}
             post={cast}
             likeState={likeStates.get(cast.hash)}
             recastState={recastStates.get(cast.hash)}
             followState={followStates.get(cast.authorFid)}
             authorIsApex={apexFids.has(cast.authorFid)}
+            // Thread-gutter layout: the avatar column carries the connector
+            // line between the parent's PFP and the reply's PFP.
+            threadPosition={
+              hasItemAbove && hasItemBelow
+                ? 'middle'
+                : hasItemAbove
+                  ? 'last'
+                  : 'first'
+            }
             // One continuous unit: only the last cast keeps the feed divider.
-            hideBottomBorder={!isLast}
+            hideBottomBorder={i !== lastCastIndex}
             // Tap the primary → its own thread; a nested cast → the cast above.
-            openOwnThread={isPrimary}
-            // Nested casts' parent is the card right above them, so drop the
-            // redundant inline "replying to …" preview.
-            suppressParentContext={!isPrimary}
+            openOwnThread={i === 0}
+            // Anything with a card or elision row above it already has its
+            // context on screen — drop the redundant "replying to …" preview.
+            suppressParentContext={hasItemAbove}
           />
-        );
-        // Primary is full-width; every cast below sits on the shared accent
-        // rail that marks the thread as nested (same as the thread view).
-        return isPrimary ? (
-          <View key={cast.hash}>{card}</View>
-        ) : (
-          <View
-            key={cast.hash}
-            style={{
-              borderLeftWidth: Skin.border(2),
-              borderLeftColor: theme.colors.accent,
-            }}
-          >
-            {card}
-          </View>
         );
       })}
     </View>
   );
 });
-
-/**
- * Collapse self-reply chains — a user rapidly replying to their own casts
- * (A → B → C) — into a single feed row so the thread shows once, root-first,
- * instead of as three overlapping parent/reply pairs.
- *
- * Chain members are gathered by walking `parentHash` links (they are NOT
- * guaranteed adjacent in the ranked feed) and only when consecutive casts
- * share an author. Each chain is emitted at its newest cast's (tip's) position
- * and keyed by the root, so the row's identity stays stable as the chain grows.
- * Cross-author replies are left untouched (FeedReplyCard fetches their parent).
- */
-function collapseSelfChains(posts: FeedPost[]): FeedPostWithChain[] {
-  const byHash = new Map<string, FeedPost>();
-  for (const p of posts) byHash.set(p.hash.toLowerCase(), p);
-
-  // The in-feed parent of a cast, but only when it's the same author.
-  const selfParent = (p: FeedPost): FeedPost | undefined => {
-    if (!p.parentHash) return undefined;
-    const parent = byHash.get(p.parentHash.toLowerCase());
-    return parent && parent.authorFid > 0 && parent.authorFid === p.authorFid
-      ? parent
-      : undefined;
-  };
-
-  // Casts that are the self-parent of another cast — i.e. not a chain tip.
-  const hasSelfChild = new Set<string>();
-  for (const p of posts) {
-    const parent = selfParent(p);
-    if (parent) hasSelfChild.add(parent.hash.toLowerCase());
-  }
-
-  const chainByTip = new Map<string, FeedPost[]>();
-  const absorbed = new Set<string>(); // non-tip members, hidden as their own rows
-  for (const p of posts) {
-    // Walk up only from a tip: a self-reply with no self-reply of its own.
-    if (!selfParent(p) || hasSelfChild.has(p.hash.toLowerCase())) continue;
-    const chain: FeedPost[] = [p];
-    let cur: FeedPost | undefined = p;
-    let parent: FeedPost | undefined;
-    // Cap guards against a pathological/cyclic parentHash graph.
-    while ((parent = selfParent(cur)) && chain.length < 64) {
-      chain.push(parent);
-      absorbed.add(parent.hash.toLowerCase());
-      cur = parent;
-    }
-    chain.reverse(); // root → tip
-    chainByTip.set(p.hash.toLowerCase(), chain);
-  }
-
-  if (chainByTip.size === 0) return posts;
-
-  const result: FeedPostWithChain[] = [];
-  for (const p of posts) {
-    const key = p.hash.toLowerCase();
-    if (absorbed.has(key)) continue; // shown inside its chain's row
-    const chain = chainByTip.get(key);
-    // Emit at the tip's position, but adopt the root's identity/fields.
-    result.push(chain ? { ...chain[0], __chain: chain } : p);
-  }
-  return result;
-}
 
 // Navigation stack types
 type NavScreen =
@@ -8023,6 +8063,52 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     },
     mediaContainer: {
       marginHorizontal: Skin.space(-16),
+    },
+    /** Inside a thread unit the body sits beside the avatar gutter, so media
+     *  can't bleed edge-to-edge without crossing the connector line. */
+    mediaContainerFlush: {
+      marginHorizontal: 0,
+    },
+    // --- Thread-gutter layout (stacked feed units) ---
+    threadRow: {
+      flexDirection: 'row',
+    },
+    threadGutter: {
+      width: 44,
+      alignItems: 'center',
+      alignSelf: 'stretch',
+    },
+    threadAvatarContainer: {
+      position: 'relative',
+    },
+    threadBody: {
+      flex: 1,
+      minWidth: 0,
+      marginLeft: Skin.space(12),
+      gap: Skin.space(10),
+    },
+    threadHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    /** Vertical avatar-to-avatar connector. Stubs extend through the card's
+     *  top/bottom padding (negative offsets) so adjacent cards in one unit —
+     *  whose divider is dropped — read as a single continuous line from the
+     *  parent's PFP to the reply's PFP. */
+    threadLine: {
+      position: 'absolute',
+      width: Skin.border(2),
+      borderRadius: Skin.border(1),
+      backgroundColor: theme.colors.surface4,
+      left: (44 - Skin.border(2)) / 2,
+    },
+    threadLineAbove: {
+      top: -Skin.space(12), // through paddingTop, from the card's top edge
+      height: Skin.space(12),
+    },
+    threadLineBelow: {
+      top: 44 + Skin.space(4), // just under the avatar
+      bottom: -Skin.space(14), // through paddingBottom, to the card's bottom edge
     },
     postMedia: {
       backgroundColor: theme.colors.surface3,
