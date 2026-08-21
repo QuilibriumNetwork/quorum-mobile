@@ -5,7 +5,7 @@ status: in-progress
 priority: high
 ai_generated: true
 created: 2026-08-16
-updated: 2026-08-16
+updated: 2026-08-21
 area: "Identity resolution / React Query persistence / security TTL"
 ---
 
@@ -23,6 +23,35 @@ confirmation**, which is why it stays in the root of `issues/` rather than
 Close this file when that box is ticked. It is the only fix on the branch with
 no device observation behind it, and it is a crash, so the asymmetry favours
 leaving it visible.
+
+**2026-08-21 — the crash class is now retired structurally, and the guard this
+issue shipped is gone.** Adopting shared's QNS transport
+(`2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md`) changed
+the records container from a `Map` to the plain object `resolveNamesBatch`
+returns. The persisted value on every affected device is `{}`, which under the
+new container is not a broken shape needing rescue — it is a readable, EMPTY set
+of records meaning "nothing verified", which is the correct fail-closed answer.
+There is no `.get` call left anywhere on the path, so `records.get is not a
+function` has nowhere to come from.
+
+The `data instanceof Map` guard was therefore replaced by a plain-object check.
+MEASURED, not assumed: restoring `.get()`-style access makes all four cases in
+`claimRecordsSurviveRehydration.test.tsx` fail with the original error, so that
+file still pins the regression.
+
+The device box above stays UNTICKED — nobody has opened the affected channel on
+a build — but what it would confirm has changed. It is no longer "did the guard
+catch it", it is "does the retired crash stay retired", and the failure mode if
+it were somehow wrong is now a missing `.q` rather than a crash.
+
+⚠️ Related, and the more important half: the same swap silently removed an
+ACCIDENTAL protection elsewhere. A `Map` could not survive JSON, so these
+records could never be persisted even if the dehydrate exclusion in
+`app/_layout.tsx` were deleted; a plain object round-trips perfectly. That
+exclusion is now load-bearing and alone. It has been extracted to
+`services/offline/shouldPersistQuery.ts` and pinned by
+`__tests__/claimRecordsAreNeverPersisted.test.ts` — see the transport issue for
+why deleting it would produce a symptomless 24-hour impersonation window.
 
 **Fixed in `bee33ec`. Unit-proven.**
 
@@ -92,6 +121,14 @@ Both halves are load-bearing:
 Do not remove the guard on the grounds that the query is no longer persisted.
 That reintroduces the crash for exactly the users who already hit it.
 
+> ⚠️ SUPERSEDED 2026-08-21 — see `## Status`. Half of this section is now
+> history rather than instruction. The `instanceof Map` guard in (1) no longer
+> exists: the records are a plain object, so the legacy `{}` needs no rescue and
+> the crash class is retired at the source. The exclusion in (2) is unchanged
+> and MORE important than this section implies — it used to be backed up by the
+> `Map` being unpersistable, and it no longer is. It now lives in
+> `services/offline/shouldPersistQuery.ts`, not inline in `app/_layout.tsx`.
+
 ## Sweep for the same class
 
 READ 2026-08-16. `qns-verify-claims` is the only instance in mobile:
@@ -117,4 +154,4 @@ persists over a filter that removes known-bad keys one crash at a time.
 
 ---
 
-*Last updated: 2026-08-16*
+*Last updated: 2026-08-21*

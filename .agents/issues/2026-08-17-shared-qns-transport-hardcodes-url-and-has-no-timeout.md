@@ -1,7 +1,7 @@
 ---
 type: task
 title: "Let shared's QNS transport carry a base URL and a timeout — desktop has neither"
-status: open
+status: in-progress
 priority: medium
 complexity: small
 created: 2026-08-17
@@ -18,9 +18,10 @@ related:
 
 ## Status
 
-**The shared half shipped 2026-08-17 as quorum-shared PR #83** (`5bd3461`). The
-issue stays open because the mobile migration — the last two steps — has not
-been done, and closing it would make that work invisible.
+Both halves are implemented. The issue stays open only until the mobile branch
+is merged.
+
+**The shared half shipped 2026-08-17 as quorum-shared PR #83** (`5bd3461`).
 
 What landed: `QnsRequestOptions` (`signal`, `baseUrl`, `timeoutMs`) on both
 entry points, a per-request deadline composed with the caller's signal, and
@@ -47,15 +48,72 @@ Verified: 683 tests in shared, 15/15 deliberate mutations caught, built artifact
 smoke-tested on real timers, desktop at 0 typecheck errors with 288 identity
 tests passing.
 
-**Remaining:** the mobile migration only. Shared has shipped and mobile is
-bumped — `2.1.0-45` (commit `bff5cfa` on `master`) carries the whole transport:
-`QnsRequestOptions` with `signal`, `baseUrl` and `timeoutMs` at
-`dist/qns/transport.d.ts:69,80,96`, `timeoutMs` opting out via the literal
-`'none'` exactly as described above. **So this issue is no longer blocked on a
-release.** What is left is swapping `resolveClaimedNames` for
-`resolveNamesBatch`, passing mobile's configured base URL, and deleting mobile's
-chunk loop — with the container swap called out under "Watch out for", which
-lands in that same change.
+**The mobile migration landed 2026-08-21** on `qns/adopt-shared-transport`
+(`9ebde48`, `f620750`). Both halves are now done and every box below is ticked.
+
+What landed on mobile:
+
+- `resolveClaimedNames` moved to `services/api/qnsClient.ts` as a thin call into
+  `resolveNamesBatch`, passing the `EXPO_PUBLIC_QNS_API_URL`-aware base URL. The
+  deadline is left to shared's default, which is the same 30s this client always
+  used — passing it explicitly would pin the number in a second place.
+- Mobile's chunk-and-re-zip loop is deleted. Its tests went with it, replaced by
+  a note saying where that coverage now lives; keying by name leaves no position
+  left to misalign.
+- The container swap (`Map` → plain object) went through
+  `stripUnverifiedNames`, `stripUnverifiedNamesInMap`, `settleClaim`,
+  `NO_RECORDS` and `identityProvider`.
+- React Query's `signal` is now passed too, in a SEPARATE commit behind its own
+  cancellation test — see "The signal was held back on purpose" below.
+
+Verified: 127 suites / 1189 tests green, no new `tsc` or `eslint` problems
+against `master` (both baselines measured, not assumed — `master` already fails
+`tsc` in 4 unrelated files and carries 302 eslint errors).
+
+### The finding worth remembering: an accidental guard was removed
+
+The `Map` → plain-object swap quietly deleted a second line of defence, and this
+was the real risk in the change rather than anything about the transport.
+
+`useClaimRecords`' `staleTime` is a security bound — the window in which a name
+transferred away keeps verifying under its previous owner. One hour. The
+persister's `maxAge` is 24 hours, so these answers must never reach disk.
+`app/_layout.tsx` excluded them, and its comment gave TWO reasons: the security
+one, and "it cannot survive the trip anyway" because `JSON.stringify(new Map())`
+is `{}`.
+
+The second reason is now false. A plain object round-trips perfectly. So the
+exclusion went from belt-and-braces to load-bearing, and **nothing tested it** —
+deleting that line would have produced a working, symptomless, 24-hour
+impersonation window.
+
+Fixed in the same change: the rule is extracted to
+`services/offline/shouldPersistQuery.ts` with the obsolete reason removed, and
+pinned by `__tests__/claimRecordsAreNeverPersisted.test.ts`. MEASURED: removing
+the exclusion turns 2 of its 5 cases red.
+
+### The signal was held back on purpose
+
+The proposal's `signal` is small value with an outsized failure mode: this
+hook's fail-closed rule carries a previous answer forward only from a query that
+SUCCEEDED, and a cancellation is a third state nobody had measured. Shipping it
+on reasoning would have risked a stale `.q` rendering invisibly for an hour.
+
+So it went in second, behind
+`__tests__/claimRecordsAbortSupersededLookup.test.tsx`. MEASURED: React Query
+treats cancellation as a REVERT, not a failure — a lookup that never succeeded
+stays `pending` with no data and has nothing to carry. Dropping the signal turns
+3 of that file's 5 cases red, which also pins the wiring, since React Query only
+cancels a fetch whose `queryFn` consumed the signal.
+
+### One assertion that could not be made to fail, labelled as such
+
+`isClaimRecords` excludes a `Map`. MEASURED: deleting that clause changes
+nothing observable, because a `Map` read with `records[name]` misses every key
+and already degrades to "nothing verified". The clause stays for type honesty
+(without it tsc would believe a `Map` is a `QnsBatchResult`), and both the code
+and the test now say plainly that it is not covered — so nobody later reads the
+green test as proof it does something.
 
 ## What & why
 
@@ -128,7 +186,7 @@ request.
 - [x] Give `timeoutMs` a bounded default and test that a hung fetch rejects
 - [x] Test that a caller-supplied signal and the internal deadline both abort
 - [x] Publish, then bump desktop and confirm it inherits the timeout — shared published; mobile pins `2.1.0-45`. Desktop links shared locally, so it already had it.
-- [ ] Bump mobile, swap `resolveClaimedNames` for `resolveNamesBatch` passing
+- [x] Bump mobile, swap `resolveClaimedNames` for `resolveNamesBatch` passing
       mobile's configured base URL, and delete mobile's chunk loop
 
 ## Watch out for
@@ -151,9 +209,9 @@ deleting it; it should still prove the rehydrated shape cannot promote a claim.
 ## Definition of done
 
 - [x] Desktop's claim lookup cannot hang indefinitely
-- [ ] Both clients resolve QNS through one transport, with mobile's base URL
+- [x] Both clients resolve QNS through one transport, with mobile's base URL
       honoured on mobile
-- [ ] Mobile has no chunk-and-zip loop of its own
+- [x] Mobile has no chunk-and-zip loop of its own
 - [x] No behaviour change on the happy path in either client
 
 ## Out of scope
