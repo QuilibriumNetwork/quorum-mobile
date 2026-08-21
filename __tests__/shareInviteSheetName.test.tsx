@@ -122,7 +122,7 @@ jest.mock('react-native-safe-area-context', () => ({
 // `mock`-prefixed so the jest.mock factories below (hoisted above these
 // declarations) may close over them, per the convention those two files use.
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -131,7 +131,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 }));
 
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 // `claimedNameBelongsTo` (from `@quilibrium/quorum-shared`) is deliberately NOT
@@ -191,14 +191,14 @@ describe('ShareInviteSheet — the contact picker resolves names', () => {
     // impersonation test reuses this SAME record: KEY derives to PARTNER only,
     // so the identical record fails to verify against IMPOSTOR without any
     // change to this mock.
-    mockResolveBatch = jest.fn().mockResolvedValue([
-      {
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({
+      alice: {
         header: { authorityKey: '0xabc', name: 'alice', parent: null, createdAt: 0, updatedAt: 0 },
         address: '0xrecord',
         resolveKey: KEY,
         metadata: null,
       },
-    ]);
+    });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
 

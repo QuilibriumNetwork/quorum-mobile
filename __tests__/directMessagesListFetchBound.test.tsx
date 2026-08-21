@@ -34,7 +34,7 @@ import type { Conversation } from '@/hooks/chat';
 const TOTAL = 60;
 
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -43,7 +43,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 }));
 
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -77,7 +77,7 @@ let queryClient: QueryClient;
 describe('DirectMessagesList — bounded fetch fan-out', () => {
   beforeEach(() => {
     mockGetPublicProfile = jest.fn().mockResolvedValue(null);
-    mockResolveBatch = jest.fn().mockResolvedValue([]);
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({});
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
 

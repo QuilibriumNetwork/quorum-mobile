@@ -51,7 +51,7 @@ const KEY =
 const SPACE_ID = 'space-1';
 
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -60,7 +60,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 }));
 
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -116,14 +116,14 @@ beforeEach(() => {
     timestamp: 0,
     signature: '',
   });
-  mockResolveBatch = jest.fn().mockResolvedValue([
-    {
+  mockResolveClaimedNames = jest.fn().mockResolvedValue({
+    alice: {
       header: { authorityKey: '0xabc', name: 'alice', parent: null, createdAt: 0, updatedAt: 0 },
       address: '0xrecord',
       resolveKey: KEY,
       metadata: null,
     },
-  ]);
+  });
 });
 
 afterEach(() => {

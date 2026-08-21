@@ -48,7 +48,7 @@ const KEY =
 const IMPOSTOR = 'QmThemThemThemThemThemThemThemThemThemThemThem';
 
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -56,7 +56,7 @@ jest.mock('@/services/api/quorumClient', () => ({
   }),
 }));
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 // `claimedNameBelongsTo` is deliberately NOT mocked — see the file header.
@@ -114,14 +114,14 @@ describe('UnifiedProfileHeader (QuorumOnlyHeader) — own name resolves through 
       timestamp: 0,
       signature: '',
     });
-    mockResolveBatch = jest.fn().mockResolvedValue([
-      {
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({
+      gatto: {
         header: { authorityKey: '0xabc', name: 'gatto', parent: null, createdAt: 0, updatedAt: 0 },
         address: '0xrecord',
         resolveKey: KEY,
         metadata: null,
       },
-    ]);
+    });
 
     renderHeader(user, { [TARGET]: 'GattoPardo Mobile' });
 
@@ -143,14 +143,14 @@ describe('UnifiedProfileHeader (QuorumOnlyHeader) — own name resolves through 
       timestamp: 0,
       signature: '',
     });
-    mockResolveBatch = jest.fn().mockResolvedValue([
-      {
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({
+      gatto: {
         header: { authorityKey: '0xabc', name: 'gatto', parent: null, createdAt: 0, updatedAt: 0 },
         address: '0xrecord',
         resolveKey: KEY,
         metadata: null,
       },
-    ]);
+    });
 
     renderHeader(user, { [IMPOSTOR]: 'GattoPardo Mobile' });
 
@@ -165,7 +165,7 @@ describe('UnifiedProfileHeader (QuorumOnlyHeader) — own name resolves through 
     // trip, can have produced it this fast.
     const user = baseUser({ displayName: 'GattoPardo Mobile' });
     mockGetPublicProfile = jest.fn(() => new Promise(() => {}));
-    mockResolveBatch = jest.fn(() => new Promise(() => {}));
+    mockResolveClaimedNames = jest.fn(() => new Promise(() => {}));
 
     renderHeader(user, { [TARGET]: 'GattoPardo Mobile' });
 

@@ -35,7 +35,7 @@ const KEY =
   '030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b';
 
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 let mockGetUserByFarcasterFid: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
@@ -46,7 +46,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 }));
 
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 // `claimedNameBelongsTo` is deliberately NOT mocked — same reasoning as
@@ -104,14 +104,14 @@ beforeEach(() => {
     signature: '',
     } : null,
   );
-  mockResolveBatch = jest.fn().mockResolvedValue([
-    {
+  mockResolveClaimedNames = jest.fn().mockResolvedValue({
+    alice: {
       header: { authorityKey: '0xabc', name: 'alice', parent: null, createdAt: 0, updatedAt: 0 },
       address: '0xrecord',
       resolveKey: KEY,
       metadata: null,
     },
-  ]);
+  });
   // Default: this fid has no linked Quorum identity — the common case, and
   // what the endpoint answers with for most Farcaster users.
   mockGetUserByFarcasterFid = jest.fn().mockResolvedValue(null);

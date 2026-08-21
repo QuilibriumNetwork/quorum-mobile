@@ -51,7 +51,7 @@ const KEY =
   '030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b';
 
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -60,7 +60,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 }));
 
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -124,7 +124,9 @@ describe('DirectMessagesList — no placeholder, no hand-rolled truncation', () 
   beforeEach(() => {
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     mockGetPublicProfile = jest.fn().mockResolvedValue(publicProfile({ primary_username: 'alice' }));
-    mockResolveBatch = jest.fn().mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({
+      alice: nameRecord(),
+    });
   });
 
   afterEach(() => {
@@ -143,7 +145,7 @@ describe('DirectMessagesList — no placeholder, no hand-rolled truncation', () 
     // has something to say: a published profile with a global display name.
     // The old code's own `|| 'Unknown'` could not see that; the resolver can.
     mockGetPublicProfile.mockResolvedValue(publicProfile({ primary_username: undefined }));
-    mockResolveBatch.mockResolvedValue([]);
+    mockResolveClaimedNames.mockResolvedValue({});
 
     renderRows([conversation()]);
 
@@ -155,7 +157,7 @@ describe('DirectMessagesList — no placeholder, no hand-rolled truncation', () 
     // No public profile at all (a legitimate "no profile" answer, not a
     // pending fetch) and no claim to verify.
     mockGetPublicProfile.mockResolvedValue(null);
-    mockResolveBatch.mockResolvedValue([]);
+    mockResolveClaimedNames.mockResolvedValue({});
 
     renderRows([conversation()]);
 

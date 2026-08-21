@@ -64,7 +64,7 @@ jest.mock('expo-router', () => ({
 }));
 
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -72,7 +72,7 @@ jest.mock('@/services/api/quorumClient', () => ({
   }),
 }));
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 // `claimedNameBelongsTo` is deliberately NOT mocked — see the file header.
@@ -115,14 +115,14 @@ describe('HeaderAvatar — own initials resolve through the verified ladder', ()
       timestamp: 0,
       signature: '',
     });
-    mockResolveBatch = jest.fn().mockResolvedValue([
-      {
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({
+      gatto: {
         header: { authorityKey: '0xabc', name: 'gatto', parent: null, createdAt: 0, updatedAt: 0 },
         address: '0xrecord',
         resolveKey: KEY,
         metadata: null,
       },
-    ]);
+    });
 
     renderAvatar({ [TARGET]: 'GattoPardo Mobile' });
 
@@ -147,14 +147,14 @@ describe('HeaderAvatar — own initials resolve through the verified ladder', ()
       timestamp: 0,
       signature: '',
     });
-    mockResolveBatch = jest.fn().mockResolvedValue([
-      {
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({
+      gatto: {
         header: { authorityKey: '0xabc', name: 'gatto', parent: null, createdAt: 0, updatedAt: 0 },
         address: '0xrecord',
         resolveKey: KEY,
         metadata: null,
       },
-    ]);
+    });
 
     renderAvatar({ [IMPOSTOR]: 'GattoPardo Mobile' });
 
@@ -169,7 +169,7 @@ describe('HeaderAvatar — own initials resolve through the verified ladder', ()
     // no round trip, can have produced it this fast.
     mockUser = { address: TARGET, displayName: 'GattoPardo Mobile' };
     mockGetPublicProfile = jest.fn(() => new Promise(() => {}));
-    mockResolveBatch = jest.fn(() => new Promise(() => {}));
+    mockResolveClaimedNames = jest.fn(() => new Promise(() => {}));
 
     renderAvatar({ [TARGET]: 'GattoPardo Mobile' });
 
@@ -180,7 +180,7 @@ describe('HeaderAvatar — own initials resolve through the verified ladder', ()
   it('shows the neutral placeholder, not an address-derived initial, when no tier has a name', async () => {
     mockUser = { address: TARGET };
     mockGetPublicProfile = jest.fn().mockResolvedValue(null);
-    mockResolveBatch = jest.fn().mockResolvedValue([]);
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({});
 
     renderAvatar({});
 

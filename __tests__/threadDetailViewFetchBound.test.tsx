@@ -171,7 +171,7 @@ jest.mock('quorum-translation', () => ({
 }));
 
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -184,7 +184,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 // only so importing the real identityProvider module graph resolves, same
 // convention as shareInviteSheetFetchBound.test.tsx.
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 import { ThreadDetailView } from '@/components/SocialFeed/views/ThreadDetailView';
@@ -194,7 +194,7 @@ let queryClient: QueryClient;
 describe('ThreadDetailView — bounded fetch fan-out', () => {
   beforeEach(() => {
     mockGetPublicProfile = jest.fn().mockResolvedValue(null);
-    mockResolveBatch = jest.fn().mockResolvedValue([]);
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({});
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
 

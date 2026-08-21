@@ -38,8 +38,8 @@
 import { createBot, type MobileBot } from './bot';
 import { awaitPeer, publish, type Role } from './rendezvous';
 import { claimedNameBelongsTo } from '@quilibrium/quorum-shared';
-import { resolveClaimedNames, stripUnverifiedNames } from '@/hooks/useVerifiedQnsNames';
-import { resolveBatch } from '@/services/api/qnsClient';
+import { stripUnverifiedNames } from '@/hooks/useVerifiedQnsNames';
+import { resolveClaimedNames } from '@/services/api/qnsClient';
 
 const SETTLE_MS = Number(process.env.HARNESS_SETTLE_MS ?? 25_000);
 
@@ -128,8 +128,8 @@ maybe(`qns-claim-two-bot (role ${ROLE} — production relay)`, () => {
 
         // (2) REJECTION, against the REAL resolver over the network — not a
         // mock. A is not the owner of this name, so the claim must not survive.
-        const records = await resolveClaimedNames([CLAIMED_NAME], resolveBatch);
-        expect(claimedNameBelongsTo(records.get(CLAIMED_NAME), theirs.address)).toBe(false);
+        const records = await resolveClaimedNames([CLAIMED_NAME]);
+        expect(claimedNameBelongsTo(records[CLAIMED_NAME], theirs.address)).toBe(false);
 
         // And end to end: the row, run through the same strip the surfaces use,
         // must come back with nothing to render as a `.q`.

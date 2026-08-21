@@ -34,7 +34,6 @@ jest.mock('react-native-mmkv', () => ({
 
 import {
   claimedNamesIn,
-  resolveClaimedNames,
   stripUnverifiedNames,
   stripUnverifiedNamesInMap,
   QNS_BATCH_LIMIT,
@@ -112,112 +111,36 @@ describe('claimedNamesIn', () => {
   });
 });
 
-describe('resolveClaimedNames', () => {
-  it('chunks at the limit the API actually enforces', () => {
+describe('QNS_BATCH_LIMIT', () => {
+  it('is the limit the API actually enforces', () => {
     // Asserted as a literal on purpose. Every other test here derives from the
     // constant, so they would all stay green if it were changed to the wrong
-    // value — and the wrong value means a 400 that loses every name on screen.
-    // 100 is MEASURED against production, not read from a doc.
+    // value — and the wrong value means a 400 that loses every name on screen,
+    // not just the excess. 100 is MEASURED against production, not read from a
+    // doc.
     expect(QNS_BATCH_LIMIT).toBe(100);
-  });
-
-  it('issues no request at all when there is nothing to resolve', async () => {
-    const batch = jest.fn();
-    const out = await resolveClaimedNames([], batch);
-    expect(batch).not.toHaveBeenCalled();
-    expect(out.size).toBe(0);
-  });
-
-  it('resolves a screenful in a single request', async () => {
-    const batch = jest.fn(async (names: string[]) => names.map((n) => rec({ header: { name: n } })));
-    const out = await resolveClaimedNames(['alice', 'bob'], batch);
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(batch).toHaveBeenCalledWith(['alice', 'bob']);
-    expect(out.size).toBe(2);
-  });
-
-  it('chunks at the API limit instead of sending one oversized request', async () => {
-    // 101 names is a 400 for the WHOLE request, not a truncated answer — so
-    // getting this wrong loses every name on the screen, not just the excess.
-    // Never exercised by hand, and only reachable in the largest spaces.
-    const names = Array.from({ length: QNS_BATCH_LIMIT + 1 }, (_, i) => `name${i}`);
-    const batch = jest.fn(async (chunk: string[]) => chunk.map(() => null));
-    await resolveClaimedNames(names, batch);
-    expect(batch).toHaveBeenCalledTimes(2);
-    expect(batch.mock.calls[0][0]).toHaveLength(QNS_BATCH_LIMIT);
-    expect(batch.mock.calls[1][0]).toHaveLength(1);
-  });
-
-  it('keeps names aligned with their records across a chunk boundary', async () => {
-    // Positional mapping is the failure that would verify one person's claim
-    // against another person's record. Worth an explicit assertion.
-    const names = Array.from({ length: QNS_BATCH_LIMIT + 2 }, (_, i) => `name${i}`);
-    const batch = async (chunk: string[]) => chunk.map((n) => rec({ header: { name: n } }));
-    const out = await resolveClaimedNames(names, batch);
-    expect(out.get('name0')?.header.name).toBe('name0');
-    expect(out.get(`name${QNS_BATCH_LIMIT}`)?.header.name).toBe(`name${QNS_BATCH_LIMIT}`);
-    expect(out.get(`name${QNS_BATCH_LIMIT + 1}`)?.header.name).toBe(`name${QNS_BATCH_LIMIT + 1}`);
-  });
-
-  it('rejects when the resolver fails, rather than reporting nobody as an owner', async () => {
-    // This used to resolve to an empty map, and that was a caching bug wearing
-    // fail-closed's clothing.
-    //
-    // The visible behaviour is the same either way — no records, so nothing
-    // verifies, so no `.q` renders. The difference is what React Query does
-    // with the answer. An empty map is a SUCCESS, so with `staleTime: 1h` a
-    // single transient blip pins "nobody owns anything" for an hour and strips
-    // the suffix from every legitimate owner for that hour. A rejection caches
-    // nothing, so the next mount refetches.
-    //
-    // Fail-closed on the NAME is still honoured, and still matters: the throw
-    // is owned by React Query, and `useClaimRecords` degrades to `NO_RECORDS`
-    // rather than letting it reach a render. An outage degrades names; it never
-    // takes down the surface rendering them.
-    await expect(
-      resolveClaimedNames(['alice'], async () => {
-        throw new Error('offline');
-      }),
-    ).rejects.toThrow('offline');
-  });
-
-  it('refuses a response with fewer records than names, instead of padding', async () => {
-    // Positional alignment is the ONLY thing tying a record to a name. Padding
-    // the shortfall with nulls — which is what this did before — silently
-    // mis-pairs everything after the first divergence, judging one account's
-    // claim against another account's key. That is the impersonation the whole
-    // feature exists to prevent, so the response is refused whole.
-    await expect(
-      resolveClaimedNames(['alice', 'bob'], async () => [rec()]),
-    ).rejects.toThrow(/1 records for 2 names/);
-  });
-
-  it('refuses a response with more records than names', async () => {
-    await expect(
-      resolveClaimedNames(['alice'], async () => [rec(), rec()]),
-    ).rejects.toThrow(/2 records for 1 names/);
-  });
-
-  it('refuses a response that is not an array at all', async () => {
-    // `resolveBatch` returns `body.records` unchecked, so a body missing the
-    // field arrives here as `undefined`. Reading `.length` off that would throw
-    // a TypeError instead of a diagnosable message.
-    await expect(
-      resolveClaimedNames(['alice'], async () => undefined as unknown as null[]),
-    ).rejects.toThrow(/no records for 1 names/);
-  });
-
-  it('still accepts a null slot for a name nobody has registered', async () => {
-    // The ordinary not-found case is a `null` SLOT at HTTP 200, not a short
-    // array — so the guard above must not mistake it for a misaligned response.
-    const out = await resolveClaimedNames(['alice', 'nobody'], async () => [rec(), null]);
-    expect(out.get('alice')).not.toBeNull();
-    expect(out.get('nobody')).toBeNull();
   });
 });
 
+// The transport tests that used to sit here are GONE ON PURPOSE, not lost.
+//
+// They covered a chunk-and-re-zip loop this repo owned: splitting at the limit,
+// keeping a name aligned with its record across a chunk boundary, refusing a
+// response with the wrong number of records, rejecting rather than reporting
+// everybody unresolved. That loop was deleted when the claim lookup moved to
+// `resolveNamesBatch` in `@quilibrium/quorum-shared`, which both clients now
+// share — so those behaviours are shared's to test, and it does.
+//
+// Keeping mobile-side copies would have meant asserting on another package's
+// internals through a function this repo no longer has, and the alignment
+// property they existed to protect is now structural rather than defended:
+// shared returns records KEYED BY NAME, so there is no position left to get
+// wrong. What remains mobile's own — the dedupe, the cap, the strip rules — is
+// still tested above and below.
+
+
 describe('stripUnverifiedNames', () => {
-  const verified = new Map([['alice', rec()]]);
+  const verified = { alice: rec() };
 
   it('keeps a claim that resolves to the claimant', () => {
     const rows = [{ address: ADDRESS, primary_username: 'alice' }];
@@ -240,12 +163,12 @@ describe('stripUnverifiedNames', () => {
     // rendered for even the instant before a lookup lands is the attack: a
     // screenshot of that instant does not expire.
     const rows = [{ address: ADDRESS, primary_username: 'alice' }];
-    expect(stripUnverifiedNames(rows, new Map())[0].primary_username).toBeUndefined();
+    expect(stripUnverifiedNames(rows, {})[0].primary_username).toBeUndefined();
   });
 
   it('strips a claim the resolver returned nothing for', () => {
     const rows = [{ address: ADDRESS, primary_username: 'ghost' }];
-    expect(stripUnverifiedNames(rows, new Map([['ghost', null]]))[0].primary_username).toBeUndefined();
+    expect(stripUnverifiedNames(rows, { ghost: null })[0].primary_username).toBeUndefined();
   });
 
   it('settles a collision in favour of the real holder only', () => {
@@ -262,7 +185,7 @@ describe('stripUnverifiedNames', () => {
 
   it('leaves rows that never claimed anything completely alone', () => {
     const rows = [{ address: ADDRESS, global_display_name: 'Nobody' }];
-    expect(stripUnverifiedNames(rows, new Map())).toBe(rows);
+    expect(stripUnverifiedNames(rows, {})).toBe(rows);
   });
 
   it('returns the SAME array when nothing needed stripping', () => {
@@ -279,7 +202,7 @@ describe('stripUnverifiedNamesInMap', () => {
   // The chat surfaces carry members as a keyed record rather than an array —
   // messages, mentions, reactions and the call screens all read that one map,
   // so this is the shape that covers the most ground.
-  const verified = new Map([['alice', rec()]]);
+  const verified = { alice: rec() };
 
   it('strips a claim belonging to somebody else, keeping the key', () => {
     const map: Record<
@@ -305,7 +228,7 @@ describe('stripUnverifiedNamesInMap', () => {
 
   it('returns the SAME map when nobody claims anything', () => {
     const map = { [ADDRESS]: { address: ADDRESS } };
-    expect(stripUnverifiedNamesInMap(map, new Map())).toBe(map);
+    expect(stripUnverifiedNamesInMap(map, {})).toBe(map);
   });
 
   it('lets an exemption keep a claim the real resolver would reject', () => {
@@ -315,7 +238,7 @@ describe('stripUnverifiedNamesInMap', () => {
     // seam the instrument would inject names, verification would strip every
     // one, and the panel would look broken while reporting success.
     const map = { [OTHER]: { address: OTHER, primary_username: 'qafake' } };
-    const out = stripUnverifiedNamesInMap(map, new Map(), (n, a) => n === 'qafake' && a === OTHER);
+    const out = stripUnverifiedNamesInMap(map, {}, (n, a) => n === 'qafake' && a === OTHER);
     expect(out[OTHER].primary_username).toBe('qafake');
   });
 
@@ -360,7 +283,7 @@ describe('stripUnverifiedNamesInMap', () => {
   it('leaves a broadcast claim inert while its lookup is in flight', () => {
     const out = stripUnverifiedNamesInMap(
       asMap({ address: ADDRESS, claimed_primary_username: 'alice' }),
-      new Map(),
+      {},
     );
     expect(out[ADDRESS].primary_username).toBeUndefined();
   });

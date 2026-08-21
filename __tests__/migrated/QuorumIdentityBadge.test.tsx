@@ -56,7 +56,7 @@ const IMPOSTOR = 'QmThemThemThemThemThemThemThemThemThemThemThem';
 // identityProviderVerification.test.tsx and shareInviteSheetName.test.tsx.
 let mockGetUserByFarcasterFid: jest.Mock;
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -72,7 +72,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 }));
 
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 // `claimedNameBelongsTo` (from `@quilibrium/quorum-shared`) is deliberately NOT
@@ -133,7 +133,9 @@ describe('QuorumIdentityBadge — the .q comes only from a verified claim', () =
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     mockGetUserByFarcasterFid = jest.fn().mockResolvedValue(linkedIdentity());
     mockGetPublicProfile = jest.fn().mockResolvedValue(publicProfile());
-    mockResolveBatch = jest.fn().mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({
+      alice: nameRecord(),
+    });
   });
 
   afterEach(() => {
