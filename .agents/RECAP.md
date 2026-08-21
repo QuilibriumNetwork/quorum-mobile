@@ -1,12 +1,12 @@
 ---
 type: recap
 title: "Quorum Mobile — Project State"
-updated: 2026-08-20
+updated: 2026-08-21
 ---
 
 # Quorum Mobile — Project State
 
-> Last updated: 2026-08-20
+> Last updated: 2026-08-21
 
 ## Dashboard
 
@@ -24,7 +24,7 @@ updated: 2026-08-20
 | 4 | [A member's profile shows somebody else's Farcaster account](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md) | Two members' identities are mixed in storage, and the UI offers to open the wrong person's external profile. |
 | 5 | [Messages DB refuses to open on identity mismatch](issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md) | The user sees empty chats and is told nothing. Indistinguishable from having lost their history. **The trigger that made this reachable in normal use shipped as #258**, so what is left is the guard itself: it trusts a boolean flag rather than the file, and cannot count rows in a file it cannot decrypt. |
 | 6 | [The signing-key cache can outlive its identity](issues/.open/2026-08-18-signing-key-cache-can-outlive-the-identity-it-belongs-to.md) | Same defect #258 just fixed on the encryption key, on the Ed448 signing key. No consumer path reaches it today — every one is gated behind being authenticated — so it is latent rather than live. Filed low, but it sits in key handling, and "unreachable today" is one refactor from reachable. |
-| 7 | [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md) | **Half shipped 2026-08-17 (quorum-shared #83), so the urgent part is gone** — desktop's claim lookup can no longer hang. What is left is mobile-side cleanup and is not blocking anything: publish shared, bump, then retire mobile's own chunk-and-zip loop. Mobile imports none of those entry points today, so the bump is inert for QNS; the better reason to do it is that `2.1.0-43` predates #82's log-redaction fix. |
+| 7 | [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md) | **Half shipped 2026-08-17 (quorum-shared #83), so the urgent part is gone** — desktop's claim lookup can no longer hang. **The publish-and-bump step is now done too**: mobile pins `2.1.0-45` as of 2026-08-21, which carries `QnsRequestOptions` (`signal`, `baseUrl`, `timeoutMs`) and #82's log-redaction fix. So this is no longer gated on anything — what is left is purely mobile-side, swapping `resolveClaimedNames` for `resolveNamesBatch` and retiring the chunk-and-zip loop, which drags the `Map`-to-object container swap along with it. |
 
 ### Nearly done — needs a check
 
@@ -43,7 +43,6 @@ updated: 2026-08-20
 - [DM frames undecryptable, mobile to desktop](issues/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md) — the remaining root causes are node-side. DM send and handshake code is deliberately frozen; see Standing caveats.
 - [Remaining TypeScript errors needing lead review](issues/.open/2026-06-15-noble-v2-api-mismatch.md) — 23 errors left untouched on purpose; crypto, native-module and messaging territory.
 - [Space-manifest sync architecture](issues/.deferred/2026-06-13-space-manifest-sync-architecture-improvement.md) — whole-object last-write-wins clobbers concurrent edits. Awaiting a lead decision on merge granularity.
-- [Drop the local StoredMessage shim](issues/.open/2026-08-20-drop-the-local-storedmessage-shim-once-shared-publishes.md) — **new 2026-08-20.** PR #264 declared a shared type locally so this repo could ship without waiting on a quorum-shared release. Gated on that release: the field is in shared `master` but this repo pins a published version that predates it. Small and mechanical once unblocked, and the issue carries a one-line check for whether the gate has lifted.
 
 _Full list of every issue: [INDEX.md](INDEX.md)._
 
@@ -152,4 +151,4 @@ Things that are true across the whole backlog and are recorded in no single issu
 
 ---
 
-_Last updated: 2026-08-17_
+_Last updated: 2026-08-21_

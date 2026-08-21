@@ -27,7 +27,6 @@ import { getDeviceKeyset, getPrivateKey, getPublicKey } from '@/services/onboard
 import { deriveAddress } from '@/services/onboarding/keyService';
 import { logger, queryKeys, bytesToHex, hexToBytes, type InitializationEnvelope } from '@quilibrium/quorum-shared';
 import type { Message } from '@quilibrium/quorum-shared';
-import type { StoredMessage } from '@/services/dm/storedMessage';
 import { NativeSigningProvider } from '@/services/crypto/native-signing-provider';
 import { withPiggybackedAcks } from '@/services/dm/piggybackAcks';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -468,7 +467,7 @@ export function useSendDirectMessage() {
       variables._messageId = messageId;
       variables._createdDate = createdDate;
 
-      const optimisticMessage: StoredMessage = {
+      const optimisticMessage: Message = {
         messageId,
         channelId: recipientAddress,
         spaceId: recipientAddress,

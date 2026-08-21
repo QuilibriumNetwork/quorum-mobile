@@ -39,7 +39,6 @@ import type { SelfIdentity } from '@/utils/resolveMemberName';
 import type { DMProfilePayload } from '@/services/dm/dmProfileService';
 import { invalidateRosterCaches } from '@/identity/invalidateRoster';
 import { parseDmProfileUpdate } from '@/services/dm/dmProfileWire';
-import type { StoredMessage } from '@/services/dm/storedMessage';
 import { recordSpaceActivity } from '@/hooks/chat/useSpaceActivity';
 import { logDirectMessage, logMentionOrReply } from '@/services/notifications/logMentionOrReply';
 import { summarizeInbound } from '@/services/observability/redactInbound';
@@ -2920,7 +2919,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
             // Regular message types (post, embed, sticker, join, leave, kick, etc.)
             // Save message to storage
-            const spaceRowToSave: StoredMessage = {
+            const spaceRowToSave: Message = {
                 ...spaceMessage,
                 spaceId,
                 channelId,
@@ -3813,7 +3812,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
         // Save message to storage
         // For DMs, we use senderAddress as both spaceId and channelId
-        const rowToSave: StoredMessage = {
+        const rowToSave: Message = {
           ...decryptedMessage,
           spaceId: senderAddress,
           channelId: senderAddress,
@@ -4863,7 +4862,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           await storage.saveMessage(
             // `authenticatedSenderId: undefined` after the spread — see the
             // live path's equivalent strip.
-            { ...spaceMessage, spaceId, channelId, authenticatedSenderId: undefined } as StoredMessage,
+            { ...spaceMessage, spaceId, channelId, authenticatedSenderId: undefined } as Message,
             spaceMessage.createdDate || Date.now(),
             spaceId, 'space',
             space?.iconUrl || '',
@@ -5480,7 +5479,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
 
         // Save message
-        const batchRowToSave: StoredMessage = {
+        const batchRowToSave: Message = {
           ...decryptedMessage,
           spaceId: resolvedSenderAddress,
           channelId: resolvedSenderAddress,
