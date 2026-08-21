@@ -10,7 +10,7 @@ updated: 2026-08-21
 
 ## Dashboard
 
-> Updated: 2026-08-20 · 79 live · 63 startable · 7 nearly done · 9 blocked
+> Updated: 2026-08-21 · 78 live · 62 startable · 6 nearly done · 9 blocked
 
 **Next step:** Work out why this device can key none of the Spaces it imported — they arrive from the config blob and cannot be decrypted at all.
 
@@ -24,12 +24,10 @@ updated: 2026-08-21
 | 4 | [A member's profile shows somebody else's Farcaster account](issues/.open/2026-08-04-a-members-profile-shows-somebody-elses-farcaster-account.md) | Two members' identities are mixed in storage, and the UI offers to open the wrong person's external profile. |
 | 5 | [Messages DB refuses to open on identity mismatch](issues/.open/2026-06-25-messages-db-refuses-to-open-on-identity-mismatch.md) | The user sees empty chats and is told nothing. Indistinguishable from having lost their history. **The trigger that made this reachable in normal use shipped as #258**, so what is left is the guard itself: it trusts a boolean flag rather than the file, and cannot count rows in a file it cannot decrypt. |
 | 6 | [The signing-key cache can outlive its identity](issues/.open/2026-08-18-signing-key-cache-can-outlive-the-identity-it-belongs-to.md) | Same defect #258 just fixed on the encryption key, on the Ed448 signing key. No consumer path reaches it today — every one is gated behind being authenticated — so it is latent rather than live. Filed low, but it sits in key handling, and "unreachable today" is one refactor from reachable. |
-| 7 | [Shared's QNS transport hardcodes its URL and has no timeout](issues/.open/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md) | **Half shipped 2026-08-17 (quorum-shared #83), so the urgent part is gone** — desktop's claim lookup can no longer hang. **The publish-and-bump step is now done too**: mobile pins `2.1.0-45` as of 2026-08-21, which carries `QnsRequestOptions` (`signal`, `baseUrl`, `timeoutMs`) and #82's log-redaction fix. So this is no longer gated on anything — what is left is purely mobile-side, swapping `resolveClaimedNames` for `resolveNamesBatch` and retiring the chunk-and-zip loop, which drags the `Map`-to-object container swap along with it. |
 
 ### Nearly done — needs a check
 
 - [Public invite never reaches existing members, and non-owners are offered a dead button](issues/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md) — **the whole mobile half shipped in PR #259**: propagation, the false "invalidates the old link" copy, and the gating. What is left is not mobile work. Desktop still never broadcasts its own generated link, shared still derives the invite domain from `window.location`, and the acceptance test is inherently cross-client — one client generates, the other's members must see it appear. Unit tests cannot reach that failure mode, because it is silent: the link simply never arrives.
-- [A persisted query cache crashes the channel screen](issues/2026-08-16-persisted-query-cache-turns-a-map-into-an-object-and-crashes-the-channel.md) — shipped in PR #249 and **the only fix on that branch with no device observation behind it.** It is a crash, so check this one first: open the channel that crashed, on a fresh build.
 - [Broadcast .q claims never reach the identity ladder](issues/2026-08-16-broadcast-q-claims-never-render-after-the-identity-migration.md) — shipped in PR #249, unit-verified by 11 tests covering the impersonation refusal and the DM path. Held open deliberately.
 - [DM self-echo: phantom row wears my identity](issues/.open/2026-06-26-dm-self-profile-overwrites-partner-row.md) — root-caused and fixed in PR #186 on 2026-07-27, with an explicit instruction not to close until the row is confirmed gone on device. Still unconfirmed, three weeks on.
 - [Verify a claimed .q name receiver-side](issues/.open/2026-08-06-verify-a-claimed-q-name-receiver-side-plan.md) — shipped in PR #249 and now structural: the identity model carries verified names only, so an unverified claim has nowhere to live.

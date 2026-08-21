@@ -1,7 +1,7 @@
 ---
 type: bug
 title: "A persisted query cache turns the claim-records Map into {} and crashes the channel screen"
-status: in-progress
+status: done
 priority: high
 ai_generated: true
 created: 2026-08-16
@@ -13,10 +13,25 @@ area: "Identity resolution / React Query persistence / security TTL"
 
 ## Status
 
+**2026-08-21 — CLOSED by PR #266**, which retired the crash class instead of
+guarding it. See the dated entry below for the mechanism.
+
+The device-confirmation box further down is deliberately left **unticked** and
+is no longer a gate. It was written to confirm the `instanceof Map` guard from
+PR #249 caught the bad shape on a real build. That guard no longer exists, so
+there is nothing left for it to confirm — the shape it rescued is now simply a
+valid empty result.
+
+What replaced it as evidence: the crash is reproducible and pinned in-session.
+MEASURED — restoring `.get()`-style access makes all four cases in
+`claimRecordsSurviveRehydration.test.tsx` fail with the operator's exact error,
+`records.get is not a function`. That is the red-on-revert check the standing
+rule on `type: bug` asks for, so this closes on tests rather than on a manual
+pass that would now be checking the wrong thing.
+
 **2026-08-16 — shipped in PR #249** (`feat: names resolve through one verified
-ladder, so a .q shows wherever a name does`), still **awaiting device
-confirmation**, which is why it stays in the root of `issues/` rather than
-`.done/`.
+ladder, so a .q shows wherever a name does`), at the time still awaiting device
+confirmation, which is why it stayed in the root of `issues/`.
 
 - [ ] Device-confirmed: the channel that crashed opens cleanly on a fresh build
 

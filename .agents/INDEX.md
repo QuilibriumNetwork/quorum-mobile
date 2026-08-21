@@ -31,11 +31,9 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [Space calls never start, and every failed start leaves a permanent banner](issues/2026-08-10-space-calls-dead-endpoints-and-stale-banner.md)
 - 🐛 [Public invite: 'Generate New Link' claims to invalidate the old link, is offered to non-owners, and never propagates the URL](issues/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md)
 - 🐛 [Broadcast `.q` claims never reach the identity ladder](issues/2026-08-16-broadcast-q-claims-never-render-after-the-identity-migration.md)
-- 🐛 [A persisted query cache turns the claim-records Map into `{}` and crashes the channel screen](issues/2026-08-16-persisted-query-cache-turns-a-map-into-an-object-and-crashes-the-channel.md)
 - 📋 [The `.q` is stuck behind the public-profile toggle, and there is no reason for it](issues/2026-08-06-decouple-qns-primary-name-from-public-profile-design.md)
 - 📋 [One page for the whole `.q` effort](issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md)
 - 📋 [Mobile Identity Resolution Implementation Plan](issues/2026-08-11-mobile-identity-resolution-plan.md)
-- 📋 [Shared's QNS transport hardcodes its URL and has no timeout](issues/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md)
 
 #### Light Theme Contrast
 
@@ -175,6 +173,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [The broadcast marked itself done before doing anything](issues/.done/2026-08-09-a-profile-change-could-silently-never-reach-anyone.md)
 - 🐛 [The invite contact picker renders an unresolved name](issues/.done/2026-08-10-invite-contact-picker-renders-an-unresolved-name.md)
 - 🐛 [The profile modal's bio is read raw, so it vanishes for any member the sender merge never touched](issues/.done/2026-08-11-profile-modal-bio-is-read-raw-so-it-vanishes-for-any-unmerged-member.md)
+- 🐛 [A persisted query cache turns the claim-records Map into `{}` and crashes the channel screen](issues/.done/2026-08-16-persisted-query-cache-turns-a-map-into-an-object-and-crashes-the-channel.md)
 - 🐛 [Photoless users all render as the same Quorum mark](issues/.done/2026-08-16-photoless-users-all-render-as-the-same-quorum-mark.md)
 - 🐛 [Space mention notifications bake names at write time, so a `.q` never renders there](issues/.done/2026-08-16-space-mention-notifications-bake-names-at-write-time-so-no-q-ever-renders.md)
 - 🐛 [Dynamic imports silently took their error branch under jest](issues/.done/2026-08-17-dynamic-imports-silently-took-their-error-branch-under-jest.md)
@@ -264,6 +263,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Scoped "Clear" in the Notifications tab, including Farcaster](issues/.done/2026-08-05-scoped-clear-notifications-including-farcaster.md)
 - 📋 [In-app browser: link mode, native app handoff, chrome rebuild](issues/.done/2026-08-10-in-app-browser-link-handling-plan.md)
 - 📋 [Adopt shared's QNS claim verification](issues/.done/2026-08-16-adopt-shared-qns-claim-verification.md)
+- 📋 [Shared's QNS transport hardcodes its URL and has no timeout](issues/.done/2026-08-17-shared-qns-transport-hardcodes-url-and-has-no-timeout.md)
 - 📋 [DM Identity Reveal Implementation Plan](issues/.done/2026-08-18-dm-identity-reveal-ledger-plan.md)
 - 📋 [Bundle Inter, tokenise the reading surfaces, and guard the font rules](issues/.done/2026-08-19-bundle-inter-and-tokenise-the-type-scale.md)
 - 📋 [In-app text size setting, so the user holds the last multiplier](issues/.done/2026-08-19-in-app-text-size-setting.md)
@@ -302,4 +302,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-21 17:53:19
+**Last Updated**: 2026-08-21 18:02:17

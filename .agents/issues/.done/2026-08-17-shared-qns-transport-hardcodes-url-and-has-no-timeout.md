@@ -1,7 +1,7 @@
 ---
 type: task
 title: "Let shared's QNS transport carry a base URL and a timeout — desktop has neither"
-status: in-progress
+status: done
 priority: medium
 complexity: small
 created: 2026-08-17
@@ -18,8 +18,9 @@ related:
 
 ## Status
 
-Both halves are implemented. The issue stays open only until the mobile branch
-is merged.
+**2026-08-21 — DONE. The mobile half shipped as PR #266**
+(`refactor(qns): verify claimed names through the transport shared with desktop`,
+squash `7f4f869`). Both halves have now landed and every box below is ticked.
 
 **The shared half shipped 2026-08-17 as quorum-shared PR #83** (`5bd3461`).
 
