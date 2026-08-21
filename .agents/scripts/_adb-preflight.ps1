@@ -216,7 +216,16 @@ function Resolve-QmUsbDevice {
         Write-Host ""
         return $null
     }
-    & $adb start-server 2>$null | Out-Null
+    # Prime the server through cmd, NOT `& $adb start-server | Out-Null`.
+    # On a COLD adb, any adb call whose output PowerShell captures (a pipeline,
+    # `| Out-Null`, or assignment to a variable) hangs forever: the server that
+    # adb forks inherits the capture pipe's write handle and holds it open for
+    # its whole lifetime, so PowerShell never sees EOF. Going through cmd with
+    # `>nul` hands the server a NUL handle instead, so nothing is left holding
+    # our pipe. MEASURED 2026-08-21: `| Out-Null` and `Start-Process -Wait` both
+    # hang on a cold server; only this form returns. Warm servers fork nothing,
+    # which is why the broken form appeared to work for months.
+    cmd /c "`"$adb`" start-server >nul 2>&1"
 
     # --- Wait for a usable cabled phone, then let USB win ----------------------
     # THE RULE: if a phone is connected over USB, discard the Wi-Fi one.

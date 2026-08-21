@@ -145,7 +145,10 @@ try {
     # nothing, call #2 seconds later listed emulator-5554. The old single-shot
     # check turned that race into "ERROR: No running emulator found" and this
     # script refused to run at all.
-    & $adb start-server 2>$null | Out-Null
+    # Prime through cmd, not `| Out-Null` - on a COLD adb the forked server
+    # inherits PowerShell's capture pipe and holds it open, so the pipeline never
+    # returns. See _adb-preflight.ps1 for the full write-up (MEASURED 2026-08-21).
+    cmd /c "`"$adb`" start-server >nul 2>&1"
     $emulator = $null
     for ($i = 0; $i -lt 10; $i++) {
         $emulator = & $adb devices 2>$null |

@@ -93,6 +93,25 @@ if (Test-Path $kbcPkg) {
 
 Set-Location $repoRoot
 
+# --- Prime the adb server BEFORE any adb call whose output we capture --------
+# On a COLD adb (server not yet running) `$x = & adb devices` NEVER RETURNS on
+# Windows. PowerShell captures a native command's output through a pipe; the
+# server that `adb devices` forks inherits that pipe's write handle and holds it
+# open for its whole lifetime, so PowerShell waits forever for an EOF that cannot
+# arrive. The symptom is the script freezing immediately after adb prints
+# "* daemon started successfully", with no further output.
+#
+# Spawning through `cmd /c ... >nul` is the ONLY priming that works, because cmd
+# hands the server a NUL handle instead of our pipe. MEASURED 2026-08-21 on four
+# private adb ports: `& adb start-server | Out-Null` and
+# `Start-Process adb start-server -Wait` both hang exactly the same way (they
+# also give the server a pipe); only the cmd form returned.
+#
+# This stayed hidden for months because the server is normally already warm from
+# dev-start-mobile.ps1 / the emulator scripts, and a warm `start-server` forks
+# nothing. It only bites on the first adb call after a reboot or `adb kill-server`.
+cmd /c "adb start-server >nul 2>&1"
+
 # --- Confirm a USB device is connected & authorized --------------------------
 $adbDevices = & adb devices
 $usbDevice = $adbDevices | Select-String -Pattern '^\S+\s+device$' | Where-Object { $_ -notmatch ':5555' }

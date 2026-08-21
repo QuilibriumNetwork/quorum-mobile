@@ -78,7 +78,10 @@ function Get-RunningEmulatorSerial {
 # server and returns before that server has finished scanning the emulator console
 # ports, so it reports an empty list while a healthy emulator is running.
 # MEASURED 2026-08-18: call #1 empty, call #2 listed emulator-5554.
-& $adb start-server 2>$null | Out-Null
+# Prime through cmd, not `| Out-Null` - on a COLD adb the forked server inherits
+# PowerShell's capture pipe and holds it open, so the pipeline never returns.
+# See _adb-preflight.ps1 for the full write-up (MEASURED 2026-08-21).
+cmd /c "`"$adb`" start-server >nul 2>&1"
 $serial = $null
 for ($i = 0; $i -lt 10; $i++) {
     $serial = Get-RunningEmulatorSerial
