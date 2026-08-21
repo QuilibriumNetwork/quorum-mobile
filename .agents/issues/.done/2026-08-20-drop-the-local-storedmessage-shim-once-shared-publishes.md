@@ -17,10 +17,13 @@ related:
 
 ## Status
 
-**Done 2026-08-21.** The gate opened with quorum-shared `2.1.0-45`, which
-declares `authenticatedSenderId` at `dist/types/message.d.ts:309`. The version
-bump landed on `master` as its own `chore:` commit (`bff5cfa`) ahead of this
-work; the cleanup itself is a separate branch.
+**2026-08-21 — shipped in PR #265** (`refactor(dm): drop the local StoredMessage
+shim now that shared declares the field`).
+
+The gate opened with quorum-shared `2.1.0-45`, which declares
+`authenticatedSenderId` at `dist/types/message.d.ts:309`. The version bump landed
+on `master` as its own `chore:` commit (`bff5cfa`) ahead of this work, so the PR
+carries only the cleanup.
 
 The shim is deleted and every use site now names `Message` directly. Verified:
 
