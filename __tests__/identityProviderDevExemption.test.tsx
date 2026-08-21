@@ -58,7 +58,7 @@ jest.mock('react-native-mmkv', () => ({
 const ADDRESS = 'QmRxwsciKWz7fvph4PobmabjChKPZtvkBcE4oALnogXDYW';
 
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -67,7 +67,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 }));
 
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 import { IdentityScopeProvider, useIdentityContext } from '@/identity/identityProvider';
@@ -107,7 +107,7 @@ describe('IdentityScopeProvider — fake-QNS exemption wiring', () => {
     mockGetPublicProfile = jest.fn();
     // No real QNS record for anything here: a synthesized name is registered
     // nowhere, so this is what the resolver genuinely returns for one.
-    mockResolveBatch = jest.fn().mockResolvedValue([]);
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({});
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
 
@@ -138,7 +138,7 @@ describe('IdentityScopeProvider — fake-QNS exemption wiring', () => {
 
     renderProvider(ADDRESS);
 
-    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalled());
+    await waitFor(() => expect(mockResolveClaimedNames).toHaveBeenCalled());
     expect(screen.getByTestId('verified').props.children).toBe('');
   });
 
@@ -152,7 +152,7 @@ describe('IdentityScopeProvider — fake-QNS exemption wiring', () => {
 
     renderProvider(ADDRESS);
 
-    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalled());
+    await waitFor(() => expect(mockResolveClaimedNames).toHaveBeenCalled());
     expect(screen.getByTestId('verified').props.children).toBe('');
   });
 });

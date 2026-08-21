@@ -5,6 +5,7 @@
  */
 
 import Constants from 'expo-constants';
+import { resolveNamesBatch, type QnsBatchResult } from '@quilibrium/quorum-shared';
 
 const QNS_API_BASE_URL =
   (Constants.expoConfig?.extra as { qnsApiUrl?: string } | undefined)?.qnsApiUrl
@@ -1215,6 +1216,47 @@ export async function resolveName(name: string): Promise<NameRecord> {
 
 export async function resolveBatch(names: string[]): Promise<(NameRecord | null)[]> {
   return getQNSClient().resolveBatch(names);
+}
+
+/**
+ * Resolve CLAIMED names for identity verification, through the transport this
+ * repo shares with desktop.
+ *
+ * Deliberately separate from `resolveBatch` above, which stays this repo's own
+ * client because it still serves registration, marketplace and bucket lookups
+ * that shared does not model. This entry point covers the one QNS call whose
+ * answer decides whether a `.q` renders, and it goes through
+ * `@quilibrium/quorum-shared` so that decision is made by the SAME code on both
+ * clients — a divergence there becomes impossible rather than merely unlikely.
+ *
+ * Shared owns the chunking. The server rejects a batch over `QNS_BATCH_LIMIT`
+ * for the WHOLE request rather than trimming the excess, so splitting is a
+ * correctness measure; mobile used to do its own split and its own positional
+ * re-zip, which is a second place for that to be got wrong.
+ *
+ * ## Why `baseUrl` is passed and the deadline is not
+ *
+ * `baseUrl` must be passed: mobile REGISTERS names against
+ * `EXPO_PUBLIC_QNS_API_URL` when it is set (`app.config.js`). Leaving shared on
+ * its production default would mean a non-production build registering a name
+ * against one resolver and verifying it against another, with nothing in either
+ * code path saying so.
+ *
+ * The deadline is deliberately left to shared's default, which is the same 30s
+ * this client's `DEFAULT_TIMEOUT` has always used against this API — so
+ * adopting it changes no observed behaviour. Passing `DEFAULT_TIMEOUT`
+ * explicitly would pin the number in a second place and let the two drift.
+ *
+ * Rejects on any transport or server failure rather than reporting the names
+ * unresolved. `useClaimRecords` depends on that: it caches for an hour and does
+ * not retry, so a swallowed error would pin "nobody owns anything" for that
+ * hour. See its docstring.
+ */
+export async function resolveClaimedNames(
+  names: readonly string[],
+  opts: { signal?: AbortSignal } = {},
+): Promise<QnsBatchResult> {
+  return resolveNamesBatch([...names], { baseUrl: QNS_API_BASE_URL, signal: opts.signal });
 }
 
 export async function reverseLookup(keyOrAddress: string): Promise<string[]> {

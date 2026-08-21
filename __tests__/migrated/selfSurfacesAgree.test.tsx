@@ -69,7 +69,7 @@ jest.mock('@/hooks/useUnifiedNotifications', () => ({
 }));
 
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -77,7 +77,7 @@ jest.mock('@/services/api/quorumClient', () => ({
   }),
 }));
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 // `claimedNameBelongsTo` is deliberately NOT mocked — the whole point of
@@ -138,14 +138,14 @@ describe('the three self surfaces agree on the same identity', () => {
       timestamp: 0,
       signature: '',
     });
-    mockResolveBatch = jest.fn().mockResolvedValue([
-      {
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({
+      gatto: {
         header: { authorityKey: '0xabc', name: 'gatto', parent: null, createdAt: 0, updatedAt: 0 },
         address: '0xrecord',
         resolveKey: KEY,
         metadata: null,
       },
-    ]);
+    });
 
     renderAllThree({ [TARGET]: 'GattoPardo Mobile' });
 
@@ -175,14 +175,14 @@ describe('the three self surfaces agree on the same identity', () => {
       timestamp: 0,
       signature: '',
     });
-    mockResolveBatch = jest.fn().mockResolvedValue([
-      {
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({
+      gatto: {
         header: { authorityKey: '0xabc', name: 'gatto', parent: null, createdAt: 0, updatedAt: 0 },
         address: '0xrecord',
         resolveKey: KEY,
         metadata: null,
       },
-    ]);
+    });
 
     renderAllThree({ [IMPOSTOR]: 'GattoPardo Mobile' });
 

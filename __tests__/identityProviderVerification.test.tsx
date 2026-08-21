@@ -36,7 +36,7 @@ const OTHER = 'QmThemThemThemThemThemThemThemThemThemThemThem';
 // that runs later, when the provider actually calls it, by which point
 // `beforeEach` has already assigned a fresh jest.fn().
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -45,7 +45,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 }));
 
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 import { IdentityScopeProvider, useIdentityContext } from '@/identity/identityProvider';
@@ -96,7 +96,7 @@ function renderProvider(selfAddress: string) {
 describe('IdentityScopeProvider — claim verification (SECURITY)', () => {
   beforeEach(() => {
     mockGetPublicProfile = jest.fn();
-    mockResolveBatch = jest.fn();
+    mockResolveClaimedNames = jest.fn();
     // Fresh client per test: nothing here should share cache across tests.
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
@@ -123,7 +123,9 @@ describe('IdentityScopeProvider — claim verification (SECURITY)', () => {
 
   it('verifies a claim that resolves back to the claiming address', async () => {
     mockGetPublicProfile.mockResolvedValue(publicProfile({ primary_username: 'alice' }));
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     renderProvider(ADDRESS);
 
@@ -136,11 +138,13 @@ describe('IdentityScopeProvider — claim verification (SECURITY)', () => {
     // catch: withholding a `.q` from its rightful owner is invisible and
     // self-correcting, but granting one to an impersonator is not.
     mockGetPublicProfile.mockResolvedValue(publicProfile({ primary_username: 'alice' }));
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     renderProvider(OTHER);
 
-    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalled());
+    await waitFor(() => expect(mockResolveClaimedNames).toHaveBeenCalled());
     expect(screen.getByTestId('verified').props.children).toBe('');
   });
 
@@ -149,8 +153,8 @@ describe('IdentityScopeProvider — claim verification (SECURITY)', () => {
     // before a lookup lands is the whole attack, because a screenshot of
     // that instant does not expire.
     mockGetPublicProfile.mockResolvedValue(publicProfile({ primary_username: 'alice' }));
-    let releaseBatch: (records: unknown[]) => void = () => {};
-    mockResolveBatch.mockImplementation(
+    let releaseBatch: (records: Record<string, unknown>) => void = () => {};
+    mockResolveClaimedNames.mockImplementation(
       () =>
         new Promise((resolve) => {
           releaseBatch = resolve;
@@ -159,12 +163,12 @@ describe('IdentityScopeProvider — claim verification (SECURITY)', () => {
 
     renderProvider(ADDRESS);
 
-    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalled());
+    await waitFor(() => expect(mockResolveClaimedNames).toHaveBeenCalled());
     expect(screen.getByTestId('verified').props.children).toBe('');
 
     // Prove the pending state was genuinely pending, not permanently broken:
     // releasing the SAME lookup lets the SAME claim verify afterwards.
-    releaseBatch([nameRecord()]);
+    releaseBatch({ alice: nameRecord() });
     await waitFor(() => expect(screen.getByTestId('verified').props.children).toBe('alice'));
   });
 });

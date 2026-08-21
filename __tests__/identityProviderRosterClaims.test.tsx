@@ -37,7 +37,7 @@ const SPACE = 'space-1';
 
 // `mock`-prefixed so the hoisted jest.mock factories may close over them.
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -46,7 +46,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 }));
 
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 import { IdentityScopeProvider } from '@/identity/identityProvider';
@@ -122,7 +122,7 @@ const nameOf = (address: string) =>
 describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
   beforeEach(() => {
     mockGetPublicProfile = jest.fn().mockResolvedValue(null);
-    mockResolveBatch = jest.fn().mockResolvedValue([]);
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({});
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
 
@@ -139,7 +139,9 @@ describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
     // The regression in one test. Route A returns nothing, as it does for every
     // user in production today; the name has to come from the broadcast or not
     // at all.
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     renderProbes(
       { [SPACE]: { [ADDRESS]: { global_display_name: 'Global', claimed_primary_username: 'alice' } } },
@@ -154,14 +156,16 @@ describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
     // OTHER broadcasts a claim on 'alice', but the resolver's record for
     // 'alice' derives back to ADDRESS. Anyone in your space can broadcast any
     // claim, so this check is the only thing between that and a forged `.q`.
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     renderProbes(
       { [SPACE]: { [OTHER]: { global_display_name: 'Impostor', claimed_primary_username: 'alice' } } },
       [{ address: OTHER, spaceId: SPACE }],
     );
 
-    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalled());
+    await waitFor(() => expect(mockResolveClaimedNames).toHaveBeenCalled());
     expect(nameOf(OTHER)).toBe('Impostor');
   });
 
@@ -169,8 +173,8 @@ describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
     // Unproven includes NOT-YET-KNOWN. A `.q` shown for the instant before a
     // lookup lands is the whole attack; a screenshot of that instant does not
     // expire.
-    let releaseBatch: (records: unknown[]) => void = () => {};
-    mockResolveBatch.mockImplementation(
+    let releaseBatch: (records: Record<string, unknown>) => void = () => {};
+    mockResolveClaimedNames.mockImplementation(
       () => new Promise((resolve) => { releaseBatch = resolve; }),
     );
 
@@ -179,11 +183,11 @@ describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
       [{ address: ADDRESS, spaceId: SPACE }],
     );
 
-    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalled());
+    await waitFor(() => expect(mockResolveClaimedNames).toHaveBeenCalled());
     expect(nameOf(ADDRESS)).toBe('Global');
 
     // Prove the pending state was pending, not permanently broken.
-    releaseBatch([nameRecord()]);
+    releaseBatch({ alice: nameRecord() });
     await waitFor(() => expect(nameOf(ADDRESS)).toBe('alice.q'));
   });
 
@@ -206,7 +210,9 @@ describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
       signature: '',
       primary_username: 'alice',
     });
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     const { updateRosters } = renderProbes(
       { [SPACE]: { [ADDRESS]: { global_display_name: 'Global' } } },
@@ -237,7 +243,9 @@ describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
       signature: '',
       primary_username: 'alice',
     });
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     renderProbes(
       { [SPACE]: { [ADDRESS]: { global_display_name: 'Global' } } },
@@ -250,7 +258,9 @@ describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
   it('lets a deliberate per-space nickname outrank the .q', async () => {
     // The control arm. If everything converges on the `.q`, precedence has been
     // inverted and a green run means nothing.
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     renderProbes(
       {
@@ -265,7 +275,7 @@ describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
       [{ address: ADDRESS, spaceId: SPACE }],
     );
 
-    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalled());
+    await waitFor(() => expect(mockResolveClaimedNames).toHaveBeenCalled());
     expect(nameOf(ADDRESS)).toBe('Nickname');
   });
 
@@ -273,7 +283,9 @@ describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
     // The name copied into the roster at join is not a deliberate choice.
     // `resolveIdentity` demotes it via its `space !== global` guard; this pins
     // that the roster claim still reaches the ladder underneath it.
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     renderProbes(
       {
@@ -306,7 +318,9 @@ describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
       };
     }
     roster[ADDRESS] = { global_display_name: 'Global', claimed_primary_username: 'alice' };
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     // Only ADDRESS is probed, so only ADDRESS is requested. The other 200 sit
     // in the same roster and must cost nothing.
@@ -315,7 +329,7 @@ describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
     await waitFor(() => expect(nameOf(ADDRESS)).toBe('alice.q'));
 
     expect(mockGetPublicProfile).toHaveBeenCalledTimes(1);
-    for (const call of mockResolveBatch.mock.calls) {
+    for (const call of mockResolveClaimedNames.mock.calls) {
       expect(call[0]).toEqual(['alice']);
     }
   });
@@ -334,7 +348,7 @@ describe('IdentityScopeProvider — broadcast (roster) .q claims', () => {
 describe('IdentityScopeProvider — broadcast .q claims from a DM conversation', () => {
   beforeEach(() => {
     mockGetPublicProfile = jest.fn().mockResolvedValue(null);
-    mockResolveBatch = jest.fn().mockResolvedValue([]);
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({});
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
 
@@ -344,7 +358,9 @@ describe('IdentityScopeProvider — broadcast .q claims from a DM conversation',
   });
 
   it('renders a .q for a DM partner with no roster and no public profile', async () => {
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     // No rosters at all, no spaceId on the probe: a pure DM.
     renderProbes({}, [{ address: ADDRESS }], { [ADDRESS]: 'alice' });
@@ -363,11 +379,13 @@ describe('IdentityScopeProvider — broadcast .q claims from a DM conversation',
       timestamp: 0,
       signature: '',
     });
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     renderProbes({}, [{ address: OTHER }], { [OTHER]: 'alice' });
 
-    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalled());
+    await waitFor(() => expect(mockResolveClaimedNames).toHaveBeenCalled());
     // Wait for the NAME to settle, not just for the lookup to fire. A DM has no
     // roster, so `Impostor` arrives with the fetched profile — while the claim
     // comes from `conversationClaims`, which is there on the first render. The
@@ -392,7 +410,9 @@ describe('IdentityScopeProvider — broadcast .q claims from a DM conversation',
       signature: '',
       primary_username: 'alice',
     });
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     const { updateRosters } = renderProbes({}, [{ address: ADDRESS }], {});
 
@@ -410,14 +430,16 @@ describe('IdentityScopeProvider — broadcast .q claims from a DM conversation',
     const claims: Record<string, string> = {};
     for (let i = 0; i < 200; i++) claims[`QmBystander${i}`] = `bystander${i}`;
     claims[ADDRESS] = 'alice';
-    mockResolveBatch.mockResolvedValue([nameRecord()]);
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: nameRecord(),
+    });
 
     renderProbes({}, [{ address: ADDRESS }], claims);
 
     await waitFor(() => expect(nameOf(ADDRESS)).toBe('alice.q'));
 
     expect(mockGetPublicProfile).toHaveBeenCalledTimes(1);
-    for (const call of mockResolveBatch.mock.calls) {
+    for (const call of mockResolveClaimedNames.mock.calls) {
       expect(call[0]).toEqual(['alice']);
     }
   });

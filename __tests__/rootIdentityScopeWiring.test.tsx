@@ -52,7 +52,7 @@ let mockConversations: {
 }[];
 // `mock`-prefixed so the hoisted factories below may close over them.
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 // Mocked at the SPECIFIC file `RootIdentityScope.tsx` imports, not the
 // `@/context` / `@/hooks/chat` barrels — those barrels transitively reach
@@ -89,7 +89,7 @@ jest.mock('@/services/api/quorumClient', () => ({
   }),
 }));
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 import { RootIdentityScope } from '@/identity/RootIdentityScope';
@@ -113,7 +113,7 @@ describe('RootIdentityScope', () => {
     mockRosters = {};
     mockConversations = [];
     mockGetPublicProfile = jest.fn().mockResolvedValue(null);
-    mockResolveBatch = jest.fn().mockResolvedValue([]);
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -175,14 +175,14 @@ describe('RootIdentityScope', () => {
     mockConversations = [
       { address: QNS_PARTNER, displayName: 'Bob', claimed_primary_username: 'alice' },
     ];
-    mockResolveBatch.mockResolvedValue([
-      {
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: {
         header: { authorityKey: '0xabc', name: 'alice', parent: null, createdAt: 0, updatedAt: 0 },
         address: '0xrecord',
         resolveKey: QNS_KEY,
         metadata: null,
       },
-    ]);
+    });
 
     // `enrich` is what a bounded surface passes, and it is what puts the
     // address in the requested set the claim check is deliberately bounded by.
@@ -200,18 +200,18 @@ describe('RootIdentityScope', () => {
     mockConversations = [
       { address: PARTNER, displayName: 'Bob', claimed_primary_username: 'alice' },
     ];
-    mockResolveBatch.mockResolvedValue([
-      {
+    mockResolveClaimedNames.mockResolvedValue({
+      alice: {
         header: { authorityKey: '0xabc', name: 'alice', parent: null, createdAt: 0, updatedAt: 0 },
         address: '0xrecord',
         resolveKey: QNS_KEY,
         metadata: null,
       },
-    ]);
+    });
 
     renderInScope(<MemberName address={PARTNER} enrich />);
 
-    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalled());
+    await waitFor(() => expect(mockResolveClaimedNames).toHaveBeenCalled());
     expect(screen.getByText('Bob')).toBeTruthy();
     expect(screen.queryByText('alice.q')).toBeNull();
   });

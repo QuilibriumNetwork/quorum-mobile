@@ -96,7 +96,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 // non-empty name list — this mock exists only so importing the real
 // `useConversationsWithQnsNames`/`identityProvider` module graph resolves.
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: jest.fn().mockResolvedValue([]),
+  resolveClaimedNames: jest.fn().mockResolvedValue({}),
 }));
 
 import { IdentityScopeProvider } from '@/identity/identityProvider';

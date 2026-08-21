@@ -55,8 +55,19 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { resolveBatch, type NameRecord } from '@/services/api/qnsClient';
-import { claimedNameBelongsTo, QNS_BATCH_LIMIT } from '@quilibrium/quorum-shared';
+import { resolveClaimedNames } from '@/services/api/qnsClient';
+// Imported, not re-typed. This key is half of a SECURITY rule whose other half
+// lives in the persister: these answers must never reach disk (see the module).
+// Two string literals in two files, held together by a comment, is a rename
+// away from silently reopening that hole with every test still green.
+// Deliberately the concrete module rather than `@/services/offline`, whose
+// barrel pulls in MMKV storage this hook has no need of.
+import { QNS_VERIFY_CLAIMS_KEY } from '@/services/offline/shouldPersistQuery';
+import {
+  claimedNameBelongsTo,
+  QNS_BATCH_LIMIT,
+  type QnsBatchResult,
+} from '@quilibrium/quorum-shared';
 
 /**
  * Re-exported so mobile's callers keep one import site while the CONSTANT has a
@@ -181,8 +192,28 @@ export function claimIn(row: Partial<ClaimingRow> | undefined): string {
   return (row?.primary_username ?? '').trim();
 }
 
-/** The batch call, injectable so the chunking is testable without a network. */
-export type ResolveBatchFn = (names: string[]) => Promise<(NameRecord | null)[]>;
+/**
+ * What the resolver answered, keyed by the name that was asked about.
+ *
+ * This is shared's `resolveNamesBatch` return type, used verbatim rather than
+ * converted, so the shape the network produces is the shape these functions
+ * consume. It replaced a `Map`, and the swap is what let mobile's own
+ * chunk-and-re-zip loop be deleted — the alignment between a name and its
+ * record is now made once, by the transport both clients share, instead of
+ * again here.
+ *
+ * Three states collapse to two on purpose. A `null` (the resolver knows nothing
+ * about the name) and a MISSING key (the name was never looked up, or the
+ * lookup failed) are both UNVERIFIED, and every read below funnels through
+ * `claimedNameBelongsTo`, which accepts `null` and `undefined` alike and
+ * answers `false` to both.
+ *
+ * Note `strict` alone does not model that: without `noUncheckedIndexedAccess`,
+ * tsc types `records[name]` as non-`undefined` even though a missing key is
+ * `undefined` at runtime. That gap is harmless ONLY because the single consumer
+ * tolerates `undefined`. Anything else added here must tolerate it too.
+ */
+export type ClaimRecords = Readonly<QnsBatchResult>;
 
 /**
  * An escape hatch for claims that cannot be verified against the real resolver
@@ -202,67 +233,6 @@ export type ResolveBatchFn = (names: string[]) => Promise<(NameRecord | null)[]>
 export type ClaimExemption = (name: string, address: string) => boolean;
 
 /**
- * Resolve every claimed name, in as few requests as the API allows.
- *
- * Returns a map rather than an array so callers cannot accidentally rely on
- * positional alignment. Alignment IS relied on inside this function, when
- * zipping a chunk back onto its names — get that wrong and one member's claim
- * is judged against another member's record, which is precisely the confusion
- * this whole feature exists to prevent.
- *
- * ## Rejects on failure rather than reporting everything unresolved
- *
- * It reads as fail-closed to catch here and return an empty map — an outage
- * costs people their suffix, which is the correct direction. It is not, because
- * of the one-hour `staleTime` below: a resolved value is CACHED, so a single
- * transient blip would pin "nobody owns anything" for an hour and strip the `.q`
- * from every legitimate owner for that hour, with nothing logged and no way for
- * a user to tell it apart from the feature being broken.
- *
- * Throwing caches nothing. The visible behaviour during the outage is identical
- * — no records, so nothing verifies, so no suffix renders — but recovery is the
- * next mount instead of the next hour. The failure still cannot take a surface
- * down: React Query owns the rejection, and `useClaimRecords` degrades to
- * `NO_RECORDS`.
- *
- * This matches `resolveNamesBatch` in `@quilibrium/quorum-shared`, which desktop
- * already uses and which mobile will adopt once it can carry mobile's base URL
- * and timeout — keep the two behaviours identical until then.
- */
-export async function resolveClaimedNames(
-  names: readonly string[],
-  batch: ResolveBatchFn,
-): Promise<Map<string, NameRecord | null>> {
-  const out = new Map<string, NameRecord | null>();
-  if (!names.length) return out;
-
-  for (let i = 0; i < names.length; i += QNS_BATCH_LIMIT) {
-    const chunk = names.slice(i, i + QNS_BATCH_LIMIT);
-    const records = await batch(chunk);
-
-    // Positional alignment is the ONLY thing tying a record to a name, so a
-    // length mismatch means every pairing after the first divergence could
-    // attribute one account's key to another account's name — precisely the
-    // impersonation this feature exists to prevent. There is no safe way to
-    // guess the intended alignment, so refuse the whole response rather than
-    // pad it with nulls, which would silently mis-pair the overlap.
-    //
-    // An unregistered name is a `null` SLOT at HTTP 200, not a short array
-    // (MEASURED against the live API), so a mismatch is genuinely anomalous
-    // rather than the ordinary not-found case.
-    if (!Array.isArray(records) || records.length !== chunk.length) {
-      throw new Error(
-        `QNS batch resolve returned ${Array.isArray(records) ? records.length : 'no'} records for ${chunk.length} names`,
-      );
-    }
-
-    chunk.forEach((name, j) => out.set(name, records[j] ?? null));
-  }
-
-  return out;
-}
-
-/**
  * Remove every claim that has not been proven, leaving the rows otherwise
  * untouched.
  *
@@ -279,7 +249,7 @@ export async function resolveClaimedNames(
  */
 export function stripUnverifiedNames<T extends Partial<ClaimingRow>>(
   rows: readonly T[],
-  records: ReadonlyMap<string, NameRecord | null>,
+  records: ClaimRecords,
   isExempt?: ClaimExemption,
 ): readonly T[] {
   let changed = false;
@@ -308,7 +278,7 @@ export function stripUnverifiedNames<T extends Partial<ClaimingRow>>(
  */
 function settleClaim<T extends Partial<ClaimingRow>>(
   row: T,
-  records: ReadonlyMap<string, NameRecord | null>,
+  records: ClaimRecords,
   isExempt: ClaimExemption | undefined,
   addressOverride?: string,
 ): T {
@@ -326,7 +296,7 @@ function settleClaim<T extends Partial<ClaimingRow>>(
   // rather than treating it as a wildcard match.
   const address = addressOverride || row?.address || '';
   const verified =
-    isExempt?.(claim, address) || claimedNameBelongsTo(records.get(claim), address);
+    isExempt?.(claim, address) || claimedNameBelongsTo(records[claim], address);
 
   if (!verified) return current ? ({ ...row, primary_username: undefined } as T) : row;
   return current === claim ? row : ({ ...row, primary_username: claim } as T);
@@ -347,7 +317,7 @@ function settleClaim<T extends Partial<ClaimingRow>>(
  */
 export function stripUnverifiedNamesInMap<T extends Partial<ClaimingRow>>(
   map: Readonly<Record<string, T>>,
-  records: ReadonlyMap<string, NameRecord | null>,
+  records: ClaimRecords,
   isExempt?: ClaimExemption,
 ): Record<string, T> {
   let changed = false;
@@ -363,8 +333,10 @@ export function stripUnverifiedNamesInMap<T extends Partial<ClaimingRow>>(
 }
 
 /** Stable identity, so a screen with no claims does not churn every memo below
- *  it by handing them a fresh empty map on each render. */
-const NO_RECORDS: ReadonlyMap<string, NameRecord | null> = new Map();
+ *  it by handing them a fresh empty object on each render. Frozen because it is
+ *  module-scoped and handed to every caller: one stray write would poison the
+ *  "nothing verified" answer for the whole app. */
+const NO_RECORDS: ClaimRecords = Object.freeze({});
 
 /**
  * The dev-only exemption for names the fake-QNS overlay synthesized.
@@ -403,7 +375,7 @@ export const DEV_CLAIM_EXEMPTION: ClaimExemption | undefined = FakeQnsModule
  * a shorter one in a duplicate would quietly widen the impersonation window
  * without either copy's history explaining why.
  */
-export function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord | null> {
+export function useClaimRecords(names: string[]): ClaimRecords {
   // SORTED, so two surfaces holding the same claimants in a different insertion
   // order share one cache entry instead of issuing the same request twice.
   // `claimedNamesIn` builds the set in row order, and row order differs between
@@ -414,8 +386,24 @@ export function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord
   const namesKey = [...names].sort().join('|');
 
   const { data, status } = useQuery({
-    queryKey: ['qns-verify-claims', namesKey],
-    queryFn: () => resolveClaimedNames(names, resolveBatch),
+    queryKey: [QNS_VERIFY_CLAIMS_KEY, namesKey],
+    // The `signal` is React Query's, and passing it is what lets a superseded
+    // lookup be dropped instead of running to completion for an answer nobody
+    // will read. Scrolling a channel widens the sender set, which changes the
+    // key, which is exactly when this happens.
+    //
+    // It is NOT a substitute for the transport's deadline and does not overlap
+    // with it: this fires when the query becomes unused, never on elapsed time,
+    // so a hung request on a screen the user is still looking at is bounded
+    // only by the deadline. The two compose inside `qnsRequest`.
+    //
+    // Safe next to the fail-closed rules below, MEASURED rather than reasoned —
+    // see `claimRecordsAbortSupersededLookup.test.tsx`. React Query treats a
+    // cancellation as a REVERT, not an error: the query keeps whatever state it
+    // had, so a lookup that never succeeded stays `pending` with no data and
+    // has nothing to carry forward. That is the case that would have been
+    // dangerous, and it is the one pinned.
+    queryFn: ({ signal }) => resolveClaimedNames(names, { signal }),
     enabled: names.length > 0,
     staleTime: 60 * 60 * 1000,
     gcTime: 24 * 60 * 60 * 1000,
@@ -462,52 +450,92 @@ export function useClaimRecords(names: string[]): ReadonlyMap<string, NameRecord
       previousQuery?.state.status === 'success' ? previous : undefined,
   });
 
-  // `data` is not necessarily a Map, however this function is typed.
+  // `data` is not necessarily the shape this function is typed to return: it can
+  // arrive from a persisted cache the type system never sees.
   //
-  // React Query's cache is persisted to MMKV as JSON (`app/_layout.tsx`), and
-  // `JSON.stringify(new Map([...]))` is `{}` — a plain object with no `.get`.
-  // Any entry written before this query was excluded from persistence
-  // rehydrates in that shape, and `settleClaim` then threw
-  // `records.get is not a function` on the first row carrying a claim, taking
-  // the whole channel screen down with it.
+  // This used to be `data instanceof Map`, guarding a crash. React Query's cache
+  // is persisted to MMKV as JSON (`app/_layout.tsx`) and
+  // `JSON.stringify(new Map([...]))` is `{}` — a plain object with no `.get` —
+  // so a rehydrated entry made `settleClaim` throw `records.get is not a
+  // function` on the first row carrying a claim, taking the channel screen down.
   //
-  // The exclusion (see `app/_layout.tsx`) stops NEW ones being written; this
-  // guard is what makes an app that already has one on disk survive the
-  // upgrade, so it cannot be dropped once the exclusion is in place.
+  // Holding the records as a plain object RETIRES that crash class rather than
+  // re-guarding it: the legacy on-disk value is `{}`, which is now simply an
+  // empty, perfectly readable set of records meaning "nothing verified" — the
+  // fail-closed answer, reached by construction instead of by a rescue.
   //
-  // Degrading to `NO_RECORDS` is the fail-closed direction: nothing verifies,
-  // so every claim renders as its global name until the query refetches. The
-  // alternative — trusting a shape we cannot read — is how an unverified claim
-  // would reach the screen.
-  //
-  // ## `status` is checked, and NOT because the shape might be wrong
+  // ## What this guard is still for: `status`
   //
   // React Query does not clear `data` when a query errors — its reducer spreads
   // the previous state and only flips `status`. So after a name set has resolved
-  // once, a FAILED REFETCH leaves the last successful records in place and
-  // `data instanceof Map` stays true.
+  // once, a FAILED REFETCH leaves the last successful records in place and the
+  // shape check alone would happily pass them through.
   //
   // That is the correct default for almost any query, and wrong for this one.
   // `staleTime` here is a SECURITY bound (see `useClaimRecords`' docstring): it
   // is how long a name transferred to somebody else can still verify for its
-  // previous owner. Serving the last good map through a failure removes that
-  // bound entirely — while refetches keep failing, the old owner keeps
-  // rendering the name, with no upper limit and nothing logged.
+  // previous owner. Serving the last good records through a failure removes that
+  // bound entirely — while refetches keep failing, the old owner keeps rendering
+  // the name, with no upper limit and nothing logged.
   //
   // MEASURED 2026-08-17, both arms of the same probe: on a failed refetch the
-  // records map retained `size = 1` (the stale verifying record) without this
-  // check, against `size = 0` on the previous implementation, which replaced the
-  // cache with an empty map because it resolved instead of rejecting. Rejecting
-  // is still the right call — it is what stops a blip being cached for an hour —
-  // but it made this path fail OPEN, and the two changes have to land together.
+  // records retained the one stale verifying entry without this check, against
+  // zero entries on the implementation that resolved instead of rejecting.
+  // Rejecting is still the right call — it is what stops a blip being cached for
+  // an hour — but it made this path fail OPEN, and the two have to stay together.
   //
-  // A placeholder-carried map still passes, since `placeholderData` reports
+  // A placeholder-carried value still passes, since `placeholderData` reports
   // `success`. That is intended, but it is safe only because `placeholderData`
-  // above now refuses to carry anything forward from a query that ERRORED.
-  // Without that guard, a widening sender set walks straight through this line
-  // with the stale map. Read the two together; changing either alone reopens
-  // the hole.
-  return status === 'success' && data instanceof Map ? data : NO_RECORDS;
+  // above refuses to carry anything forward from a query that ERRORED. Without
+  // that guard, a widening sender set walks straight through this line with the
+  // stale records. Read the two together; changing either alone reopens the hole.
+  //
+  // ## The shape check is kept, narrower
+  //
+  // Nothing in this file produces anything but a plain object now, so this only
+  // catches a value that came from somewhere else — a hand-seeded cache, or a
+  // legacy entry. Every rejected shape lands on `NO_RECORDS`, and every shape
+  // that gets THROUGH is read with `records[name]`, which answers `undefined`
+  // for a key it does not have. Both roads end at unverified, so an unreadable
+  // cache can only ever cost a `.q`, never grant one.
+  return status === 'success' && isClaimRecords(data) ? data : NO_RECORDS;
+}
+
+/**
+ * A value that can be safely READ as claim records.
+ *
+ * Deliberately structural and permissive rather than a validation of every
+ * entry. It is not trying to prove the records are trustworthy — the records
+ * are never trusted; `claimedNameBelongsTo` re-derives the address from the key
+ * on every single read, which is what actually decides a claim. All this needs
+ * to establish is that indexing the value cannot throw.
+ *
+ * Arrays and `null` are excluded because neither can be a records object, and
+ * letting them through would mean typing `data` as something it is not.
+ *
+ * ## The `Map` clause has NO observable effect, and is kept anyway
+ *
+ * MEASURED by deleting it and re-running the suite: nothing changed. A `Map`
+ * that slipped past would be read with `records[name]`, which answers
+ * `undefined` for every key a `Map` holds, so it already degrades to "nothing
+ * verified" — the same outcome this clause produces, by a different route.
+ *
+ * It stays because this is a TYPE PREDICATE: without it, tsc would believe a
+ * `Map` is a `QnsBatchResult`, and a later `Object.entries(records)` would
+ * silently see an empty set with no warning. That is a real hazard, just not a
+ * currently reachable one.
+ *
+ * Do not write a test asserting this clause does something — it cannot fail.
+ * `claimRecordsSurviveRehydration.test.tsx` says as much where it feeds a
+ * `Map` in.
+ */
+function isClaimRecords(data: unknown): data is QnsBatchResult {
+  return (
+    typeof data === 'object'
+    && data !== null
+    && !Array.isArray(data)
+    && !(data instanceof Map)
+  );
 }
 
 /**

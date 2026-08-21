@@ -70,7 +70,7 @@ const KEY =
 let mockConversations: Conversation[];
 let mockChatEntries: NotificationLogEntry[];
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/context/AuthContext', () => ({
   useAuth: () => ({ farcasterAuthToken: undefined }),
@@ -133,7 +133,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 }));
 
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 // `claimedNameBelongsTo` is deliberately NOT mocked — see file header.
@@ -162,14 +162,14 @@ beforeEach(() => {
     timestamp: 0,
     signature: '',
   });
-  mockResolveBatch = jest.fn().mockResolvedValue([
-    {
+  mockResolveClaimedNames = jest.fn().mockResolvedValue({
+    bob: {
       header: { authorityKey: '0xabc', name: 'bob', parent: null, createdAt: 0, updatedAt: 0 },
       address: '0xrecord',
       resolveKey: KEY,
       metadata: null,
     },
-  ]);
+  });
 });
 
 afterEach(() => {
@@ -303,7 +303,7 @@ describe('useUnifiedNotifications — the DM sender prefix resolves through @/id
     // carries rather than degrading to a hash — the stored string is often a
     // real name and is never worse.
     mockGetPublicProfile = jest.fn().mockResolvedValue(null);
-    mockResolveBatch = jest.fn().mockResolvedValue([]);
+    mockResolveClaimedNames = jest.fn().mockResolvedValue({});
     mockConversations = [
       {
         conversationId: 'conv-unsynced',

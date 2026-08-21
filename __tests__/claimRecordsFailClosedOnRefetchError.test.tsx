@@ -9,23 +9,28 @@
  *
  * React Query does not clear `data` when a query errors — its reducer spreads
  * the previous state and only flips `status`. So once a name set has resolved
- * successfully, a failed refetch leaves the last successful `Map` in place and
- * `data instanceof Map` stays true. Reading `data` alone therefore serves the
+ * successfully, a failed refetch leaves the last successful records in place and
+ * a shape check on them still passes. Reading `data` alone therefore serves the
  * stale, still-verifying records for as long as refetches keep failing, which
  * removes the bound entirely — the previous owner keeps rendering the name with
  * no upper limit, and (with `retry: false` and no logging on that path) nothing
  * anywhere records that it is happening.
  *
- * This was introduced, not inherited. The previous implementation caught
- * resolver errors and returned an empty `Map`, which RESOLVED — so React Query
- * replaced the cache with it and the path failed closed by accident. Changing it
- * to reject is correct (a resolved empty map is cached as a success, pinning
+ * This was introduced, not inherited. An earlier implementation caught resolver
+ * errors and returned an empty result, which RESOLVED — so React Query replaced
+ * the cache with it and the path failed closed by accident. Changing it to
+ * reject is correct (a resolved empty result is cached as a success, pinning
  * "nobody owns anything" for the full hour after one blip), but on its own it
  * flipped this case from fail-closed to fail-OPEN. Both halves have to hold.
  *
  * MEASURED 2026-08-17, same probe against both implementations: after a failed
- * refetch the records map retained `size = 1` on the rejecting version and
- * `size = 0` on the swallowing one.
+ * refetch the records retained the one verifying entry on the rejecting version
+ * and none on the swallowing one.
+ *
+ * The container has since changed from a `Map` to the plain object shared's
+ * `resolveNamesBatch` returns. That moved which line does the shape check, and
+ * nothing about what this file pins — `status` is still the gate, and these
+ * assertions are on the rendered name, not on the cache.
  *
  * ## Why this asserts on the rendered name
  *
@@ -42,9 +47,9 @@ import { Text } from 'react-native';
 import { render, screen, cleanup, waitFor, act } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const mockResolveBatch = jest.fn();
+const mockResolveClaimedNames = jest.fn();
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 import { useVerifiedQnsNamesInMap } from '@/hooks/useVerifiedQnsNames';
@@ -62,6 +67,10 @@ const RECORD = {
   resolveKey: KEY,
   metadata: null,
 };
+
+/** A successful answer: the record keyed by the name it is for, which is the
+ *  shape `resolveNamesBatch` returns. */
+const RECORDS = { alice: RECORD };
 
 const MEMBERS = {
   [ADDR]: { address: ADDR, display_name: 'Alice', primary_username: 'alice' },
@@ -84,7 +93,7 @@ let queryClient: QueryClient;
 afterEach(() => {
   cleanup();
   queryClient.clear();
-  mockResolveBatch.mockReset();
+  mockResolveClaimedNames.mockReset();
 });
 
 beforeEach(() => {
@@ -107,14 +116,14 @@ const refetch = async () => {
 
 describe('useClaimRecords — a refetch that fails', () => {
   it('stops verifying, rather than serving the last good records forever', async () => {
-    mockResolveBatch.mockResolvedValueOnce([RECORD]);
+    mockResolveClaimedNames.mockResolvedValueOnce(RECORDS);
     renderProbe();
     await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('alice'));
 
     // The name is transferred away, and the refetch that would have noticed
     // fails. The suffix must drop; it must not survive on the strength of a
     // lookup that succeeded before the transfer.
-    mockResolveBatch.mockRejectedValue(new Error('offline'));
+    mockResolveClaimedNames.mockRejectedValue(new Error('offline'));
     await refetch();
 
     await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('none'));
@@ -124,15 +133,15 @@ describe('useClaimRecords — a refetch that fails', () => {
     // The whole argument for rejecting instead of caching an empty result is
     // that recovery is fast. If a failure left the query permanently unable to
     // verify, this fix would have traded one silent bug for another.
-    mockResolveBatch.mockResolvedValueOnce([RECORD]);
+    mockResolveClaimedNames.mockResolvedValueOnce(RECORDS);
     renderProbe();
     await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('alice'));
 
-    mockResolveBatch.mockRejectedValueOnce(new Error('offline'));
+    mockResolveClaimedNames.mockRejectedValueOnce(new Error('offline'));
     await refetch();
     await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('none'));
 
-    mockResolveBatch.mockResolvedValue([RECORD]);
+    mockResolveClaimedNames.mockResolvedValue(RECORDS);
     await refetch();
     await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('alice'));
   });
@@ -140,7 +149,7 @@ describe('useClaimRecords — a refetch that fails', () => {
   it('CONTROL: a verified name renders while nothing is failing', async () => {
     // Without this arm, a hook hard-wired to return NO_RECORDS would pass the
     // test above while having disabled verification entirely.
-    mockResolveBatch.mockResolvedValue([RECORD]);
+    mockResolveClaimedNames.mockResolvedValue(RECORDS);
     renderProbe();
 
     await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('alice'));
@@ -161,24 +170,24 @@ describe('useClaimRecords — a refetch that fails', () => {
     // time, and that is exactly what changes the query key. With `retry: false`
     // the errored query never re-attempts, so the resurrected answer never
     // expires on its own.
-    mockResolveBatch.mockResolvedValueOnce([RECORD]);
+    mockResolveClaimedNames.mockResolvedValueOnce(RECORDS);
     const view = renderProbe();
     await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('alice'));
 
-    mockResolveBatch.mockRejectedValue(new Error('offline'));
+    mockResolveClaimedNames.mockRejectedValue(new Error('offline'));
     await refetch();
     await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('none'));
 
     // The widened lookup never settles, so anything rendering `alice` below is
     // stale by construction — nothing could have re-verified it.
-    mockResolveBatch.mockImplementation(() => new Promise(() => {}));
+    mockResolveClaimedNames.mockImplementation(() => new Promise(() => {}));
     view.rerender(
       <QueryClientProvider client={queryClient}>
         <Probe members={TWO_MEMBERS} />
       </QueryClientProvider>,
     );
 
-    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(mockResolveClaimedNames).toHaveBeenCalledTimes(3));
     expect(screen.getByTestId('qns').props.children).toBe('none');
   });
 
@@ -187,18 +196,18 @@ describe('useClaimRecords — a refetch that fails', () => {
     // set is what stops every name on screen flickering whenever a new claimant
     // appears, and it must survive the fix above. Without this arm, disabling
     // `placeholderData` outright would look like a clean pass.
-    mockResolveBatch.mockResolvedValueOnce([RECORD]);
+    mockResolveClaimedNames.mockResolvedValueOnce(RECORDS);
     const view = renderProbe();
     await waitFor(() => expect(screen.getByTestId('qns').props.children).toBe('alice'));
 
-    mockResolveBatch.mockImplementation(() => new Promise(() => {}));
+    mockResolveClaimedNames.mockImplementation(() => new Promise(() => {}));
     view.rerender(
       <QueryClientProvider client={queryClient}>
         <Probe members={TWO_MEMBERS} />
       </QueryClientProvider>,
     );
 
-    await waitFor(() => expect(mockResolveBatch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockResolveClaimedNames).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId('qns').props.children).toBe('alice');
   });
 });

@@ -28,7 +28,7 @@ const ADDR = 'QmPeerAEgVKpYZKYuFu2J49zHXnA8vZtEqHMtpB4imzzzz';
 // memberName.test.tsx: the enrich-wiring tests below genuinely trigger a
 // request, so the network seam must be mocked rather than merely unreached.
 let mockGetPublicProfile: jest.Mock;
-let mockResolveBatch: jest.Mock;
+let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/services/api/quorumClient', () => ({
   getQuorumClient: () => ({
@@ -37,7 +37,7 @@ jest.mock('@/services/api/quorumClient', () => ({
 }));
 
 jest.mock('@/services/api/qnsClient', () => ({
-  resolveBatch: (names: string[]) => mockResolveBatch(names),
+  resolveClaimedNames: (names: string[]) => mockResolveClaimedNames(names),
 }));
 
 let queryClient: QueryClient;
@@ -62,7 +62,7 @@ const wrap = (ui: React.ReactNode, sources: {
 
 beforeEach(() => {
   mockGetPublicProfile = jest.fn().mockResolvedValue(null);
-  mockResolveBatch = jest.fn().mockResolvedValue([]);
+  mockResolveClaimedNames = jest.fn().mockResolvedValue({});
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });
 

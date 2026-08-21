@@ -374,7 +374,7 @@ export const IdentityScopeProvider: React.FunctionComponent<{
       // `identityProviderDevExemption.test.tsx`.
       if (
         DEV_CLAIM_EXEMPTION?.(claim, address) ||
-        claimedNameBelongsTo(claimRecords.get(claim), address)
+        claimedNameBelongsTo(claimRecords[claim], address)
       ) {
         map[address] = claim;
       }
