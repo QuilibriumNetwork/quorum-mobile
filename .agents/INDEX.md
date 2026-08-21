@@ -133,6 +133,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Add the global "Always sign Direct Messages" toggle to mobile settings](issues/.open/2026-08-07-no-global-always-sign-dms-toggle-on-mobile.md)
 - 📋 [Mobile lets you finish onboarding with no display name, desktop does not](issues/.open/2026-08-16-mobile-lets-you-finish-onboarding-with-no-display-name.md)
 - 📋 [`void import(...).then(...)` without a `.catch()`](issues/.open/2026-08-19-fire-and-forget-dynamic-imports-lack-catch.md)
+- 📋 [`QnsBatchResult` should be built on a null prototype](issues/.open/2026-08-21-shared-qns-batch-result-should-use-a-null-prototype.md)
 
 ### Deferred
 
@@ -301,4 +302,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-21 16:49:19
+**Last Updated**: 2026-08-21 17:53:19

@@ -115,6 +115,70 @@ and already degrades to "nothing verified". The clause stays for type honesty
 and the test now say plainly that it is not covered — so nobody later reads the
 green test as proof it does something.
 
+## Independent review, 2026-08-21
+
+Two adversarial reviewers ran against the branch in fresh contexts, one on
+production correctness and one on test quality. Both re-ran the mutation matrix
+rather than trusting the report of it. Three real defects came back; all are
+fixed.
+
+**1. A CONTROL arm asserted nothing (the worst kind, and it was mine).**
+`claimRecordsAreNeverPersisted.test.ts` built its pending-query fixture with
+`setQueryData(['spaces'], undefined)`, then guarded the only `expect` behind
+`if (pending)`. MEASURED: React Query reads `undefined` as "no update" and
+creates NO cache entry, so `find()` returned `undefined`, the body never ran,
+and the case passed with zero assertions while claiming to prove the exclusion
+is additive rather than a replacement. A mutation that stopped consulting
+`defaultShouldDehydrateQuery` entirely left all five cases green.
+
+Fixed by building the query through `getQueryCache().build()`, asserting the
+fixture is real before using it, and dropping the conditional. MEASURED: that
+mutation now turns the arm red.
+
+**2. The one place mobile's config reaches shared had no test at all.**
+Every test stubs `@/services/api/qnsClient` at the module boundary, so the real
+`resolveClaimedNames` body never executed anywhere in the suite. MEASURED:
+deleting `baseUrl: QNS_API_BASE_URL` — the exact bug its own docstring warns
+about — produced ZERO failures across 1189 tests.
+
+Fixed by `__tests__/resolveClaimedNamesWiring.test.ts`, which stubs shared's
+`resolveNamesBatch` instead and asserts against a NON-production URL, so a
+regression that silently fell back to the default is caught. MEASURED: dropping
+`baseUrl`, dropping `signal`, or passing the caller's array by reference each
+turn it red.
+
+**3. Two copies of the query key, held together by a comment.**
+`QNS_VERIFY_CLAIMS_KEY` and the hook's `queryKey[0]` were separate literals.
+Renaming one would silently stop the persistence exclusion matching, with every
+test still green. The hook now imports the constant, so there is one definition.
+
+### Corrections to earlier MEASURED claims
+
+- "returning `NO_RECORDS` unconditionally → 6 red" was **wrong**, and wrong in a
+  way worth naming: it was a TWO-FILE run reported as though it were the whole
+  suite. The reviewer measured 8 on a three-file run. The actual whole-suite
+  figure is **57 tests across 28 suites**. No conclusion changes — the mutation
+  is caught either way — but a subset measurement stated as a total is exactly
+  the error this file's own epistemic rule exists to prevent.
+
+### Not a defect: the prototype-key attack
+
+A claim is attacker-controlled text and is now used as an OBJECT KEY, where it
+used to be a `Map` key. Both reviewers attacked this independently and neither
+could construct an impersonation. Shared builds its result with a flat
+`out[name] = record` on a fresh object per call, never a nested merge, and every
+read looks up the same name that was requested. `constructor`/`toString` become
+ordinary shadowing keys; `__proto__` reassigns that object's prototype, and
+reads still fail closed because `claimedNameBelongsTo` demands a `resolveKey`
+field no inherited member has.
+
+Safe, but safe by a property nothing asserted. `verifiedQnsNames.test.ts` now
+pins it (6 cases including a control). MEASURED: weakening the predicate to
+`!!records[claim]` — the plausible future refactor — turns 9 cases red.
+
+Worth hardening upstream anyway: shared should build `QnsBatchResult` with
+`Object.create(null)`. Filed separately; it cannot be fixed from this repo.
+
 ## What & why
 
 `@quilibrium/quorum-shared` owns the QNS network calls both clients need. Both

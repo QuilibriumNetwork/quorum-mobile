@@ -56,6 +56,13 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { resolveClaimedNames } from '@/services/api/qnsClient';
+// Imported, not re-typed. This key is half of a SECURITY rule whose other half
+// lives in the persister: these answers must never reach disk (see the module).
+// Two string literals in two files, held together by a comment, is a rename
+// away from silently reopening that hole with every test still green.
+// Deliberately the concrete module rather than `@/services/offline`, whose
+// barrel pulls in MMKV storage this hook has no need of.
+import { QNS_VERIFY_CLAIMS_KEY } from '@/services/offline/shouldPersistQuery';
 import {
   claimedNameBelongsTo,
   QNS_BATCH_LIMIT,
@@ -379,7 +386,7 @@ export function useClaimRecords(names: string[]): ClaimRecords {
   const namesKey = [...names].sort().join('|');
 
   const { data, status } = useQuery({
-    queryKey: ['qns-verify-claims', namesKey],
+    queryKey: [QNS_VERIFY_CLAIMS_KEY, namesKey],
     // The `signal` is React Query's, and passing it is what lets a superseded
     // lookup be dropped instead of running to completion for an answer nobody
     // will read. Scrolling a channel widens the sender set, which changes the

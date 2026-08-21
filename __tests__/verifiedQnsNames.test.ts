@@ -139,6 +139,73 @@ describe('QNS_BATCH_LIMIT', () => {
 // still tested above and below.
 
 
+describe('a claimed name that collides with Object.prototype', () => {
+  // The records used to be a `Map`, where a key is just a key. They are now a
+  // plain object, and the claim is ATTACKER-CONTROLLED TEXT used directly as a
+  // property name — so a claim can now name something every object already has.
+  //
+  // Nothing here was exploitable when this was written (checked in independent
+  // review, and again by these tests). But the reason it is safe is not
+  // obvious, is not asserted anywhere else, and does not hold by construction:
+  // it holds because `claimedNameBelongsTo` demands a `resolveKey` field, which
+  // no inherited member has. A future change to that predicate — say, treating
+  // any non-null record as good enough — would turn every one of these into a
+  // live impersonation with nothing else failing.
+  //
+  // These cost almost nothing and pin exactly that.
+  const noRecords = {};
+
+  it('does not verify a claim named `constructor`, which every object answers', () => {
+    // `({}).constructor` is truthy and always present, so a records lookup for
+    // this name returns a real value rather than `undefined`. It still must not
+    // verify.
+    const rows = [{ address: ADDRESS, primary_username: 'constructor' }];
+    expect(stripUnverifiedNames(rows, noRecords)[0].primary_username).toBeUndefined();
+  });
+
+  it('does not verify a claim named `toString`', () => {
+    const rows = [{ address: ADDRESS, primary_username: 'toString' }];
+    expect(stripUnverifiedNames(rows, noRecords)[0].primary_username).toBeUndefined();
+  });
+
+  it('does not verify a claim named `hasOwnProperty`', () => {
+    const rows = [{ address: ADDRESS, primary_username: 'hasOwnProperty' }];
+    expect(stripUnverifiedNames(rows, noRecords)[0].primary_username).toBeUndefined();
+  });
+
+  it('does not verify a claim named `__proto__`', () => {
+    const rows = [{ address: ADDRESS, primary_username: '__proto__' }];
+    expect(stripUnverifiedNames(rows, noRecords)[0].primary_username).toBeUndefined();
+  });
+
+  it('does not let a `__proto__` claim promote an UNRELATED claimant', () => {
+    // The interesting one. Assigning to `__proto__` on a plain object does not
+    // create a normal key — it reassigns the object's prototype. So a records
+    // object built with an attacker's `__proto__` entry has a genuine
+    // `NameRecord` sitting on its prototype chain, and EVERY missing key would
+    // inherit from it if lookups walked that chain far enough.
+    //
+    // Built the way shared builds it (`out[name] = record`) so this reproduces
+    // the real shape rather than a hypothetical one.
+    const poisoned: Record<string, unknown> = {};
+    poisoned['__proto__'] = rec();
+
+    // A different member claims a name nobody resolved. It must not inherit the
+    // attacker's record.
+    const rows = [{ address: ADDRESS, primary_username: 'alice' }];
+    expect(
+      stripUnverifiedNames(rows, poisoned as never)[0].primary_username,
+    ).toBeUndefined();
+  });
+
+  it('CONTROL: an ordinary claim still verifies against the same shape', () => {
+    // Without this, every case above would pass against a build where
+    // verification was simply broken for all names.
+    const rows = [{ address: ADDRESS, primary_username: 'alice' }];
+    expect(stripUnverifiedNames(rows, { alice: rec() })[0].primary_username).toBe('alice');
+  });
+});
+
 describe('stripUnverifiedNames', () => {
   const verified = { alice: rec() };
 

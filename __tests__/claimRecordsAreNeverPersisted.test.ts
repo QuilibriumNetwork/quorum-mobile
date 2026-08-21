@@ -88,16 +88,37 @@ describe('shouldPersistQuery', () => {
 
   it('CONTROL: still defers to React Query on a query it would not persist itself', () => {
     // The exclusion is an ADDITION to the default policy, not a replacement for
-    // it. A pending query has no data to write, and the default says so; this
-    // proves the rule did not stop consulting it.
+    // it. A query that never resolved has no data worth writing, React Query's
+    // own default says so, and this proves the rule still asks.
+    //
+    // ## Built through the cache, and NOT via setQueryData
+    //
+    // The obvious fixture — `setQueryData(['spaces'], undefined)` — creates NO
+    // cache entry at all: React Query reads `undefined` as "no update" and
+    // skips the write. MEASURED: `getQueryCache().getAll().length` is 0
+    // afterwards and `find()` returns `undefined`.
+    //
+    // This test previously guarded that with `if (pending) { ...expect... }`,
+    // which meant the body never ran and the whole case asserted NOTHING while
+    // reporting green. Caught in independent review, not by me. `build()`
+    // creates the entry directly, and the assertion below is unconditional so
+    // a broken fixture fails loudly instead of silently skipping.
     const client = new QueryClient();
-    client.setQueryData(['spaces'], undefined);
-    const pending = client.getQueryCache().find({ queryKey: ['spaces'] });
+    // `readonly unknown[]`, not the inferred `string[]`: `Query`'s key type is
+    // covariant in a way that makes the narrower inference unassignable to the
+    // `Query` that `shouldPersistQuery` and `defaultShouldDehydrateQuery` take.
+    const pending: Query = client
+      .getQueryCache()
+      .build(client, { queryKey: ['spaces'] as readonly unknown[] });
 
-    if (pending) {
-      expect(shouldPersistQuery(pending as Query)).toBe(
-        defaultShouldDehydrateQuery(pending as Query),
-      );
-    }
+    // Fail loudly if the fixture ever stops producing a real query — that is
+    // the exact failure mode this test just had.
+    expect(pending).toBeDefined();
+    expect(pending.state.status).toBe('pending');
+
+    expect(shouldPersistQuery(pending)).toBe(defaultShouldDehydrateQuery(pending));
+    // And spell out what that agreement IS, so the assertion cannot be
+    // satisfied by both sides being broken in the same direction.
+    expect(shouldPersistQuery(pending)).toBe(false);
   });
 });
