@@ -18,6 +18,7 @@
     "harness:config-sync": "jest --config jest.harness.config.js config-sync",
     "harness:config-to-desktop": "jest --config jest.harness.config.js config-to-desktop",
     "test:dyn-trace": "node scripts/dynamic-import-coverage.js --run",
+    "check:bundle": "node scripts/check-bundle.js",
     "check:release-bundle": "node scripts/check-release-bundle.js",
     "prebuild": "echo '\\n⚠️  prebuild is NOT a safe operation on this project.\\n\\nThe iOS folder is the source of truth and contains manual customizations\\n(QuorumNotificationService target, App Group entitlements, pinned\\nobjectVersion) that are not declared in app.json and would be lost.\\n\\nIf you genuinely need to prebuild, snapshot first:\\n  scripts/snapshot-ios-customizations.sh\\n  npx expo prebuild --no-install   (or --clean if you must)\\n  scripts/restore-ios-customizations.sh\\n\\nSee PREBUILD.md for the full rationale.\\n' && exit 1",
     "prebuild:snapshot": "scripts/snapshot-ios-customizations.sh",

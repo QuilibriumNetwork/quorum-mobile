@@ -38,10 +38,10 @@
  * is matching everything and every PRESENT result is meaningless.
  */
 
-const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { exportBundle, findBundles } = require('./lib/metro-export');
 
 /**
  * Literals that must survive. Each is the storage key or the user-facing copy
@@ -87,50 +87,6 @@ const value = (name) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
-function findBundle(dir) {
-  const jsRoot = path.join(dir, '_expo', 'static', 'js');
-  if (!fs.existsSync(jsRoot)) return null;
-  for (const platform of fs.readdirSync(jsRoot)) {
-    const platformDir = path.join(jsRoot, platform);
-    if (!fs.statSync(platformDir).isDirectory()) continue;
-    for (const file of fs.readdirSync(platformDir)) {
-      // .hbc is Hermes bytecode, .js the plain bundle. Either is the shipped
-      // artifact depending on the engine; both carry the string table.
-      if (file.endsWith('.hbc') || file.endsWith('.js')) {
-        return path.join(platformDir, file);
-      }
-    }
-  }
-  return null;
-}
-
-function exportBundle(outDir) {
-  console.log(`[release-bundle] exporting a production bundle to ${outDir}`);
-  console.log('[release-bundle] this takes a few minutes.\n');
-  // Run the CLI's JS entry point under this node, rather than going through
-  // `npx`. On Windows `npx` is a .cmd, and since the CVE-2024-27980 fix Node
-  // refuses to spawn a .cmd without a shell — `execFileSync('npx.cmd', …)`
-  // fails with EINVAL before Metro is ever reached. Going through a shell
-  // instead would work but reintroduces quoting bugs on any path containing a
-  // space, which a temp directory under a user profile very often does.
-  //
-  // Deliberately NOT --clear: the Metro cache is what makes a re-run bearable,
-  // and a stale cache would have to survive a source change to mislead us,
-  // which Metro's own invalidation already rules out.
-  execFileSync(
-    process.execPath,
-    [
-      require.resolve('@expo/cli/build/bin/cli'),
-      'export',
-      '--platform',
-      'android',
-      '--output-dir',
-      outDir,
-    ],
-    { stdio: 'inherit' }
-  );
-}
-
 function main() {
   let bundlePath = value('--bundle');
   let outDir;
@@ -138,8 +94,11 @@ function main() {
   if (!bundlePath) {
     outDir = path.join(os.tmpdir(), 'quorum-release-bundle-check');
     fs.rmSync(outDir, { recursive: true, force: true });
-    exportBundle(outDir);
-    bundlePath = findBundle(outDir);
+    console.log('[release-bundle] exporting a production bundle');
+    console.log('[release-bundle] this takes a few minutes.\n');
+    exportBundle({ outDir, platform: 'android' });
+    // Android is the only platform exported, so there is exactly one bundle.
+    bundlePath = findBundles(outDir)[0]?.file;
     if (!bundlePath) {
       console.error(`[release-bundle] FAIL: the export produced no bundle under ${outDir}`);
       process.exit(1);
