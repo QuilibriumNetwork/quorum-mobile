@@ -2288,10 +2288,10 @@
     tslib "^2.8.0"
     ws "^8.18.0"
 
-"@quilibrium/quorum-shared@2.1.0-43":
-  version "2.1.0-43"
-  resolved "https://registry.yarnpkg.com/@quilibrium/quorum-shared/-/quorum-shared-2.1.0-43.tgz#4c48146c664f10f2522f71993246f9393277b8f6"
-  integrity sha512-vZPnEbqnOptS5H1jDAutxyXksHJ1NvqX7qRcqtcPZ0AEAr16Z2JmBnub2jM2iMPUed0+3fSNrvzmiAjvzSS52g==
+"@quilibrium/quorum-shared@2.1.0-45":
+  version "2.1.0-45"
+  resolved "https://registry.yarnpkg.com/@quilibrium/quorum-shared/-/quorum-shared-2.1.0-45.tgz#1f709cb99e823df31be6961dc02207cdb9486022"
+  integrity sha512-uVV4+1n4NmsHb0dqvfAg9lljwSVfyQloYLd5RYAtSD9la/Uzf/PaNjO7mcTMCaqHdpO0Wra+NI70DcCit6LJbg==
   dependencies:
     "@noble/hashes" "1.8.0"
     dayjs "1.11.19"
