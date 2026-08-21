@@ -1,10 +1,10 @@
 ---
 type: task
 title: "Drop the local StoredMessage shim once quorum-shared publishes authenticatedSenderId"
-status: open
+status: done
 priority: medium
 created: 2026-08-20
-updated: 2026-08-20
+updated: 2026-08-21
 area: types / cross-repo dependency
 related:
   - "quorum-shared PR #85 (declares Message.authenticatedSenderId)"
@@ -14,6 +14,35 @@ related:
 ---
 
 # Delete `services/dm/storedMessage.ts` after the next quorum-shared release
+
+## Status
+
+**Done 2026-08-21.** The gate opened with quorum-shared `2.1.0-45`, which
+declares `authenticatedSenderId` at `dist/types/message.d.ts:309`. The version
+bump landed on `master` as its own `chore:` commit (`bff5cfa`) ahead of this
+work; the cleanup itself is a separate branch.
+
+The shim is deleted and every use site now names `Message` directly. Verified:
+
+- `npx tsc --noEmit` — **12 errors, identical to the pre-bump baseline**, and
+  none in any touched file. The baseline was MEASURED both ways (installed
+  `2.1.0-43`, counted, restored `2.1.0-45`, counted) rather than assumed.
+- `npx jest` — **125 suites / 1187 tests green**, exactly the count recorded
+  below when the shim went in.
+- `npx eslint` on the five touched files — 0 errors.
+
+**One step was not in the plan above: a test asserts on the source text.**
+`__tests__/dmSelfEchoGuards.test.ts:137` matched the literal string
+`'channelId, authenticatedSenderId: undefined } as StoredMessage'`, so renaming
+the type necessarily moved it to `... } as Message`. That is a rename following
+a rename, not a weakened guard — proven by mutation: deleting
+`authenticatedSenderId: undefined` from the batch-path literal turns the test
+red, and restoring it turns it green. The security property the test exists for
+(a space save strips the wire marker) is untouched.
+
+The `Partial<StoredMessage>` weak-type rationale did not just evaporate with the
+file. It moved to a comment on `messagesContainSelfAuthored` in
+`dmRevealLedger.ts`, since that is now the only place the constraint binds.
 
 ## Why this exists
 
@@ -67,12 +96,13 @@ grep -c authenticatedSenderId node_modules/@quilibrium/quorum-shared/dist/types/
 
 Small and mechanical. Every use is in the DM path.
 
-- [ ] Bump `@quilibrium/quorum-shared` in `package.json` to the release carrying the field.
-- [ ] Replace `StoredMessage` with `Message` at its use sites: `context/WebSocketContext.tsx` (the two DM receive saves and the two space saves), `hooks/chat/useSendDirectMessage.ts` (the optimistic message).
-- [ ] Replace `StoredMessageView` with `Partial<Message>` in `services/dm/dmRevealLedger.ts` and `services/dm/dmProfileService.ts`.
-- [ ] Delete `services/dm/storedMessage.ts`.
-- [ ] `npx tsc --noEmit` — expect the repo's pre-existing baseline and nothing new in the touched files.
-- [ ] `npx jest` — 125 files / 1187 tests were green when the shim went in.
+- [x] Bump `@quilibrium/quorum-shared` in `package.json` to the release carrying the field. → `2.1.0-45`, commit `bff5cfa` on `master`.
+- [x] Replace `StoredMessage` with `Message` at its use sites: `context/WebSocketContext.tsx` (the two DM receive saves and the two space saves), `hooks/chat/useSendDirectMessage.ts` (the optimistic message).
+- [x] Replace `StoredMessageView` with `Partial<Message>` in `services/dm/dmRevealLedger.ts` and `services/dm/dmProfileService.ts`.
+- [x] Delete `services/dm/storedMessage.ts`.
+- [x] Update the source-text literal in `__tests__/dmSelfEchoGuards.test.ts` that names the type. *(Not foreseen above — see Status.)*
+- [x] `npx tsc --noEmit` — expect the repo's pre-existing baseline and nothing new in the touched files. → 12 errors, baseline unchanged.
+- [x] `npx jest` — 125 files / 1187 tests were green when the shim went in. → still 125 / 1187.
 
 ⚠️ **Do not change the field's write sites while doing this.** The stamps in
 `WebSocketContext.tsx` are written *after* the spread of the wire message, and
@@ -87,4 +117,4 @@ assignable to it. `Partial<Message>` keeps that working; a hand-written
 `{ authenticatedSenderId?: string }` does not.
 
 ---
-*Last updated: 2026-08-20*
+*Last updated: 2026-08-21*

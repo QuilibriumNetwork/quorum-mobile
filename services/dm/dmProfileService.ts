@@ -26,7 +26,6 @@ import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
 import { getDeviceKeyset, type DeviceKeyset } from '../onboarding/secureStorage';
 import { ensureRevealBootstrap, hasRevealedTo, recordReveal } from './dmRevealLedger';
-import type { StoredMessageView } from './storedMessage';
 import {
   readGateRecord,
   shouldSendProfile,
@@ -458,7 +457,7 @@ export async function autoRevealOnInboundSession(
     spaceId: string;
     channelId: string;
     limit?: number;
-  }) => Promise<{ messages: StoredMessageView[] }>,
+  }) => Promise<{ messages: Partial<Message>[] }>,
 ): Promise<void> {
   try {
     const now = Date.now();

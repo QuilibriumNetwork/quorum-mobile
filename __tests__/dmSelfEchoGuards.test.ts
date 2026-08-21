@@ -134,7 +134,7 @@ describe('DM self-echo guards', () => {
       trimmedLines.filter((l) => l === 'authenticatedSenderId: undefined,')
     ).toHaveLength(1); // the live path's named literal
     expect(
-      source.includes('channelId, authenticatedSenderId: undefined } as StoredMessage')
+      source.includes('channelId, authenticatedSenderId: undefined } as Message')
     ).toBe(true); // the batch path's inline literal
   });
 

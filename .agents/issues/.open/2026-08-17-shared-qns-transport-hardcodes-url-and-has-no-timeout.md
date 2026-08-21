@@ -5,7 +5,7 @@ status: open
 priority: medium
 complexity: small
 created: 2026-08-17
-updated: 2026-08-17
+updated: 2026-08-21
 area: identity resolution / QNS / shared package
 repos: quorum-shared (the change), quorum-desktop (gains a timeout), quorum-mobile (can then retire its chunk loop)
 source: found while adopting shared's claim verification in mobile (#256) — the transport gap was not in that issue's scope
@@ -47,9 +47,15 @@ Verified: 683 tests in shared, 15/15 deliberate mutations caught, built artifact
 smoke-tested on real timers, desktop at 0 typecheck errors with 288 identity
 tests passing.
 
-**Remaining:** publish shared (version is still `2.1.0-43`; this repo bumps in
-separate `chore:` commits), then bump mobile and retire its chunk loop. Note the
-container swap called out under "Watch out for" lands with that step.
+**Remaining:** the mobile migration only. Shared has shipped and mobile is
+bumped — `2.1.0-45` (commit `bff5cfa` on `master`) carries the whole transport:
+`QnsRequestOptions` with `signal`, `baseUrl` and `timeoutMs` at
+`dist/qns/transport.d.ts:69,80,96`, `timeoutMs` opting out via the literal
+`'none'` exactly as described above. **So this issue is no longer blocked on a
+release.** What is left is swapping `resolveClaimedNames` for
+`resolveNamesBatch`, passing mobile's configured base URL, and deleting mobile's
+chunk loop — with the container swap called out under "Watch out for", which
+lands in that same change.
 
 ## What & why
 
@@ -121,7 +127,7 @@ request.
       existing `resolveNamesBatch(names, signal)` call site is untouched
 - [x] Give `timeoutMs` a bounded default and test that a hung fetch rejects
 - [x] Test that a caller-supplied signal and the internal deadline both abort
-- [ ] Publish, then bump desktop and confirm it inherits the timeout
+- [x] Publish, then bump desktop and confirm it inherits the timeout — shared published; mobile pins `2.1.0-45`. Desktop links shared locally, so it already had it.
 - [ ] Bump mobile, swap `resolveClaimedNames` for `resolveNamesBatch` passing
       mobile's configured base URL, and delete mobile's chunk loop
 
@@ -158,4 +164,4 @@ deleting it; it should still prove the rehydrated shape cannot promote a claim.
 
 ---
 
-*Last updated: 2026-08-17*
+*Last updated: 2026-08-21*
