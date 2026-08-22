@@ -5476,7 +5476,7 @@ const FeedReplyCard = React.memo(function FeedReplyCard({
 
   // The on-screen unit is the chain (root-first) or just this lone cast.
   const hasChain = !!(chain && chain.length > 0);
-  const baseChain = hasChain ? chain! : [post];
+  const baseChain = hasChain && chain ? chain : [post];
   const root = baseChain[0];
 
   // A lone reply promotes the cast it replied to into the primary card (fetch
@@ -5519,14 +5519,15 @@ const FeedReplyCard = React.memo(function FeedReplyCard({
   // cast is unavailable. A placeholder avatar is preferable to temporarily
   // erasing the person/reply slot and causing the feed unit to jump later.
   if (!parentCast && baseChain.length === 1 && root.parentHash) {
+    const parentHash = root.parentHash;
     const parentName = unresolvedParentAuthor?.displayName
       || unresolvedParentAuthor?.username
       || (rootParentFid ? `fid:${rootParentFid}` : 'Parent post');
     const openParent = () => shared.onNavigateToThread(
       unresolvedParentAuthor?.username ?? '',
-      root.parentHash!,
+      parentHash,
       false,
-      minimalParentStub(root.parentHash!, rootParentFid),
+      minimalParentStub(parentHash, rootParentFid),
     );
     return (
       <View>
