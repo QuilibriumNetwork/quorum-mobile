@@ -1287,13 +1287,32 @@ export async function setSpaceMuted(
 ): Promise<void> {
   const current = getLocalUserConfig(address) ?? getDefaultUserConfig(address);
   const prevSettings = current.notificationSettings ?? {};
+  const prev = (prevSettings[spaceId] ?? {}) as {
+    spaceId?: string;
+    enabledNotificationTypes?: SpaceNotificationTypeId[];
+  };
   const updated: UserConfig = {
     ...current,
     notificationSettings: {
       ...prevSettings,
       // Preserve any existing per-space notification settings; add isMuted, which
       // the pinned shared type doesn't declare yet (rides the untyped config blob).
-      [spaceId]: { ...(prevSettings[spaceId] ?? {}), isMuted: muted } as any,
+      //
+      // spaceId + enabledNotificationTypes are written EVEN WHEN THIS IS THE
+      // FIRST WRITE for the space. `{ ...(prev ?? {}), isMuted }` alone produced
+      // a bare `{ isMuted }`, and every consumer — here and on desktop — treats
+      // enabledNotificationTypes as guaranteed because the shared type declares
+      // it required. Desktop's `settings ?? getDefaults()` cannot recover it
+      // (the record is truthy), so the missing array crashed the channel route
+      // at NotificationPanel's `selectedTypes.filter(...)`. A record must never
+      // leave here in a shape its own type says is impossible.
+      [spaceId]: {
+        ...prev,
+        spaceId: prev.spaceId || spaceId,
+        enabledNotificationTypes:
+          prev.enabledNotificationTypes ?? DEFAULT_NOTIFICATION_TYPES,
+        isMuted: muted,
+      } as any,
     },
   };
   saveLocalUserConfig(updated);
