@@ -1900,6 +1900,35 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     const decryptedText = new TextDecoder().decode(new Uint8Array(decryptedBytes));
                     const updatedSpace = JSON.parse(decryptedText) as Space;
 
+                    // Scope guard. Everything above authenticates the manifest
+                    // against the DELIVERING space: the signing key must be in
+                    // THAT space's registration and the payload must decrypt
+                    // under THAT space's config key. But the object it produces
+                    // carries its own `spaceId`, chosen by whoever signed it, and
+                    // saveSpace keys the write on that field while the cache
+                    // writes below key on the delivering `spaceId`. The two are
+                    // never otherwise compared, so the identifier that was
+                    // checked and the row that gets rewritten can be different
+                    // spaces.
+                    //
+                    // Persist only what the delivering space is entitled to
+                    // change, and refuse otherwise like every other gate here.
+                    // Strictly narrowing: both broadcast paths encrypt the space
+                    // they seal for (broadcastSpaceUpdate.ts:41-94,
+                    // inviteService.ts:337-544, both via getSpace(spaceId)), so
+                    // no honest manifest names a space other than its own.
+                    //
+                    // Placed BEFORE the staleness guard on purpose — that guard
+                    // compares the incoming timestamp against the DELIVERING
+                    // space's modifiedDate, which is only a meaningful
+                    // comparison once the two spaces are known to be the same.
+                    if (updatedSpace.spaceId !== spaceId) {
+                      logger.warn(
+                        `[space-manifest] dropped: refusing cross-space write — payload names ${updatedSpace.spaceId?.slice(0, 12)}, delivered on ${spaceId?.slice(0, 12)}`
+                      );
+                      break;
+                    }
+
                     // Staleness guard. The hub replays historical log entries on
                     // every reconnect (log-since-result), so OLD space manifests
                     // routinely arrive after newer local changes. Applying them
