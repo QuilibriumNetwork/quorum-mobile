@@ -2556,7 +2556,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 return;
               }
 
-              // Remove message from cache and storage
+              // Remove from the cache. `messagesKey` is built from the
+              // DELIVERING spaceId+channelId, so this only ever touches this
+              // channel's list. It stays unconditional on purpose: a message
+              // can be in the cache before its storage write lands (optimistic
+              // render), and that one still has to disappear.
               queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
                 if (!old) return old;
                 return {
@@ -2568,8 +2572,24 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 };
               });
 
-              // Also remove from storage
-              await storage.deleteMessage(removeContent.removeMessageId);
+              // Storage removal is keyed on messageId ALONE (messagesDb:
+              // DELETE FROM messages WHERE message_id = ?), so unlike the cache
+              // update above it is NOT confined to the delivering space.
+              //
+              // The authorization ran against `targetMessage`, resolved with a
+              // getMessage scoped to THIS space and channel. When that finds
+              // nothing the shared verdict still allows the frame, reasoning
+              // that removing a message we do not have is a harmless no-op.
+              // Honour that reasoning literally rather than deleting anyway:
+              // an id is not unique to a space, so an unscoped delete for a
+              // target absent HERE lands on whatever row carries that id
+              // elsewhere — another space, or a DM.
+              //
+              // Same guard the DM remove-message handlers in this file already
+              // apply (`if (authorized && targetMsg)`).
+              if (targetMessage) {
+                await storage.deleteMessage(removeContent.removeMessageId);
+              }
               // Delete remove-message from inbox after processing
               if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
                 deleteSpaceInboxMessages(
@@ -4613,6 +4633,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               continue;
             }
 
+            // Cache first, and unconditionally: `messagesKey` is scoped to the
+            // delivering space+channel, and an optimistically rendered message
+            // may not have a storage row yet.
             queryClient.setQueryData<InfiniteMessagesData>(messagesKey, (old) => {
               if (!old) return old;
               return { ...old, pages: old.pages.map(page => ({
@@ -4620,12 +4643,22 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 messages: page.messages.filter(msg => msg.messageId !== removeContent.removeMessageId),
               })) };
             });
-            await storage.deleteMessage(removeContent.removeMessageId);
-            // Drop any queued reaction/edit update for this message so the
-            // deferred flush below doesn't resurrect it after deletion.
-            pendingStorageUpdates.delete(removeContent.removeMessageId);
-            for (const entry of pendingCacheTransforms.values()) {
-              entry.transforms.delete(removeContent.removeMessageId);
+            // Scope guard, same rule as the live path above: deleteMessage is
+            // keyed on messageId alone, so it is not confined to the space this
+            // removal arrived through. With no target in the delivering scope
+            // the shared verdict has allowed the frame as a no-op — deleting
+            // anyway would reach a same-id row in another space or a DM.
+            if (targetMessage) {
+              await storage.deleteMessage(removeContent.removeMessageId);
+              // Drop any queued reaction/edit update for this message so the
+              // deferred flush below doesn't resurrect it after deletion. Tied
+              // to the delete: with nothing removed there is nothing to
+              // resurrect, and discarding them would drop live updates for a
+              // message this batch is otherwise carrying.
+              pendingStorageUpdates.delete(removeContent.removeMessageId);
+              for (const entry of pendingCacheTransforms.values()) {
+                entry.transforms.delete(removeContent.removeMessageId);
+              }
             }
             continue;
           }
