@@ -22,7 +22,7 @@ import {
   type SpaceKey,
 } from './spaceStorage';
 import { type Space, type SpaceMember } from '@quilibrium/quorum-shared';
-import { hexToBytes, bytesToHex } from '@quilibrium/quorum-shared';
+import { hexToBytes, bytesToHex, logger } from '@quilibrium/quorum-shared';
 import { getMMKVAdapter } from '../storage/mmkvAdapter';
 import { deriveAddress } from '@/utils/deriveAddress';
 
@@ -189,7 +189,34 @@ export async function syncSpaceFromConfig(
       return false;
     }
 
-    // Generate new inbox keypair for this space
+    // Scope guard. This call was asked to sync `spaceId`, but the object about
+    // to be persisted carries its own `spaceId` from inside the fetched
+    // ciphertext, and `saveSpace` keys the write on THAT field
+    // (spaceStorage: `space:<space.spaceId>`). Nothing upstream compares the
+    // two — note in particular that the existing-space short-circuit at the top
+    // of this function tested the REQUESTED id, so it does not protect whichever
+    // space the payload happens to name.
+    //
+    // Persist only the space that was actually requested.
+    //
+    // ⚠️ This is a SCOPE guard, NOT authentication. The manifest fetched above
+    // is unsigned — `getSpaceManifest`'s response shape carries no signature or
+    // owner field at all — so nothing here establishes who authored it, and
+    // successful decryption proves only that the sender knew the space config
+    // key, which every current and past member holds. Authenticating this
+    // endpoint needs a wire change and is tracked separately. What this guard
+    // does establish is that syncing one space can no longer rewrite another.
+    if (decryptedManifest.spaceId !== spaceId) {
+      // Said out loud on purpose: every other exit in this function is a bare
+      // `return false`, which is what made this path hard to reason about.
+      logger.warn(
+        `[space-sync] refusing cross-space write — manifest served for ${spaceId?.slice(0, 12)} names ${decryptedManifest.spaceId?.slice(0, 12)}`
+      );
+      return false;
+    }
+
+    // Generate new inbox keypair for this space. After the guard on purpose —
+    // an Ed448 keygen is slow, and a refused sync has no use for one.
     const inboxKeypair = await cryptoProvider.generateEd448();
     const inboxAddress = deriveAddress(new Uint8Array(inboxKeypair.public_key));
 
