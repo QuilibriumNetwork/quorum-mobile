@@ -219,8 +219,47 @@ export async function isReadOnlyPostAuthorized(
  * parity), PLUS a known-key binding — when the signing key DOES map to an
  * existing member row, the claimed senderId must be that member. This kills
  * the cheap impersonation (a member signing with their own registered key
- * while claiming someone else's senderId) while leaving genuine rotations
- * (unknown key) accepted exactly as desktop does.
+ * while claiming someone else's senderId).
+ *
+ * ## An unbound key may INTRODUCE a member, never REWRITE one
+ *
+ * The bootstrap exemption below is load-bearing and cannot simply be removed:
+ * mobile's space manifest carries no member list, so an existing member's
+ * connect-time profile re-broadcast landing in the handler's upsert is the ONLY
+ * way a new joiner learns who was already there. Suppressing creation would
+ * leave every new joiner with a half-empty roster.
+ *
+ * But it is bounded. Accepting a key bound to nobody justifies POPULATING an
+ * absent row; it does not justify REPLACING a present one. Without that bound,
+ * a freshly generated keypair — registered to nobody, which is the entire
+ * qualification the exemption asks for — could name any existing member as
+ * `senderId` and rewrite their display name, avatar and bio on every device.
+ * The authorization reads the KEY while the mutation acts on the CLAIMED
+ * ADDRESS, and nothing tied the two together.
+ *
+ * The presence test uses `getSpaceMember`, the SAME call both receive handlers
+ * make to decide create-vs-merge. That is deliberate: scanning the passed-in
+ * `members` array instead would be cheaper but could disagree with the handler
+ * whenever that array is a stale cache, and a disagreement here reopens the
+ * hole silently. Agreement by construction beats agreement by argument on a
+ * gate whose failure mode is invisible.
+ *
+ * ## Why the owner lookup goes through `resolveVerifiedSender`
+ *
+ * A second device signs with its OWN per-space key (`getSpaceSigningKey` =
+ * signing ?? inbox), which is never written to a member row's anchor — mobile
+ * refuses to repoint an anchor at all (see buildJoinedMemberRow). So an
+ * anchor-only lookup classifies every legitimate second device as "unknown",
+ * and bounding the unknown branch would then break every multi-device profile
+ * update, permanently and silently. `resolveVerifiedSender` also admits the
+ * per-device signing keys announced via master-signed `announce-keys`
+ * statements, which is what makes the bound safe. It is the same resolution the
+ * control-message path already uses, so the two can no longer disagree about
+ * who a key belongs to.
+ *
+ * One deliberate tightening rides along: `resolveVerifiedSender` skips kicked
+ * members, so a kicked member's own key is now unbound and can no longer edit
+ * their existing row. That is the correct answer and it fails closed.
  *
  * Deliberately NOT mirrored from desktop: writing the announced key's inbox
  * address onto the claimed member's row. Accepting an unproven key→member
@@ -237,15 +276,33 @@ export async function isUpdateProfileAuthorized(
   if (!publicKey) return false;
   const senderId = (message.content as { senderId?: string })?.senderId;
   if (!senderId) return false;
-  const memberList =
-    members ?? (await getMMKVAdapter().getSpaceMembers(spaceId));
-  const inboxAddress = deriveInboxAddress(publicKey);
-  const keyOwner = memberList.find(
-    (m) => m.inbox_address && m.inbox_address === inboxAddress
-  );
-  if (!keyOwner) return true; // unknown key: rotation announcement, accept
-  const ownerAddress = keyOwner.address || keyOwner.user_address;
-  return ownerAddress === senderId;
+  const adapter = getMMKVAdapter();
+  const memberList = members ?? (await adapter.getSpaceMembers(spaceId));
+  const deviceKeys = await adapter.getSpaceMemberDevices(spaceId);
+  const keyOwner = resolveVerifiedSender(publicKey, memberList, deviceKeys);
+  // Bound key: it may speak for its owner and nobody else.
+  if (keyOwner) return keyOwner === senderId;
+
+  // Unbound key — the rotation/bootstrap announcement. Allowed only to
+  // introduce a member this device has never recorded.
+  const claimed = await adapter.getSpaceMember(spaceId, senderId);
+  if (claimed) {
+    // `debug`, not `warn`, deliberately. This refusal cannot tell a forged
+    // rewrite from a member's own second device whose `announce-keys` has not
+    // been seen yet — the two are byte-identical on the wire — so it is a
+    // routine outcome, not an attack signal. Production sets minLevel 'warn'
+    // (services/observability/loggingPolicy.ts), and the hub log replays
+    // entries on reconnect, so `warn` here would print on real devices for
+    // ordinary multi-device use. That is the exact trap
+    // `processDeviceKeyStatement` already documents one file over ("logging
+    // those would drown the console"), and it matches the level of the
+    // handler's own drop line one statement later.
+    logger.debug(
+      `[update-profile] space=${spaceId.slice(0, 12)}: unregistered key may not rewrite an existing member (claimed=${senderId.slice(0, 12)}); refusing`
+    );
+    return false;
+  }
+  return true;
 }
 
 /**

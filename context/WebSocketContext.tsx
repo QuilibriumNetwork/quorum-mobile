@@ -2708,11 +2708,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             if (contentType === 'update-profile') {
               // Profile updates rewrite a member's display identity, so they
               // require a valid signature (unsigned/invalid → DROPPED, desktop
-              // parity) plus the known-key binding: a signing key already
-              // registered to a member may only speak for that member. A key
-              // matching no row is accepted — the message doubles as a
-              // key-rotation announcement. See isUpdateProfileAuthorized for
-              // why this is weaker than control-message auth and why the
+              // parity) plus the known-key binding: a signing key bound to a
+              // member — by their join anchor OR by an announced per-device
+              // key — may only speak for that member. A key bound to nobody is
+              // still accepted as a rotation/bootstrap announcement, but only
+              // to INTRODUCE a member this device has no row for; it may not
+              // rewrite one it already has. See isUpdateProfileAuthorized for
+              // why the bootstrap case cannot simply be removed, and why the
               // announced key is NOT written back to the member row.
               const profileAuthorized = await isUpdateProfileAuthorized(spaceMessage, spaceId);
               if (!profileAuthorized) {
@@ -4755,9 +4757,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             // member's profile update would never reach this device.
             //
             // Signature + known-key-binding gate, same as live: unsigned or
-            // invalid → dropped; a signing key registered to a member may only
-            // speak for that member; unknown key accepted (rotation
-            // announcement). See isUpdateProfileAuthorized.
+            // invalid → dropped; a signing key bound to a member (join anchor
+            // or announced per-device key) may only speak for that member; an
+            // unbound key may introduce a member this device has no row for
+            // but may not rewrite one it has. The gate itself lives in
+            // isUpdateProfileAuthorized, so this path and the live path share
+            // one implementation rather than two copies that can drift.
             const profileAuthorized = await isUpdateProfileAuthorized(
               spaceMessage, spaceId, await getBatchMembers()
             );
