@@ -22,6 +22,10 @@
 //   - anything that is a defect in the .so rather than in the crate is invisible
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+// Same specifier native-provider.ts uses for its own sha512, so the legacy
+// hub-derived branch of unsealHubEnvelope below derives the key the real code
+// would derive rather than a lookalike from elsewhere.
+import { sha512 as nobleSha512 } from '@noble/hashes/sha2.js';
 import { channel_raw } from '@quilibrium/quilibrium-js-sdk-channels';
 import { WasmCryptoProvider, type ChannelWasmModule } from '@quilibrium/quorum-shared';
 
@@ -284,15 +288,49 @@ export class NativeCryptoProvider extends WasmCryptoProvider {
     return nativeOnly('batchUnsealEnvelopes');
   }
 
-  // Hub and sync envelopes belong to the SPACE paths, which this harness does
-  // not cover (DM transport only, same boundary the desktop harness draws).
-  // Reproducing them unexercised would be speculative code that drifts silently;
-  // throwing names exactly what to add if a space scenario ever needs them.
+  // Hub and sync envelopes belong to the SPACE paths. Everything here except
+  // unsealHubEnvelope stays unimplemented: reproducing a method no scenario
+  // exercises is speculative code that drifts silently, and throwing names
+  // exactly what to add when a space scenario needs it.
   async sealHubEnvelope(): Promise<never> {
-    return nativeOnly('sealHubEnvelope (space path — out of DM scope)');
+    return nativeOnly('sealHubEnvelope (space path — no scenario seals one yet)');
   }
-  async unsealHubEnvelope(): Promise<never> {
-    return nativeOnly('unsealHubEnvelope (space path — out of DM scope)');
+
+  /**
+   * native-provider.ts unsealHubEnvelope (~:882-920), transcribed.
+   *
+   * Implemented because the space RECEIVE path calls it unconditionally
+   * (WebSocketContext handleIncomingMessage), so a scenario that delivers a
+   * space frame cannot reach any space handler without it. It is the vehicle,
+   * not the thing under test — a scenario asserting on space authorization is
+   * asserting on code above this line.
+   *
+   * Both branches are reproduced even though scenarios currently only use the
+   * config-key one: matching the real method exactly is what keeps the
+   * transcription checkable against its original.
+   *
+   * ⚠️ DRIFT RISK, same as every method in this block: if native-provider's
+   * version changes, change this to match.
+   */
+  async unsealHubEnvelope(
+    hubPrivateKey: number[],
+    ephemeralPublicKeyHex: string,
+    encryptedEnvelope: string,
+    configPrivateKey?: number[]
+  ): Promise<string> {
+    // The config key is used DIRECTLY as the X448 private key; the hub-derived
+    // form is the legacy fallback for spaces predating config keys.
+    const x448PrivateKey = configPrivateKey
+      ? configPrivateKey
+      : Array.from(nobleSha512(new Uint8Array(hubPrivateKey)).slice(0, 56));
+
+    const decrypted = (await this.decryptInboxMessage({
+      inbox_private_key: x448PrivateKey,
+      ephemeral_public_key: Array.from(Buffer.from(ephemeralPublicKeyHex, 'hex')),
+      ciphertext: JSON.parse(encryptedEnvelope) as Record<string, unknown>,
+    } as never)) as number[];
+
+    return new TextDecoder().decode(new Uint8Array(decrypted));
   }
   async sealSyncEnvelope(): Promise<never> {
     return nativeOnly('sealSyncEnvelope (space path — out of DM scope)');
