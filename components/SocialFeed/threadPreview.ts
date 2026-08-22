@@ -39,12 +39,15 @@ export function buildThreadPreview(
       : casts;
   }
 
-  return [
+  const preview: ThreadPreviewEntry[] = [
     { type: 'cast', cast: chain[0] },
     { type: 'gap', omittedCount: chain.length - 3 },
     { type: 'cast', cast: chain[chain.length - 2] },
     { type: 'cast', cast: chain[chain.length - 1] },
   ];
+  return options.hasEarlierContext
+    ? [{ type: 'gap' }, ...preview]
+    : preview;
 }
 
 /**

@@ -57,6 +57,29 @@ describe('buildThreadPreview', () => {
     expect(buildThreadPreview(chain, { hasEarlierContext: true })[0]).toEqual({ type: 'gap' });
   });
 
+  it('preserves both unknown earlier context and a known internal omission', () => {
+    const chain = [
+      post('c', 'b'),
+      post('d', 'c'),
+      post('e', 'd'),
+      post('f', 'e'),
+      post('g', 'f'),
+    ];
+    const preview = buildThreadPreview(chain, { hasEarlierContext: true });
+
+    expect(preview.map((entry) => entry.type)).toEqual([
+      'gap',
+      'cast',
+      'gap',
+      'cast',
+      'cast',
+    ]);
+    expect(preview[0]).toEqual({ type: 'gap' });
+    expect(preview[2]).toEqual({ type: 'gap', omittedCount: 2 });
+    expect(preview.filter((entry) => entry.type === 'cast').map((entry) => entry.cast.hash))
+      .toEqual(['c', 'f', 'g']);
+  });
+
   it('never exceeds three casts at any supported depth', () => {
     for (let depth = 1; depth <= 64; depth += 1) {
       const chain = Array.from({ length: depth }, (_, index) =>
