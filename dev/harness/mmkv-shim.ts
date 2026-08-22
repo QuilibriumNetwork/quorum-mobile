@@ -60,9 +60,42 @@ export function createMMKV(opts: { id: string }): MMKV {
   };
 }
 
-/** Test helper — drop every store. Not part of the real MMKV API. */
+/**
+ * Test helper — empty every store in THIS module instance. Not part of the real
+ * MMKV API.
+ *
+ * ⚠️ **It does not reset the app's storage when a scenario imports it as
+ * `'./mmkv-shim'`, and that is not fixable from in here.** MEASURED 2026-08-22:
+ * a scenario importing it relatively logged `stores = []` while the app's spaces
+ * store was populated and being read normally. App code reaches this file
+ * through the `^react-native-mmkv$` moduleNameMapper rule, and jest gives the
+ * mapped request its own module registry entry — so the two specifiers produce
+ * two INSTANCES, each with its own private `stores`. The scenario clears an
+ * empty registry and nothing happens.
+ *
+ * Existing scenarios are unaffected only by luck: they call this once in
+ * `beforeAll`, where a fresh jest module registry means the stores were empty
+ * regardless. Nothing was silently broken by it — but nothing was reset either.
+ *
+ * **To actually clear state between tests, use the app's own API**, which by
+ * construction holds the same handle as the code under test:
+ *
+ * ```ts
+ * import { clearSpaceStorage } from '@/services/config/spaceStorage';
+ * beforeEach(() => clearSpaceStorage());
+ * ```
+ *
+ * The symptom when you get this wrong is not a crash: it is a security
+ * assertion passing while the function under test returned early and never ran.
+ *
+ * The in-place clear below is still the right implementation independent of all
+ * that. `createMMKV` closes over its own Map (`s` above), so the previous
+ * `stores.clear()` dropped the registry while live handles kept pointing at
+ * populated Maps — and a later `createMMKV` for the same id would mint a SECOND
+ * Map, leaving two handles to one id silently diverging.
+ */
 export function __resetAllMMKV(): void {
-  stores.clear();
+  for (const store of stores.values()) store.clear();
 }
 
 export default { createMMKV };
