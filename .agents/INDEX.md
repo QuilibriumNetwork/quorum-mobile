@@ -98,6 +98,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [The batch receive path short-circuits past the auto-reveal for `call-*` frames](issues/.open/2026-08-19-batch-decrypt-path-skips-auto-reveal-for-call-frames.md)
 - 🐛 [Farcaster DM: in-conversation pfps fall back to initials on a fresh device](issues/.open/2026-08-19-farcaster-dm-pfps-fall-back-to-initials-inside-the-conversation.md)
 - 🐛 [Opening a first-time Farcaster DM can still title it with a raw FID](issues/.open/2026-08-19-opening-a-first-time-farcaster-dm-can-still-title-it-with-a-raw-fid.md)
+- 📋 [Home feed: conversation relationships are not visually obvious (PFP connectors, deep-reply collapse, 3-post cap)](issues/.open/2026-08-21-feed-thread-relationships-not-visually-obvious.md)
 - 🐛 [Six `saveSpaceMember` sites still skip the identity-roster invalidation](issues/.open/2026-08-19-self-rename-name-stale-outside-websocket-context.md)
 - 🐛 [Renaming yourself on one client gets undone by the other client's synced config](issues/.open/2026-08-20-config-sync-silently-reverts-a-display-name-rename.md)
 - 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
