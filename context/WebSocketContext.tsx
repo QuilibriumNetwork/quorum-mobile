@@ -124,6 +124,7 @@ import { getApiConfig } from '../services/api/config';
 
 import type { MessagesPage, InfiniteMessagesData } from '../hooks/chat/queryTypes';
 import { NO_PRIMARY_NAME } from '@/utils/primaryName';
+import { clampWireTimestamp } from '@/utils/wireTimestamp';
 
 interface WebSocketContextValue {
   // Connection state
@@ -2770,7 +2771,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               // Stamp the merge with the wire message's createdDate so the
               // public-profile fallback can decide which is newer when
               // both exist for the same user.
-              const ts = spaceMessage.createdDate || Date.now();
+              //
+              // Clamped, because this value is chosen by the sender and is then
+              // used as a last-write-wins high-water mark below. A far-future
+              // claim would not just win now, it would refuse every later
+              // update to this row — including the member's own correction —
+              // by the same comparison. `Math.min` only ever pulls the stamp
+              // backward, so a genuinely older or queue-delayed message keeps
+              // its real ordering. See utils/wireTimestamp.
+              const ts = clampWireTimestamp(spaceMessage.createdDate, Date.now());
 
               // Two-slot staleness: OVERRIDE fields (display_name/profile_image/
               // bio) and GLOBAL fields (global_*) each have their own timestamp
@@ -4791,7 +4800,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             const existingMember = await adapter.getSpaceMember(spaceId, profileContent.senderId) as
               | (SpaceMember & { profileTimestamp?: number; globalProfileTimestamp?: number; farcasterFid?: number; farcasterUsername?: string })
               | undefined;
-            const ts = spaceMessage.createdDate || Date.now();
+            // Same clamp as the live handler — the sender picks this value and
+            // it becomes the LWW high-water mark. See utils/wireTimestamp.
+            const ts = clampWireTimestamp(spaceMessage.createdDate, Date.now());
 
             // Two-slot staleness (mirror of the JS-path handler): override and
             // global field groups each guard on their own timestamp.

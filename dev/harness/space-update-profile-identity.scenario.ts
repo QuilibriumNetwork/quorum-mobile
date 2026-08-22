@@ -250,10 +250,18 @@ const REINTRODUCED_NAME = 'renamed-after-being-introduced';
 const SELF_UPDATED_NAME = 'renamed-by-my-own-registered-key';
 
 // Fixed rather than Date.now(), so ordering between arms is deterministic and a
-// re-run cannot trip the handler's own LWW staleness guard. Every value is an
-// ordinary past timestamp: the unbounded-future-timestamp defect is a separate
-// finding and is measured by its own scenario, not here.
-const T_BASE = 1_800_000_000_000;
+// re-run cannot trip the handler's own LWW staleness guard.
+//
+// The base must be genuinely in the PAST relative to the wall clock. The
+// handler clamps a wire timestamp with `Math.min(value, now)`
+// (utils/wireTimestamp), so a ladder set in the future would be flattened to
+// "whenever the test happened to run" — every arm's stamp would collapse to the
+// same neighbourhood and the ordering these constants exist to fix would become
+// a race against real elapsed milliseconds rather than a fixture.
+//
+// Every value here is an ordinary past timestamp: the unbounded-future-timestamp
+// defect is a separate finding, measured by `space-profile-timestamp-clamp`.
+const T_BASE = 1_700_000_000_000;
 const T_BOOTSTRAP = T_BASE + 1_000;
 const T_KNOWN_KEY_FORGERY = T_BASE + 2_000;
 const T_ATTACK = T_BASE + 3_000;
