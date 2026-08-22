@@ -85,10 +85,12 @@ describe('buildThreadPreview', () => {
       const chain = Array.from({ length: depth }, (_, index) =>
         post(`cast-${index}`, index > 0 ? `cast-${index - 1}` : undefined),
       );
-      const preview = buildThreadPreview(chain);
-      const visible = preview.filter((entry) => entry.type === 'cast');
-      expect(visible.length).toBeLessThanOrEqual(3);
-      expect(visible.at(-1)?.cast.hash).toBe(`cast-${depth - 1}`);
+      for (const hasEarlierContext of [false, true]) {
+        const preview = buildThreadPreview(chain, { hasEarlierContext });
+        const visible = preview.filter((entry) => entry.type === 'cast');
+        expect(visible.length).toBeLessThanOrEqual(3);
+        expect(visible.at(-1)?.cast.hash).toBe(`cast-${depth - 1}`);
+      }
     }
   });
 });
@@ -127,6 +129,26 @@ describe('collapseSelfReplyChains', () => {
     const result = collapseSelfReplyChains([post('a'), post('b', 'a', 2)]);
     expect(result).toHaveLength(2);
     expect(result.every((item) => item.__chain === undefined)).toBe(true);
+  });
+
+  it('matches Farcaster hashes case-insensitively', () => {
+    const result = collapseSelfReplyChains([post('0xABCD'), post('reply', '0xabcd')]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].hash).toBe('reply');
+    expect(result[0].__chain?.map((item) => item.hash)).toEqual(['0xABCD', 'reply']);
+  });
+
+  it('does not mutate the loaded feed array or its casts', () => {
+    const root = post('root');
+    const reply = post('reply', 'root');
+    const posts = [root, reply];
+
+    collapseSelfReplyChains(posts);
+
+    expect(posts).toEqual([root, reply]);
+    expect(root).not.toHaveProperty('__chain');
+    expect(reply).not.toHaveProperty('__chain');
   });
 
   it('keeps branches as separate feed units', () => {
