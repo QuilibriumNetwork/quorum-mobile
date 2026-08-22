@@ -19,6 +19,7 @@ This is the main index for all documentation, bug reports, and task management.
 ### Features
 - [DM "delete your own message" (delete for everyone) — mobile](docs/features/dm-delete-own-message.md)
 - [DM mute: what we show, what we don't, and how it's built](docs/features/dm-mute-behavior-and-pattern.md)
+- [Feed thread previews](docs/features/feed-thread-previews.md)
 - [Identity resolution on mobile](docs/features/identity-resolution.md)
 - [Mobile Notification System (in-app unified panel)](docs/features/notification-system.md)
 
@@ -28,6 +29,7 @@ This is the main index for all documentation, bug reports, and task management.
 
 ### In Progress
 
+- 📋 [Make feed conversation threads visually obvious](issues/2026-08-21-feed-conversation-thread-clarity.md)
 - 🐛 [Space calls never start, and every failed start leaves a permanent banner](issues/2026-08-10-space-calls-dead-endpoints-and-stale-banner.md)
 - 🐛 [Public invite: 'Generate New Link' claims to invalidate the old link, is offered to non-owners, and never propagates the URL](issues/2026-08-11-public-invite-regenerate-copy-and-non-owner-invite-gating.md)
 - 🐛 [Broadcast `.q` claims never reach the identity ladder](issues/2026-08-16-broadcast-q-claims-never-render-after-the-identity-migration.md)
