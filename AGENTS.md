@@ -314,6 +314,15 @@ verdict block **verbatim**.
 - `yarn verify --show-receipt` prints the last run's record, including the
   commit it ran against.
 
+`yarn verify` here runs `scripts/verify.mjs`, which delegates to the same
+orchestrator quorum-desktop and quorum-shared use (spawning
+`quorum-desktop`'s `scripts/verify/index.mjs` when that checkout is present
+as a sibling, and falling back to this repo's own fast tier with a
+`PASS (PARTIAL)` otherwise). That default delegation path has not itself
+been exercised end to end yet, only via the `VERIFY_ORCHESTRATOR` override:
+the main desktop checkout stays on `main`, which will not carry the
+orchestrator until this PR merges there, and this gap closes once it does.
+
 ### What it costs, so you can predict before you run it
 
 The gate routes itself from the diff (`scripts/verify/routing.mjs`), so the
