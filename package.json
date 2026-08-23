@@ -12,6 +12,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest",
+    "verify": "node scripts/verify.mjs",
     "harness": "jest --config jest.harness.config.js",
     "harness:smoke": "jest --config jest.harness.config.js smoke",
     "harness:join": "jest --config jest.harness.config.js join-parity",
