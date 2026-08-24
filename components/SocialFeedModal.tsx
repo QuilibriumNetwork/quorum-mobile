@@ -5028,6 +5028,11 @@ function threadCastToFeedPost(cast: ThreadCast): FeedPost {
         },
         text: quoted.text,
         timestamp: quoted.timestamp,
+        embeds: {
+          images: (quoted.embeds?.images ?? [])
+            .map((image) => ({ url: image.url, alt: image.alt }))
+            .filter((image) => Boolean(image.url)),
+        },
       },
       username: quoted.author.username,
       hashPrefix: quoted.hash.slice(0, 10),
@@ -5072,6 +5077,7 @@ function threadCastToFeedPost(cast: ThreadCast): FeedPost {
     frameEmbeds: [],
     filter: 'all',
     viewerHasLiked: cast.viewerContext?.reacted,
+    viewerHasRecast: cast.viewerContext?.recast,
     viewerIsFollowing: cast.author.viewerContext?.following,
   };
 }
