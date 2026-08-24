@@ -74,7 +74,7 @@ import {
   type SearchChannel,
   type SearchUser,
 } from '@/hooks/useFarcasterSearch';
-import { parseFarcasterUrl, useFarcasterThread, type FlattenedCast, type ThreadCast } from '@/hooks/useFarcasterThread';
+import { parseFarcasterUrl, useFarcasterThread, type FlattenedCast } from '@/hooks/useFarcasterThread';
 import { useFarcasterCastLimits, isLongCast } from '@/hooks/useFarcasterPro';
 import { followUser, likeCast, recastCast, unlikeCast, unrecastCast, uploadImageForCast } from '@/services/farcasterClient';
 import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
@@ -108,7 +108,6 @@ import ReanimatedModule, { runOnJS, useAnimatedStyle, useSharedValue, withSpring
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { ReportModal } from '@/components/ReportModal';
-import { buildCompactThread } from '@/components/SocialFeed/threadContext';
 import * as Skin from '@/theme/skins/geometry';
 
 const ReanimatedView = ReanimatedModule.View;
@@ -4997,91 +4996,6 @@ function normalizedCastToFeedPost(cast: NormalizedCast): FeedPost {
   };
 }
 
-/**
- * Convert a thread-history cast into the flat shape used by feed cards.
- * The shared thread hook is the only source that exposes the complete
- * parent chain for a deeply nested reply.
- */
-function threadCastToFeedPost(cast: ThreadCast): FeedPost {
-  const embeds = cast.embeds ?? {};
-  const mediaUrls = (embeds.images ?? [])
-    .map((image) => image.url)
-    .filter((url): url is string => Boolean(url));
-  const videos: VideoEmbed[] = (embeds.videos ?? [])
-    .filter((video) => Boolean(video.url || video.thumbnailUrl))
-    .map((video) => ({
-      url: video.url,
-      thumbnailUrl: video.thumbnailUrl,
-      width: video.width,
-      height: video.height,
-    }));
-  const quoteCasts: QuoteCastEmbed[] = (embeds.casts ?? [])
-    .filter((quoted) => Number.isFinite(quoted.author.fid) && quoted.author.fid > 0 && !!quoted.hash)
-    .map((quoted) => ({
-      cast: {
-        hash: quoted.hash,
-        author: {
-          fid: quoted.author.fid,
-          username: quoted.author.username,
-          displayName: quoted.author.displayName,
-          pfp: quoted.author.pfp,
-        },
-        text: quoted.text,
-        timestamp: quoted.timestamp,
-        embeds: {
-          images: (quoted.embeds?.images ?? [])
-            .map((image) => ({ url: image.url, alt: image.alt }))
-            .filter((image) => Boolean(image.url)),
-        },
-      },
-      username: quoted.author.username,
-      hashPrefix: quoted.hash.slice(0, 10),
-    }));
-  const urlPreviews: UrlEmbed[] = (embeds.urls ?? [])
-    .map((url) => ({
-      url: url.openGraph?.url || url.openGraph?.sourceUrl,
-      title: url.openGraph?.title,
-      description: url.openGraph?.description,
-      domain: url.openGraph?.domain,
-      image: url.openGraph?.image,
-      frameImageUrl: url.openGraph?.frameEmbedNext?.frameEmbed?.imageUrl,
-      frameButtonTitle: url.openGraph?.frameEmbedNext?.frameEmbed?.button?.title,
-      frameActionUrl: url.openGraph?.frameEmbedNext?.frameUrl,
-    }))
-    .filter((preview) => Boolean(preview.url));
-
-  return {
-    id: `thread-${cast.hash}`,
-    hash: cast.hash,
-    username: cast.author.username,
-    authorFid: cast.author.fid,
-    authorName: cast.author.displayName || cast.author.username || `fid:${cast.author.fid}`,
-    authorHandle: cast.author.username ? `@${cast.author.username}` : '',
-    authorAvatar: cast.author.pfp?.url,
-    channel: cast.channel?.name,
-    parentHash: cast.parentHash,
-    parentUrl: cast.parentUrl,
-    parentAuthorFid: cast.parentAuthor?.fid,
-    time: formatTimestamp(cast.timestamp),
-    content: cast.text,
-    stats: {
-      likes: formatCount(cast.reactions?.count ?? 0),
-      replies: formatCount(cast.replies?.count ?? 0),
-      shares: formatCount(cast.recasts?.count ?? 0),
-    },
-    tags: [],
-    mediaUrls,
-    videos,
-    urlPreviews,
-    quoteCasts,
-    frameEmbeds: [],
-    filter: 'all',
-    viewerHasLiked: cast.viewerContext?.reacted,
-    viewerHasRecast: cast.viewerContext?.recast,
-    viewerIsFollowing: cast.author.viewerContext?.following,
-  };
-}
-
 const MediaGridCell = React.memo(function MediaGridCell({
   post,
   theme,
@@ -5574,24 +5488,6 @@ interface FeedReplyCardProps extends FeedPostCardProps {
   /** A precomputed self-reply chain (root-first) to render stacked as one unit.
    *  Absent for a lone reply, which instead fetches its immediate parent. */
   chain?: FeedPost[];
-}
-
-function ThreadConnector({ theme }: { theme: AppTheme }) {
-  const rowPadding = Skin.contentRowPaddingH();
-  return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={{
-        width: 56,
-        height: 16,
-        marginLeft: rowPadding + 22,
-        borderLeftWidth: Skin.border(2),
-        borderBottomLeftRadius: Skin.radius(10),
-        borderColor: theme.colors.accent,
-      }}
-    />
-  );
 }
 
 /**
