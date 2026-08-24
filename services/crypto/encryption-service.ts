@@ -374,8 +374,12 @@ class EncryptionService {
       conversationId,
       senderDeviceInboxAddress
     );
+    // warn, not debug: replacing a row is unrecoverable message loss for
+    // anything the peer already encrypted against the old session, and
+    // production discards debug. A brand-new row (no priorRow) is silent
+    // because it destroys nothing.
     if (priorRow) {
-      logger.debug('[session-init] replacing an existing session for this row', JSON.stringify({
+      logger.warn('[session-init] replacing an existing session for this row', JSON.stringify({
         conv: conversationId?.slice(0, 10),
         row: senderDeviceInboxAddress?.slice(0, 10),
         priorSentAccept: priorRow.sentAccept ?? null,
@@ -551,8 +555,17 @@ class EncryptionService {
       // So each one says which guard tripped: without this, a lost first reply
       // looks identical whichever of the four reasons caused it, and the only
       // way to tell them apart was to add these lines and re-run the harness.
-      const say = (reason: string, extra: Record<string, unknown> = {}) =>
-        logger.debug('[session-confirm] not a confirm case', JSON.stringify({
+      // `level` is per-reason on purpose. Production discards `debug` outright
+      // (services/observability/loggingPolicy.ts sets minLevel to 'warn'), so a
+      // reason that indicates real message loss MUST be warn or it does not
+      // exist where it matters. The two routine ones stay debug: they fire
+      // constantly in a healthy multi-device fan-out.
+      const say = (
+        reason: string,
+        extra: Record<string, unknown> = {},
+        level: 'debug' | 'warn' = 'debug'
+      ) =>
+        logger[level]('[session-confirm] not a confirm case', JSON.stringify({
           reason,
           conv: conversationId?.slice(0, 10),
           inbox: receivedOnInboxAddress?.slice(0, 10),
@@ -592,19 +605,27 @@ class EncryptionService {
         !unsealed.message ||
         !unsealed.user_address
       ) {
-        say('partial-envelope', {
-          missing: [
-            ['return_inbox_address', unsealed.return_inbox_address],
-            ['return_inbox_encryption_key', unsealed.return_inbox_encryption_key],
-            ['return_inbox_private_key', unsealed.return_inbox_private_key],
-            ['return_inbox_public_key', unsealed.return_inbox_public_key],
-            ['tag', unsealed.tag],
-            ['message', unsealed.message],
-            ['user_address', unsealed.user_address],
-          ]
-            .filter(([, v]) => !v)
-            .map(([k]) => k),
-        });
+        // warn: this inbox is this session's own, so an init-wrapped frame
+        // landing here IS the expected confirm reply. One missing a required
+        // field is a peer running incompatible code or a downgrade attempt —
+        // an interop anomaly, not routine traffic.
+        say(
+          'partial-envelope',
+          {
+            missing: [
+              ['return_inbox_address', unsealed.return_inbox_address],
+              ['return_inbox_encryption_key', unsealed.return_inbox_encryption_key],
+              ['return_inbox_private_key', unsealed.return_inbox_private_key],
+              ['return_inbox_public_key', unsealed.return_inbox_public_key],
+              ['tag', unsealed.tag],
+              ['message', unsealed.message],
+              ['user_address', unsealed.user_address],
+            ]
+              .filter(([, v]) => !v)
+              .map(([k]) => k),
+          },
+          'warn'
+        );
         return null;
       }
 
@@ -622,9 +643,15 @@ class EncryptionService {
       if (resultWithError.decryptionError || decryptResult.message.length === 0) {
         // Signal rule: a bad frame never destroys the session — leave the
         // state untouched and let the caller fall back.
-        say('ratchet-decrypt-failed', {
-          err: String(resultWithError.decryptionError ?? 'empty-message').slice(0, 160),
-        });
+        // warn: THIS is the signature of the bug this change exists to fix — a
+        // reply that should have confirmed the session and could not be read.
+        // It fires only on a real, unconfirmed, structurally complete frame, so
+        // it is never routine, and at debug it would be invisible in production.
+        say(
+          'ratchet-decrypt-failed',
+          { err: String(resultWithError.decryptionError ?? 'empty-message').slice(0, 160) },
+          'warn'
+        );
         return null;
       }
       const decryptedMessage = textDecoder.decode(new Uint8Array(decryptResult.message));

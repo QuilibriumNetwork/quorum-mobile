@@ -1162,53 +1162,86 @@ async function buildReinitEnvelopeSend(args: {
     cryptoProvider,
   } = args;
 
-  if (!state.x3dhEphemeralPublicKey || !state.x3dhEphemeralPrivateKey) return null;
+  // Re-read the row NOW rather than trusting the caller's snapshot. That
+  // snapshot was taken synchronously, outside the ratchet lock, before this
+  // callback was queued, and the queue can drain arbitrarily later (offline,
+  // reconnect backoff, the queue timer). The inner payload is encrypted from
+  // the CURRENT row by encryptWithExistingSession, so taking the ephemeral from
+  // a stale snapshot could seal a frame whose outer key and inner ratchet come
+  // from different generations of the session.
+  const current = encryptionStateStorage.getEncryptionState(conversationId, state.inboxId);
+  const ephemeralPublicKey = current?.x3dhEphemeralPublicKey;
+  const ephemeralPrivateKey = current?.x3dhEphemeralPrivateKey;
+  if (!ephemeralPublicKey || !ephemeralPrivateKey) return null;
 
-  // Advances the ratchet, exactly as a confirmed send would. The frame is
-  // init-WRAPPED, not init-DERIVED: no X3DH runs here.
-  const encrypted = await encryptWithExistingSession(
-    conversationId,
-    state.inboxId,
-    JSON.stringify(message)
-  );
+  // EVERYTHING below is wrapped. This function runs inside the outbound batch
+  // callback, and a throw there rejects the whole callback — the transport then
+  // discards the ENTIRE batch, for every device, without requeueing it (see the
+  // note above the markAcceptSent loop). `encryptWithExistingSession` throws on
+  // a missing, empty or corrupted row, all of which are reachable here because
+  // the row is re-read at drain time. Degrading to the documented `null`
+  // contract keeps the caller's fallback working and costs one message shape;
+  // letting it throw costs the whole batch, silently, which is the exact
+  // failure this change exists to remove.
+  try {
+    // Advances the ratchet, exactly as a confirmed send would. The frame is
+    // init-WRAPPED, not init-DERIVED: no X3DH runs here.
+    const encrypted = await encryptWithExistingSession(
+      conversationId,
+      state.inboxId,
+      JSON.stringify(message)
+    );
 
-  const initEnvelope: InitializationEnvelope = {
-    user_address: userAddress,
-    ...(displayName ? { display_name: displayName } : {}),
-    ...(userIcon ? { user_icon: userIcon } : {}),
-    return_inbox_address: returnInbox.inboxAddress,
-    return_inbox_encryption_key: bytesToHex(returnInbox.encryptionPublicKey),
-    return_inbox_public_key: returnInbox.signingPublicKey
-      ? bytesToHex(returnInbox.signingPublicKey)
-      : '',
-    return_inbox_private_key: returnInbox.signingPrivateKey
-      ? bytesToHex(returnInbox.signingPrivateKey)
-      : '',
-    identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
-    tag: deviceKeyset.inboxAddress,
-    message: encrypted.envelope,
-    type: 'direct',
-  };
+    const initEnvelope: InitializationEnvelope = {
+      user_address: userAddress,
+      ...(displayName ? { display_name: displayName } : {}),
+      ...(userIcon ? { user_icon: userIcon } : {}),
+      return_inbox_address: returnInbox.inboxAddress,
+      return_inbox_encryption_key: bytesToHex(returnInbox.encryptionPublicKey),
+      return_inbox_public_key: returnInbox.signingPublicKey
+        ? bytesToHex(returnInbox.signingPublicKey)
+        : '',
+      return_inbox_private_key: returnInbox.signingPrivateKey
+        ? bytesToHex(returnInbox.signingPrivateKey)
+        : '',
+      identity_public_key: bytesToHex(deviceKeyset.identityPublicKey),
+      tag: deviceKeyset.inboxAddress,
+      message: encrypted.envelope,
+      type: 'direct',
+    };
 
-  const envelopeBytes = Array.from(new TextEncoder().encode(JSON.stringify(initEnvelope)));
+    const envelopeBytes = Array.from(new TextEncoder().encode(JSON.stringify(initEnvelope)));
 
-  // Sealed with THIS session's X3DH ephemeral, not a fresh one: the peer unseals
-  // with it and derives the session key from it, so it must be the ephemeral the
-  // session was born from.
-  const sealedEnvelope = await cryptoProvider.encryptInboxMessage({
-    inbox_public_key: device.inboxEncryptionKey,
-    ephemeral_private_key: hexToBytes(state.x3dhEphemeralPrivateKey),
-    plaintext: envelopeBytes,
-  });
+    // Sealed with THIS session's X3DH ephemeral, not a fresh one: the peer
+    // unseals with it and derives the session key from it, so it must be the
+    // ephemeral the session was born from.
+    const sealedEnvelope = await cryptoProvider.encryptInboxMessage({
+      inbox_public_key: device.inboxEncryptionKey,
+      ephemeral_private_key: hexToBytes(ephemeralPrivateKey),
+      plaintext: envelopeBytes,
+    });
 
-  return JSON.stringify({
-    type: 'direct',
-    inbox_address: device.inboxAddress,
-    ephemeral_public_key: state.x3dhEphemeralPublicKey,
-    envelope: sealedEnvelope,
-    inbox_public_key: '',
-    inbox_signature: '',
-  });
+    return JSON.stringify({
+      type: 'direct',
+      inbox_address: device.inboxAddress,
+      ephemeral_public_key: ephemeralPublicKey,
+      envelope: sealedEnvelope,
+      inbox_public_key: '',
+      inbox_signature: '',
+    });
+  } catch (reinitError) {
+    // warn, not debug: production discards debug entirely
+    // (services/observability/loggingPolicy.ts). Reaching here means the
+    // caller is about to fall back to a fresh X3DH, which REPLACES the session
+    // and strands anything the peer encrypted against the old one. That must
+    // not be inferable only from the absence of a log line.
+    logger.warn(
+      '[DM-send] re-announce failed, falling back to a fresh X3DH (this replaces the session):',
+      device.inboxAddress.slice(0, 12),
+      String(reinitError).slice(0, 160)
+    );
+    return null;
+  }
 }
 
 /**
@@ -1504,19 +1537,30 @@ export async function sendEncryptedMessageToAllDevices(
         //
         // Falls back to the old fresh-X3DH re-init for rows too old to carry
         // the stored ephemeral, which is strictly what those rows did before.
+        const reannounced = await buildReinitEnvelopeSend({
+          conversationId,
+          message,
+          state,
+          device,
+          returnInbox: reinitInbox,
+          deviceKeyset,
+          userAddress,
+          displayName,
+          userIcon,
+          cryptoProvider,
+        });
+        if (!reannounced) {
+          // Say so explicitly. Otherwise "we took the destructive path" is
+          // indistinguishable from "everything is fine", and a regression that
+          // made the re-announce return null forever would restore the old
+          // ratchet-replacing behaviour with nothing in the logs to show it.
+          logger.debug(
+            '[DM-send] no stored X3DH ephemeral on this row, re-initialising instead of re-announcing:',
+            device.inboxAddress.slice(0, 12),
+          );
+        }
         const sealed =
-          (await buildReinitEnvelopeSend({
-            conversationId,
-            message,
-            state,
-            device,
-            returnInbox: reinitInbox,
-            deviceKeyset,
-            userAddress,
-            displayName,
-            userIcon,
-            cryptoProvider,
-          })) ??
+          reannounced ??
           (await buildInitEnvelopeSend({
             conversationId,
             recipientAddress,
