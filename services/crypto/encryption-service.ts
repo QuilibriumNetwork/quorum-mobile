@@ -23,6 +23,7 @@ import {
   recordInstalledInitEnvelopeTs,
 } from './initEnvelopeGuard';
 import { deriveAddress } from '../onboarding/keyService';
+import { logger } from '@quilibrium/quorum-shared';
 
 import type {
   DoubleRatchetStateAndMessage,
@@ -364,6 +365,24 @@ class EncryptionService {
     // Generate ephemeral key for X3DH
     const ephemeralKey = await this.cryptoProvider.generateX448();
 
+    // Loud on purpose: this REPLACES any session already stored for this row,
+    // so anything the peer encrypted against the old one becomes permanently
+    // undecryptable. That is correct for a genuinely new session and a bug
+    // anywhere else, and it was silent until it cost a message — see
+    // buildReinitEnvelopeSend in hooks/chat/useSendDirectMessage.ts.
+    const priorRow = encryptionStateStorage.getEncryptionState(
+      conversationId,
+      senderDeviceInboxAddress
+    );
+    if (priorRow) {
+      logger.debug('[session-init] replacing an existing session for this row', JSON.stringify({
+        conv: conversationId?.slice(0, 10),
+        row: senderDeviceInboxAddress?.slice(0, 10),
+        priorSentAccept: priorRow.sentAccept ?? null,
+        priorPeerInboxPub: priorRow.sendingInbox?.inbox_public_key ? 'set' : 'empty',
+      }));
+    }
+
     // Perform sender-side X3DH
     const sessionKeyResult = await this.cryptoProvider.senderX3DH({
       sending_identity_private_key: this.deviceKeys.identityPrivateKey,
@@ -527,12 +546,40 @@ class EncryptionService {
     unsealed: UnsealedEnvelope
   ): Promise<{ message: string; userProfile?: { displayName?: string; userIcon?: string } } | null> {
     return ratchetMutex.runExclusive(conversationId, async () => {
+      // Every `return null` below is a fall-through the caller cannot
+      // distinguish, and the caller's fallback can end in a DROPPED message.
+      // So each one says which guard tripped: without this, a lost first reply
+      // looks identical whichever of the four reasons caused it, and the only
+      // way to tell them apart was to add these lines and re-run the harness.
+      const say = (reason: string, extra: Record<string, unknown> = {}) =>
+        logger.debug('[session-confirm] not a confirm case', JSON.stringify({
+          reason,
+          conv: conversationId?.slice(0, 10),
+          inbox: receivedOnInboxAddress?.slice(0, 10),
+          ...extra,
+        }));
+
       const state = encryptionStateStorage.getEncryptionState(conversationId, receivedOnInboxAddress);
       // Only an UNCONFIRMED sender session is a confirm case (SDK throws
       // 'inbox key already set' otherwise; we return null and let the
       // normal DR/init paths handle it).
-      if (!state) return null;
-      if (state.sendingInbox?.inbox_public_key) return null;
+      if (!state) {
+        // The row is keyed by the inbox we ADVERTISED as our return address.
+        // If the peer replied to that address and we still miss, the row is
+        // keyed by something else and the session can never confirm.
+        // Optional call: this is a diagnostic, and it must not be able to turn
+        // a fall-through into a thrown frame.
+        say('no-state-at-this-inbox', {
+          knownInboxes: (encryptionStateStorage.getEncryptionStates?.(conversationId) ?? []).map(
+            (s) => s.inboxId?.slice(0, 10)
+          ),
+        });
+        return null;
+      }
+      if (state.sendingInbox?.inbox_public_key) {
+        say('already-confirmed');
+        return null;
+      }
 
       // SDK validation: ALL initialization fields must be present — a
       // partial envelope must not half-confirm the session.
@@ -545,6 +592,19 @@ class EncryptionService {
         !unsealed.message ||
         !unsealed.user_address
       ) {
+        say('partial-envelope', {
+          missing: [
+            ['return_inbox_address', unsealed.return_inbox_address],
+            ['return_inbox_encryption_key', unsealed.return_inbox_encryption_key],
+            ['return_inbox_private_key', unsealed.return_inbox_private_key],
+            ['return_inbox_public_key', unsealed.return_inbox_public_key],
+            ['tag', unsealed.tag],
+            ['message', unsealed.message],
+            ['user_address', unsealed.user_address],
+          ]
+            .filter(([, v]) => !v)
+            .map(([k]) => k),
+        });
         return null;
       }
 
@@ -553,6 +613,7 @@ class EncryptionService {
       if (envelopeStr.includes('\\')) {
         envelopeStr = envelopeStr.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
       }
+
       const decryptResult = await this.cryptoProvider.doubleRatchetDecrypt({
         ratchet_state: state.state,
         envelope: envelopeStr,
@@ -561,6 +622,9 @@ class EncryptionService {
       if (resultWithError.decryptionError || decryptResult.message.length === 0) {
         // Signal rule: a bad frame never destroys the session — leave the
         // state untouched and let the caller fall back.
+        say('ratchet-decrypt-failed', {
+          err: String(resultWithError.decryptionError ?? 'empty-message').slice(0, 160),
+        });
         return null;
       }
       const decryptedMessage = textDecoder.decode(new Uint8Array(decryptResult.message));

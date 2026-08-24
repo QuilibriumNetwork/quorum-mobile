@@ -3337,6 +3337,22 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   const existingStates = encryptionStateStorage.getEncryptionStates(conversationId);
                   const hasExistingSession = existingStates.length > 0;
 
+                  // The peer's advertised return inbox CHANGES when they rebuild
+                  // their session under us, which is the shape of a whole class
+                  // of cross-client loss — worth being able to see in a log
+                  // without adding instrumentation first.
+                  logger.debug('[DM-recv] init-wrapped frame on our conversation inbox', JSON.stringify({
+                    onInbox: message.inboxAddress?.slice(0, 12),
+                    ts: message.timestamp,
+                    peerReturn: unsealed.return_inbox_address?.slice(0, 12),
+                    peerTag: unsealed.tag?.slice(0, 12),
+                    states: existingStates.map((s) => ({
+                      inbox: s.inboxId?.slice(0, 12),
+                      confirmed: !!s.sendingInbox?.inbox_public_key,
+                      sendTo: s.sendingInbox?.inbox_address?.slice(0, 12),
+                    })),
+                  }));
+
                   // === Session CONFIRMATION (SDK/desktop parity) ===
                   // If this inbox holds an UNCONFIRMED sender session (we
                   // initiated; sendingInbox pub key still ''), the peer's
@@ -3349,26 +3365,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                     message.inboxAddress,
                     unsealed
                   );
-                  if (confirmResult) {
-                    logger.debug('[session-confirm] sender session CONFIRMED', JSON.stringify({
-                      conv: conversationId?.slice(0, 10),
-                      inbox: message.inboxAddress?.slice(0, 10),
-                    }));
-                    decryptedText = confirmResult.message;
-                    userProfileFromEnvelope = confirmResult.userProfile;
-                    // Session just CONFIRMED (we initiated; this is the
-                    // peer's first init-wrapped reply) — the authenticated
-                    // partner is the address this conversation was built
-                    // from, not any payload-declared sender.
-                    const confirmedSender = conversationId.split('/')[0];
-                    if (confirmedSender !== fullUserAddrRef.current) {
-                      autoRevealRef.current?.(confirmedSender);
-                    }
-                  } else if (hasExistingSession) {
-                    // === Use existing session to decrypt ===
-                    // The message is wrapped in InitEnvelope but we already have a session
-                    // Try to decrypt with existing states (trial decryption)
-                    let successInboxId: string | null = null;
+                  // Trial-decrypt against our existing states BEFORE choosing a
+                  // branch, so the chain can route on whether one of them
+                  // actually worked rather than on whether any exist. Routing
+                  // on mere existence is what sent an unreadable init frame
+                  // down the "use an existing session" path, where its only
+                  // outcome was to be dropped.
+                  let successInboxId: string | null = null;
+                  if (!confirmResult && hasExistingSession) {
                     for (const encState of existingStates) {
                       try {
                         decryptedText = await encryptionService.decryptMessage(
@@ -3386,36 +3390,46 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                           break;
                         }
                       } catch (decryptErr) {
-                        // Per-state trial failure is expected mid-loop; the
-                        // all-states-failed case below is the loud signal.
+                        // Per-state trial failure is expected mid-loop; falling
+                        // through to the init path below is the real handling.
                         logger.debug(
                           `[DM-recv] trial decrypt failed for state ${encState.inboxId?.slice(0, 10)}: ${String(decryptErr).slice(0, 120)}`
                         );
                       }
                     }
-
-                    if (!decryptedText || decryptedText.startsWith('Decryption failed') || !successInboxId) {
-                      // Bound the redelivery loop (PR #170 parity): a frame no
-                      // stored state can decrypt replays forever otherwise —
-                      // this branch previously returned without counting the
-                      // attempt, and dead frames re-drained several times a
-                      // minute indefinitely.
-                      // Logged loudly: an init-wrapped frame on OUR
-                      // conversation inbox that no state decrypts is a
-                      // message-loss signal (peer ahead of our ratchet, or a
-                      // consumed-then-stranded frame), not routine noise.
-                      logger.warn(
-                        '[DM-recv] init-wrapped frame undecryptable by ALL states — dropping after bounded retries',
+                    if (!successInboxId) {
+                      // Leave nothing behind for the init path to trip over: a
+                      // failed trial can leave the literal string "Decryption
+                      // failed: ..." in decryptedText.
+                      decryptedText = null;
+                      logger.debug(
+                        '[DM-recv] no existing state decrypts this init-wrapped frame — establishing a session from it',
                         JSON.stringify({
                           inbox: message.inboxAddress?.slice(0, 12),
                           ts: message.timestamp,
                           states: existingStates.length,
                         })
                       );
-                      recordInboxAttempt(message.inboxAddress, message.timestamp);
-                      return;
                     }
+                  }
 
+                  if (confirmResult) {
+                    logger.debug('[session-confirm] sender session CONFIRMED', JSON.stringify({
+                      conv: conversationId?.slice(0, 10),
+                      inbox: message.inboxAddress?.slice(0, 10),
+                    }));
+                    decryptedText = confirmResult.message;
+                    userProfileFromEnvelope = confirmResult.userProfile;
+                    // Session just CONFIRMED (we initiated; this is the
+                    // peer's first init-wrapped reply) — the authenticated
+                    // partner is the address this conversation was built
+                    // from, not any payload-declared sender.
+                    const confirmedSender = conversationId.split('/')[0];
+                    if (confirmedSender !== fullUserAddrRef.current) {
+                      autoRevealRef.current?.(confirmedSender);
+                    }
+                  } else if (successInboxId) {
+                    // === An existing session read it ===
                     // IMPORTANT: Update sendingInbox from the InitEnvelope
                     // This tells us where to send future replies (the sender's return inbox)
                     // SDK-parity: only patch the sendingInbox when the envelope
@@ -3446,7 +3460,19 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                       }
                     }
                   } else {
-                    // === First message from this sender - initialize new session ===
+                    // === No session of ours can read it - build one from it ===
+                    // Reached both for a genuinely first message from this
+                    // sender AND, since the cross-client fix, for an
+                    // init-wrapped frame that none of our existing states could
+                    // decrypt. The second case used to be dropped outright,
+                    // which is wrong twice over: an init envelope is the thing
+                    // that ESTABLISHES a session, so there is nothing
+                    // surprising about no current state decrypting it, and
+                    // ignoring it also leaves us sending to a return inbox the
+                    // peer has already abandoned. MEASURED against desktop,
+                    // which mints a fresh session per send while its own side
+                    // is unconfirmed, so its second reply arrives on a session
+                    // we have never seen.
                     // Returns null if decryption fails (expected for multi-device)
                     const sessionResult = await encryptionService.initializeRecipientSession(
                       unsealed,
