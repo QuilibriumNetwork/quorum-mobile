@@ -5571,14 +5571,15 @@ interface FeedReplyCardProps extends FeedPostCardProps {
 }
 
 function ThreadConnector({ theme }: { theme: AppTheme }) {
+  const rowPadding = Skin.contentRowPaddingH();
   return (
     <View
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={{
-        width: 44,
-        height: 18,
-        marginLeft: Skin.space(22),
+        width: 56,
+        height: 16,
+        marginLeft: rowPadding + 22,
         borderLeftWidth: Skin.border(2),
         borderBottomLeftRadius: Skin.radius(10),
         borderColor: theme.colors.accent,
