@@ -1554,8 +1554,15 @@ export async function sendEncryptedMessageToAllDevices(
           // indistinguishable from "everything is fine", and a regression that
           // made the re-announce return null forever would restore the old
           // ratchet-replacing behaviour with nothing in the logs to show it.
+          //
+          // Deliberately does NOT name a cause. `buildReinitEnvelopeSend`
+          // returns null for two unrelated reasons — a row predating the stored
+          // ephemeral (benign) and an encryption failure (not benign) — and it
+          // logs the second one itself, at warn, with the real error. Naming
+          // one of them here made this line factually wrong half the time it
+          // fired.
           logger.debug(
-            '[DM-send] no stored X3DH ephemeral on this row, re-initialising instead of re-announcing:',
+            '[DM-send] re-initialising instead of re-announcing (see any [DM-send] warn above for the cause):',
             device.inboxAddress.slice(0, 12),
           );
         }
