@@ -11,6 +11,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
     "test": "jest",
     "verify": "node scripts/verify.mjs",
     "harness": "jest --config jest.harness.config.js",
