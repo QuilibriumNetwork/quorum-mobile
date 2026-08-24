@@ -5020,7 +5020,12 @@ function threadCastToFeedPost(cast: ThreadCast): FeedPost {
     .map((quoted) => ({
       cast: {
         hash: quoted.hash,
-        author: { fid: quoted.author.fid, username: quoted.author.username, displayName: quoted.author.displayName },
+        author: {
+          fid: quoted.author.fid,
+          username: quoted.author.username,
+          displayName: quoted.author.displayName,
+          pfp: quoted.author.pfp,
+        },
         text: quoted.text,
         timestamp: quoted.timestamp,
       },
@@ -5571,7 +5576,7 @@ function ThreadConnector({ theme }: { theme: AppTheme }) {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={{
-        width: 44 + Skin.space(12),
+        width: 44,
         height: 18,
         marginLeft: Skin.space(22),
         borderLeftWidth: Skin.border(2),
