@@ -3337,6 +3337,22 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                   const existingStates = encryptionStateStorage.getEncryptionStates(conversationId);
                   const hasExistingSession = existingStates.length > 0;
 
+                  // The peer's advertised return inbox CHANGES when they rebuild
+                  // their session under us, which is the shape of a whole class
+                  // of cross-client loss — worth being able to see in a log
+                  // without adding instrumentation first.
+                  logger.debug('[DM-recv] init-wrapped frame on our conversation inbox', JSON.stringify({
+                    onInbox: message.inboxAddress?.slice(0, 12),
+                    ts: message.timestamp,
+                    peerReturn: unsealed.return_inbox_address?.slice(0, 12),
+                    peerTag: unsealed.tag?.slice(0, 12),
+                    states: existingStates.map((s) => ({
+                      inbox: s.inboxId?.slice(0, 12),
+                      confirmed: !!s.sendingInbox?.inbox_public_key,
+                      sendTo: s.sendingInbox?.inbox_address?.slice(0, 12),
+                    })),
+                  }));
+
                   // === Session CONFIRMATION (SDK/desktop parity) ===
                   // If this inbox holds an UNCONFIRMED sender session (we
                   // initiated; sendingInbox pub key still ''), the peer's
