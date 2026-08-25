@@ -1,16 +1,16 @@
 ---
 type: recap
 title: "Quorum Mobile — Project State"
-updated: 2026-08-21
+updated: 2026-08-25
 ---
 
 # Quorum Mobile — Project State
 
-> Last updated: 2026-08-21
+> Last updated: 2026-08-25
 
 ## Dashboard
 
-> Updated: 2026-08-21 · 78 live · 62 startable · 6 nearly done · 9 blocked
+> Updated: 2026-08-25 · 78 live · 62 startable · 6 nearly done · 9 blocked
 
 **Next step:** Work out why this device can key none of the Spaces it imported — they arrive from the config blob and cannot be decrypted at all.
 
@@ -83,6 +83,7 @@ Things that are true across the whole backlog and are recorded in no single issu
 
 | date          | decision                                                                                                                                                                                                   | rationale                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-08-25    | While a DM session is unconfirmed, RE-ANNOUNCE the existing ratchet rather than re-running X3DH — and do NOT let an undecryptable init frame establish a session on the conversation inbox | The first half is the fix for a measured cross-client loss (PR #277): a fresh ephemeral per send gives a different session key, so the peer's in-flight reply is orphaned. The second half was BUILT AND REVERTED in the same branch, which is the part a future reader cannot re-derive from the diff — it installs a row keyed by unauthenticated envelope fields, and `selectSendState` prefers send-ready-then-newest, so a forged frame could outrank a confirmed session. It also turned out to be unnecessary once the real cause was found. |
 | 2026-08-16    | Mobile name resolution goes through one verified ladder, and `.q` verification is structural rather than an upstream check                                                                                | The identity model carries verified names only, so an unverified claim has nowhere to live and cannot be rendered by accident. Shipped as PR #249: 79 commits, 24 migrated surfaces, 986 tests, both guards proven red first.                                                                                                                                                                                                              |
 | 2026-08-16    | QNS claim verification is owned by quorum-shared, not copied a third time                                                                                                                                  | Mobile shipped it first in its own files; desktop then needed the same check. `deriveAddress` and `resolveName` already live in shared, so the verification belongs beside them rather than in a third divergent copy.                                                                                                                                                                                                                     |
 | 2026-08-09    | A delegated `.q` must be explicitly elected by the user; nothing may elect one on their behalf                                                                                                              | Stated as a requirement, not a preference: not on registration, not when they hold exactly one name, not when a delegated name arrives. A name the user did not choose can be revoked by its owner without them knowing.                                                                                                                                                                                                                   |

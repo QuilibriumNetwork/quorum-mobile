@@ -98,7 +98,6 @@ This is the main index for all documentation, bug reports, and task management.
 - 🐛 [The batch receive path short-circuits past the auto-reveal for `call-*` frames](issues/.open/2026-08-19-batch-decrypt-path-skips-auto-reveal-for-call-frames.md)
 - 🐛 [Farcaster DM: in-conversation pfps fall back to initials on a fresh device](issues/.open/2026-08-19-farcaster-dm-pfps-fall-back-to-initials-inside-the-conversation.md)
 - 🐛 [Opening a first-time Farcaster DM can still title it with a raw FID](issues/.open/2026-08-19-opening-a-first-time-farcaster-dm-can-still-title-it-with-a-raw-fid.md)
-- 📋 [Home feed: conversation relationships are not visually obvious (PFP connectors, deep-reply collapse, 3-post cap)](issues/.open/2026-08-21-feed-thread-relationships-not-visually-obvious.md)
 - 🐛 [Six `saveSpaceMember` sites still skip the identity-roster invalidation](issues/.open/2026-08-19-self-rename-name-stale-outside-websocket-context.md)
 - 🐛 [Renaming yourself on one client gets undone by the other client's synced config](issues/.open/2026-08-20-config-sync-silently-reverts-a-display-name-rename.md)
 - 📋 [Mobile dev playground for primitives + interactions](issues/.open/2026-06-13-mobile-dev-playground-design.md)
@@ -132,6 +131,7 @@ This is the main index for all documentation, bug reports, and task management.
 - 📋 [Add the global "Always sign Direct Messages" toggle to mobile settings](issues/.open/2026-08-07-no-global-always-sign-dms-toggle-on-mobile.md)
 - 📋 [Mobile lets you finish onboarding with no display name, desktop does not](issues/.open/2026-08-16-mobile-lets-you-finish-onboarding-with-no-display-name.md)
 - 📋 [`void import(...).then(...)` without a `.catch()`](issues/.open/2026-08-19-fire-and-forget-dynamic-imports-lack-catch.md)
+- 📋 [Home feed: conversation relationships are not visually obvious](issues/.open/2026-08-21-feed-thread-relationships-not-visually-obvious.md)
 - 📋 [`QnsBatchResult` should be built on a null prototype](issues/.open/2026-08-21-shared-qns-batch-result-should-use-a-null-prototype.md)
 
 ### Deferred
@@ -303,4 +303,4 @@ This is the main index for all documentation, bug reports, and task management.
 
 ---
 
-**Last Updated**: 2026-08-21 18:26:25
+**Last Updated**: 2026-08-25 11:28:04

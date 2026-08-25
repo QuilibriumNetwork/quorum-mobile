@@ -3,7 +3,7 @@ type: bug
 title: "DM sessions never confirm: confirm writes to a state row the send path never reads, send path clobbers it back — full X3DH ×6 devices on every send"
 status: done
 created: 2026-07-24
-updated: 2026-08-16
+updated: 2026-08-25
 severity: high (sole remaining cause of DM send latency ~2-3s after the cache fixes; also generates 6 init envelopes per send = inbox spam / envelope hoard fuel)
 area: DM Double-Ratchet session lifecycle / encryption-state row schema
 related:
@@ -14,6 +14,35 @@ related:
 # DM sessions never confirm — the permanent re-init loop
 
 ## Status
+
+**2026-08-25 — the deliberate check below was done, and it was NOT fixed. Now
+actually fixed, in PR #277.**
+
+The check this issue asked for ("nothing records that anyone confirmed X3DH
+stopped repeating on every send") was run on 2026-08-24 by instrumenting
+`establishSession`. It was still repeating:
+
+```
+1. hadPriorSession:false                newEphemeral: <E1>
+2. hadPriorSession:true  prior:<E1>     newEphemeral: <E2>   <- replaces session 1
+3. hadPriorSession:true  prior:<E2>     newEphemeral: <E3>   <- replaces session 2
+```
+
+Three sessions on one row, in one conversation. Step 2 of this issue's own plan
+is what shipped as the fix. It was found by a cross-client harness arm that had
+never been able to run before — not by re-reading the code, which had already
+been read.
+
+The lesson worth keeping: this file was closed on a judgement, correctly flagged
+that the judgement was unverified, and the flag then sat unread for nine days
+while the bug kept losing messages. **A `## Status` note saying "worth one
+deliberate check" is not a mechanism.** If a check matters, it needs an arm that
+runs it.
+
+See [quorum-desktop's write-up](https://github.com/QuilibriumNetwork/quorum-desktop/blob/main/.agents/issues/.done/2026-08-24-cross-client-dm-loses-the-first-desktop-to-mobile-message.md)
+for the full measurement chain.
+
+---
 
 **2026-08-16 — closed on a "likely fixed" judgement, not a confirmed one.** The
 2026-07-27 recap marked this as likely fixed by PR #177, and noted it was misfiled
