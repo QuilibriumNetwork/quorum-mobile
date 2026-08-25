@@ -429,7 +429,12 @@ export function useFarcasterThread({
 }: UseFarcasterThreadOptions) {
   // Paint the last-known thread instantly from MMKV on cold start, then
   // refresh in the background (initialDataUpdatedAt preserves staleness).
-  const cached = useMemo(() => getCachedThread(castHashPrefix), [castHashPrefix]);
+  // Disabled callers (for example compact feed context) must not pay for a
+  // synchronous MMKV read on every recycled list row.
+  const cached = useMemo(
+    () => (enabled ? getCachedThread(castHashPrefix) : undefined),
+    [castHashPrefix, enabled],
+  );
 
   const query = useQuery({
     queryKey: ['farcaster-thread', username, castHashPrefix],
