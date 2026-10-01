@@ -3,7 +3,7 @@
  *
  * Renders deterministic initials + gradient via the shared avatar functions
  * (see AvatarInitials). Prefers a human display name so initials are
- * recognizable ("NA" for "Niccolò Angeli"); falls back to the address only
+ * recognizable ("NA" for "Nora Adams"); falls back to the address only
  * when a name genuinely isn't available at the call site.
  *
  * No external API calls — color and initials are computed locally.
