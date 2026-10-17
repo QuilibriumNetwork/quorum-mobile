@@ -5,7 +5,9 @@ import {
   replaceMention,
 } from '@/components/SocialFeed/MentionAutocomplete';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useAuth } from '@/context/AuthContext';
 import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
+import { useFarcasterCastLimits } from '@/hooks/useFarcasterPro';
 import { uploadImageForCast } from '@/services/farcasterClient';
 import { pickMedia, type ProcessedAttachment } from '@/services/media/imageAttachment';
 import { uploadVideoForCast } from '@/services/farcaster/videoUpload';
@@ -18,15 +20,14 @@ import * as Skin from '@/theme/skins/geometry';
 interface CastComposeModalProps {
   visible: boolean;
   onClose: () => void;
-  /** Required token. The modal is gated on a valid Farcaster session. */
+  /** farcaster.xyz bearer token. Only needed to attach media: images and
+   *  videos are uploaded to Farcaster's CDN. Text casts need no token. */
   token?: string;
   /** Optional channel target. When set, the modal posts the cast there. */
   channelKey?: string;
   /** Called once the cast has been posted (parent can refetch). */
   onPosted?: () => void;
 }
-
-const MAX_LENGTH = 320;
 
 export default function CastComposeModal({
   visible,
@@ -37,7 +38,9 @@ export default function CastComposeModal({
 }: CastComposeModalProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { submitCast } = useFarcasterSubmitCast({ token });
+  const { submitCast } = useFarcasterSubmitCast();
+  const fid = useAuth().user?.farcaster?.fid;
+  const { longCastByteLimit: maxLength } = useFarcasterCastLimits();
 
   const [text, setText] = useState('');
   const [cursor, setCursor] = useState(0);
@@ -57,11 +60,15 @@ export default function CastComposeModal({
     }
   }, [visible]);
 
+  const canAttach = Boolean(token);
   const canPost =
-    !posting && Boolean(token) && (text.trim().length > 0 || attachments.length > 0);
+    !posting &&
+    Boolean(fid) &&
+    (text.trim().length > 0 || attachments.length > 0) &&
+    (attachments.length === 0 || canAttach);
 
   const handlePickMedia = async () => {
-    if (attachments.length >= 2) return;
+    if (attachments.length >= 2 || !canAttach) return;
     const result = await pickMedia('library');
     if (result.success && result.attachment) {
       setAttachments((prev) => [...prev, result.attachment!]);
@@ -73,12 +80,13 @@ export default function CastComposeModal({
   };
 
   const handlePost = async () => {
-    if (!canPost || !token) return;
+    if (!canPost) return;
     setPosting(true);
     setError(null);
     try {
       const embeds: string[] = [];
       for (const a of attachments) {
+        if (!token) throw new Error('Reconnect Hypersnap to attach media');
         if (a.kind === 'video') {
           const v = await uploadVideoForCast(token, a.localUri);
           embeds.push(v.url);
@@ -125,7 +133,7 @@ export default function CastComposeModal({
         <TextInput
           autoFocus
           multiline
-          maxLength={MAX_LENGTH}
+          maxLength={maxLength}
           value={text}
           onChangeText={setText}
           onSelectionChange={(e) => setCursor(e.nativeEvent.selection.end)}
@@ -172,12 +180,12 @@ export default function CastComposeModal({
         )}
 
         <View style={styles.footer}>
-          <TouchableOpacity onPress={handlePickMedia} style={styles.iconButton} disabled={posting || attachments.length >= 2}>
-            <IconSymbol name="photo.fill" size={20} color={attachments.length >= 2 ? theme.colors.textMuted : theme.colors.accent} />
+          <TouchableOpacity onPress={handlePickMedia} style={styles.iconButton} disabled={posting || attachments.length >= 2 || !canAttach}>
+            <IconSymbol name="photo.fill" size={20} color={attachments.length >= 2 || !canAttach ? theme.colors.textMuted : theme.colors.accent} />
           </TouchableOpacity>
           <View style={{ flex: 1 }} />
           <Text style={styles.charCount}>
-            {text.length}/{MAX_LENGTH}
+            {text.length}/{maxLength}
           </Text>
         </View>
 

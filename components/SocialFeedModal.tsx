@@ -76,7 +76,10 @@ import {
 } from '@/hooks/useFarcasterSearch';
 import { parseFarcasterUrl, useFarcasterThread, type FlattenedCast } from '@/hooks/useFarcasterThread';
 import { useFarcasterCastLimits, isLongCast } from '@/hooks/useFarcasterPro';
-import { followUser, likeCast, recastCast, unlikeCast, unrecastCast, uploadImageForCast } from '@/services/farcasterClient';
+import { uploadImageForCast } from '@/services/farcasterClient';
+import { lookupFidByUsername } from '@/services/farcaster/mentionExtraction';
+import { useCastByFullHash } from '@/services/farcaster/hypersnapCastLookup';
+import { isFullCastHash } from '@/services/farcaster/hypersnapWrites';
 import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
 import { useFeedOptimistic } from '@/context/FeedOptimisticContext';
 import type { PendingCast } from '@/services/feed/optimisticFeedStore';
@@ -102,7 +105,7 @@ import { Image as ExpoImage } from 'expo-image';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, BackHandler, Dimensions, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View, type KeyboardEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
-import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView, useKeyboardState, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReanimatedModule, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -111,6 +114,12 @@ import { ReportModal } from '@/components/ReportModal';
 import * as Skin from '@/theme/skins/geometry';
 
 const ReanimatedView = ReanimatedModule.View;
+
+/** Casts and replies are signed with the Hypersnap signer, but attachments are
+ *  still hosted by Farcaster's upload service, which needs the farcaster.xyz
+ *  token (FARCASTER_TECH_DEBT.md). */
+const MEDIA_UPLOAD_UNAVAILABLE =
+  "Photos and videos can't be uploaded for your account right now. You can still post text.";
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -138,12 +147,14 @@ const CarouselImageTile = React.memo(function CarouselImageTile({
   url,
   index,
   maxHeight,
+  width,
   theme,
   onImagePress,
 }: {
   url: string;
   index: number;
   maxHeight: number;
+  width: number;
   theme: AppTheme;
   onImagePress?: (url: string, index: number) => void;
 }) {
@@ -151,7 +162,7 @@ const CarouselImageTile = React.memo(function CarouselImageTile({
   return (
     <View
       style={{
-        width: SCREEN_WIDTH,
+        width,
         justifyContent: 'center',
         alignItems: 'center',
       }}
@@ -159,7 +170,7 @@ const CarouselImageTile = React.memo(function CarouselImageTile({
       <AutoHeightImage
         uri={url}
         maxHeight={maxHeight}
-        maxWidth={SCREEN_WIDTH}
+        maxWidth={width}
         style={{ backgroundColor: theme.colors.surface3 }}
         onPress={onImagePress ? handlePress : undefined}
       />
@@ -167,17 +178,30 @@ const CarouselImageTile = React.memo(function CarouselImageTile({
   );
 });
 
-function ImageCarousel({ urls, maxHeight, theme, onImagePress }: { urls: string[]; maxHeight: number; theme: AppTheme; onImagePress?: (url: string, index: number) => void }) {
+function ImageCarousel({
+  urls,
+  maxHeight,
+  width = SCREEN_WIDTH,
+  theme,
+  onImagePress,
+}: {
+  urls: string[];
+  maxHeight: number;
+  /** Page width. Defaults to edge-to-edge; narrower inside a thread unit. */
+  width?: number;
+  theme: AppTheme;
+  onImagePress?: (url: string, index: number) => void;
+}) {
   const [activeIndex, setActiveIndex] = useState(0);
 
   const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { x: number } } }) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(contentOffsetX / SCREEN_WIDTH);
+    const index = Math.round(contentOffsetX / width);
     setActiveIndex(index);
-  }, []);
+  }, [width]);
 
   return (
-    <View style={{ width: SCREEN_WIDTH }}>
+    <View style={{ width }}>
       <ScrollView
         horizontal
         pagingEnabled
@@ -185,9 +209,9 @@ function ImageCarousel({ urls, maxHeight, theme, onImagePress }: { urls: string[
         onScroll={handleScroll}
         scrollEventThrottle={16}
         decelerationRate="fast"
-        snapToInterval={SCREEN_WIDTH}
+        snapToInterval={width}
         snapToAlignment="start"
-        contentContainerStyle={{ width: SCREEN_WIDTH * urls.length }}
+        contentContainerStyle={{ width: width * urls.length }}
       >
         {urls.map((url, index) => (
           <CarouselImageTile
@@ -195,6 +219,7 @@ function ImageCarousel({ urls, maxHeight, theme, onImagePress }: { urls: string[
             url={url}
             index={index}
             maxHeight={maxHeight}
+            width={width}
             theme={theme}
             onImagePress={onImagePress}
           />
@@ -436,7 +461,8 @@ interface ShareActionSheetProps {
   castAuthor: string;
   isRecasted: boolean;
   recastCount: number;
-  token?: string;
+  /** Recast and Quote are protocol writes: they need a Farcaster account. */
+  canWrite: boolean;
   onClose: () => void;
   onRecast: () => void;
   onQuote: () => void;
@@ -447,7 +473,7 @@ interface ShareActionSheetProps {
 function ShareActionSheet({
   visible,
   isRecasted,
-  token,
+  canWrite,
   onClose,
   onRecast,
   onQuote,
@@ -460,13 +486,13 @@ function ShareActionSheet({
       label: isRecasted ? 'Undo recast' : 'Recast',
       active: isRecasted,
       onPress: onRecast,
-      disabled: !token,
+      disabled: !canWrite,
     },
     {
       icon: 'quote.bubble',
       label: 'Quote',
       onPress: onQuote,
-      disabled: !token,
+      disabled: !canWrite,
     },
     {
       icon: 'paperplane',
@@ -870,6 +896,7 @@ function VideoPlayer({
   width,
   height,
   duration,
+  displayWidth = SCREEN_WIDTH,
   theme
 }: {
   url: string;
@@ -878,6 +905,8 @@ function VideoPlayer({
   width?: number;
   height?: number;
   duration?: number;
+  /** On-screen width. Defaults to edge-to-edge; narrower inside a thread unit. */
+  displayWidth?: number;
   theme: AppTheme;
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -890,7 +919,7 @@ function VideoPlayer({
   const videoRef = useRef<VideoView>(null);
   const aspectRatio = measuredAspect ?? (width && height ? height / width : 9 / 16);
   // Full-width, natural aspect ratio — no max-height cap.
-  const calculatedHeight = SCREEN_WIDTH * aspectRatio;
+  const calculatedHeight = displayWidth * aspectRatio;
 
   // Configure audio mode on mount
   useEffect(() => {
@@ -1044,7 +1073,7 @@ function VideoPlayer({
             <Image
               source={{ uri: thumbnailUrl }}
               style={{
-                width: SCREEN_WIDTH,
+                width: displayWidth,
                 height: calculatedHeight,
                 backgroundColor: theme.colors.surface3,
               }}
@@ -1059,7 +1088,7 @@ function VideoPlayer({
             <VideoView
               player={player}
               style={{
-                width: SCREEN_WIDTH,
+                width: displayWidth,
                 height: calculatedHeight,
                 backgroundColor: theme.colors.surface3,
               }}
@@ -1129,7 +1158,7 @@ function VideoPlayer({
             ref={videoRef}
             player={player}
             style={{
-              width: SCREEN_WIDTH,
+              width: displayWidth,
               height: calculatedHeight,
               backgroundColor: theme.colors.surface3,
             }}
@@ -1999,9 +2028,10 @@ function QuoteCast({
  * Render a `https://farcaster.xyz/<username>/0x<prefix>` link inline as a
  * quote-cast card. The Farcaster client treats these URLs as cast embeds
  * even when the protocol-level cast.embeds.casts list omits them, so we
- * lazily resolve the cast by (username, prefix) via legacy thread API and
- * render it through the same `QuoteCast` component used for native quote
- * embeds. While the lookup is in flight we show the QuoteCast loading
+ * lazily resolve the cast — by full hash through Hypersnap, or by
+ * (username, prefix) through farcaster.xyz when the link only carries a
+ * prefix — and render it through the same `QuoteCast` component used for
+ * native quote embeds. While the lookup is in flight we show the QuoteCast loading
  * skeleton (matches isStub branch). On a failed/empty lookup we fall back
  * to a minimal "View cast" link card so the link is still actionable.
  */
@@ -2020,7 +2050,10 @@ function FarcasterCastUrlEmbed({
   theme: AppTheme;
   onPress: () => void;
 }) {
-  const { data: cast, isLoading } = useFarcasterCastByUrl(username, castHashPrefix);
+  const hasFullHash = isFullCastHash(castHashPrefix);
+  const byHash = useCastByFullHash(castHashPrefix, { enabled: hasFullHash });
+  const byUrl = useFarcasterCastByUrl(username, castHashPrefix, { enabled: !hasFullHash });
+  const { data: cast, isLoading } = hasFullHash ? byHash : byUrl;
 
   if (cast) {
     const embedded: EmbeddedCast = {
@@ -2103,12 +2136,15 @@ function FrameEmbed({
   imageUrl,
   buttonTitle,
   actionUrl,
+  width = SCREEN_WIDTH,
   theme,
   onPress,
 }: {
   imageUrl: string;
   buttonTitle: string;
   actionUrl: string;
+  /** Defaults to edge-to-edge; narrower inside a thread unit. */
+  width?: number;
   theme: AppTheme;
   onPress: () => void;
 }) {
@@ -2121,8 +2157,8 @@ function FrameEmbed({
       <Image
         source={{ uri: imageUrl }}
         style={{
-          width: SCREEN_WIDTH,
-          height: SCREEN_WIDTH * 0.525, // Standard frame aspect ratio
+          width,
+          height: width * 0.525, // Standard frame aspect ratio
           backgroundColor: theme.colors.surface3,
         }}
         resizeMode="cover"
@@ -2159,7 +2195,9 @@ function FrameEmbed({
   );
 }
 
-function ThreadDetailView({
+/** The feed's own thread screen (not `SocialFeed/views/ThreadDetailView`).
+ *  Exported for tests (threadReplyEditorTabBarClearance). */
+export function ThreadDetailView({
   username,
   castHashPrefix,
   token,
@@ -2224,7 +2262,6 @@ function ThreadDetailView({
   const { parentCasts, mainCast: fetchedMainCast, replies, allCasts, isLoading, error, channelContext, refetch } = useFarcasterThread({
     username,
     castHashPrefix,
-    token,
     // Merge optimistic pending replies into the thread so a just-posted
     // reply shows instantly in the right place.
     getPendingReplies: optimistic.pendingRepliesAsThreadCasts,
@@ -2298,18 +2335,22 @@ function ThreadDetailView({
   // current Farcaster avatar (the cached pfpUrl in user state may be missing
   // or stale — falling back to it leaves CachedAvatar showing the Quorum
   // default symbol).
-  const { author: currentFarcasterProfile } = useFarcasterProfile({
-    fid: currentUser?.farcaster?.fid ?? 0,
-    token,
-    enabled: Boolean(currentUser?.farcaster?.fid),
-  });
+  const { data: currentFarcasterProfile } = useFarcasterUserPersistent(
+    currentUser?.farcaster?.fid,
+    { enabled: Boolean(currentUser?.farcaster?.fid) },
+  );
   const replyAvatarUri =
-    currentFarcasterProfile?.pfp?.url ??
+    currentFarcasterProfile?.pfpUrl ??
     currentUser?.farcaster?.pfpUrl ??
     null;
   const scrollViewRef = useRef<KeyboardAwareScrollViewRef>(null);
   const replyInputRef = useRef<TextInput>(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
+  // Whether the on-screen keyboard is actually up. Focus alone doesn't say:
+  // with a hardware keyboard (or after Android's back button hides the
+  // keyboard but leaves the input focused) the editor is focused and the
+  // tab bar is still showing.
+  const isKeyboardVisible = useKeyboardState((s) => s.isVisible);
   // Track whether the inline reply editor is in the scroll viewport. Used
   // to hide the floating reply FAB when the user can already see the
   // composer (focus alone isn't enough — they may have scrolled to it
@@ -2391,10 +2432,15 @@ function ThreadDetailView({
     castAuthorFid?: number;
   } | null>(null);
 
-  // Allow replying if there's text OR images
-  const canReply = Boolean(token && (replyText.trim().length > 0 || replyImages.length > 0) && !isPosting && mainCast);
+  // Allow replying if there's text OR images. Replies are signed with the
+  // Hypersnap signer, so they need a Farcaster account, not the token.
+  const canReply = Boolean(currentUserFid && (replyText.trim().length > 0 || replyImages.length > 0) && !isPosting && mainCast);
 
   const handlePickReplyImage = async () => {
+    if (!token) {
+      setReplyError(MEDIA_UPLOAD_UNAVAILABLE);
+      return;
+    }
     if (replyImages.length >= 2) {
       setReplyError('Maximum 2 images per reply');
       return;
@@ -2423,13 +2469,18 @@ function ThreadDetailView({
       // Upload any attachments first — their URLs are needed for the cast.
       // Videos go through TUS upload, images through the direct upload.
       const embeds: string[] = [];
+      if (replyImages.length > 0 && !token) {
+        setReplyError(MEDIA_UPLOAD_UNAVAILABLE);
+        setIsPosting(false);
+        return;
+      }
       for (const a of replyImages) {
         try {
           if (a.kind === 'video') {
-            const v = await uploadVideoForCast(token!, a.localUri);
+            const v = await uploadVideoForCast(token as string, a.localUri);
             embeds.push(v.url);
           } else {
-            const uploaded = await uploadImageForCast(token!, a.localUri, a.mimeType);
+            const uploaded = await uploadImageForCast(token as string, a.localUri, a.mimeType);
             embeds.push(uploaded.url);
           }
         } catch (uploadErr: any) {
@@ -2465,23 +2516,8 @@ function ThreadDetailView({
   };
 
   const handleMentionPress = async (mentionUsername: string) => {
-    try {
-      const response = await fetch(`https://farcaster.xyz/~api/v2/user-by-username?username=${mentionUsername}`, {
-        headers: {
-          accept: '*/*',
-          origin: 'https://farcaster.xyz',
-          referer: 'https://farcaster.xyz/',
-        },
-      });
-      if (response.ok) {
-        const json = await response.json();
-        if (json.result?.fid) {
-          onOpenProfile(json.result.fid, mentionUsername);
-        }
-      }
-    } catch {
-      // Profile lookup failed — no action needed
-    }
+    const fid = await lookupFidByUsername(mentionUsername);
+    if (fid) onOpenProfile(fid, mentionUsername);
   };
 
   // Image viewer state
@@ -3034,7 +3070,7 @@ function ThreadDetailView({
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6), paddingVertical: Skin.space(4), paddingHorizontal: Skin.space(2) }}
-                onPress={() => onOpenThread(cast.author.username, cast.hash.slice(0, 10), cast)}
+                onPress={() => onOpenThread(cast.author.username, cast.hash, cast)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
@@ -3095,6 +3131,24 @@ function ThreadDetailView({
         </View>
       )}
 
+      {/* No cast to show yet. A route without a placeholder (a notification
+          or push tap) used to render an empty screen while the thread
+          loaded, and stay empty if the cast never matched. */}
+      {!mainCast && !error && (
+        <View style={{ padding: Skin.space(24), alignItems: 'center', gap: Skin.space(12) }}>
+          {isLoading ? (
+            <ActivityIndicator color={theme.colors.accent} />
+          ) : (
+            <>
+              <Text style={{ color: theme.colors.textMuted }}>Couldn&apos;t load this cast.</Text>
+              <TouchableOpacity onPress={() => refetch()} hitSlop={12}>
+                <Text style={{ color: theme.colors.accent, fontWeight: '600' }}>Try again</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
+
       {mainCast && (
         // KeyboardAwareScrollView (react-native-keyboard-controller) keeps the
         // focused reply input visible above the keyboard on BOTH platforms and
@@ -3113,11 +3167,13 @@ function ThreadDetailView({
           // keep Post visible.
           bottomOffset={Skin.space(64)}
           contentContainerStyle={{
-            // Resting: clear the floating tab bar (bottomInset). When the editor
-            // is focused the keyboard is up and covers the tab-bar zone, so the
-            // tab-bar clearance becomes pure dead space below the editor — drop
-            // it to a small gap so there's no big empty area under the Post row.
-            paddingBottom: isEditorFocused ? Skin.space(16) : Skin.space(16) + bottomInset,
+            // Resting: clear the floating tab bar (bottomInset). While the
+            // keyboard is up it covers the tab-bar zone, so the clearance would
+            // be pure dead space below the editor — drop it to a small gap so
+            // there's no big empty area under the Post row. Keyed on the
+            // keyboard, not on focus: a focused editor with no keyboard showing
+            // still has the tab bar over it.
+            paddingBottom: isKeyboardVisible ? Skin.space(16) : Skin.space(16) + bottomInset,
           }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
@@ -3164,7 +3220,6 @@ function ThreadDetailView({
               hash={(mainCast as { hash: string }).hash}
               votesFor={govProposal.votesFor}
               votesAgainst={govProposal.votesAgainst}
-              token={token}
               theme={theme}
               onVoted={onGovernanceVoted}
             />
@@ -3190,7 +3245,7 @@ function ThreadDetailView({
           )}
 
           {/* Inline reply editor - styled like a cast card */}
-          {token && (
+          {!!currentUserFid && (
             <View
               onLayout={(e) => {
                 editorYRef.current = e.nativeEvent.layout.y;
@@ -3405,7 +3460,7 @@ function ThreadDetailView({
 
       {/* Floating reply FAB — hidden when the editor is in viewport (the
           user can already see/tap the composer directly). */}
-      {token && mainCast && !isEditorVisible && !isEditorFocused && (
+      {!!currentUserFid && mainCast && !isEditorVisible && !isEditorFocused && (
         <TouchableOpacity
           onPress={scrollToReplyAndFocus}
           style={{
@@ -3440,7 +3495,7 @@ function ThreadDetailView({
         castAuthor={shareSheetCast?.author ?? ''}
         isRecasted={shareSheetCast?.isRecasted ?? false}
         recastCount={shareSheetCast?.recastCount ?? 0}
-        token={token}
+        canWrite={!!currentUserFid}
         onClose={() => setShareSheetCast(null)}
         onRecast={() => {
           if (shareSheetCast) {
@@ -3458,7 +3513,8 @@ function ThreadDetailView({
         }}
         onShareToChat={() => {
           if (shareSheetCast) {
-            const castUrl = `https://warpcast.com/${shareSheetCast.author}/${shareSheetCast.hash.slice(0, 10)}`;
+            // Full hash, so the card in the chat resolves through Hypersnap.
+            const castUrl = `https://warpcast.com/${shareSheetCast.author}/${shareSheetCast.hash}`;
             setShareSheetCast(null); // Close the share sheet
             onShareToChat(castUrl);
           }
@@ -3528,7 +3584,7 @@ export function ProfileView({
     hasNextPage,
     fetchNextPage,
     refetch,
-  } = useFarcasterProfile({ fid, token });
+  } = useFarcasterProfile({ fid });
 
   // Apex gold ring — the profile owner plus any cast authors that appear
   // in the list (recasts can carry other authors).
@@ -3667,23 +3723,8 @@ export function ProfileView({
   };
 
   const handleMentionPress = async (username: string) => {
-    try {
-      const response = await fetch(`https://farcaster.xyz/~api/v2/user-by-username?username=${username}`, {
-        headers: {
-          accept: '*/*',
-          origin: 'https://farcaster.xyz',
-          referer: 'https://farcaster.xyz/',
-        },
-      });
-      if (response.ok) {
-        const json = await response.json();
-        if (json.result?.fid) {
-          onOpenProfile(json.result.fid, username);
-        }
-      }
-    } catch {
-      // Profile lookup failed — no action needed
-    }
+    const fid = await lookupFidByUsername(username);
+    if (fid) onOpenProfile(fid, username);
   };
 
   const renderCast = (cast: ProfileCast) => {
@@ -3727,7 +3768,7 @@ export function ProfileView({
 
     const navigateToThread = () => {
       if (cast.author.username && cast.hash) {
-        onOpenThread(cast.author.username, cast.hash.slice(0, 10), cast);
+        onOpenThread(cast.author.username, cast.hash, cast);
       }
     };
 
@@ -4276,25 +4317,8 @@ function ChannelView({
   };
 
   const handleMentionPress = async (username: string) => {
-    // Need to look up fid from username - for now just use a search API
-    // This is a simplified version - ideally we'd have a username->fid lookup
-    try {
-      const response = await fetch(`https://farcaster.xyz/~api/v2/user-by-username?username=${username}`, {
-        headers: {
-          accept: '*/*',
-          origin: 'https://farcaster.xyz',
-          referer: 'https://farcaster.xyz/',
-        },
-      });
-      if (response.ok) {
-        const json = await response.json();
-        if (json.result?.fid) {
-          onOpenProfile(json.result.fid, username);
-        }
-      }
-    } catch {
-      // Profile lookup failed — no action needed
-    }
+    const fid = await lookupFidByUsername(username);
+    if (fid) onOpenProfile(fid, username);
   };
 
   // Image viewer state
@@ -4341,7 +4365,7 @@ function ChannelView({
 
     const navigateToThread = () => {
       if (cast.author.username && cast.hash) {
-        onOpenThread(cast.author.username, cast.hash.slice(0, 10), cast);
+        onOpenThread(cast.author.username, cast.hash, cast);
       }
     };
 
@@ -4951,7 +4975,7 @@ function normalizedCastToFeedPost(cast: NormalizedCast): FeedPost {
         timestamp: 0,
       } as EmbeddedCast,
       username: '',
-      hashPrefix: e.castId!.hash.slice(0, 10),
+      hashPrefix: e.castId!.hash,
     }));
 
   const urlPreviews: UrlEmbed[] = cast.embeds
@@ -5041,7 +5065,20 @@ const MediaGridCell = React.memo(function MediaGridCell({
   );
 });
 
-const FeedPostCard = React.memo(function FeedPostCard({
+/** Thread-gutter layout geometry, shared by the styles and the media width. */
+const THREAD_GUTTER_WIDTH = 44;
+const threadBodyGap = () => Skin.space(12);
+
+/** Width of a thread-unit card's body column. Media there can't bleed to the
+ *  screen edges (it would cross the connector line), so it is sized to this
+ *  rather than SCREEN_WIDTH, which would push it off the right edge by the
+ *  card padding plus the gutter. */
+function threadBodyWidth(): number {
+  return SCREEN_WIDTH - 2 * Skin.contentRowPaddingH() - THREAD_GUTTER_WIDTH - threadBodyGap();
+}
+
+/** Exported for tests (feedThreadMediaWidth); the feed is its only caller. */
+export const FeedPostCard = React.memo(function FeedPostCard({
   post,
   theme,
   styles,
@@ -5129,6 +5166,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
   const inThreadUnit = threadPosition !== undefined && threadPosition !== 'only';
   const showLineAbove = threadPosition === 'middle' || threadPosition === 'last';
   const showLineBelow = threadPosition === 'first' || threadPosition === 'middle';
+  const mediaWidth = inThreadUnit ? threadBodyWidth() : SCREEN_WIDTH;
 
   const avatarBlock = (
     <TouchableOpacity
@@ -5231,6 +5269,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
             <AutoHeightImage
               uri={post.mediaUrls[0]}
               maxHeight={Infinity}
+              maxWidth={mediaWidth}
               style={styles.postMedia}
               onPress={() => onImagePress(post.mediaUrls, 0)}
             />
@@ -5238,6 +5277,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
             <ImageCarousel
               urls={post.mediaUrls}
               maxHeight={Infinity}
+              width={mediaWidth}
               theme={theme}
               onImagePress={(_, index) => onImagePress(post.mediaUrls, index)}
             />
@@ -5256,6 +5296,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
                 width={video.width}
                 height={video.height}
                 duration={video.duration}
+                displayWidth={mediaWidth}
                 theme={theme}
               />
             )
@@ -5271,6 +5312,7 @@ const FeedPostCard = React.memo(function FeedPostCard({
               imageUrl={frame.imageUrl}
               buttonTitle={frame.buttonTitle}
               actionUrl={frame.actionUrl}
+              width={mediaWidth}
               theme={theme}
               onPress={() => onLinkPress(frame.actionUrl)}
             />
@@ -5651,11 +5693,13 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   const { user } = useAuth();
   const currentUserFid = user?.farcaster?.fid;
   const insets = useSafeAreaInsets();
-  const { submitCast: submitMainCast } = useFarcasterSubmitCast({ token });
+  const { submitCast: submitMainCast } = useFarcasterSubmitCast();
 
   // Farcaster Pro status and cast limits
-  const { regularCastByteLimit, longCastByteLimit, isPro } = useFarcasterCastLimits();
-  const maxCastLength = isPro ? longCastByteLimit : regularCastByteLimit;
+  // Long casts (up to longCastByteLimit) are open to every account; Pro only
+  // raises that limit.
+  const { regularCastByteLimit, longCastByteLimit } = useFarcasterCastLimits();
+  const maxCastLength = longCastByteLimit;
   const [activeFilter, setActiveFilter] = useState<FeedFilter>('all');
   // Centre the tapped filter chip in each of the two filter rows (full + mini).
   // The chips keep their bespoke circular/solid look; only scrolling is shared.
@@ -5874,24 +5918,8 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   }, [openMiniapp]);
 
   const handleMentionPress = useCallback(async (username: string) => {
-    try {
-      const response = await fetch(`https://farcaster.xyz/~api/v2/user-by-username?username=${username}`, {
-        headers: {
-          accept: '*/*',
-          origin: 'https://farcaster.xyz',
-          referer: 'https://farcaster.xyz/',
-        },
-      });
-      if (response.ok) {
-        const json = await response.json();
-        const fid = json.result?.fid || json.result?.user?.fid;
-        if (fid) {
-          pushScreen({ type: 'profile', fid, username });
-        }
-      }
-    } catch {
-      // Profile lookup failed — no action needed
-    }
+    const fid = await lookupFidByUsername(username);
+    if (fid) pushScreen({ type: 'profile', fid, username });
   }, [pushScreen]);
 
   const openChannel = useCallback((channelKey: string) => {
@@ -6051,7 +6079,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     refetch,
     isRefetching,
   } = useFarcasterFeed({
-    token,
     enabled: visible,
   });
 
@@ -6103,7 +6130,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
 
   const { users: searchUsers, onEndReached: onUsersEndReached, isFetchingNextPage: isFetchingMoreUsers } = useSearchUsers({
     q: debouncedSearchQuery,
-    token,
     enabled: visible && searchActive && searchTab === 'users' && debouncedSearchQuery.length > 0,
   });
 
@@ -6115,7 +6141,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
 
   const { casts: searchCasts, onEndReached: onCastsEndReached, isFetchingNextPage: isFetchingMoreCasts } = useSearchCasts({
     q: debouncedSearchQuery,
-    token,
     enabled: visible && searchActive && searchTab === 'casts' && debouncedSearchQuery.length > 0,
   });
 
@@ -6180,7 +6205,8 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         .map((c) => ({
           cast: c,
           username: c.author.username || '',
-          hashPrefix: c.hash.slice(0, 10), // e.g., "0x2cba399b"
+          // The full hash: a thread opened from it loads through Hypersnap.
+          hashPrefix: c.hash,
         }));
 
       // Extract URL embeds. Each `cast.embeds.urls` entry becomes EXACTLY ONE
@@ -6381,7 +6407,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     pushScreen({
       type: 'thread',
       username: cast.author.username,
-      castHashPrefix: cast.hash.slice(0, 10),
+      castHashPrefix: cast.hash,
       placeholderCast: cast,
     });
   }, [pushScreen]);
@@ -6572,13 +6598,19 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
       ? governanceProposals.length === 0
       : !isLoading && !error && filteredPosts.length === 0;
   // Allow posting if there's text, images, or mini app embeds (not requiring all)
-  const canPost = Boolean(token && (castText.trim().length > 0 || selectedImages.length > 0 || miniAppEmbeds.length > 0) && !posting);
+  // Casts are signed with the Hypersnap signer: they need a Farcaster
+  // account, not the token (which only media uploads still use).
+  const canPost = Boolean(currentUserFid && (castText.trim().length > 0 || selectedImages.length > 0 || miniAppEmbeds.length > 0) && !posting);
 
   const handleChangeText = (value: string) => {
     setCastText(value.slice(0, maxCastLength));
   };
 
   const handlePickImage = async () => {
+    if (!token) {
+      setPostError(MEDIA_UPLOAD_UNAVAILABLE);
+      return;
+    }
     if (selectedImages.length >= 2) {
       setPostError('Maximum 2 images per cast');
       return;
@@ -6597,10 +6629,9 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   };
 
   const handleSubmitCast = async () => {
-    if (!canPost) {
-      if (!token) {
-        setPostError('Missing Farcaster token.');
-      }
+    if (!canPost) return;
+    if (selectedImages.length > 0 && !token) {
+      setPostError(MEDIA_UPLOAD_UNAVAILABLE);
       return;
     }
     try {
@@ -6610,8 +6641,10 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
       // Build embeds array as simple URL strings (API expects string[])
       const embeds: string[] = [];
       if (quoteCastEmbed) {
-        // Farcaster expects a cast URL for quote casts
-        const quoteUrl = `https://warpcast.com/${quoteCastEmbed.author}/${quoteCastEmbed.hash.slice(0, 10)}`;
+        // A cast link with the FULL hash: translateEmbedUrls turns it into a
+        // castId embed through Hypersnap (a short prefix would need
+        // farcaster.xyz to resolve).
+        const quoteUrl = `https://warpcast.com/${quoteCastEmbed.author}/${quoteCastEmbed.hash}`;
         embeds.push(quoteUrl);
       }
 
@@ -7208,7 +7241,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                     onPress={() =>
                       handleNavigateToThread(
                         post.username,
-                        post.hash.slice(0, 10),
+                        post.hash,
                         false,
                         feedPostToCastPlaceholder(post),
                       )
@@ -7252,7 +7285,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                         hash={post.hash}
                         votesFor={post.votesFor ?? 0}
                         votesAgainst={post.votesAgainst ?? 0}
-                        token={token}
                         theme={theme}
                         onVoted={refetchGovernance}
                       />
@@ -7264,13 +7296,13 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
           )}
 
           {/* Farcaster Account Required Overlay */}
-          {!token && (
+          {!currentUserFid && (
             <View style={styles.farcasterRequiredOverlay}>
               <View style={styles.farcasterRequiredContent}>
                 <IconSymbol name="person.crop.circle.badge.exclamationmark" size={48} color={theme.colors.warning} />
-                <Text style={styles.farcasterRequiredTitle}>Farcaster Account Required</Text>
+                <Text style={styles.farcasterRequiredTitle}>Hypersnap Account Required</Text>
                 <Text style={styles.farcasterRequiredMessage}>
-                  The social feed requires a Farcaster account. You can import your Farcaster account in Settings to view and interact with the feed.
+                  The social feed requires a Hypersnap account. You can import your Hypersnap account in Settings to view and interact with the feed.
                 </Text>
               </View>
             </View>
@@ -7279,7 +7311,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
           {/* Floating Action Button — in route mode it must float ABOVE the
               floating tab bar (not the hardcoded bottom:16, which now overlaps
               the tab bar / device buttons). Modal mode keeps bottom:16. */}
-          {token && (
+          {!!currentUserFid && (
             <TouchableOpacity
               style={[styles.fab, isRouteMode && { bottom: floatingTabBarPadding }]}
               onPress={() => {
@@ -7757,7 +7789,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             castAuthor={feedShareSheet?.author ?? ''}
             isRecasted={feedShareSheet?.isRecasted ?? false}
             recastCount={feedShareSheet?.recastCount ?? 0}
-            token={token}
+            canWrite={!!currentUserFid}
             onClose={() => setFeedShareSheet(null)}
             onRecast={() => {
               if (feedShareSheet) {
@@ -7775,7 +7807,8 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             }}
             onShareToChat={() => {
               if (feedShareSheet) {
-                const castUrl = `https://warpcast.com/${feedShareSheet.author}/${feedShareSheet.hash.slice(0, 10)}`;
+                // Full hash, so the card in the chat resolves through Hypersnap.
+                const castUrl = `https://warpcast.com/${feedShareSheet.author}/${feedShareSheet.hash}`;
                 handleShareToChat(castUrl);
               }
             }}
@@ -7839,7 +7872,8 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
 
 export default SocialFeedModal;
 
-const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
+/** Exported for tests that mount a feed card directly. */
+export const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
   StyleSheet.create({
     overlay: {
       ...StyleSheet.absoluteFillObject,
@@ -8074,7 +8108,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       flexDirection: 'row',
     },
     threadGutter: {
-      width: 44,
+      width: THREAD_GUTTER_WIDTH,
       alignItems: 'center',
       alignSelf: 'stretch',
     },
@@ -8084,7 +8118,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
     threadBody: {
       flex: 1,
       minWidth: 0,
-      marginLeft: Skin.space(12),
+      marginLeft: threadBodyGap(),
       gap: Skin.space(10),
     },
     threadHeader: {
@@ -8100,7 +8134,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       width: Skin.border(2),
       borderRadius: Skin.border(1),
       backgroundColor: theme.colors.surface4,
-      left: (44 - Skin.border(2)) / 2,
+      left: (THREAD_GUTTER_WIDTH - Skin.border(2)) / 2,
     },
     threadLineAbove: {
       top: -Skin.space(12), // through paddingTop, from the card's top edge

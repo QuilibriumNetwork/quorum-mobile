@@ -1,9 +1,9 @@
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
 import { useMMKVBoolean } from 'react-native-mmkv';
-import { reportFarcasterAuthFailure } from '@/services/farcaster/authTokenEvents';
 import { isScamCast } from '@/services/farcaster/scamFilter';
 import { normalizedCastToLegacy } from '@/services/farcaster/hypersnapToLegacyShape';
+import { rememberCastAuthor } from '@/services/farcaster/hypersnapWrites';
 import { useAuth } from '@/context/AuthContext';
 import { useFollowingFids } from '@/hooks/useFollowingFids';
 import { useFarcasterUsersPrefetch } from '@/hooks/useFarcasterUsersPrefetch';
@@ -18,8 +18,7 @@ import {
   fromHypersnapCast,
 } from '@quilibrium/quorum-shared';
 
-const FARCASTER_FEED_URL = 'https://client.farcaster.xyz/v2/feed-items';
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 25;
 
 export interface FarcasterFeedItem {
   id: string;
@@ -170,171 +169,59 @@ export interface EmbeddedCast {
 
 export interface FeedPage {
   items: FarcasterFeedItem[];
-  /** Cursor for the next page. `number` = legacy `olderThan` timestamp;
-   *  PageContext-shaped object = either continuation. `null` = end. */
-  nextCursor: number | PageContext | null;
-  latestMainCastTimestamp?: number;
-  excludeItemIdPrefixes: string[];
+  /** Cursor for the next page; `null` at the end of the feed. */
+  nextCursor: PageContext | null;
 }
 
 interface UseFarcasterFeedOptions {
-  token?: string;
   enabled?: boolean;
 }
 
 export interface PageContext {
-  /** Legacy /v2/feed-items cursor. */
-  olderThan?: number;
-  latestMainCastTimestamp?: number;
-  excludeItemIdPrefixes?: string[];
-  /** Hypersnap continuation cursor — present when the prior page came
-   *  from hypersnap. Forwarded to the hypersnap path; if hypersnap fails
-   *  on a continuation, the next page falls back to legacy at the same
-   *  approximate position via olderThan (best effort). */
-  hypersnapCursor?: string;
+  /** Hypersnap's opaque continuation cursor for the following feed. */
+  hypersnapCursor: string;
+}
+
+/** A page param this build can follow. Anything else — including a cursor
+ *  persisted by an older build in another shape — ends the feed instead of
+ *  being sent anywhere. */
+function isPageContext(value: unknown): value is PageContext {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as PageContext).hypersnapCursor === 'string'
+  );
 }
 
 /**
- * Try hypersnap's following feed first; return null on any failure or
- * when the page is empty (so the caller falls back to legacy). The
- * normalized casts are down-converted to the legacy FeedPage shape so
- * downstream UI doesn't need to change.
+ * One page of the viewer's following feed from Hypersnap, down-converted to
+ * the FeedPage shape the UI renders. No auth. A viewer who follows no
+ * one gets an empty feed.
  */
-async function tryHypersnapFollowingFeed(
-  fid: number | undefined,
-  pageContext: PageContext | undefined,
-): Promise<FeedPage | null> {
-  if (!fid) return null;
-  // Hypersnap cursors are opaque strings; only forward when the prior
-  // page came from hypersnap (we tag that on the FeedPage).
-  const cursor = pageContext?.hypersnapCursor;
-  try {
-    const client = getDefaultHypersnapClient();
-    const res = await client.getFollowingFeed(fid, { cursor, limit: 25 });
-    if (res.casts.length === 0) return null;
-    const items: FarcasterFeedItem[] = res.casts.map((c) => {
-      const norm = fromHypersnapCast(c);
-      const legacy = normalizedCastToLegacy(norm);
-      return {
-        id: legacy.hash,
-        timestamp: legacy.timestamp,
-        cast: legacy,
-      };
-    });
-    const filtered = items.filter(
-      (item) => !isScamCast(item.cast as unknown as Parameters<typeof isScamCast>[0]),
-    );
-    return {
-      items: filtered,
-      nextCursor: res.next.cursor
-        ? { hypersnapCursor: res.next.cursor }
-        : null,
-      latestMainCastTimestamp: undefined,
-      excludeItemIdPrefixes: [],
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function fetchFeedPage(
-  token: string,
-  fid: number | undefined,
-  pageContext?: PageContext,
-  topItemHash?: string
-): Promise<FeedPage> {
-  // Hypersnap-first when we have a FID. Skip when the prior page already
-  // pinned us to the legacy cursor.
-  if (!pageContext || pageContext.hypersnapCursor) {
-    const hypersnapPage = await tryHypersnapFollowingFeed(fid, pageContext);
-    if (hypersnapPage) return hypersnapPage;
-  }
-
-  const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-  const body: Record<string, unknown> = {
-    feedKey: 'home',
-    feedType: 'default',
-    updateState: true,
-  };
-
-  if (pageContext?.olderThan) {
-    body.olderThan = pageContext.olderThan;
-    body.latestMainCastTimestamp = pageContext.latestMainCastTimestamp;
-    body.excludeItemIdPrefixes = pageContext.excludeItemIdPrefixes ?? [];
-    body.castViewEvents = [];
-  }
-
-  // Include castViewEvents when refreshing to get new content
-  if (!pageContext?.olderThan && topItemHash) {
-    body.castViewEvents = [
-      {
-        ts: Date.now(),
-        hash: topItemHash,
-        on: 'home',
-      },
-    ];
-  }
-
-  const response = await fetch(FARCASTER_FEED_URL, {
-    method: 'POST',
-    headers: {
-      accept: '*/*',
-      'content-type': 'application/json; charset=utf-8',
-      authorization: `Bearer ${token}`,
-      'idempotency-key': idempotencyKey,
-      origin: 'https://farcaster.xyz',
-      referer: 'https://farcaster.xyz/',
-    },
-    body: JSON.stringify(body),
+async function fetchFeedPage(fid: number, pageContext?: PageContext): Promise<FeedPage> {
+  const res = await getDefaultHypersnapClient().getFollowingFeed(fid, {
+    cursor: pageContext?.hypersnapCursor,
+    limit: PAGE_SIZE,
   });
-
-  if (!response.ok) {
-    // Expired/revoked token → kick off the background re-auth (it
-    // invalidates this query on success, so the retry fetch picks up
-    // the new token via the hook's `token` param). Still throw so this
-    // fetch surfaces its error normally.
-    if (response.status === 401 || response.status === 403) {
-      reportFarcasterAuthFailure();
-    }
-    const errorData = await response.json().catch(() => null);
-    throw new Error(
-      errorData?.message || `Farcaster request failed (${response.status})`
-    );
-  }
-
-  const json = await response.json();
-
-  const rawItems: FarcasterFeedItem[] = json?.result?.items ?? [];
-  // Drop wallet-drainer typo-squat casts (hyrpia.xyz). Filtering at
-  // the fetch boundary means the rest of the feed pipeline (cursors,
-  // exclude lists, optimistic updates) sees a clean array — no
-  // gaps, no special-case rendering branches downstream.
-  const items = rawItems.filter(
-    (item) => !isScamCast(item.cast as unknown as Parameters<typeof isScamCast>[0]),
-  );
-
-  // Use the last item's timestamp as the cursor for the next page
-  // Always provide a cursor if we have items - the API may return fewer than PAGE_SIZE
-  const lastItem = items[items.length - 1];
-  const latestMainCastTimestamp = json?.result?.latestMainCastTimestamp;
-  // Use latestMainCastTimestamp for the next page cursor
-  const nextCursor = latestMainCastTimestamp ?? (lastItem ? lastItem.timestamp : null);
-  // Collect item ID prefixes for exclusion
-  const excludeItemIdPrefixes = items.map((item) => item.id.slice(2, 10)); // Remove 0x prefix, take 8 chars
-
-  return { items, nextCursor, latestMainCastTimestamp, excludeItemIdPrefixes };
+  const items: FarcasterFeedItem[] = res.casts.map((c) => {
+    const cast = normalizedCastToLegacy(fromHypersnapCast(c));
+    rememberCastAuthor(cast.hash, cast.author.fid);
+    return { id: cast.hash, timestamp: cast.timestamp, cast };
+  });
+  return {
+    // Drop wallet-drainer typo-squat casts (hyrpia.xyz) at the fetch
+    // boundary, so the rest of the pipeline sees a clean array.
+    items: items.filter(
+      (item) => !isScamCast(item.cast as unknown as Parameters<typeof isScamCast>[0]),
+    ),
+    nextCursor: res.next.cursor ? { hypersnapCursor: res.next.cursor } : null,
+  };
 }
 
-export function useFarcasterFeed({ token, enabled = true }: UseFarcasterFeedOptions) {
-  const queryClient = useQueryClient();
+export function useFarcasterFeed({ enabled = true }: UseFarcasterFeedOptions = {}) {
   const { user } = useAuth();
   const fid = user?.farcaster?.fid;
-  // The auth token is deliberately NOT in the key — it changes on
-  // re-auth and would orphan the cached pages. fid is the data identity;
-  // the token is gated via `enabled` and used inside queryFn only.
   const queryKey = ['farcaster-feed', fid];
-  const topItemHashRef = useRef<string | undefined>(undefined);
 
   // Paint the last-known feed instantly from MMKV on cold start, then
   // refresh in the background. `initialDataUpdatedAt` carries the persist
@@ -343,27 +230,12 @@ export function useFarcasterFeed({ token, enabled = true }: UseFarcasterFeedOpti
 
   const query = useInfiniteQuery({
     queryKey,
-    queryFn: ({ pageParam }) => {
-      // On refresh (no pageParam), pass the top item hash
-      const hashForRefresh = pageParam === undefined ? topItemHashRef.current : undefined;
-      return fetchFeedPage(token!, fid, pageParam, hashForRefresh);
-    },
+    queryFn: ({ pageParam }) =>
+      fetchFeedPage(fid as number, isPageContext(pageParam) ? pageParam : undefined),
     initialPageParam: undefined as PageContext | undefined,
-    getNextPageParam: (lastPage, allPages) => {
-      if (lastPage.nextCursor === null) return undefined;
-      if (typeof lastPage.nextCursor === 'object') {
-        // Hypersnap continuation — forward as-is.
-        return lastPage.nextCursor;
-      }
-      // Legacy continuation — accumulate exclude prefixes.
-      const allExcludePrefixes = allPages.flatMap((page) => page.excludeItemIdPrefixes);
-      return {
-        olderThan: lastPage.nextCursor,
-        latestMainCastTimestamp: lastPage.latestMainCastTimestamp,
-        excludeItemIdPrefixes: allExcludePrefixes,
-      } as PageContext;
-    },
-    enabled: Boolean(token) && enabled,
+    getNextPageParam: (lastPage) =>
+      isPageContext(lastPage.nextCursor) ? lastPage.nextCursor : undefined,
+    enabled: enabled && typeof fid === 'number' && fid > 0,
     staleTime: 1000 * 60 * 2, // 2 minutes
     // Cap retained pages so a long scroll session doesn't pin every page
     // in the JS heap; dropped pages refetch from the network on demand.
@@ -435,13 +307,7 @@ export function useFarcasterFeed({ token, enabled = true }: UseFarcasterFeedOpti
       if (authorFid === fid) return true; // always show the viewer's own replies
       return typeof authorFid === 'number' && followingFids.has(authorFid);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allItems, showRepliesInFeed, showNonFollowReplies, followsLoaded, followingFids, fid]);
-
-  // Track the top item hash for refresh requests
-  if (data.length > 0 && data[0].cast?.hash) {
-    topItemHashRef.current = data[0].cast.hash;
-  }
 
   // Refresh KEEPS the existing pages visible while the fetch runs in
   // the background — `refetch` does not clear the cache. Only when the

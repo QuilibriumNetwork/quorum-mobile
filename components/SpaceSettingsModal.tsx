@@ -2771,7 +2771,7 @@ export default function SpaceSettingsModal({
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.sectionTitle}>Linked Farcaster channels</Text>
+      <Text style={styles.sectionTitle}>Linked Hypersnap channels</Text>
       <Text style={[styles.sectionDescription, { marginBottom: Skin.space(12) }]}>
         Casts from linked channels appear inline at the top of this space's chat
         screens. Bindings are local to your device.

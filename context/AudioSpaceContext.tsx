@@ -59,7 +59,7 @@ import {
 } from '@/services/farcaster/spaceChatFetch';
 import { mmkvStorage } from '@/services/offline/storage';
 import { connectSpaceSocket } from '@/services/spaces/farcasterSpaceSocket';
-import { likeCast, unlikeCast, recastCast, unrecastCast } from '@/services/farcasterClient';
+import { setCastReaction } from '@/services/farcaster/hypersnapWrites';
 import { logger } from '@quilibrium/quorum-shared';
 import QuorumCrypto from '../modules/quorum-crypto/src';
 
@@ -1071,7 +1071,7 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
     const trimmed = text.trim();
     if (!trimmed) return;
     const persistAnchor = castHashRef.current;
-    if (!persistAnchor || !farcasterAuthToken || localFid == null) return;
+    if (!persistAnchor || localFid == null) return;
 
     const pending: PendingChatEntry = {
       hash: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1100,7 +1100,7 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
     }]);
 
     try {
-      await submitSpaceChatReply(parentHash, trimmed, farcasterAuthToken);
+      await submitSpaceChatReply(parentHash, trimmed, localFid);
     } catch (e) {
       logger.warn('[AudioSpace] chat send failed:', e instanceof Error ? e.message : e);
       // Drop the pending stub if the send itself errored — there's
@@ -1109,7 +1109,7 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
       savePendingChat(persistAnchor, pendingChatRef.current);
       setChatMessages((prev) => prev.filter((m) => m.hash !== pending.hash));
     }
-  }, [farcasterAuthToken, localFid, user?.displayName, user?.farcaster?.username, user?.farcaster?.pfpUrl]);
+  }, [localFid, user?.displayName, user?.farcaster?.username, user?.farcaster?.pfpUrl]);
 
   const sendChat = React.useCallback((text: string) => {
     const anchor = castHashRef.current;
@@ -1122,44 +1122,42 @@ export function AudioSpaceProvider({ children }: { children: React.ReactNode }) 
     return postChatReply(targetCastHash, text);
   }, [postChatReply]);
 
-  /** Like/unlike a chat message via the Farcaster API. Optimistic + rollback. */
+  /** Like/unlike a chat message. Optimistic + rollback. */
   const toggleChatLike = React.useCallback(
     async (castHash: string, currentlyLiked: boolean, currentCount: number) => {
-      if (!farcasterAuthToken) return;
+      if (localFid == null) return;
       const nextLiked = !currentlyLiked;
       const nextCount = nextLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
       setChatLikeStates((prev) => new Map(prev).set(castHash, { liked: nextLiked, count: nextCount }));
       try {
-        if (nextLiked) await likeCast({ token: farcasterAuthToken, castHash });
-        else await unlikeCast({ token: farcasterAuthToken, castHash });
+        await setCastReaction({ fid: localFid, castHash, kind: 'like', active: nextLiked });
       } catch {
         setChatLikeStates((prev) =>
           new Map(prev).set(castHash, { liked: currentlyLiked, count: currentCount }),
         );
       }
     },
-    [farcasterAuthToken],
+    [localFid],
   );
 
-  /** Recast/unrecast a chat message via the Farcaster API. Optimistic + rollback. */
+  /** Recast/unrecast a chat message. Optimistic + rollback. */
   const toggleChatRecast = React.useCallback(
     async (castHash: string, currentlyRecasted: boolean, currentCount: number) => {
-      if (!farcasterAuthToken) return;
+      if (localFid == null) return;
       const nextRecasted = !currentlyRecasted;
       const nextCount = nextRecasted ? currentCount + 1 : Math.max(0, currentCount - 1);
       setChatRecastStates((prev) =>
         new Map(prev).set(castHash, { recasted: nextRecasted, count: nextCount }),
       );
       try {
-        if (nextRecasted) await recastCast({ token: farcasterAuthToken, castHash });
-        else await unrecastCast({ token: farcasterAuthToken, castHash });
+        await setCastReaction({ fid: localFid, castHash, kind: 'recast', active: nextRecasted });
       } catch {
         setChatRecastStates((prev) =>
           new Map(prev).set(castHash, { recasted: currentlyRecasted, count: currentCount }),
         );
       }
     },
-    [farcasterAuthToken],
+    [localFid],
   );
 
   /** Toggle RSVP for the currently active scheduled room. Updates the

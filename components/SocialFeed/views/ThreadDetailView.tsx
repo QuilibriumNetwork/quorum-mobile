@@ -11,7 +11,8 @@ import type { EmbeddedCast } from '@/hooks/useFarcasterFeed';
 import { ImageViewer, AutoHeightImage, ImageCarousel, VideoPlayer, YouTubeEmbed, parseYouTubeUrl, extractYouTubeMatchesFromText } from '../media';
 import { CastText, LinkPreview, QuoteCast, FrameEmbed, LikeIcon, getLikeIconType, SnapEmbed, useSnapDetection, SnapIcon } from '../content';
 import { QuorumIdentityBadge } from '../content/QuorumIdentityBadge';
-import { SCREEN_HEIGHT, formatTimestamp, lookupUserByUsername } from '../utils';
+import { SCREEN_HEIGHT, formatTimestamp } from '../utils';
+import { lookupFidByUsername } from '@/services/farcaster/mentionExtraction';
 import { MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
@@ -64,10 +65,9 @@ export function ThreadDetailView({
   onTipPress,
   bottomInset = 0,
 }: ThreadDetailViewProps) {
-  const { parentCasts, mainCast, replies, isLoading, error, channelContext } = useFarcasterThread({
+  const { parentCasts, mainCast, replies, isLoading, error, channelContext, refetch } = useFarcasterThread({
     username,
     castHashPrefix,
-    token,
   });
 
   const [viewerState, setViewerState] = useState<{ images: string[]; index: number } | null>(null);
@@ -109,7 +109,7 @@ export function ThreadDetailView({
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const handleMentionPress = async (mentionUsername: string) => {
-    const fid = await lookupUserByUsername(mentionUsername);
+    const fid = await lookupFidByUsername(mentionUsername);
     if (fid) {
       onOpenProfile(fid, mentionUsername);
     }
@@ -410,7 +410,7 @@ export function ThreadDetailView({
                 theme={theme}
                 onPress={() => setSelectedThread({
                   username: embeddedCast.author.username,
-                  castHashPrefix: embeddedCast.hash.slice(0, 10),
+                  castHashPrefix: embeddedCast.hash,
                 })}
               />
             ))}
@@ -506,6 +506,15 @@ export function ThreadDetailView({
       ) : isLoading ? (
         <View style={staticStyles.centered}>
           <ActivityIndicator color={theme.colors.accent} />
+        </View>
+      ) : !error ? (
+        // Loaded, but the cast isn't in the result: say so rather than
+        // leave the screen blank.
+        <View style={[staticStyles.centered, { gap: Skin.space(12) }]}>
+          <Text style={{ color: theme.colors.textMuted }}>Couldn&apos;t load this cast.</Text>
+          <TouchableOpacity onPress={() => refetch()} hitSlop={12}>
+            <Text style={{ color: theme.colors.accent, fontWeight: '600' }}>Try again</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
 

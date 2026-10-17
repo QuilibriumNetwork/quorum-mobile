@@ -8,7 +8,7 @@ import { useToast } from '@/context/ToastContext';
 import { truncateAddress } from '@/utils/formatAddress';
 import { useWallet, useWalletKeys, aggregateAssets, AggregatedAsset, useEvmBalancesForAddress } from '@/hooks/useWallet';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
-import { useWarpcastWallet } from '@/hooks/useWarpcastWallet';
+import { getWarpcastWalletPrivateKey } from '@/services/onboarding/secureStorage';
 import { useBiometricAuth } from '@/hooks/useBiometricAuth';
 import { getChainName, formatBalance } from '@/services/wallet/balanceService';
 import WalletSelector from './WalletSelector';
@@ -99,7 +99,6 @@ export default function SwapModal({ visible, onClose, initialBuyToken }: SwapMod
   const { addresses, balances, refetch: refetchBalances } = useWallet();
   const { refetch: fetchKeys } = useWalletKeys();
   const { activeWallet, activeType, warpcastWallet } = useWalletSelection();
-  const { importedWallet: warpcastImportedWallet } = useWarpcastWallet();
   const { isAvailable: biometricAvailable, authenticate, getBiometricLabel } = useBiometricAuth();
   const { showToast } = useToast();
 
@@ -1079,7 +1078,7 @@ export default function SwapModal({ visible, onClose, initialBuyToken }: SwapMod
         }
       } else {
         // For warpcast wallet, use imported wallet private key; for builtin, use keys from derivation
-        privateKey = (activeType === 'warpcast' ? warpcastImportedWallet?.privateKey : null) || keys.ethereum?.privateKey || '';
+        privateKey = (activeType === 'warpcast' ? await getWarpcastWalletPrivateKey() : null) || keys.ethereum?.privateKey || '';
         if (!privateKey) {
           throw new Error('No EVM private key available');
         }

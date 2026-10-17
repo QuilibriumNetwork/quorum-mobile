@@ -9,14 +9,13 @@ import {
   deriveMultiChainAddresses,
   deriveMultiChainAddressesAsync,
   deriveMultiChainKeys,
-  deriveMultiChainKeysAsync,
   deriveMultiChainAddressesFromPrivateKey,
   deriveMultiChainAddressesFromPrivateKeyAsync,
   deriveMultiChainKeysFromPrivateKey,
-  deriveMultiChainKeysFromPrivateKeyAsync,
   ChainAddresses,
   ChainKeys,
 } from '@/services/wallet/multiChainWallet';
+import { getWalletKeys } from '@/services/wallet/walletKeyCache';
 import {
   fetchAllBalances,
   fetchEvmBalancesForAddress,
@@ -144,7 +143,7 @@ const DERIVATION_VERSION = 7;
 export const walletKeys = {
   all: ['wallet'] as const,
   addresses: () => [...walletKeys.all, 'addresses', `v${DERIVATION_VERSION}`] as const,
-  keys: () => [...walletKeys.all, 'keys', `v${DERIVATION_VERSION}`] as const,
+  // No `keys` entry: private keys are never a query. See services/wallet/walletKeyCache.ts.
   // Use ethereum address as stable key instead of whole object to prevent refetch loops
   balances: (ethAddress: string | null) => [...walletKeys.all, 'balances', ethAddress] as const,
   chainBalance: (chain: string, address: string) => [...walletKeys.all, 'balance', chain, address] as const,
@@ -242,33 +241,15 @@ export function useWalletAddresses() {
 }
 
 /**
- * Hook to get full key material (including private keys) - use carefully!
- * This should only be used when signing transactions
+ * Full key material (including private keys) for signing - use carefully!
+ *
+ * Deliberately NOT a React Query query: see `services/wallet/walletKeyCache.ts`
+ * for why key material must never enter the query cache. The `{ refetch }` shape
+ * is kept so signing call sites read `(await fetchKeys()).data` as before.
  */
-export function useWalletKeys() {
-  return useQuery({
-    queryKey: walletKeys.keys(),
-    queryFn: async (): Promise<ChainKeys | null> => {
-      // First try mnemonic (preferred)
-      const mnemonic = await getMnemonic();
-      if (mnemonic && mnemonic.length >= 12) {
-        // Use async version that yields to UI thread
-        return deriveMultiChainKeysAsync(mnemonic);
-      }
-
-      // Fall back to hex private key derivation (for non-mnemonic accounts)
-      const privateKey = await getPrivateKey();
-      if (privateKey && privateKey.length > 0) {
-        // Use async version that yields to UI thread
-        return deriveMultiChainKeysFromPrivateKeyAsync(privateKey);
-      }
-
-      return null;
-    },
-    staleTime: Infinity,
-    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes only (security)
-    enabled: false, // Don't auto-fetch - must be manually triggered
-  });
+export function useWalletKeys(): { refetch: () => Promise<{ data: ChainKeys | null }> } {
+  const refetch = React.useCallback(async () => ({ data: await getWalletKeys() }), []);
+  return React.useMemo(() => ({ refetch }), [refetch]);
 }
 
 /**

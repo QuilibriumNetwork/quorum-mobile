@@ -10,7 +10,6 @@
 import { BaseModal } from '@/components/shared';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SnapIcon } from '@/components/SocialFeed/content/SnapIcon';
-import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { useStorageAdapter } from '@/context/StorageContext';
 import { useSendDirectMessage } from '@/hooks/chat/useSendDirectMessage';
@@ -18,9 +17,8 @@ import { useQuorumIdentityForFid } from '@/hooks/useQuorumIdentityForFid';
 import { useResolvedName } from '@/identity';
 import { useWallet, useWalletKeys, aggregateAssets, AggregatedAsset, useEvmBalancesForAddress } from '@/hooks/useWallet';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
-import { useWarpcastWallet } from '@/hooks/useWarpcastWallet';
 import { getWalletPrivateKey } from '@/hooks/useQNSPayment';
-import { fetchPrimaryEthAddress } from '@/services/farcasterClient';
+import { fetchPrimaryEthAddress } from '@/services/farcaster/hypersnapUsers';
 import { getChainName, formatBalance } from '@/services/wallet/balanceService';
 import { getChainId } from '@/services/wallet/swapService';
 import { sendSwapTransaction, getExplorerUrl, estimateTransferGasCost, waitForTransaction } from '@/services/wallet/transactionService';
@@ -63,7 +61,6 @@ export default function TipModal({
   authorDisplayName,
 }: TipModalProps) {
   const { theme } = useTheme();
-  const { farcasterAuthToken } = useAuth();
   const { showToast } = useToast();
   const storage = useStorageAdapter();
   const sendDirectMessage = useSendDirectMessage();
@@ -71,21 +68,20 @@ export default function TipModal({
   const { balances, refetch: refetchBalances } = useWallet();
   const { refetch: fetchKeys } = useWalletKeys();
   const { activeWallet, activeType, warpcastWallet } = useWalletSelection();
-  const { importedWallet: warpcastImportedWallet } = useWarpcastWallet();
   const { data: warpcastBalances, refetch: refetchWarpcastBalances } = useEvmBalancesForAddress(
     warpcastWallet?.address,
     { enabled: visible }
   );
 
-  // Resolve the author's primary verified ETH address
+  // Resolve the author's primary ETH address (Hypersnap; no auth)
   const {
     data: recipientAddress,
     isLoading: isResolvingRecipient,
     isError: recipientError,
   } = useQuery({
     queryKey: ['tip-recipient-eth', authorFid],
-    queryFn: () => fetchPrimaryEthAddress(farcasterAuthToken!, authorFid),
-    enabled: visible && !!farcasterAuthToken && authorFid > 0,
+    queryFn: () => fetchPrimaryEthAddress(authorFid),
+    enabled: visible && authorFid > 0,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
@@ -306,7 +302,7 @@ export default function TipModal({
 
     try {
       // Get private key for the selected wallet (builtin fetches on demand)
-      const privateKey = await getWalletPrivateKey(activeType, warpcastImportedWallet, fetchKeys);
+      const privateKey = await getWalletPrivateKey(activeType, fetchKeys);
 
       // Build transaction (native transfer vs ERC20 transfer)
       let txData: string;

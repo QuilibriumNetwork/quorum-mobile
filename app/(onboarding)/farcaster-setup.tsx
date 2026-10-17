@@ -126,7 +126,7 @@ export default function FarcasterSetupScreen() {
       const account = await lookupFarcasterAccount(keys.custodyAddress, keys.custodyPrivateKey);
 
       if (!account) {
-        setError(`No Farcaster account found for this recovery phrase.`);
+        setError(`No Hypersnap account found for this recovery phrase.`);
         setIsSubmitting(false);
         return;
       }
@@ -190,9 +190,9 @@ export default function FarcasterSetupScreen() {
         <View style={styles.iconContainer}>
           <FarcasterLogoIcon size={32} color={theme.colors.primary} />
         </View>
-        <Text style={styles.title}>Import Farcaster</Text>
+        <Text style={styles.title}>Import Hypersnap</Text>
         <Text style={styles.subtitle}>
-          Enter your Farcaster recovery phrase to connect your account. This is optional and can be done later in Settings.
+          Enter your Hypersnap recovery phrase to connect your account. This is optional and can be done later in Settings.
         </Text>
       </View>
 

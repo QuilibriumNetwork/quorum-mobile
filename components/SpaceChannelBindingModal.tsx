@@ -29,7 +29,7 @@ export default function SpaceChannelBindingModal({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Linked Farcaster channels</Text>
+          <Text style={styles.title}>Linked Hypersnap channels</Text>
           <TouchableOpacity onPress={onClose}>
             <IconSymbol name="xmark" size={20} color={theme.colors.textMuted} />
           </TouchableOpacity>

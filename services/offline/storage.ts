@@ -27,6 +27,30 @@ export const mmkvStorage = {
   },
 };
 
+const SCRUB_FILLER_KEY = '__scrub_filler__';
+
+/**
+ * Replace `key`'s value and leave no copy of the previous value in the file.
+ *
+ * A plain `set` is not enough. MMKV is append-only: the old value stays in the
+ * file until a compaction, and compaction (`trim()` → full writeback,
+ * MMKVCore `MMKV_IO.cpp`) rewrites the live data from the start of the file but
+ * does not zero the unused tail behind it. So after compacting, this writes a
+ * throwaway filler over that tail (the file is then at most twice the live
+ * data, and the filler is longer than that tail), removes it, and compacts
+ * again, which leaves only filler bytes behind the live data.
+ *
+ * Costly (the filler is as large as everything else in this store). Call only
+ * when the old value must not survive, never on a routine write.
+ */
+export function replaceAndScrubFile(key: string, value: string): void {
+  storage.set(key, value);
+  storage.trim();
+  storage.set(SCRUB_FILLER_KEY, '0'.repeat(storage.size + 64 * 1024));
+  storage.remove(SCRUB_FILLER_KEY);
+  storage.trim();
+}
+
 /**
  * Storage for the mutation queue
  */

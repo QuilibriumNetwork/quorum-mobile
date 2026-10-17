@@ -130,7 +130,9 @@ export function FarcasterCastCard({ url, cast: providedCast, channelKey, fullWid
       const username = cast?.author?.username ?? parsed?.username;
       const castHash = cast?.hash ?? parsed?.castHash;
       if (username && castHash) {
-        onPress(username, castHash.slice(0, 10));
+        // The full hash when the cast is loaded: the thread view resolves
+        // a full hash on Hypersnap directly, a prefix needs a lookup.
+        onPress(username, castHash);
         return;
       }
     }

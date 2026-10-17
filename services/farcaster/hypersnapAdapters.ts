@@ -1,22 +1,14 @@
 /**
- * Mobile-side adapters that fulfil the SignerStore / OptInStore contracts
- * from @quilibrium/quorum-shared.
+ * Mobile-side adapter that fulfils the SignerStore contract from
+ * @quilibrium/quorum-shared.
  *
- * - SignerStore → SecureStore (Ed25519 private key must live in the keychain).
- * - OptInStore → MMKV (cheap, frequent reads).
+ * SignerStore → SecureStore (the Ed25519 private key must live in the keychain).
+ * One slot per device, holding the signer for the signed-in FID. Reset App Data
+ * clears it (`clearAllSecureStorage`).
  */
 
 import * as SecureStore from 'expo-secure-store';
-import {
-  getHypersnapOptInChoice,
-  setHypersnapOptInChoice,
-} from './hypersnapOptIn';
-import {
-  type HypersnapOptInChoice,
-  type OptInStore,
-  type SignerRecord,
-  type SignerStore,
-} from '@quilibrium/quorum-shared';
+import type { SignerRecord, SignerStore } from '@quilibrium/quorum-shared';
 
 const SIGNER_KEY = 'hypersnap.signerRecord.v1';
 const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
@@ -38,14 +30,5 @@ export const hypersnapSignerStore: SignerStore = {
   },
   async clear(): Promise<void> {
     await SecureStore.deleteItemAsync(SIGNER_KEY);
-  },
-};
-
-export const hypersnapOptInStore: OptInStore = {
-  async get(): Promise<HypersnapOptInChoice> {
-    return getHypersnapOptInChoice();
-  },
-  async set(choice: HypersnapOptInChoice): Promise<void> {
-    setHypersnapOptInChoice(choice);
   },
 };

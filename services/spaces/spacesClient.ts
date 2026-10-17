@@ -235,33 +235,6 @@ export async function listScheduledAudioRooms(
   }
 }
 
-/** Read-only chat history for an audio room. Chat is a read-only
- *  surface server-side: messages can be fetched via this GET, but
- *  there is no HTTP send endpoint, so we poll. */
-export interface AudioRoomChatMessage {
-  id?: string;
-  fid?: number;
-  /** Denormalized user — present on some responses. */
-  user?: SpaceUser;
-  text: string;
-  createdAt?: string | number;
-}
-
-export async function getAudioRoomChat(
-  roomId: string,
-  token: string,
-): Promise<AudioRoomChatMessage[]> {
-  try {
-    const env = await getJson<Envelope<{ messages?: AudioRoomChatMessage[] }>>(
-      `/v1/audio-room/chat?roomId=${encodeURIComponent(roomId)}`,
-      token,
-    );
-    return env.result?.messages ?? [];
-  } catch {
-    return [];
-  }
-}
-
 // ---- Write-side: lifecycle ----------------------------------------
 
 export async function joinAudioRoom(roomId: string, token: string): Promise<AudioRoomJoinResult> {

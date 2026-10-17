@@ -19,7 +19,6 @@ import {
 } from '@/hooks/useQNSPayment';
 import { useWallet, aggregateAssets, useWalletKeys } from '@/hooks/useWallet';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
-import { useWarpcastWallet } from '@/hooks/useWarpcastWallet';
 import type { Auction } from '@/services/api/qnsClient';
 import {
   QNS_TOKEN_ADDRESSES,
@@ -110,7 +109,6 @@ export default function AuctionDetailModal({
   const { balances } = useWallet();
   const { refetch: fetchKeys } = useWalletKeys();
   const { activeWallet, activeType } = useWalletSelection();
-  const { importedWallet } = useWarpcastWallet();
   const countdown = useCountdown(auction?.ends_at);
 
   const [bidAmount, setBidAmount] = React.useState('');
@@ -176,7 +174,7 @@ export default function AuctionDetailModal({
       const ownership = stealthOwnershipToApi(stealth);
 
       // Sign the QNS signature message (EIP-191) so the server can verify the bidder address
-      const walletPrivateKey = await getWalletPrivateKey(activeType, importedWallet, fetchKeys);
+      const walletPrivateKey = await getWalletPrivateKey(activeType, fetchKeys);
       const { address: bidderAddress, signature } = await signQNSSignatureMessage(walletPrivateKey);
 
       placeBid({
@@ -216,7 +214,7 @@ export default function AuctionDetailModal({
               const ownership = stealthOwnershipToApi(stealth);
 
               // Sign the QNS signature message (EIP-191) so the server can verify the buyer address
-              const walletPrivateKey = await getWalletPrivateKey(activeType, importedWallet, fetchKeys);
+              const walletPrivateKey = await getWalletPrivateKey(activeType, fetchKeys);
               const { address: buyerAddress, signature } = await signQNSSignatureMessage(walletPrivateKey);
 
               instantBuy({

@@ -16,9 +16,9 @@ import React, {
   useEffect,
 } from 'react';
 import { AppState, InteractionManager } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
 import { mmkvStorage, clearAllMMKVStorage } from '../services/offline/storage';
 import { getPrivateKey, getDeviceKeyset, clearAllSecureStorage, getFarcasterAuthToken, getFarcasterAuthTokenExpiresAt, getFarcasterCustodyKey, storeFarcasterAuthToken, storeFarcasterAuthTokenExpiresAt, storeFarcasterCustodyKey, storeFarcasterSignerKey, storeFarcasterFid, getMnemonic } from '../services/onboarding/secureStorage';
+import { clearWalletKeysCache } from '../services/wallet/walletKeyCache';
 import { deriveFarcasterKeys, lookupFarcasterAccount, validateFarcasterMnemonic } from '../services/onboarding/farcasterService';
 import { refreshFarcasterAuthToken, fetchFarcasterProfileByFid } from '../services/onboarding/farcasterService';
 import { registerFarcasterAuthFailureHandler } from '../services/farcaster/authTokenEvents';
@@ -191,7 +191,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [authState, setAuthState] = useState<AuthState>('loading');
   const [user, setUser] = useState<UserInfo | null>(null);
   const [farcasterAuthToken, setFarcasterAuthToken] = useState<string | null>(null);
-  const queryClient = useQueryClient();
 
   // Load persisted auth state on mount
   useEffect(() => {
@@ -487,6 +486,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // block's error would replace the secure-storage one, and losing that
       // is losing the report that the user's keys may still be on the device.
       let wipeError: unknown = null;
+      // Derived wallet keys held in memory die with the identity, whatever the
+      // wipe below does.
+      clearWalletKeysCache();
       try {
         // Secure storage (private keys, mnemonics, onboarding state)
         await clearAllSecureStorage();
@@ -609,7 +611,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!mnemonic) {
           recoveryDetail = 'no mnemonic in secure storage';
         } else if (!validateFarcasterMnemonic(mnemonic)) {
-          recoveryDetail = `mnemonic invalid for Farcaster (length ${mnemonic.length})`;
+          recoveryDetail = `mnemonic invalid for Hypersnap (length ${mnemonic.length})`;
         } else {
           try {
             const keys = deriveFarcasterKeys(mnemonic);
@@ -634,7 +636,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
               }
             } else {
               recoveryDetail =
-                'mnemonic derives a Farcaster custody address but lookup returned no FID — this account was likely created with a different seed phrase';
+                'mnemonic derives a Hypersnap custody address but lookup returned no FID — this account was likely created with a different seed phrase';
             }
           } catch (e) {
             recoveryDetail = `derivation/lookup threw: ${(e as Error)?.message ?? 'unknown'}`;
@@ -662,22 +664,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [farcasterAuthToken]);
 
-  // Reactive 401/403 backstop: high-traffic Farcaster call sites (feed,
-  // notifications, legacy cast submit) report rejections through
-  // authTokenEvents; we force-refresh from the custody key and then
-  // invalidate the Farcaster query caches. The token is deliberately
-  // NOT in those queryKeys — queryFns read it per-render from
-  // context-fed props, so the refetch triggered by invalidation is what
-  // carries the new token to the API.
+  // Reactive 401/403 backstop: farcaster.xyz call sites report rejections
+  // through authTokenEvents and we force-refresh from the custody key. The
+  // feed, notifications and every protocol write go through Hypersnap and
+  // never need the token, so only the farcaster.xyz-only features listed in
+  // FARCASTER_TECH_DEBT.md depend on this, and they read the token from context.
   useEffect(() => {
     return registerFarcasterAuthFailureHandler(async () => {
-      const result = await refreshFarcasterToken({ force: true });
-      if ('token' in result) {
-        void queryClient.invalidateQueries({ queryKey: ['farcaster-feed'] });
-        void queryClient.invalidateQueries({ queryKey: ['farcaster-notifications'] });
-      }
+      await refreshFarcasterToken({ force: true });
     });
-  }, [refreshFarcasterToken, queryClient]);
+  }, [refreshFarcasterToken]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

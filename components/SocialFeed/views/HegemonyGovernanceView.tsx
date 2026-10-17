@@ -24,7 +24,8 @@ import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import type { AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
-import { postFarcasterCast } from '@/services/farcasterClient';
+import { useAuth } from '@/context/AuthContext';
+import { publishCast } from '@/services/farcaster/hypersnapWrites';
 import { useHegemonyGovernance } from '@/hooks/useHegemonyGovernance';
 import {
   getTier,
@@ -100,8 +101,9 @@ function ReplyThread({
   );
 }
 
-export function HegemonyGovernanceView({ theme, token }: { theme: AppTheme; token?: string }) {
+export function HegemonyGovernanceView({ theme }: { theme: AppTheme }) {
   const { casts, isLoading, error, refetch, isRefetching } = useHegemonyGovernance();
+  const fid = useAuth().user?.farcaster?.fid;
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
   const [voteTarget, setVoteTarget] = React.useState<{ hash: string; dir: 'for' | 'against' } | null>(null);
   const [reason, setReason] = React.useState('');
@@ -120,13 +122,13 @@ export function HegemonyGovernanceView({ theme, token }: { theme: AppTheme; toke
   };
 
   const submitVote = async () => {
-    if (!voteTarget || !token || submitting) return;
+    if (!voteTarget || !fid || submitting) return;
     const base = voteTarget.dir === 'for' ? 'FOR' : 'AGAINST';
     const trimmed = reason.trim();
     const text = trimmed ? `${base}: ${trimmed}` : base;
     setSubmitting(true);
     try {
-      await postFarcasterCast({ token, text, parentHash: voteTarget.hash });
+      await publishCast({ fid, text, parent: { castHash: voteTarget.hash } });
       setVoteTarget(null);
       setReason('');
       Alert.alert('Vote posted', 'Your vote is in. Weighted tallies update on the next refresh.');
@@ -262,13 +264,13 @@ export function HegemonyGovernanceView({ theme, token }: { theme: AppTheme; toke
                 ) : (
                   <View style={{ flexDirection: 'row', gap: Skin.space(8), marginTop: Skin.space(10) }}>
                     <Pressable
-                      onPress={() => (token ? startVote(c.hash, 'for') : Alert.alert('Sign in', 'Connect Farcaster to vote.'))}
+                      onPress={() => (fid ? startVote(c.hash, 'for') : Alert.alert('Sign in', 'Connect Hypersnap to vote.'))}
                       style={[s.btn, { backgroundColor: theme.colors.accent }]}
                     >
                       <Text style={s.btnText}>Vote FOR</Text>
                     </Pressable>
                     <Pressable
-                      onPress={() => (token ? startVote(c.hash, 'against') : Alert.alert('Sign in', 'Connect Farcaster to vote.'))}
+                      onPress={() => (fid ? startVote(c.hash, 'against') : Alert.alert('Sign in', 'Connect Hypersnap to vote.'))}
                       style={[s.btn, { backgroundColor: theme.colors.warning }]}
                     >
                       <Text style={s.btnText}>Vote AGAINST</Text>

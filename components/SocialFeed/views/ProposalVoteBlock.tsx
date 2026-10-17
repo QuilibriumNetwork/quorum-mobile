@@ -9,7 +9,8 @@ import React from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
-import { postFarcasterCast } from '@/services/farcasterClient';
+import { useAuth } from '@/context/AuthContext';
+import { publishCast } from '@/services/farcaster/hypersnapWrites';
 
 function fmtPoints(n: number): string {
   return Math.floor(n).toLocaleString();
@@ -19,27 +20,26 @@ export function ProposalVoteBlock({
   hash,
   votesFor,
   votesAgainst,
-  token,
   theme,
   onVoted,
 }: {
   hash: string;
   votesFor: number;
   votesAgainst: number;
-  token?: string;
   theme: AppTheme;
   onVoted?: () => void;
 }) {
   const [dir, setDir] = React.useState<'for' | 'against' | null>(null);
   const [reason, setReason] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
+  const fid = useAuth().user?.farcaster?.fid;
 
   const total = votesFor + votesAgainst;
   const forPct = total > 0 ? (votesFor / total) * 100 : 50;
 
   const start = (d: 'for' | 'against') => {
-    if (!token) {
-      Alert.alert('Sign in', 'Connect Farcaster to vote.');
+    if (!fid) {
+      Alert.alert('Sign in', 'Connect Hypersnap to vote.');
       return;
     }
     setReason('');
@@ -47,13 +47,13 @@ export function ProposalVoteBlock({
   };
 
   const submit = async () => {
-    if (!dir || !token || submitting) return;
+    if (!dir || !fid || submitting) return;
     const base = dir === 'for' ? 'FOR' : 'AGAINST';
     const trimmed = reason.trim();
     const text = trimmed ? `${base}: ${trimmed}` : base;
     setSubmitting(true);
     try {
-      await postFarcasterCast({ token, text, parentHash: hash });
+      await publishCast({ fid, text, parent: { castHash: hash } });
       setDir(null);
       setReason('');
       onVoted?.();

@@ -110,7 +110,7 @@ export default function BoundChannelFeedPanel({
           </>
         )}
         <View style={{ flex: 1 }} />
-        {!activeThread && farcasterAuthToken && activeKey && (
+        {!activeThread && currentUserFid && activeKey && (
           <TouchableOpacity
             onPress={(e) => {
               e.stopPropagation?.();
@@ -183,9 +183,11 @@ export default function BoundChannelFeedPanel({
                   channelName={channel?.name}
                   theme={theme}
                   onPress={() => {
+                    // The full hash lets the thread load from Hypersnap; a
+                    // short prefix can only be resolved by farcaster.xyz.
                     setActiveThread({
                       username: item.author.username,
-                      castHashPrefix: item.hash.slice(0, 10),
+                      castHashPrefix: item.hash,
                     });
                   }}
                 />

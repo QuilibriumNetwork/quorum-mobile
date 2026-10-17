@@ -1,52 +1,44 @@
 /**
  * useFarcasterSubmitCast — single entry point for every cast / reply
- * the app publishes. Wraps quorum-shared's `useSubmitCast` with the
- * mobile-side wiring (signer store, legacy token, channel-URL map) and
- * adds the composer-side preprocessing that the read path's
+ * the app publishes. Casts are signed with the device's Hypersnap signer
+ * and submitted to Hypersnap (`publishCast`); there is no farcaster.xyz
+ * path. Adds the composer-side preprocessing that the read path's
  * normalization expects:
  *
  *   - `@username` extraction → `(mentions, mentionsPositions)` pair
  *     (skipped when `extractMentions: false`, for chat-share / browser
  *     paths where chat handles can collide with Farcaster usernames).
- *   - `farcaster.xyz/<user>/0x<hash>` URL embeds promoted to canonical
- *     `castId` embeds.
+ *   - `farcaster.xyz` / `warpcast.com` cast-link embeds promoted to
+ *     canonical `castId` embeds.
  *   - Channel key → parent_url resolution.
  *
- * Falls back to legacy `client.farcaster.xyz/v2/casts` automatically
- * when no signer is provisioned (handled inside `useSubmitCast`).
+ * Reply parents may be hash-only: `publishCast` looks up the parent's
+ * author FID, which the protocol needs to address the reply.
  */
 
 import { useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import {
-  useSubmitCast,
-  type SubmitCastResult,
-} from '@quilibrium/quorum-shared';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
-import { reportFarcasterAuthFailure } from '@/services/farcaster/authTokenEvents';
-import { hypersnapSignerStore } from '@/services/farcaster/hypersnapAdapters';
 import { extractMentions } from '@/services/farcaster/mentionExtraction';
 import { translateEmbedUrls } from '@/services/farcaster/embedTranslation';
 import { resolveChannelParentUrl } from '@/services/farcaster/channelUrlResolver';
+import { FarcasterWriteError, publishCast } from '@/services/farcaster/hypersnapWrites';
 
 // Channel key → parent_url: a cast joins a channel ONLY when parent_url
 // exactly equals the channel's canonical FIP-2 `url` (warpcast.com/~/channel
 // form for most, chain:// URIs for original channels). Constructing the URL
-// from the key — the old behavior here — produced identifiers Farcaster's
-// backend doesn't recognize, so hypersnap-submitted casts fell out of their
-// channels. resolveChannelParentUrl fetches (and caches) the canonical URL
-// from the Farcaster API instead.
+// from the key produces identifiers Farcaster's backend doesn't recognize,
+// so resolveChannelParentUrl fetches (and caches) the canonical URL from the
+// Farcaster API instead.
 
 export interface SubmitCastInput {
   text: string;
   /** Plain URL strings collected by the composer (image uploads, page
-   *  links, farcaster.xyz cast links). Get translated into protocol-
-   *  level `CastEmbed[]` before submit. */
+   *  links, cast links). Get translated into protocol-level
+   *  `CastEmbed[]` before submit. */
   embedUrls?: string[];
-  /** When set, this becomes a reply to that cast. `fid` is required for
-   *  the hypersnap path; surfaces that don't track it (BrowserModal /
-   *  miniapp compose) can omit it and the submit will fall through to
-   *  the legacy path which accepts hash-only. */
+  /** When set, this becomes a reply to that cast. `fid` is the parent's
+   *  author; looked up from the hash when omitted. */
   parent?: { castHashHex: string; fid?: number } | { url: string };
   channelKey?: string;
   /** Default `true`. Set `false` for chat-share / browser flows where
@@ -54,125 +46,49 @@ export interface SubmitCastInput {
   extractMentions?: boolean;
 }
 
-export interface UseFarcasterSubmitCastOptions {
-  /** Bearer token for the legacy fallback path. Optional — without it
-   *  the submit will fail loudly if the signer path also fails. */
-  token?: string;
+export interface SubmitCastResult {
+  /** 0x-prefixed hex of the published cast's hash. */
+  hash: string;
 }
 
-export function useFarcasterSubmitCast(options: UseFarcasterSubmitCastOptions = {}) {
+export function useFarcasterSubmitCast() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const fid = user?.farcaster?.fid;
 
-  const mutation = useSubmitCast({
-    fid,
-    token: options.token,
-    signerStore: hypersnapSignerStore,
-  });
+  const mutation = useMutation<SubmitCastResult, Error, SubmitCastInput>({
+    mutationFn: async (input) => {
+      if (!fid) throw new FarcasterWriteError('No Hypersnap account is connected');
 
-  const submitCast = useCallback(
-    async (input: SubmitCastInput): Promise<SubmitCastResult> => {
-      // Decide the publish path up front, because the two paths want the
-      // text preprocessed in OPPOSITE ways:
-      //   - hypersnap (protocol) path: `@username` must be STRIPPED out of
-      //     the stored text and supplied as an aligned
-      //     (mentions, mentionsPositions) pair (byte offsets into the
-      //     stripped text).
-      //   - legacy `/v2/casts` path: `@username` must be left INLINE — the
-      //     server resolves handles itself and has no mentions-array field
-      //     (see `submitViaLegacy` in quorum-shared, which forwards neither
-      //     `mentions` nor `mentionsPositions`).
-      // Running extractMentions and *then* falling through to legacy strips
-      // the handle from the text AND sends no mentions array, so the mention
-      // vanishes entirely. So only extract when hypersnap will actually run;
-      // otherwise leave the handle inline for the server to resolve.
-      //
-      // Mirrors the path decision inside `useSubmitCast`: hypersnap is used
-      // only when a signer record exists for this fid and the parent (if a
-      // reply) carries a fid.
-      const parentMissingFid =
-        !!input.parent && 'castHashHex' in input.parent && input.parent.fid == null;
-      let willUseHypersnap = false;
-      if (!parentMissingFid && fid != null) {
-        try {
-          const record = await hypersnapSignerStore.get();
-          willUseHypersnap = !!record && record.fid === fid;
-        } catch {
-          willUseHypersnap = false;
-        }
-      }
-
-      const wantMentions = (input.extractMentions ?? true) && willUseHypersnap;
-      const { text, mentions, mentionsPositions } = wantMentions
+      const { text, mentions, mentionsPositions } = (input.extractMentions ?? true)
         ? await extractMentions(input.text, qc)
         : { text: input.text, mentions: [] as number[], mentionsPositions: [] as number[] };
 
-      const inputUrls = input.embedUrls ?? [];
-      const embeds = await translateEmbedUrls(inputUrls, qc);
+      const embeds = await translateEmbedUrls(input.embedUrls ?? [], qc);
 
-      // Resolve the channel's canonical parent URL up front (the
-      // channelKeyToUrl callback below is synchronous). Cached after the
-      // first lookup per channel; falls back to the warpcast.com form.
-      const channelParentUrl = input.channelKey
-        ? await resolveChannelParentUrl(input.channelKey)
-        : undefined;
-
-      // Map from a CastId's hash (hex) → original sharable URL. The
-      // legacy `/v2/casts` endpoint only accepts plain URL strings,
-      // so when the protocol-shape produced by `translateEmbedUrls`
-      // resolved a cast URL into `{castId}`, the legacy path needs
-      // the reverse to keep the embed.
-      const castIdHashHexToUrl = new Map<string, string>();
-      embeds.forEach((e, idx) => {
-        if ('castId' in e) {
-          const hex = Array.from(e.castId.hash)
-            .map((b) => b.toString(16).padStart(2, '0'))
-            .join('');
-          const original = inputUrls[idx];
-          if (original) castIdHashHexToUrl.set(hex, original);
-        }
-      });
-
-      try {
-        return await mutation.mutateAsync({
-          text,
-          embeds: embeds.length > 0 ? embeds : undefined,
-          mentions: mentions.length > 0 ? mentions : undefined,
-          mentionsPositions: mentionsPositions.length > 0 ? mentionsPositions : undefined,
-          parent: input.parent,
-          channelKey: input.channelKey,
-          channelKeyToUrl: channelParentUrl ? () => channelParentUrl : undefined,
-          castIdToUrl: ({ hash }) => {
-            const hex = Array.from(hash)
-              .map((b) => b.toString(16).padStart(2, '0'))
-              .join('');
-            return castIdHashHexToUrl.get(hex);
-          },
-        });
-      } catch (e) {
-        // The legacy `/v2/casts` fallback throws quorum-shared's
-        // LegacyFarcasterError, which carries the HTTP status (the
-        // class isn't exported, so duck-type it). An expired token
-        // surfaces here as 401/403 — kick off the background re-auth
-        // so the user's retry succeeds; still rethrow so the composer
-        // shows the failure.
-        const status = (e as { status?: unknown })?.status;
-        if (status === 401 || status === 403) {
-          reportFarcasterAuthFailure();
-        }
-        throw e;
+      let parent: { castHash: string; fid?: number } | { url: string } | undefined;
+      if (input.parent && 'url' in input.parent) {
+        parent = { url: input.parent.url };
+      } else if (input.parent) {
+        parent = { castHash: input.parent.castHashHex, fid: input.parent.fid ?? undefined };
+      } else if (input.channelKey) {
+        parent = { url: await resolveChannelParentUrl(input.channelKey) };
       }
+
+      const hash = await publishCast({ fid, text, embeds, mentions, mentionsPositions, parent });
+      return { hash };
     },
-    [mutation, qc],
+  });
+
+  const { mutateAsync } = mutation;
+  const submitCast = useCallback(
+    (input: SubmitCastInput): Promise<SubmitCastResult> => mutateAsync(input),
+    [mutateAsync],
   );
 
   return {
     submitCast,
     isPending: mutation.isPending,
     error: mutation.error,
-    /** Set by the hypersnap path on success; useful for telemetry +
-     *  "successfully signed locally" UI affordances. */
-    source: mutation.data?.source,
   };
 }

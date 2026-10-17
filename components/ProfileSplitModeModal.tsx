@@ -33,7 +33,7 @@ export default function ProfileSplitModeModal({
       <View style={styles.container}>
         <Text style={styles.title}>Keep profiles separate?</Text>
         <Text style={styles.subtitle}>
-          You can manage your Quorum and Farcaster profiles independently, or
+          You can manage your Quorum and Hypersnap profiles independently, or
           treat them as one. Fname and QNS usernames always stay in their own
           system.
         </Text>
@@ -64,7 +64,7 @@ export default function ProfileSplitModeModal({
           </View>
         </TouchableOpacity>
 
-        <Text style={styles.footer}>You can change this any time from the Farcaster section of your profile.</Text>
+        <Text style={styles.footer}>You can change this any time from the Hypersnap section of your profile.</Text>
       </View>
     </BaseModal>
   );

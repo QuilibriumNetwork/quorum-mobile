@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
+import { lookupFidByUsername } from '@/services/farcaster/mentionExtraction';
+import { isFullCastHash, rememberCastAuthor } from '@/services/farcaster/hypersnapWrites';
 import { isScamCast } from '@/services/farcaster/scamFilter';
 import { getCachedThread, setCachedThread } from '@/services/offline/farcasterFeedCache';
 import {
@@ -8,7 +10,13 @@ import {
   type HypersnapConversationCast,
 } from '@quilibrium/quorum-shared';
 
-const THREAD_API_URL = 'https://farcaster.xyz/~api/v2/user-thread-casts';
+/** farcaster.xyz's thread lookup: the only service that resolves a cast from a
+ *  hash PREFIX (what farcaster.xyz/<user>/0x<prefix> share links carry).
+ *  Used for that resolution alone, after Hypersnap could not find it. */
+const PREFIX_LOOKUP_URL = 'https://farcaster.xyz/~api/v2/user-thread-casts';
+/** How far back through an author's casts to look for a hash prefix. */
+const PREFIX_SCAN_PAGES = 3;
+const PREFIX_SCAN_PAGE_SIZE = 100;
 
 export interface ThreadCast {
   hash: string;
@@ -121,9 +129,11 @@ interface ThreadResponse {
 }
 
 interface UseFarcasterThreadOptions {
+  /** The author's username. Only needed when `castHashPrefix` is a prefix
+   *  rather than a full hash. */
   username: string;
+  /** A full cast hash, or a prefix from a share link. */
   castHashPrefix: string;
-  token?: string;
   enabled?: boolean;
   /** Optional source of optimistic pending replies for the resolved
    *  thread. Called with the main cast's hash; the returned casts are
@@ -242,8 +252,8 @@ function fromHypersnapConversation(c: HypersnapConversationCast): ThreadCast {
   };
 }
 
-/** Flatten a hypersnap conversation tree into the same flat array that
- *  the legacy /user-thread-casts endpoint returns: [main, ...replies]. */
+/** Flatten a hypersnap conversation tree into a flat array:
+ *  [main, ...replies]. */
 function hypersnapConversationToFlatCasts(root: ThreadCast): ThreadCast[] {
   const out: ThreadCast[] = [];
   const walk = (c: ThreadCast) => {
@@ -255,87 +265,98 @@ function hypersnapConversationToFlatCasts(root: ThreadCast): ThreadCast[] {
   return out;
 }
 
-async function fetchThreadFromHypersnap(castHashPrefix: string): Promise<ThreadCast[] | null> {
-  // Hypersnap requires the full hash. If we only have a prefix (<40 hex
-  // chars after stripping 0x), we can't query it directly — fall through
-  // to legacy which does prefix resolution server-side.
-  const stripped = castHashPrefix.toLowerCase().replace(/^0x/, '');
-  if (stripped.length < 40) return null;
+/** The thread around a cast, by full hash: its parents (walked up to the root),
+ *  the cast, and its replies, flat, from Hypersnap. */
+async function fetchThreadFromHypersnap(castHash: string): Promise<ThreadCast[]> {
   const client = getDefaultHypersnapClient();
-  try {
-    const res = await client.getCastConversation(stripped, { replyDepth: 5 });
-    const root = fromHypersnapConversation(res.conversation.cast);
+  const res = await client.getCastConversation(castHash.toLowerCase().replace(/^0x/, ''), {
+    replyDepth: 5,
+  });
+  const root = fromHypersnapConversation(res.conversation.cast);
 
-    // Walk up the parent chain: hypersnap's conversation endpoint roots
-    // the tree at the queried cast and only returns descendants, but the
-    // thread UI expects parents above the focused cast. We chase
-    // parent_hash + parent_author.fid pairs until we hit the root.
-    const parents: ThreadCast[] = [];
-    let cursor: ThreadCast = root;
-    const SAFETY = 16;
-    for (let i = 0; i < SAFETY; i++) {
-      const pHash = cursor.parentHash?.replace(/^0x/, '');
-      const pFid = cursor.parentAuthor?.fid;
-      if (!pHash || !pFid) break;
-      let parent;
-      try {
-        parent = await client.getCastByHash(pFid, pHash);
-      } catch {
-        break;
-      }
-      const parentNormalized = fromHypersnapConversation(parent);
-      parents.unshift(parentNormalized);
-      cursor = parentNormalized;
+  // Walk up the parent chain: hypersnap's conversation endpoint roots
+  // the tree at the queried cast and only returns descendants, but the
+  // thread UI expects parents above the focused cast. We chase
+  // parent_hash + parent_author.fid pairs until we hit the root.
+  const parents: ThreadCast[] = [];
+  let cursor: ThreadCast = root;
+  const SAFETY = 16;
+  for (let i = 0; i < SAFETY; i++) {
+    const pHash = cursor.parentHash?.replace(/^0x/, '');
+    const pFid = cursor.parentAuthor?.fid;
+    if (!pHash || !pFid) break;
+    let parent;
+    try {
+      parent = await client.getCastByHash(pFid, pHash);
+    } catch {
+      break;
     }
-
-    return [...parents, ...hypersnapConversationToFlatCasts(root)];
-  } catch {
-    return null;
+    const parentNormalized = fromHypersnapConversation(parent);
+    parents.unshift(parentNormalized);
+    cursor = parentNormalized;
   }
+
+  const casts = [...parents, ...hypersnapConversationToFlatCasts(root)];
+  for (const c of casts) rememberCastAuthor(c.hash, c.author.fid);
+  return casts;
 }
 
-async function fetchThreadFromLegacy(
+/** Find the full hash for a prefix among the author's recent casts on
+ *  Hypersnap. Null when the author is unknown or the cast is older than the
+ *  scan reaches. */
+async function findHashByPrefixOnHypersnap(
   username: string,
-  castHashPrefix: string,
-  token?: string,
-): Promise<ThreadCast[]> {
-  // Legacy requires both fields in the query string. Without username,
-  // we can't even attempt this path — return empty so the caller can
-  // surface an empty thread rather than throwing.
-  if (!username || !castHashPrefix) return [];
-  const url = `${THREAD_API_URL}?castHashPrefix=${castHashPrefix}&username=${username}&limit=15`;
-
-  const headers: Record<string, string> = {
-    accept: '*/*',
-    'content-type': 'application/json',
-    origin: 'https://farcaster.xyz',
-    referer: 'https://farcaster.xyz/',
-  };
-
-  if (token) {
-    headers.authorization = `Bearer ${token}`;
+  prefix: string,
+): Promise<string | null> {
+  const fid = await lookupFidByUsername(username);
+  if (!fid) return null;
+  const client = getDefaultHypersnapClient();
+  let cursor: string | undefined;
+  for (let i = 0; i < PREFIX_SCAN_PAGES; i++) {
+    const res = await client.getUserCasts(fid, { cursor, limit: PREFIX_SCAN_PAGE_SIZE });
+    const hit = res.casts.find((c) => c.hash.toLowerCase().replace(/^0x/, '').startsWith(prefix));
+    if (hit) return hit.hash;
+    if (!res.next.cursor) return null;
+    cursor = res.next.cursor;
   }
-
-  const response = await fetch(url, { method: 'GET', headers });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch thread (${response.status})`);
-  }
-
-  const json = await response.json();
-  return json.result?.casts ?? [];
+  return null;
 }
 
-async function fetchThread(
+/** Resolve a prefix through farcaster.xyz's thread lookup. */
+async function findHashByPrefixOnFarcasterXyz(
   username: string,
-  castHashPrefix: string,
-  token?: string,
-): Promise<ThreadCast[]> {
-  // Hypersnap-first when we have a full hash; falls through to legacy on
-  // empty/error or when only a prefix is available.
-  const hyp = await fetchThreadFromHypersnap(castHashPrefix);
-  if (hyp && hyp.length > 0) return hyp;
-  return fetchThreadFromLegacy(username, castHashPrefix, token);
+  prefix: string,
+): Promise<string | null> {
+  const url = `${PREFIX_LOOKUP_URL}?castHashPrefix=0x${prefix}&username=${encodeURIComponent(username)}&limit=1`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      accept: '*/*',
+      'content-type': 'application/json',
+      origin: 'https://farcaster.xyz',
+      referer: 'https://farcaster.xyz/',
+    },
+  });
+  if (!response.ok) return null;
+  const json = (await response.json()) as ThreadResponse;
+  const hit = (json.result?.casts ?? []).find((c) =>
+    c.hash.toLowerCase().replace(/^0x/, '').startsWith(prefix),
+  );
+  return hit?.hash ?? null;
+}
+
+async function fetchThread(username: string, castHashPrefix: string): Promise<ThreadCast[]> {
+  if (isFullCastHash(castHashPrefix)) {
+    return fetchThreadFromHypersnap(castHashPrefix);
+  }
+
+  const prefix = castHashPrefix.toLowerCase().replace(/^0x/, '');
+  if (!username || !prefix) return [];
+  const fullHash =
+    (await findHashByPrefixOnHypersnap(username, prefix).catch(() => null)) ??
+    (await findHashByPrefixOnFarcasterXyz(username, prefix).catch(() => null));
+  if (!fullHash) throw new Error('Cast not found');
+  return fetchThreadFromHypersnap(fullHash);
 }
 
 // Flatten nested replies into a linear array with depth info
@@ -347,8 +368,8 @@ export interface FlattenedCast extends ThreadCast {
  * Build the reply tree from explicit `parent_hash` links rather than
  * trusting any single API's nested `direct_replies` shape. Hypersnap
  * returns a depth-bounded tree (`reply_depth`) which can flatten deeper
- * replies into the immediate-children list of the root; legacy
- * `/user-thread-casts` returns a flat array with `parentHash` pointers.
+ * replies into the immediate-children list of the root, and optimistic
+ * pending replies arrive as a flat array with `parentHash` pointers.
  * Indexing by `parent_hash` handles both shapes the same way.
  *
  * Returns descendants of `mainHash` in depth-first order, with each
@@ -402,10 +423,9 @@ function organizeReplies(replies: ThreadCast[], mainHash: string): FlattenedCast
   return out;
 }
 
-/** Dedupe casts by hash. Farcaster.xyz's user-thread-casts response
- *  occasionally repeats casts (parent chain overlapping with descendants,
- *  or a hypersnap fallback that re-encounters a cast already returned by
- *  legacy). React's `key` collision errors come straight from this.
+/** Dedupe casts by hash. The walked parent chain can overlap the
+ *  conversation tree, and a thread cached by an older build can repeat
+ *  casts. React's `key` collision errors come straight from this.
  *  First occurrence wins so the conversation order from the source is
  *  preserved. */
 function dedupeByHash<T extends { hash: string }>(casts: T[]): T[] {
@@ -423,7 +443,6 @@ function dedupeByHash<T extends { hash: string }>(casts: T[]): T[] {
 export function useFarcasterThread({
   username,
   castHashPrefix,
-  token,
   enabled = true,
   getPendingReplies,
 }: UseFarcasterThreadOptions) {
@@ -433,10 +452,8 @@ export function useFarcasterThread({
 
   const query = useQuery({
     queryKey: ['farcaster-thread', username, castHashPrefix],
-    queryFn: () => fetchThread(username, castHashPrefix, token),
-    // Username is only required by the legacy fallback. Hypersnap takes
-    // hash + reply_depth and resolves the author internally, so we don't
-    // block the entire query when the caller doesn't have a username
+    queryFn: () => fetchThread(username, castHashPrefix),
+    // A full hash needs no username, so the query never waits on one
     // (typical when navigating from a reply card into the parent's thread).
     enabled: enabled && Boolean(castHashPrefix),
     staleTime: 1000 * 60 * 2, // 2 minutes
@@ -471,8 +488,11 @@ export function useFarcasterThread({
   // Without exposing the parents, taps from a reply notification lose
   // the conversation context — the user lands on the reply with no
   // sense of what was being replied to.
+  // Compared without `0x`: Hypersnap hands out bare hashes (notification
+  // rows, pushes), while the casts here are always normalized to `0x…`.
+  const targetPrefix = castHashPrefix.toLowerCase().replace(/^0x/, '');
   const targetCastIndex = actualCasts.findIndex((cast) =>
-    cast.hash.toLowerCase().startsWith(castHashPrefix.toLowerCase())
+    cast.hash.toLowerCase().replace(/^0x/, '').startsWith(targetPrefix)
   );
 
   const parentCasts =
@@ -490,7 +510,7 @@ export function useFarcasterThread({
     : [];
 
   // Organize replies into a depth-aware list via parent_hash links.
-  // Hypersnap's `direct_replies` and legacy's flat array converge here,
+  // Hypersnap's `direct_replies` and the pending replies converge here,
   // and depth comes from the actual parent chain rather than a nested
   // structure that may be truncated by the API's reply-depth limit.
   // The caller (ThreadDetailView) shifts these depths by

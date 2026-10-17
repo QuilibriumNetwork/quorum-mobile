@@ -4,19 +4,19 @@
  * Provides detection of available Warpcast wallet and import functionality.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context';
 import {
-  getWarpcastWallet,
+  getImportedWarpcastWallet,
   storeWarpcastWallet,
   deleteWarpcastWallet,
   WarpcastWalletData,
+  ImportedWarpcastWallet,
   hasWarpcastWallet,
 } from '@/services/onboarding/secureStorage';
 import {
   checkWarpcastWallet,
-  fetchWalletRecoveryKey,
 } from '@/services/farcasterClient';
 import { logger } from '@quilibrium/quorum-shared';
 
@@ -25,14 +25,17 @@ export const warpcastWalletKeys = {
   all: ['warpcastWallet'] as const,
   imported: () => [...warpcastWalletKeys.all, 'imported'] as const,
   available: () => [...warpcastWalletKeys.all, 'available'] as const,
-  recoveryKey: () => [...warpcastWalletKeys.all, 'recoveryKey'] as const,
 };
 
 export interface WarpcastWalletState {
   /** Whether a Warpcast wallet has been imported to Quorum */
   isImported: boolean;
-  /** The imported wallet data (if imported) */
-  importedWallet: WarpcastWalletData | null;
+  /**
+   * The imported wallet's public record (if imported). Never carries the private
+   * key or mnemonic: this is query data, and the query cache is persisted. Sign
+   * with `getWarpcastWalletPrivateKey()` instead.
+   */
+  importedWallet: ImportedWarpcastWallet | null;
   /** Whether a Warpcast wallet is available to import (user has one in Warpcast) */
   isAvailable: boolean;
   /** The address of the available wallet (from Warpcast) */
@@ -50,8 +53,8 @@ export function useImportedWarpcastWallet() {
   return useQuery({
     queryKey: warpcastWalletKeys.imported(),
     queryFn: async () => {
-      const wallet = await getWarpcastWallet();
-      logger.debug('[useWarpcastWallet] getWarpcastWallet result:', {
+      const wallet = await getImportedWarpcastWallet();
+      logger.debug('[useWarpcastWallet] getImportedWarpcastWallet result:', {
         hasWallet: !!wallet,
         address: wallet?.address?.slice(0, 10),
       });
@@ -62,64 +65,25 @@ export function useImportedWarpcastWallet() {
 }
 
 /**
- * Check if user has a Warpcast wallet available to import
+ * Check if user has a Warpcast wallet available to import. This asks
+ * farcaster.xyz (the wallet label is Warpcast server metadata, with no protocol
+ * equivalent), so only the import prompt and the export flow mount it.
  */
 export function useAvailableWarpcastWallet() {
   const { farcasterAuthToken, user } = useAuth();
   const fid = user?.farcaster?.fid;
 
-  // Debug log
-  useEffect(() => {
-    logger.debug('[useAvailableWarpcastWallet] Auth state:', {
-      hasToken: !!farcasterAuthToken,
-      fid,
-      hasFarcaster: !!user?.farcaster,
-    });
-  }, [farcasterAuthToken, fid, user?.farcaster]);
-
-  const query = useQuery({
+  return useQuery({
     queryKey: warpcastWalletKeys.available(),
     queryFn: async () => {
-      logger.debug('[useAvailableWarpcastWallet] queryFn called');
       if (!farcasterAuthToken || !fid) return { hasWallet: false, address: undefined };
       const fidNum = typeof fid === 'string' ? parseInt(fid, 10) : fid;
-      const result = await checkWarpcastWallet(farcasterAuthToken, fidNum);
-      logger.debug('[useAvailableWarpcastWallet] checkWarpcastWallet result:', result);
-      return result;
+      return checkWarpcastWallet(farcasterAuthToken, fidNum);
     },
     enabled: !!farcasterAuthToken && !!fid,
-    staleTime: 0, // Always refetch to debug
-    gcTime: 0, // Don't cache for now
-  });
-
-  // Debug query state
-  useEffect(() => {
-    logger.debug('[useAvailableWarpcastWallet] Query state:', {
-      isLoading: query.isLoading,
-      isFetching: query.isFetching,
-      data: query.data,
-      error: query.error,
-    });
-  }, [query.isLoading, query.isFetching, query.data, query.error]);
-
-  return query;
-}
-
-/**
- * Fetch the recovery key needed for wallet export
- */
-export function useWarpcastRecoveryKey() {
-  const { farcasterAuthToken } = useAuth();
-
-  return useQuery({
-    queryKey: warpcastWalletKeys.recoveryKey(),
-    queryFn: async () => {
-      if (!farcasterAuthToken) return null;
-      return fetchWalletRecoveryKey(farcasterAuthToken);
-    },
-    enabled: false, // Only fetch when explicitly requested
-    staleTime: 0, // Always fetch fresh (sensitive data)
-    gcTime: 0, // Don't cache
+    // A Warpcast wallet comes into existence rarely, so a check per half hour
+    // is plenty; the import modal checks again itself when it has no address.
+    staleTime: 30 * 60 * 1000,
   });
 }
 
@@ -127,7 +91,7 @@ export function useWarpcastRecoveryKey() {
  * Main hook for Warpcast wallet state
  */
 export function useWarpcastWallet(): WarpcastWalletState & {
-  importWallet: (data: Omit<WarpcastWalletData, 'importedAt'>) => Promise<WarpcastWalletData>;
+  importWallet: (data: Omit<WarpcastWalletData, 'importedAt'>) => Promise<ImportedWarpcastWallet>;
   removeWallet: () => Promise<void>;
   refetch: () => void;
 } {
@@ -145,13 +109,19 @@ export function useWarpcastWallet(): WarpcastWalletState & {
   } = useAvailableWarpcastWallet();
 
   const importMutation = useMutation({
-    mutationFn: async (data: Omit<WarpcastWalletData, 'importedAt'>) => {
+    // The variables carry the private key and mnemonic, and the persister writes
+    // PAUSED mutations to disk. This only touches SecureStore, so never let it
+    // pause for the network, and drop its state as soon as it settles.
+    networkMode: 'always',
+    gcTime: 0,
+    meta: { neverPersist: true },
+    mutationFn: async (data: Omit<WarpcastWalletData, 'importedAt'>): Promise<ImportedWarpcastWallet> => {
       const fullData: WarpcastWalletData = {
         ...data,
         importedAt: new Date().toISOString(),
       };
       await storeWarpcastWallet(fullData);
-      return fullData;
+      return { address: fullData.address, importedAt: fullData.importedAt };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: warpcastWalletKeys.imported() });

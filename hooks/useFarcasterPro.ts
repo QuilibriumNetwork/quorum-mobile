@@ -1,19 +1,29 @@
 /**
- * Hook to detect Farcaster Pro status and get cast limits
+ * Hook to detect Farcaster Pro status and get cast limits.
+ *
+ * The limits are the ones Hypersnap validates casts against
+ * (`castTypeForText` picks the matching cast type at publish time):
+ *   - up to 320 bytes: a regular cast, shown in full on the timeline
+ *   - up to 1024 bytes: a long cast, open to everyone
+ *   - up to 10,000 bytes: Farcaster Pro only
+ *
+ * Pro status is read from the account's on-chain tier purchases on Hypersnap
+ * (`isProUser`), computed the same way the hub does.
  */
 
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
-import { fetchUserAppContext, type FarcasterUserAppContext } from '@/services/farcasterClient';
-
-// Default limits for non-Pro users
-const DEFAULT_REGULAR_CAST_LIMIT = 320;
-const DEFAULT_LONG_CAST_LIMIT = 320;
+import { isProUser } from '@/services/farcaster/hypersnapUsers';
+import {
+  CAST_BYTE_LIMIT,
+  LONG_CAST_BYTE_LIMIT,
+  TEN_K_CAST_BYTE_LIMIT,
+} from '@/services/farcaster/hypersnapWrites';
 
 export interface FarcasterCastLimits {
   /** Regular cast byte limit (shown on timeline) */
   regularCastByteLimit: number;
-  /** Long cast byte limit (max for Pro users) */
+  /** Long cast byte limit (the most this account can post) */
   longCastByteLimit: number;
   /** Whether the user has Farcaster Pro */
   isPro: boolean;
@@ -23,31 +33,22 @@ export interface FarcasterCastLimits {
 
 /**
  * Hook to fetch the user's Farcaster cast limits and Pro status
- * Uses the user-app-context API to get the actual limits from Farcaster
  */
 export function useFarcasterCastLimits(): FarcasterCastLimits {
-  const { farcasterAuthToken } = useAuth();
+  const fid = useAuth().user?.farcaster?.fid;
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['farcaster-app-context', farcasterAuthToken ? 'authenticated' : 'none'],
-    queryFn: async (): Promise<FarcasterUserAppContext | null> => {
-      if (!farcasterAuthToken) return null;
-      return fetchUserAppContext(farcasterAuthToken);
-    },
-    enabled: !!farcasterAuthToken,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 30 * 60 * 1000, // 30 minutes
+  const { data: isPro, isLoading } = useQuery({
+    queryKey: ['farcaster-pro', fid],
+    queryFn: () => isProUser(fid as number),
+    enabled: !!fid,
+    staleTime: 30 * 60 * 1000, // 30 minutes
+    gcTime: 60 * 60 * 1000, // 1 hour
   });
 
-  // Determine if user is Pro based on whether their limits exceed defaults
-  const isPro = data
-    ? data.longCastByteLimit > DEFAULT_REGULAR_CAST_LIMIT
-    : false;
-
   return {
-    regularCastByteLimit: data?.regularCastByteLimit ?? DEFAULT_REGULAR_CAST_LIMIT,
-    longCastByteLimit: data?.longCastByteLimit ?? DEFAULT_LONG_CAST_LIMIT,
-    isPro,
+    regularCastByteLimit: CAST_BYTE_LIMIT,
+    longCastByteLimit: isPro ? TEN_K_CAST_BYTE_LIMIT : LONG_CAST_BYTE_LIMIT,
+    isPro: !!isPro,
     isLoading,
   };
 }
@@ -56,7 +57,7 @@ export function useFarcasterCastLimits(): FarcasterCastLimits {
  * Get the appropriate max cast length based on Pro status
  */
 export function getMaxCastLength(isPro: boolean, longCastByteLimit: number): number {
-  return isPro ? longCastByteLimit : DEFAULT_REGULAR_CAST_LIMIT;
+  return isPro ? longCastByteLimit : LONG_CAST_BYTE_LIMIT;
 }
 
 /**

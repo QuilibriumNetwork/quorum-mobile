@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { hypersnapSignerStore } from '../farcaster/hypersnapAdapters';
 
 const STORAGE_KEYS = {
   // Quorum keys (Ed448 - for signing/identity)
@@ -487,24 +488,38 @@ export async function storeWarpcastWallet(data: WarpcastWalletData): Promise<voi
   ]);
 }
 
-export async function getWarpcastWallet(): Promise<WarpcastWalletData | null> {
-  const [address, privateKey, mnemonic, importedAt] = await Promise.all([
+/**
+ * The public half of an imported Warpcast wallet: what the UI may hold onto.
+ *
+ * Deliberately has no key fields. It is the data of a React Query query, and the
+ * query cache is persisted to disk, so the private key and mnemonic must never be
+ * part of it. Read the key with `getWarpcastWalletPrivateKey()` at signing time.
+ */
+export interface ImportedWarpcastWallet {
+  address: string;
+  importedAt: string;
+}
+
+export async function getImportedWarpcastWallet(): Promise<ImportedWarpcastWallet | null> {
+  const [address, privateKey, importedAt] = await Promise.all([
     SecureStore.getItemAsync(STORAGE_KEYS.WARPCAST_WALLET_ADDRESS),
     SecureStore.getItemAsync(STORAGE_KEYS.WARPCAST_WALLET_PRIVATE_KEY),
-    SecureStore.getItemAsync(STORAGE_KEYS.WARPCAST_WALLET_MNEMONIC),
     SecureStore.getItemAsync(STORAGE_KEYS.WARPCAST_WALLET_IMPORTED_AT),
   ]);
 
+  // A wallet without a usable key is not imported (unchanged rule). The key is
+  // read only to check that; it is not returned.
   if (!address || !privateKey || !importedAt) {
     return null;
   }
 
-  return {
-    address,
-    privateKey,
-    mnemonic: mnemonic ?? undefined,
-    importedAt,
-  };
+  return { address, importedAt };
+}
+
+/** The imported Warpcast wallet's private key, read at the moment of signing. */
+export async function getWarpcastWalletPrivateKey(): Promise<string | null> {
+  const privateKey = await SecureStore.getItemAsync(STORAGE_KEYS.WARPCAST_WALLET_PRIVATE_KEY);
+  return privateKey || null;
 }
 
 export async function hasWarpcastWallet(): Promise<boolean> {
@@ -561,6 +576,7 @@ export async function clearAllSecureStorage(): Promise<void> {
     SecureStore.deleteItemAsync(STORAGE_KEYS.FARCASTER_FID),
     deleteFarcasterAuthToken(),
     deleteFarcasterAuthTokenExpiresAt(),
+    hypersnapSignerStore.clear(),
     clearOnboardingState(),
     deleteWarpcastWallet(),
   ]);

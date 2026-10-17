@@ -20,7 +20,6 @@ import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { textStyles, useTheme, type AppTheme } from '@/theme';
 import { accentThemes, brandColors } from '@/theme/colors';
 import { withAlpha } from '@/theme/skins/mergeSkin';
-import { useAuth } from '@/context/AuthContext';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
@@ -42,7 +41,6 @@ import {
   clearFarcasterNotifications,
   dismissFarcasterNotification,
 } from '@/services/notifications/farcasterDismissal';
-import { markAllFarcasterNotificationsRead } from '@/services/farcasterClient';
 import {
   useUnifiedNotifications,
   type UnifiedNotification,
@@ -84,19 +82,19 @@ const CLEAR_COPY = {
     label: 'Clear all',
     title: 'Clear all notifications?',
     message:
-      'This removes every notification shown here. Your Quorum notifications are deleted on this device; Farcaster activity is hidden here but stays on your Farcaster account.',
+      'This removes every notification shown here. Your Quorum notifications are deleted on this device; Hypersnap activity is hidden here but stays on your Hypersnap account.',
   },
   quorum: {
     label: 'Clear Quorum',
     title: 'Clear Quorum notifications?',
     message:
-      'This permanently removes your Quorum mentions, replies, and message notifications. Your Farcaster activity stays. This cannot be undone.',
+      'This permanently removes your Quorum mentions, replies, and message notifications. Your Hypersnap activity stays. This cannot be undone.',
   },
   farcaster: {
-    label: 'Clear Farcaster',
-    title: 'Clear Farcaster notifications?',
+    label: 'Clear Hypersnap',
+    title: 'Clear Hypersnap notifications?',
     message:
-      'This hides your Farcaster notifications on this device. Your Quorum notifications stay, and the activity itself stays on your Farcaster account.',
+      'This hides your Hypersnap notifications on this device. Your Quorum notifications stay, and the activity itself stays on your Hypersnap account.',
   },
 } as const;
 
@@ -249,7 +247,6 @@ function formatTime(ts: number): string {
 export default function NotificationsScreen() {
   const { theme, isDark } = useTheme();
   const listPadding = useFloatingTabBarPadding();
-  const { farcasterAuthToken } = useAuth();
   const {
     items,
     quorumItems,
@@ -260,7 +257,6 @@ export default function NotificationsScreen() {
     fetchMore,
     refetch,
     farcasterEnabled,
-    farcasterError,
     dismissedCount,
     // Only the panel pays for the conversation join — the tab badge counts
     // rows and doesn't care what they say.
@@ -277,22 +273,13 @@ export default function NotificationsScreen() {
   // Mark seen on mount and again whenever the feed grows while the user
   // is already on this screen — without the second pass a notification
   // landing during the session would stay flagged unread until next mount.
-  // Also mirror the "all read" state to Farcaster so the user's web/iOS
-  // Farcaster client doesn't keep showing the same items as unread.
-  // Best-effort; failures are swallowed so a network blip on the Farcaster
-  // side doesn't block our local clear.
   useEffect(() => {
     markNotificationsSeen();
     // Level 1 — mark the Quorum section seen so the tab badge clears on open.
     // This does NOT mark per-channel mentions read (Level 2 clears on channel
     // open), per the two-level read-state model.
     markQuorumTabSeen();
-    if (farcasterAuthToken) {
-      markAllFarcasterNotificationsRead(farcasterAuthToken).catch(() => {
-        /* ignore — local seen state is still cleared */
-      });
-    }
-  }, [items.length, farcasterAuthToken]);
+  }, [items.length]);
 
   const handlePress = useCallback((entry: UnifiedNotification) => {
     const link = entry.link;
@@ -530,7 +517,7 @@ export default function NotificationsScreen() {
       out.push({ key: 'quorum', title: 'Quorum', data: quorumItems });
     }
     if (farcasterFeedItems.length && activeFilter !== 'quorum') {
-      out.push({ key: 'farcaster', title: 'Farcaster', data: farcasterFeedItems });
+      out.push({ key: 'farcaster', title: 'Hypersnap', data: farcasterFeedItems });
     }
     return out;
   }, [quorumItems, farcasterFeedItems, activeFilter]);
@@ -605,7 +592,7 @@ export default function NotificationsScreen() {
           items={[
             { key: 'all', label: 'All' },
             { key: 'quorum', label: 'Quorum' },
-            { key: 'farcaster', label: 'Farcaster' },
+            { key: 'farcaster', label: 'Hypersnap' },
           ]}
           activeKey={activeFilter}
           onChange={(k) => setSourceFilter(k as 'all' | 'quorum' | 'farcaster')}
@@ -615,19 +602,6 @@ export default function NotificationsScreen() {
           observable and, crucially, reversible, so testing "Clear Farcaster"
           doesn't cost a real notification history. */}
       {__DEV__ && <FarcasterDismissalPanel dismissedCount={dismissedCount} />}
-      {farcasterError && farcasterEnabled && (
-        // Inline banner — visible whether or not chat notifications are
-        // present. This is the only way the user can tell that their
-        // Farcaster fetch failed; we have no working console-log path
-        // in production. Shows the HTTP status / response snippet from
-        // FarcasterNotificationsFetchError so the cause is debuggable.
-        <View style={styles.errorBanner}>
-          <IconSymbol name="exclamationmark.circle" color="#fff" size={16} />
-          <Text style={styles.errorText} numberOfLines={3}>
-            Couldn't load Farcaster notifications: {farcasterError.message}
-          </Text>
-        </View>
-      )}
       {items.length === 0 && !isLoading ? (
         <View style={styles.empty}>
           <IconSymbol name="bell" color={theme.colors.textMuted} size={42} />
@@ -635,7 +609,7 @@ export default function NotificationsScreen() {
           <Text style={styles.emptySubtitle}>
             {farcasterEnabled
               ? 'New mentions, replies, and chat messages will show up here.'
-              : 'Sign in with Farcaster in your profile to see mentions and replies here too.'}
+              : 'Sign in with Hypersnap in your profile to see mentions and replies here too.'}
           </Text>
         </View>
       ) : (
@@ -882,14 +856,6 @@ const createStyles = (theme: AppTheme) =>
       padding: Skin.space(6),
       alignSelf: 'flex-start',
     },
-    errorBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Skin.space(8),
-      paddingHorizontal: Skin.space(16),
-      paddingVertical: Skin.space(10),
-      backgroundColor: theme.colors.danger,
-    },
     clearRow: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
@@ -902,11 +868,5 @@ const createStyles = (theme: AppTheme) =>
       paddingHorizontal: Skin.space(12),
       paddingTop: Skin.space(20),
       paddingBottom: Skin.space(8),
-    },
-    errorText: {
-      flex: 1,
-      color: '#fff',
-      fontSize: Skin.font(13),
-      lineHeight: Skin.font(18),
     },
   });

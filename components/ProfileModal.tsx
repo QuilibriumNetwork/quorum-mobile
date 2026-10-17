@@ -20,8 +20,6 @@ import SyncStatusLine from '@/components/SyncStatusLine';
 import { useAuth, useWebSocket } from '@/context';
 import { useToast } from '@/context/ToastContext';
 import { compressAvatarImage } from '@/services/media/imageAttachment';
-import { getHypersnapOptInChoice, setHypersnapOptInChoice } from '@/services/farcaster/hypersnapOptIn';
-import { provisionHypersnapSigner, forgetHypersnapSigner } from '@/services/farcaster/hypersnapProvision';
 import { changePrimaryName } from '@/services/profile/primaryNameChange';
 import { NO_PRIMARY_NAME } from '@/utils/primaryName';
 import { truncateAddress } from '@/utils/formatAddress';
@@ -401,13 +399,6 @@ export default function ProfileModal({
   const [inviteCode, setInviteCode] = React.useState('');
   // Reset App Data — type-to-confirm (T3: the only catastrophic op; wipes keys).
   const [showResetConfirm, setShowResetConfirm] = React.useState(false);
-  // Hypersnap signer opt-in. Mirrors the MMKV-persisted choice that the
-  // first-run prompt writes; this switch is the only way to change the
-  // choice after that prompt has been answered.
-  const [hypersnapEnabled, setHypersnapEnabled] = React.useState<boolean>(
-    () => getHypersnapOptInChoice() === 'opted-in'
-  );
-  const [hypersnapBusy, setHypersnapBusy] = React.useState(false);
   // Notifications toggle. Backed by MMKV via notificationPrefs so the
   // setting persists across launches AND is read by showMessageNotification
   // at presentation time. Previously this was plain React state with no
@@ -541,9 +532,6 @@ export default function ProfileModal({
       setFarcasterMnemonic('');
       setFarcasterError(null);
       setPendingRemovals([]);
-      // Re-read the persisted Hypersnap choice — the first-run prompt (or
-      // another surface) may have changed it since this modal last opened.
-      setHypersnapEnabled(getHypersnapOptInChoice() === 'opted-in');
       // Load device registrations
       loadDeviceRegistrations();
     }
@@ -560,45 +548,6 @@ export default function ProfileModal({
       setRevealMnemonic(false);
     }
   }, [activeTab]);
-
-  // Toggle the Hypersnap signer opt-in. Enabling provisions immediately so
-  // the user gets feedback here rather than waiting for the feed-mounted
-  // lifecycle hook; disabling clears the local signer record (the on-chain
-  // KEY_REMOVE is intentionally not issued — the key simply stops being used).
-  const handleToggleHypersnap = React.useCallback(async (value: boolean) => {
-    const fid = user?.farcaster?.fid;
-    if (!fid) return;
-    setHypersnapEnabled(value);
-    if (!value) {
-      setHypersnapOptInChoice('opted-out');
-      try {
-        await forgetHypersnapSigner();
-      } catch {
-        // Local cleanup only — nothing user-actionable if it fails.
-      }
-      showToast({ type: 'success', title: 'Hypersnap signer disabled' });
-      return;
-    }
-    setHypersnapOptInChoice('opted-in');
-    setHypersnapBusy(true);
-    try {
-      await provisionHypersnapSigner(fid);
-      showToast({
-        type: 'success',
-        title: 'Hypersnap signer enabled',
-        message: 'Eligible Farcaster activity now earns $SNAP.',
-      });
-    } catch (e) {
-      // Stay opted-in: the feed lifecycle hook retries automatically.
-      showToast({
-        type: 'error',
-        title: "Couldn't create signer",
-        message: e instanceof Error ? e.message : 'It will retry automatically.',
-      });
-    } finally {
-      setHypersnapBusy(false);
-    }
-  }, [user?.farcaster?.fid, showToast]);
 
   // Load device registrations from server
   const loadDeviceRegistrations = React.useCallback(async () => {
@@ -736,7 +685,7 @@ export default function ProfileModal({
       if (enabled) {
         const hasFC = !!user?.farcaster?.fid && !!user?.farcaster?.custodyAddress;
         const fcNote = hasFC
-          ? '\n\nYour Farcaster account will be linked to your Quorum identity, enabling mutual followers on Farcaster who also use Quorum to call you.'
+          ? '\n\nYour Hypersnap account will be linked to your Quorum identity, enabling mutual followers on Hypersnap who also use Quorum to call you.'
           : '';
         Alert.alert(
           'Make profile public?',
@@ -1011,7 +960,7 @@ export default function ProfileModal({
       const account = await lookupFarcasterAccount(keys.custodyAddress, keys.custodyPrivateKey);
 
       if (!account) {
-        setFarcasterError('No Farcaster account found for this recovery phrase');
+        setFarcasterError('No Hypersnap account found for this recovery phrase');
         setFarcasterImporting(false);
         return;
       }
@@ -1048,7 +997,7 @@ export default function ProfileModal({
       // Redirect to the Farcaster pill now that it exists.
       onFarcasterConnected?.();
     } catch (error) {
-      setFarcasterError('Failed to import Farcaster account. Please try again.');
+      setFarcasterError('Failed to import Hypersnap account. Please try again.');
     } finally {
       setFarcasterImporting(false);
     }
@@ -1057,8 +1006,8 @@ export default function ProfileModal({
   const handleDisconnectFarcaster = () => {
     void (async () => {
       const ok = await confirm({
-        title: 'Disconnect Farcaster',
-        message: 'Are you sure you want to disconnect your Farcaster account?',
+        title: 'Disconnect Hypersnap',
+        message: 'Are you sure you want to disconnect your Hypersnap account?',
         confirmLabel: 'Disconnect',
       });
       if (!ok) return;
@@ -1074,7 +1023,7 @@ export default function ProfileModal({
       const ok = await confirm({
         title: 'Merge profiles',
         message:
-          'Your name, bio, and picture will be made the same on Quorum and Farcaster (Quorum wins where both are set), and editing will update both at once. Your usernames are never affected. You can un-merge the profiles again later.',
+          'Your name, bio, and picture will be made the same on Quorum and Hypersnap (Quorum wins where both are set), and editing will update both at once. Your usernames are never affected. You can un-merge the profiles again later.',
         confirmLabel: 'Merge',
       });
       if (!ok) return;
@@ -1090,7 +1039,7 @@ export default function ProfileModal({
       const ok = await confirm({
         title: 'Separate profiles',
         message:
-          'Your Quorum and Farcaster profiles will be shown and edited separately again. Nothing is deleted or changed.',
+          'Your Quorum and Hypersnap profiles will be shown and edited separately again. Nothing is deleted or changed.',
         confirmLabel: 'Separate',
       });
       if (!ok) return;
@@ -2461,20 +2410,20 @@ export default function ProfileModal({
                 Farcaster pill. */}
             {!user?.farcaster && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Farcaster</Text>
+                <Text style={styles.sectionTitle}>Hypersnap</Text>
                 {!showFarcasterImport ? (
                   <TouchableOpacity
                     style={styles.actionButton}
                     onPress={() => setShowFarcasterImport(true)}
                   >
                     <IconSymbol name="person.badge.plus" size={20} color={theme.colors.primary} />
-                    <Text style={styles.actionButtonText}>Connect Farcaster Account</Text>
+                    <Text style={styles.actionButtonText}>Connect Hypersnap Account</Text>
                     <IconSymbol name="chevron.right" size={16} color={theme.colors.textMuted} />
                   </TouchableOpacity>
                 ) : (
                   <View style={styles.farcasterImportContainer}>
                     <Text style={styles.farcasterImportDescription}>
-                      Enter your Farcaster recovery phrase (12 or 24 words) to import your account.
+                      Enter your Hypersnap recovery phrase (12 or 24 words) to import your account.
                     </Text>
                     {/* Hidden by default (treated like a password). Hidden state
                         uses a single-line secure field; revealing switches to a
@@ -2601,7 +2550,7 @@ export default function ProfileModal({
           <View style={styles.section}>
             {/* The pill already labels this "Farcaster"; only show the heading in
                 the standalone tab-bar mode to avoid a redundant title. */}
-            {!hideTabBar && <Text style={styles.sectionTitle}>Farcaster</Text>}
+            {!hideTabBar && <Text style={styles.sectionTitle}>Hypersnap</Text>}
             {user?.farcaster ? (
               // Connected state
               <>
@@ -2663,25 +2612,6 @@ export default function ProfileModal({
                     thumbColor={showNonFollowReplies ? '#ffffff' : '#f4f3f4'}
                   />
                 </View>
-                {/* Hypersnap signer opt-in */}
-                <View style={styles.farcasterConnected}>
-                  <IconSymbol name="bolt" size={20} color={theme.colors.primary} style={styles.settingIcon} />
-                  <View style={{ flex: 1, marginRight: Skin.space(12) }}>
-                    <Text style={{ fontSize: Skin.font(15), color: theme.colors.textMain }}>Hypersnap Signer</Text>
-                    <Text style={{ fontSize: Skin.font(12), color: theme.colors.textSubtle, marginTop: Skin.space(2) }}>
-                      Post and react through Quilibrium&apos;s hub to earn $SNAP
-                    </Text>
-                  </View>
-                  {hypersnapBusy ? (
-                    <ActivityIndicator size="small" color={theme.colors.primary} />
-                  ) : (
-                    <Switch
-                      value={hypersnapEnabled}
-                      onValueChange={handleToggleHypersnap}
-                      trackColor={{ true: theme.colors.primary }}
-                    />
-                  )}
-                </View>
                 {/* Warpcast Wallet Import */}
                 {hasWarpcastWallet && !hasImportedWarpcastWallet && onOpenWarpcastImport && (
                   <TouchableOpacity
@@ -2728,7 +2658,7 @@ export default function ProfileModal({
                     <IconSymbol name="merge" size={20} color={theme.colors.primary} />
                     <View style={styles.actionButtonContent}>
                       <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Merge profiles</Text>
-                      <Text style={styles.actionButtonSubtext}>Combine your Quorum and Farcaster profiles into one</Text>
+                      <Text style={styles.actionButtonSubtext}>Combine your Quorum and Hypersnap profiles into one</Text>
                     </View>
                   </TouchableOpacity>
                 )}
@@ -2739,7 +2669,7 @@ export default function ProfileModal({
                     <IconSymbol name="split" size={20} color={theme.colors.primary} />
                     <View style={styles.actionButtonContent}>
                       <Text style={[styles.actionButtonText, { marginLeft: 0 }]}>Separate profiles</Text>
-                      <Text style={styles.actionButtonSubtext}>Show and edit your Quorum and Farcaster profiles separately</Text>
+                      <Text style={styles.actionButtonSubtext}>Show and edit your Quorum and Hypersnap profiles separately</Text>
                     </View>
                   </TouchableOpacity>
                 )}
@@ -4357,7 +4287,7 @@ const ProfileTabSection = React.memo(function ProfileTabSection({
           <View style={styles.bioContainer}>
             <Text style={styles.bioText}>
               {showFarcaster
-                ? (farcasterIdentity?.bio || 'No Farcaster bio yet.')
+                ? (farcasterIdentity?.bio || 'No Hypersnap bio yet.')
                 : // Merged (has Farcaster, not the dual-identity switcher): bios are
                   // meant to be identical after editing, so fall back to the
                   // Farcaster bio if the Quorum bio is empty.

@@ -71,7 +71,7 @@ export function useUserVisibilityActions(): UserVisibilityActions {
     ) => {
       if (!farcasterAuthToken) {
         reverts.forEach((r) => r());
-        throw new Error('Not signed in to Farcaster');
+        throw new Error('Not signed in to Hypersnap');
       }
       try {
         await apply(farcasterAuthToken);

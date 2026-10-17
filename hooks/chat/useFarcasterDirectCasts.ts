@@ -100,7 +100,7 @@ export function useFarcasterConversations(options?: { enabled?: boolean }) {
     queryKey: farcasterDCQueryKeys.conversations,
     queryFn: async ({ pageParam }) => {
       if (!farcasterAuthToken) {
-        throw new Error('Farcaster auth token not available');
+        throw new Error('Hypersnap auth token not available');
       }
 
       const result = await getDirectCastConversations({
@@ -256,7 +256,7 @@ export function useSendFarcasterDirectCast() {
       metadata?: DirectCastMessageMetadata;
     }) => {
       if (!farcasterAuthToken) {
-        throw new Error('Farcaster auth token not available');
+        throw new Error('Hypersnap auth token not available');
       }
 
       // Extract actual Farcaster conversation ID
@@ -380,7 +380,7 @@ export function useMarkFarcasterConversationRead() {
   return useMutation({
     mutationFn: async (conversationId: string) => {
       if (!farcasterAuthToken) {
-        throw new Error('Farcaster auth token not available');
+        throw new Error('Hypersnap auth token not available');
       }
 
       const fcConversationId = conversationId.startsWith('farcaster:')
@@ -480,7 +480,7 @@ export function useAddFarcasterDirectCastReaction() {
       reaction: string;
     }) => {
       if (!farcasterAuthToken) {
-        throw new Error('Farcaster auth token not available');
+        throw new Error('Hypersnap auth token not available');
       }
 
       const fcConversationId = conversationId.startsWith('farcaster:')
@@ -545,7 +545,7 @@ export function useRemoveFarcasterDirectCastReaction() {
       reaction: string;
     }) => {
       if (!farcasterAuthToken) {
-        throw new Error('Farcaster auth token not available');
+        throw new Error('Hypersnap auth token not available');
       }
 
       const fcConversationId = conversationId.startsWith('farcaster:')

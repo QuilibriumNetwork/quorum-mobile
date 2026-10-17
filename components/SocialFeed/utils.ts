@@ -106,25 +106,3 @@ export function deriveFilter(cast: any, hasMedia: boolean): FeedFilter {
   }
   return 'all';
 }
-
-/**
- * Look up user FID from username via Farcaster API
- */
-export async function lookupUserByUsername(username: string): Promise<number | null> {
-  try {
-    const response = await fetch(`https://farcaster.xyz/~api/v2/user-by-username?username=${username}`, {
-      headers: {
-        accept: '*/*',
-        origin: 'https://farcaster.xyz',
-        referer: 'https://farcaster.xyz/',
-      },
-    });
-    if (response.ok) {
-      const json = await response.json();
-      return json.result?.fid ?? null;
-    }
-  } catch {
-    // Username lookup failed — return null below
-  }
-  return null;
-}

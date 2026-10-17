@@ -9,7 +9,6 @@ import { useCreateOfferOnListing, useCreateOfferOnName } from '@/hooks/useQNSMar
 import { getWalletPrivateKey, signQNSSignatureMessage } from '@/hooks/useQNSPayment';
 import { useWalletKeys } from '@/hooks/useWallet';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
-import { useWarpcastWallet } from '@/hooks/useWarpcastWallet';
 import {
   generateStealthOwnership,
   stealthOwnershipToApi,
@@ -55,7 +54,6 @@ export default function MakeOfferModal({
   const styles = createStyles(theme, isDark, insets);
   const { refetch: fetchKeys } = useWalletKeys();
   const { activeWallet, activeType } = useWalletSelection();
-  const { importedWallet } = useWarpcastWallet();
 
   const [token, setToken] = React.useState<'wQUIL' | 'USDC'>(listingToken || 'USDC');
   const [amount, setAmount] = React.useState('');
@@ -90,7 +88,7 @@ export default function MakeOfferModal({
       const ownership = stealthOwnershipToApi(stealth);
 
       // Sign the QNS signature message (EIP-191) so the server can verify the buyer address
-      const walletPrivateKey = await getWalletPrivateKey(activeType, importedWallet, fetchKeys);
+      const walletPrivateKey = await getWalletPrivateKey(activeType, fetchKeys);
       const { address: buyerAddress, signature } = await signQNSSignatureMessage(walletPrivateKey);
 
       const callbacks = {

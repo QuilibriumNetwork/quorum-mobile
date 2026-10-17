@@ -117,7 +117,6 @@ export function MentionAutocomplete({
     isPending: isLoadingUsers,
   } = useSearchUsers({
     q: debouncedQuery,
-    token,
     limit: 10,
     enabled: mentionInfo?.type === 'user' && debouncedQuery.length > 0,
   });

@@ -1,7 +1,9 @@
 import { AppTabBar } from '@/components/ui/AppTabBar';
 import { AudioSpaceProvider } from '@/context/AudioSpaceContext';
 import { MiniappOverlayProvider } from '@/context/MiniappOverlayContext';
+import { useAuth } from '@/context/AuthContext';
 import { SwapModalProvider } from '@/context/SwapModalContext';
+import { useHypersnapSignerLifecycle } from '@/hooks/useHypersnapSignerLifecycle';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +14,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // this so the composer lands flush below the bar.
 const TAB_BAR_CONTENT_HEIGHT = 54;
 
+/**
+ * Keeps the signed-in Farcaster account's Hypersnap signer provisioned. Its own
+ * component so auth-context updates re-render nothing but this.
+ */
+function HypersnapSignerKeeper() {
+  const { user } = useAuth();
+  useHypersnapSignerLifecycle(user?.farcaster?.fid);
+  return null;
+}
+
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
 
@@ -19,6 +31,7 @@ export default function TabsLayout() {
     <SwapModalProvider>
     <MiniappOverlayProvider>
     <AudioSpaceProvider>
+    <HypersnapSignerKeeper />
     {/* AppTabBar is always mounted; it hides itself (UI-thread) while the emoji
         panel is open or a keyboard is up, so transitions never flash. */}
     <Tabs

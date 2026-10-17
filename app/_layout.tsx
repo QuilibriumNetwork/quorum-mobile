@@ -20,6 +20,12 @@ installGlobalErrorReporter();
 import { installReactQueryRnBridges } from '@/services/observability/reactQueryRnBridges';
 installReactQueryRnBridges();
 
+// Farcaster reads and writes go through Hypersnap only. quorum-shared's hooks
+// would otherwise fall back to farcaster.xyz on any Hypersnap error; install the
+// client that refuses those fallbacks before any of them runs.
+import { installHypersnapOnlyLegacyClient } from '@/services/farcaster/legacyClientPolicy';
+installHypersnapOnlyLegacyClient();
+
 // quorum-shared's transport rejects its connect promise on socket error, and
 // its reconnect timer calls doConnect() uncaught — so flaky connectivity
 // floods dev builds with an "Uncaught (in promise) Error: WebSocket error"
@@ -62,7 +68,7 @@ import { ToastProvider } from '@/context/ToastContext';
 import { CallOverlay, SpaceCallOverlay } from '@/components/Call';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { queryConfig } from '@/services/api';
-import { queryPersister, shouldPersistQuery } from '@/services/offline';
+import { queryPersister, shouldPersistMutation, shouldPersistQuery } from '@/services/offline';
 import { RootIdentityScope } from '@/identity/RootIdentityScope';
 import {
   initializeNotifications,
@@ -349,6 +355,9 @@ export default function RootLayout() {
           // alone rather than being backed up by a container that could not
           // survive JSON.
           shouldDehydrateQuery: shouldPersistQuery,
+          // Paused mutations are persisted with their variables. Same module,
+          // same rule: key material never reaches disk.
+          shouldDehydrateMutation: shouldPersistMutation,
         },
       }}
     >

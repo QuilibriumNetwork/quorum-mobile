@@ -294,7 +294,7 @@ export function FarcasterDirectMessageView({
       {/* Security warning banner */}
       <View style={styles.warningBanner}>
         <Text style={styles.warningText}>
-          Farcaster messages are not end-to-end encrypted
+          Hypersnap messages are not end-to-end encrypted
         </Text>
       </View>
 

@@ -2,7 +2,7 @@ import { ProfileView } from '@/components/SocialFeed/views/ProfileView';
 import { ThreadDetailView } from '@/components/SocialFeed/views/ThreadDetailView';
 import { Button } from '@/components/ui/Button';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useWalletSelection, useActiveWalletKeys } from '@/hooks/useWalletSelection';
+import { useWalletSelection } from '@/hooks/useWalletSelection';
 import { useWallet, useWalletKeys, aggregateAssets, type AggregatedAsset } from '@/hooks/useWallet';
 import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
 import { useMiniAppBridge, type ComposeCastOptions, type ComposeCastResult } from '@/services/miniapp';
@@ -19,11 +19,11 @@ import {
   signTransactionOnly,
 } from '@/services/miniapp/secureSigningService';
 import { simulateMiniAppTransaction } from '@/services/miniapp/txSimulationService';
-import { likeCast, unlikeCast, followUser, unfollowUser } from '@/services/farcasterClient';
+import { setCastReaction, setFollowing } from '@/services/farcaster/hypersnapWrites';
 import { resolveFidByUsername } from '@/services/farcaster/mentionExtraction';
 import { fetchFarcasterUser } from '@quilibrium/quorum-shared';
 import { useQueryClient } from '@tanstack/react-query';
-import { getFarcasterAuthToken } from '@/services/onboarding/secureStorage';
+import { getFarcasterAuthToken, getFarcasterFid, getWarpcastWalletPrivateKey } from '@/services/onboarding/secureStorage';
 import { useTheme, type AppTheme } from '@/theme';
 import { useToast } from '@/context/ToastContext';
 import { shouldOpenExternally } from '@/utils/linkRouting';
@@ -176,12 +176,9 @@ export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', 
     });
   }, []);
 
-  // Hypersnap-first cast publish for the miniapp compose flow. Mention
-  // extraction stays on — miniapp text typically intends @-handles as
-  // Farcaster usernames; falls back to legacy when no signer.
-  const { submitCast: submitMiniAppCast } = useFarcasterSubmitCast({
-    token: farcasterToken,
-  });
+  // Cast publish for the miniapp compose flow. Mention extraction stays
+  // on — miniapp text typically intends @-handles as Farcaster usernames.
+  const { submitCast: submitMiniAppCast } = useFarcasterSubmitCast();
 
   // Delay source loading for LAN URLs to ensure native prop is set before WebView loads
   useEffect(() => {
@@ -193,8 +190,7 @@ export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', 
 
   // Wallet state for mini app integration - uses selected wallet (builtin or warpcast)
   const { activeWallet, activeType, availableWallets, hasWarpcastWallet, switchWallet, isSwitching, isLoading: walletLoading } = useWalletSelection();
-  // Get private key for warpcast wallet (available immediately) or fetch for builtin
-  const { privateKey: warpcastPrivateKey } = useActiveWalletKeys();
+  // Keys are read at signing time, never held in component or query state.
   const { refetch: fetchBuiltinKeys } = useWalletKeys();
   // User's wallet balances aggregated into a flat list. Used by the
   // sendToken miniapp handler to look up the requested token's
@@ -205,13 +201,14 @@ export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', 
 
   // Helper to get private key on-demand (for signing)
   const getPrivateKeyForSigning = useCallback(async (): Promise<string | null> => {
-    if (activeType === 'warpcast' && warpcastPrivateKey) {
-      return warpcastPrivateKey;
+    if (activeType === 'warpcast') {
+      const warpcastPrivateKey = await getWarpcastWalletPrivateKey();
+      if (warpcastPrivateKey) return warpcastPrivateKey;
     }
     // For builtin wallet, fetch keys on-demand
     const result = await fetchBuiltinKeys();
     return result.data?.ethereum?.privateKey ?? null;
-  }, [activeType, warpcastPrivateKey, fetchBuiltinKeys]);
+  }, [activeType, fetchBuiltinKeys]);
 
   const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
@@ -499,11 +496,6 @@ export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', 
     setComposeError(null);
 
     try {
-      const token = await getFarcasterAuthToken();
-      if (!token) {
-        throw new Error('Not authenticated with Farcaster');
-      }
-
       // Build embeds array with URLs
       const embeds = composeEmbeds.map(url => url);
 
@@ -588,7 +580,7 @@ export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', 
         `${action} cast?`,
         currentlyLiked
           ? 'Remove your like from this cast?'
-          : 'Like this cast on Farcaster?',
+          : 'Like this cast on Hypersnap?',
         [
           { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
           { text: action, onPress: () => resolve(true) },
@@ -598,8 +590,8 @@ export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', 
     });
     if (!confirmed) return;
 
-    const token = await getFarcasterAuthToken();
-    if (!token) return;
+    const ownFid = await getFarcasterFid();
+    if (!ownFid) return;
 
     // Optimistic
     setLikeStates(prev => {
@@ -608,11 +600,7 @@ export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', 
       return next;
     });
     try {
-      if (currentlyLiked) {
-        await unlikeCast({ token, castHash });
-      } else {
-        await likeCast({ token, castHash });
-      }
+      await setCastReaction({ fid: ownFid, castHash, kind: 'like', active: !currentlyLiked });
     } catch {
       // Roll back on failure.
       setLikeStates(prev => {
@@ -631,8 +619,8 @@ export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', 
       Alert.alert(
         `${action} user?`,
         isFollowing
-          ? 'Stop following this user on Farcaster?'
-          : 'Follow this user on Farcaster?',
+          ? 'Stop following this user on Hypersnap?'
+          : 'Follow this user on Hypersnap?',
         [
           { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
           { text: action, onPress: () => resolve(true) },
@@ -642,8 +630,8 @@ export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', 
     });
     if (!confirmed) return;
 
-    const token = await getFarcasterAuthToken();
-    if (!token) return;
+    const ownFid = await getFarcasterFid();
+    if (!ownFid) return;
 
     // Optimistic
     setFollowStates(prev => {
@@ -652,11 +640,7 @@ export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', 
       return next;
     });
     try {
-      if (isFollowing) {
-        await unfollowUser({ token, targetFid: fid });
-      } else {
-        await followUser({ token, targetFid: fid });
-      }
+      await setFollowing({ fid: ownFid, targetFid: fid, following: !isFollowing });
     } catch {
       // Roll back on failure.
       setFollowStates(prev => {
@@ -1437,9 +1421,9 @@ export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', 
               <View style={styles.farcasterModalIcon}>
                 <IconSymbol name="person.crop.circle.badge.exclamationmark" size={48} color={theme.colors.warning} />
               </View>
-              <Text style={styles.farcasterModalTitle}>Farcaster Account Required</Text>
+              <Text style={styles.farcasterModalTitle}>Hypersnap Account Required</Text>
               <Text style={styles.farcasterModalMessage}>
-                This app requires a Farcaster account to function properly. You can import your Farcaster account in Settings, or continue with limited functionality.
+                This app requires a Hypersnap account to function properly. You can import your Hypersnap account in Settings, or continue with limited functionality.
               </Text>
               <View style={styles.farcasterModalButtons}>
                 <Button
@@ -1578,7 +1562,6 @@ export default function BrowserModal({ visible, url, onClose, mode = 'miniapp', 
         <View style={styles.overlayContainer}>
           <ProfileView
             fid={profileOverlay.fid}
-            token={farcasterToken}
             theme={theme}
             onClose={() => setProfileOverlay(null)}
             onOpenThread={handleOverlayOpenThread}

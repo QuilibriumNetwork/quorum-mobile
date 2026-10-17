@@ -7,16 +7,15 @@
  * loop. We deliberately don't import the React-Query hook here — the
  * context already runs its own poll and shouldn't double-cache.
  *
- * Sending a chat = posting a reply to the root cast via the legacy
- * `/v2/casts` endpoint.
+ * Sending a chat = publishing a reply to the root cast, signed with the
+ * account's Hypersnap signer (`publishCast`).
  */
 
 import {
   getDefaultHypersnapClient,
   type HypersnapConversationCast,
 } from '@quilibrium/quorum-shared';
-
-const LEGACY_BASE = 'https://client.farcaster.xyz';
+import { publishCast, rememberCastAuthor } from './hypersnapWrites';
 
 /** Lighter shape than `ThreadCast` — we only carry the fields the
  *  chat panel actually renders. Decouples the chat module from the
@@ -44,10 +43,7 @@ export interface SpaceChatCast {
 }
 
 /** The hypersnap conversation endpoint returns hashes WITHOUT the `0x`
- *  prefix, but the like/recast/reply (`cast-likes`, `recasts`, `/v2/casts`)
- *  endpoints — and the rest of the app — use the `0x`-prefixed form. Without
- *  this, liking/recasting/replying to a chat message hits the API with a bare
- *  hash and is rejected. */
+ *  prefix, but the rest of the app keys casts by the `0x`-prefixed form. */
 function ensure0x(h?: string): string | undefined {
   if (!h) return h;
   const lower = h.toLowerCase();
@@ -55,6 +51,9 @@ function ensure0x(h?: string): string | undefined {
 }
 
 function normalizeReply(c: HypersnapConversationCast): SpaceChatCast {
+  // A like, recast or reply on this message needs its author; record it so
+  // that write needs no lookup.
+  rememberCastAuthor(ensure0x(c.hash), c.author.fid);
   return {
     hash: ensure0x(c.hash)!,
     text: c.text,
@@ -105,38 +104,13 @@ export async function fetchSpaceChat(rootCastHash: string): Promise<SpaceChatCas
 }
 
 /**
- * Post a reply to the space's root cast via the legacy
- * `/v2/casts` endpoint. We use legacy (not the hypersnap signer path)
- * because the context is non-component and doesn't have the React
- * mutation plumbing — a one-shot fetch is the right tool here.
- *
- * Returns the created cast's hash on success, or throws on failure.
+ * Post a reply to the space's root cast (or to one chat message), as `fid`.
+ * Returns the created cast's hash; throws on failure.
  */
 export async function submitSpaceChatReply(
-  rootCastHash: string,
+  parentCastHash: string,
   text: string,
-  token: string,
-): Promise<string | null> {
-  const body = {
-    text,
-    parent: { hash: rootCastHash },
-  };
-  const res = await fetch(`${LEGACY_BASE}/v2/casts`, {
-    method: 'POST',
-    headers: {
-      accept: '*/*',
-      'content-type': 'application/json; charset=utf-8',
-      authorization: `Bearer ${token}`,
-      origin: 'https://farcaster.xyz',
-      referer: 'https://farcaster.xyz/',
-      'idempotency-key': `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const errBody = await res.text().catch(() => '');
-    throw new Error(`audio-space chat send ${res.status}: ${errBody.slice(0, 200)}`);
-  }
-  const json = await res.json().catch(() => null);
-  return json?.result?.cast?.hash ?? null;
+  fid: number,
+): Promise<string> {
+  return publishCast({ fid, text, parent: { castHash: parentCastHash } });
 }

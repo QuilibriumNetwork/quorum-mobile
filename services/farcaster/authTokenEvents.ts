@@ -1,19 +1,19 @@
 /**
  * authTokenEvents — reactive backstop for Farcaster auth-token expiry.
  *
- * High-traffic Farcaster API call sites (feed fetch, notifications,
- * legacy cast submit) call `reportFarcasterAuthFailure()` when they see
- * a 401/403. That invokes a handler registered by AuthContext which
- * force-refreshes the token via the stored custody key and invalidates
- * the affected React Query caches so consumers refetch with the new
+ * farcaster.xyz call sites that use the auth token (the DM list) call
+ * `reportFarcasterAuthFailure()` when they see a 401/403. That invokes a
+ * handler registered by AuthContext which force-refreshes the token via the
+ * stored custody key; consumers read the new token from context. Feed,
+ * notifications and protocol writes go through Hypersnap and never use the
  * token.
  *
  * This module exists (instead of call sites importing AuthContext
  * directly) because the call sites are plain async functions, not
  * components — and importing the context here would create a cycle.
  *
- * Single-flight + cooldown: a feed page, a notifications poll, and a
- * cast submit can all 401 in the same second when the token expires.
+ * Single-flight + cooldown: several token calls can all 401 in the same
+ * second when the token expires.
  * Only the first report triggers a refresh; the rest are dropped until
  * the in-flight attempt settles AND the cooldown elapses.
  */

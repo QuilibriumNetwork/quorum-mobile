@@ -1,50 +1,53 @@
 /**
- * haatzNotifications — a second, auth-free source of Farcaster notifications.
+ * haatzNotifications — the in-app Farcaster notifications feed, from
+ * Hypersnap (the public "haatz" deployment) by `fid`, with no auth.
  *
- * The primary in-app notifications feed comes from farcaster.xyz's web API
- * (`notifications-for-tab`), which needs a custody-derived bearer token and
- * is therefore unavailable when the user hasn't linked Farcaster or the
- * token has lapsed. Hypersnap (hosted at haatz.quilibrium.com) exposes the
- * same activity by `fid` with no auth, so we blend it in for resilience and
- * dedupe against the official source in useUnifiedNotifications.
- *
- * Shape returned by GET /v2/farcaster/notifications?fid=<fid>&limit=N:
+ * Shape returned by GET /v2/farcaster/notifications?fid=<fid>&limit=N[&cursor=]:
  *   { "notifications": [
  *       { "object": "notification",
- *         "type": "likes" | "reply" | "follows" | "mention",
- *         "cast": { "hash", "text", "author": { "username" } } | null,
- *         "user": { "fid", "username", ... },
+ *         "type": "likes" | "recasts" | "reply" | "follows" | "mention",
+ *         "cast": { "hash", "text", "author": <user> } | null,
+ *         "user": <user: fid, username, display_name, pfp_url, ...>,
  *         "timestamp": "2026-06-11T03:21:45.000Z" | "<farcaster-epoch secs>" }
- *   ] }
+ *     ],
+ *     "next": { "cursor": "<opaque>" | null } }
  *
- * Field names differ from the official API: `user` (not `actor`), plural
- * `likes`/`follows` types, no stable id / unread flag / pfp. We normalize
- * into the shared FarcasterNotification shape so the rest of the pipeline
- * (titles, routing, dedup) treats both sources uniformly.
+ * `user` is who acted. For a like or recast, `cast` is the viewer's cast that
+ * was reacted to; for a reply or mention it is the new cast. Rows carry no
+ * stable id, unread flag or aggregation count, and Hypersnap does not report
+ * quote casts or mini-app notifications (FARCASTER_TECH_DEBT.md). We
+ * normalize into the shared FarcasterNotification shape so the rest of the
+ * pipeline (titles, routing, dismissal) is source-agnostic.
  */
 
+import { DEFAULT_HYPERSNAP_BASE_URL } from '@quilibrium/quorum-shared';
 import type {
   FarcasterNotification,
+  FarcasterNotificationsPage,
   FarcasterNotificationType,
 } from '@/services/farcasterClient';
-
-/** Hypersnap base (the public "haatz" deployment). */
-const HAATZ_BASE_URL = 'https://haatz.quilibrium.com';
 
 /** Farcaster epoch (2021-01-01T00:00:00Z) in unix seconds. */
 const FARCASTER_EPOCH_SECONDS = 1609459200;
 
+interface HaatzUser {
+  fid?: number;
+  username?: string;
+  display_name?: string;
+  pfp_url?: string;
+}
+
 interface HaatzCast {
   hash?: string;
   text?: string;
-  author?: { username?: string };
+  author?: HaatzUser;
 }
 
 interface HaatzNotification {
   type?: string;
   timestamp?: string | number;
   cast?: HaatzCast | null;
-  user?: { fid?: number; username?: string };
+  user?: HaatzUser;
 }
 
 /**
@@ -100,37 +103,51 @@ function normalize(n: HaatzNotification): FarcasterNotification | null {
   const timestamp = parseHaatzTimestamp(n.timestamp);
   const actorFid = n.user?.fid;
   const actorUsername = n.user?.username;
-  const castHash = n.cast?.hash;
+  const rawCastHash = n.cast?.hash;
+  // Hypersnap sends bare hex; everything downstream (thread routes, cast
+  // lookups) uses the `0x…` form the rest of the app's casts carry.
+  const castHash = rawCastHash ? `0x${rawCastHash.replace(/^0x/i, '')}` : undefined;
 
   // A notification with neither an actor nor a cast carries no usable
   // information — drop it rather than render an empty row.
   if (actorFid == null && !actorUsername && !castHash) return null;
 
+  const castAuthor = n.cast?.author;
   const content = castHash
     ? {
         cast: {
           hash: castHash,
           text: n.cast?.text,
-          author: n.cast?.author?.username
-            ? { fid: actorFid ?? 0, username: n.cast.author.username }
-            : undefined,
+          author:
+            castAuthor?.fid != null
+              ? {
+                  fid: castAuthor.fid,
+                  username: castAuthor.username,
+                  displayName: castAuthor.display_name || undefined,
+                }
+              : undefined,
         },
       }
     : undefined;
 
-  // Synthesize a stable-enough id for the in-source seen-set. Cross-source
-  // dedup uses a separate heuristic key (see useUnifiedNotifications).
-  const idParts = [type, String(actorFid ?? actorUsername ?? '?'), castHash ?? '', String(timestamp)];
+  // Synthesize a stable-enough id for the in-source seen-set. Built from the
+  // raw hash so ids already in someone's seen-set keep matching.
+  const idParts = [type, String(actorFid ?? actorUsername ?? '?'), rawCastHash ?? '', String(timestamp)];
   const id = `haatz:${idParts.join(':')}`;
 
   return {
     id,
     type,
     timestamp,
-    reactionType: type === 'cast-like' ? 'like' : undefined,
+    reactionType: type === 'cast-like' ? 'like' : type === 'cast-recast' ? 'recast' : undefined,
     actor:
       actorFid != null || actorUsername
-        ? { fid: actorFid ?? 0, username: actorUsername, displayName: actorUsername }
+        ? {
+            fid: actorFid ?? 0,
+            username: actorUsername,
+            displayName: n.user?.display_name || actorUsername,
+            pfp: n.user?.pfp_url ? { url: n.user.pfp_url } : undefined,
+          }
         : undefined,
     content,
     raw: { source: 'haatz', original: n as unknown as Record<string, unknown> },
@@ -138,30 +155,29 @@ function normalize(n: HaatzNotification): FarcasterNotification | null {
 }
 
 /**
- * Fetch + normalize notifications from haatz for the given fid. Resolves to
- * an empty array on any failure — this is a best-effort supplementary
- * source and must never surface an error to the user.
+ * Fetch + normalize one page of notifications from haatz for the given fid.
+ * Throws on network or HTTP failure, so a query keeps its last good data
+ * instead of being replaced by an empty page.
  */
 export async function fetchHaatzNotifications(
   fid: number,
+  cursor?: string,
   limit = 25,
-): Promise<FarcasterNotification[]> {
-  try {
-    const url = `${HAATZ_BASE_URL}/v2/farcaster/notifications?fid=${encodeURIComponent(
-      String(fid),
-    )}&limit=${limit}`;
-    const res = await fetch(url, { headers: { Accept: 'application/json' } });
-    if (!res.ok) return [];
-    const json = (await res.json()) as { notifications?: HaatzNotification[] } | null;
-    const list = json?.notifications;
-    if (!Array.isArray(list)) return [];
-    const out: FarcasterNotification[] = [];
-    for (const n of list) {
-      const normalized = normalize(n);
-      if (normalized) out.push(normalized);
-    }
-    return out;
-  } catch {
-    return [];
+): Promise<FarcasterNotificationsPage> {
+  const params = new URLSearchParams({ fid: String(fid), limit: String(limit) });
+  if (cursor) params.set('cursor', cursor);
+  const res = await fetch(`${DEFAULT_HYPERSNAP_BASE_URL}/v2/farcaster/notifications?${params}`, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(`Hypersnap notifications failed (${res.status})`);
+  const json = (await res.json()) as {
+    notifications?: HaatzNotification[];
+    next?: { cursor?: string | null };
+  } | null;
+  const out: FarcasterNotification[] = [];
+  for (const n of Array.isArray(json?.notifications) ? json.notifications : []) {
+    const normalized = normalize(n);
+    if (normalized) out.push(normalized);
   }
+  return { notifications: out, nextCursor: json?.next?.cursor || null };
 }

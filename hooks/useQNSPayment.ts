@@ -9,7 +9,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { mainnet, base, optimism, arbitrum, polygon } from 'viem/chains';
 import { useWalletKeys, useWallet } from '@/hooks/useWallet';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
-import { useWarpcastWallet } from '@/hooks/useWarpcastWallet';
+import { getWarpcastWalletPrivateKey } from '@/services/onboarding/secureStorage';
 import { getQNSClient, type Ownership } from '@/services/api/qnsClient';
 import {
   sendERC20Transfer,
@@ -55,7 +55,6 @@ export type RegistrationStep =
 export function useRegistrationPayment() {
   const { refetch: fetchKeys } = useWalletKeys();
   const { activeType } = useWalletSelection();
-  const { importedWallet } = useWarpcastWallet();
 
   const [step, setStep] = useState<RegistrationStep>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +86,7 @@ export function useRegistrationPayment() {
       // Get private key
       let privateKey: string | null = null;
       if (activeType === 'warpcast') {
-        privateKey = importedWallet?.privateKey ?? null;
+        privateKey = await getWarpcastWalletPrivateKey();
       } else {
         const keysResult = await fetchKeys();
         privateKey = keysResult.data?.ethereum?.privateKey ?? null;
@@ -198,7 +197,7 @@ export function useRegistrationPayment() {
       setStep('error');
       return null;
     }
-  }, [activeType, importedWallet, fetchKeys]);
+  }, [activeType, fetchKeys]);
 
   return {
     execute,
@@ -228,12 +227,11 @@ export type MarketplaceBuyStep =
  */
 export async function getWalletPrivateKey(
   activeType: string,
-  importedWallet: { privateKey?: string } | null,
   fetchKeys: () => Promise<{ data?: { ethereum?: { privateKey: string } } | null }>
 ): Promise<string> {
   let privateKey: string | null = null;
   if (activeType === 'warpcast') {
-    privateKey = importedWallet?.privateKey ?? null;
+    privateKey = await getWarpcastWalletPrivateKey();
   } else {
     const keysResult = await fetchKeys();
     privateKey = keysResult.data?.ethereum?.privateKey ?? null;
@@ -264,7 +262,6 @@ export async function signQNSSignatureMessage(
 export function useMarketplaceBuy() {
   const { refetch: fetchKeys } = useWalletKeys();
   const { activeType } = useWalletSelection();
-  const { importedWallet } = useWarpcastWallet();
 
   const [step, setStep] = useState<MarketplaceBuyStep>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -291,7 +288,7 @@ export function useMarketplaceBuy() {
       if (!chainId) throw new Error(`Unsupported chain: ${chainName}`);
 
       // Get private key
-      const privateKey = await getWalletPrivateKey(activeType, importedWallet, fetchKeys);
+      const privateKey = await getWalletPrivateKey(activeType, fetchKeys);
       const formattedKey = (privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`) as Hex;
       const account = privateKeyToAccount(formattedKey);
 
@@ -377,7 +374,7 @@ export function useMarketplaceBuy() {
       setStep('error');
       return null;
     }
-  }, [activeType, importedWallet, fetchKeys]);
+  }, [activeType, fetchKeys]);
 
   return {
     execute,
@@ -398,7 +395,6 @@ export function useMarketplaceBuy() {
 export function useAuctionPayment() {
   const { refetch: fetchKeys } = useWalletKeys();
   const { activeType } = useWalletSelection();
-  const { importedWallet } = useWarpcastWallet();
 
   const [step, setStep] = useState<MarketplaceBuyStep>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -428,7 +424,7 @@ export function useAuctionPayment() {
       const chainId = QNS_CHAIN_IDS[params.chainName];
       if (!chainId) throw new Error(`Unsupported chain: ${params.chainName}`);
 
-      const privateKey = await getWalletPrivateKey(activeType, importedWallet, fetchKeys);
+      const privateKey = await getWalletPrivateKey(activeType, fetchKeys);
       const formattedKey = (privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`) as Hex;
       const account = privateKeyToAccount(formattedKey);
 
@@ -488,7 +484,7 @@ export function useAuctionPayment() {
       setStep('error');
       return null;
     }
-  }, [activeType, importedWallet, fetchKeys]);
+  }, [activeType, fetchKeys]);
 
   return { execute, reset, step, isProcessing: step !== 'idle' && step !== 'success' && step !== 'error', error, txHash };
 }
@@ -502,7 +498,6 @@ export function useAuctionPayment() {
 export function useOfferPayment() {
   const { refetch: fetchKeys } = useWalletKeys();
   const { activeType } = useWalletSelection();
-  const { importedWallet } = useWarpcastWallet();
 
   const [step, setStep] = useState<MarketplaceBuyStep>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -532,7 +527,7 @@ export function useOfferPayment() {
       const chainId = QNS_CHAIN_IDS[params.chainName];
       if (!chainId) throw new Error(`Unsupported chain: ${params.chainName}`);
 
-      const privateKey = await getWalletPrivateKey(activeType, importedWallet, fetchKeys);
+      const privateKey = await getWalletPrivateKey(activeType, fetchKeys);
       const formattedKey = (privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`) as Hex;
       const account = privateKeyToAccount(formattedKey);
 
@@ -591,7 +586,7 @@ export function useOfferPayment() {
       setStep('error');
       return null;
     }
-  }, [activeType, importedWallet, fetchKeys]);
+  }, [activeType, fetchKeys]);
 
   return { execute, reset, step, isProcessing: step !== 'idle' && step !== 'success' && step !== 'error', error, txHash };
 }

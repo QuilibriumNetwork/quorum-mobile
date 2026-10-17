@@ -653,7 +653,7 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
           savedApps,
           isFavLoading,
           'No saved apps',
-          'Apps you favorite on Farcaster or add here will show up.',
+          'Apps you favorite or add here will show up.',
         )}
 
       {activeTab === 'recent' &&

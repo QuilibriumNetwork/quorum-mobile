@@ -118,7 +118,7 @@ export default function WarpcastWalletImportModal({
         const fid = await getFarcasterFid();
 
         if (!custodyKey || !fid || !farcasterAuthToken) {
-          throw new Error('Missing Farcaster credentials');
+          throw new Error('Missing Hypersnap credentials');
         }
 
         // Fetch recovery shard from Farcaster API

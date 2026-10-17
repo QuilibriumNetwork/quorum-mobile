@@ -1,8 +1,19 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
+import { fromHypersnapCast, getDefaultHypersnapClient } from '@quilibrium/quorum-shared';
+import { useFollowingFids } from '@/hooks/useFollowingFids';
+import { normalizedCastToLegacy } from '@/services/farcaster/hypersnapToLegacyShape';
+import { fetchHubUserData, isProUser } from '@/services/farcaster/hypersnapUsers';
+import { rememberCastAuthor } from '@/services/farcaster/hypersnapWrites';
 import { getCachedProfile, setCachedProfile } from '@/services/offline/farcasterFeedCache';
 
-const PROFILE_CASTS_URL = 'https://farcaster.xyz/~api/v2/profile-casts';
+/** Hypersnap page size; its user-casts feed includes replies, which the
+ *  profile filters out, so pages are fetched larger than they render. */
+const CASTS_PAGE_SIZE = 50;
+/** Keep reading until a page has this many top-level casts (or the feed
+ *  ends), so a run of replies doesn't render as an empty profile. */
+const MIN_CASTS_PER_PAGE = 10;
+const MAX_REQUESTS_PER_PAGE = 3;
 
 export interface ProfileAuthor {
   fid: number;
@@ -127,53 +138,72 @@ export interface ProfilePage {
 
 interface UseFarcasterProfileOptions {
   fid: number;
-  token?: string;
   enabled?: boolean;
 }
 
-async function fetchProfilePage(
-  fid: number,
-  token?: string,
-  cursor?: string
-): Promise<ProfilePage> {
-  let url = `${PROFILE_CASTS_URL}?fid=${fid}&limit=15`;
-  if (cursor) {
-    url += `&cursor=${cursor}`;
-  }
+/** `geo:<lat>,<long>` is how the protocol stores a location; there is no
+ *  place name to show for it. */
+function displayableLocation(value: string | undefined): string | undefined {
+  if (!value || /^geo:/i.test(value)) return undefined;
+  return value;
+}
 
-  const headers: Record<string, string> = {
-    accept: '*/*',
-    'content-type': 'application/json',
-    origin: 'https://farcaster.xyz',
-    referer: 'https://farcaster.xyz/',
+async function fetchProfileAuthor(fid: number): Promise<ProfileAuthor> {
+  const [user, hub, pro] = await Promise.all([
+    getDefaultHypersnapClient().getUserByFid(fid),
+    // Banner, location and Pro are header extras: a failure leaves them out.
+    fetchHubUserData(fid).catch(() => ({ banner: undefined, location: undefined })),
+    isProUser(fid).catch(() => false),
+  ]);
+  const bio = user.profile?.bio?.text;
+  const location = displayableLocation(hub.location);
+  return {
+    fid: user.fid,
+    displayName: user.display_name ?? '',
+    username: user.username,
+    pfp: user.pfp_url ? { url: user.pfp_url } : undefined,
+    profile: {
+      bio: bio ? { text: bio } : undefined,
+      location: location ? { description: location } : undefined,
+      accountLevel: pro ? 'pro' : undefined,
+      bannerImageUrl: hub.banner,
+    },
+    followerCount: user.follower_count,
+    followingCount: user.following_count,
   };
+}
 
-  if (token) {
-    headers.authorization = `Bearer ${token}`;
+/** One page of the account's own top-level casts (replies excluded). */
+async function fetchProfileCasts(
+  fid: number,
+  cursor?: string,
+): Promise<{ casts: ProfileCast[]; cursor?: string }> {
+  const client = getDefaultHypersnapClient();
+  const casts: ProfileCast[] = [];
+  let next: string | undefined = cursor;
+  for (let i = 0; i < MAX_REQUESTS_PER_PAGE; i++) {
+    const res = await client.getUserCasts(fid, { cursor: next, limit: CASTS_PAGE_SIZE });
+    for (const c of res.casts) {
+      const cast = normalizedCastToLegacy(fromHypersnapCast(c));
+      if (cast.parentHash) continue;
+      rememberCastAuthor(cast.hash, cast.author.fid);
+      casts.push({ ...cast, threadHash: cast.hash } as ProfileCast);
+    }
+    next = res.next.cursor ?? undefined;
+    if (!next || casts.length >= MIN_CASTS_PER_PAGE) break;
   }
+  return { casts, cursor: next };
+}
 
-  const response = await fetch(url, {
-    method: 'GET',
-    headers,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch profile (${response.status})`);
-  }
-
-  const json = await response.json();
-  const casts: ProfileCast[] = json.result?.casts ?? [];
-  const nextCursor = json.next?.cursor;
-
-  // Get author info from first cast
-  const author = casts[0]?.author;
-
-  return { casts, cursor: nextCursor, author };
+/** A profile page from Hypersnap. The first page also carries the author. */
+async function fetchProfilePage(fid: number, cursor?: string): Promise<ProfilePage> {
+  if (cursor) return fetchProfileCasts(fid, cursor);
+  const [author, page] = await Promise.all([fetchProfileAuthor(fid), fetchProfileCasts(fid)]);
+  return { ...page, author };
 }
 
 export function useFarcasterProfile({
   fid,
-  token,
   enabled = true,
 }: UseFarcasterProfileOptions) {
   // Paint the last-known profile instantly from MMKV on cold start, then
@@ -182,7 +212,7 @@ export function useFarcasterProfile({
 
   const query = useInfiniteQuery({
     queryKey: ['farcaster-profile', fid],
-    queryFn: ({ pageParam }) => fetchProfilePage(fid, token, pageParam),
+    queryFn: ({ pageParam }) => fetchProfilePage(fid, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => {
       if (!lastPage.cursor) return undefined;
@@ -208,8 +238,18 @@ export function useFarcasterProfile({
   // Flatten all pages into a single array
   const casts = query.data?.pages.flatMap((page) => page.casts) ?? [];
 
-  // Get author from first page
-  const author = query.data?.pages[0]?.author;
+  // Author from the first page. Whether the viewer follows them comes from
+  // the viewer's own follow list (Hypersnap's user object has no viewer
+  // context); unknown until that list loads.
+  const { fids: followingFids, isLoaded: followsLoaded } = useFollowingFids();
+  const pageAuthor = query.data?.pages[0]?.author;
+  const author = useMemo(
+    () =>
+      pageAuthor && followsLoaded
+        ? { ...pageAuthor, viewerContext: { following: followingFids.has(pageAuthor.fid) } }
+        : pageAuthor,
+    [pageAuthor, followsLoaded, followingFids],
+  );
 
   return {
     author,

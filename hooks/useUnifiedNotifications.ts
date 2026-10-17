@@ -1,9 +1,10 @@
 /**
- * useUnifiedNotifications — gathers the notification panel's inputs (the two
- * Farcaster feeds, the Quorum mention log, the background-push chat log, mute
- * state, dismissal watermark) and hands them to `partitionNotifications`.
+ * useUnifiedNotifications — gathers the notification panel's inputs (the
+ * Farcaster feed from Hypersnap, the Quorum mention log, the background-push
+ * chat log, mute state, dismissal watermark) and hands them to
+ * `partitionNotifications`.
  *
- * All the actual logic — cross-source dedup, dismissal, muted-DM exclusion,
+ * All the actual logic — dismissal, muted-DM exclusion,
  * badge arithmetic — lives in that pure module so it can be unit-tested
  * without a renderer. This file should stay thin.
  *
@@ -14,11 +15,7 @@
 
 import { useCallback, useEffect, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import {
-  flattenFarcasterNotifications,
-  useFarcasterNotifications,
-} from './useFarcasterNotifications';
-import { useHaatzNotifications } from './useHaatzNotifications';
+import { flattenFarcasterNotifications, useHaatzNotifications } from './useHaatzNotifications';
 import { useDMMute } from '@/hooks/chat/useDMMute';
 import { useUnifiedConversations } from '@/hooks/chat/useUnifiedConversations';
 import type { Conversation } from '@/hooks/chat/useConversations';
@@ -68,11 +65,8 @@ export interface UnifiedNotificationsResult {
   hasMore: boolean;
   fetchMore: () => void;
   refetch: () => void;
+  /** A Farcaster account is connected, so its notifications are shown. */
   farcasterEnabled: boolean;
-  /** Surfaces fetch errors to the screen so the user can see why the
-   *  Farcaster portion of the feed is empty (auth expiry, 5xx, etc.)
-   *  instead of being told there are no notifications. */
-  farcasterError: Error | null;
 }
 
 export interface UseUnifiedNotificationsOptions {
@@ -128,14 +122,10 @@ export function useUnifiedNotifications(
   options: UseUnifiedNotificationsOptions = {},
 ): UnifiedNotificationsResult {
   const { enrichConversations = false } = options;
-  const { farcasterAuthToken } = useAuth();
+  const { user } = useAuth();
   const { entries: chatEntries } = useNotificationLog();
   const { entries: quorumEntries } = useMentionReplyLog();
-  const farcasterQuery = useFarcasterNotifications(farcasterAuthToken ?? undefined);
-  // Supplementary auth-free source (hypersnap/haatz). Blended in and
-  // deduped against the official feed so notifications still show when the
-  // farcaster.xyz bearer token is missing or expired.
-  const haatzQuery = useHaatzNotifications();
+  const farcasterQuery = useHaatzNotifications();
   // Consuming the hook (vs reading MMKV) makes the panel recompute the moment
   // a mute toggles.
   const { mutedConversations } = useDMMute();
@@ -291,7 +281,7 @@ export function useUnifiedNotifications(
     [resolve],
   );
 
-  const officialFarcaster = useMemo(
+  const farcaster = useMemo(
     () => flattenFarcasterNotifications(farcasterQuery.data?.pages),
     [farcasterQuery.data?.pages],
   );
@@ -303,8 +293,7 @@ export function useUnifiedNotifications(
         chatEntries,
         conversationDetails,
         resolveName,
-        officialFarcaster,
-        haatzFarcaster: haatzQuery.data ?? [],
+        farcaster,
         clearedBefore,
         dismissedKeys,
         mutedConversations,
@@ -315,8 +304,7 @@ export function useUnifiedNotifications(
       quorumEntries,
       chatEntries,
       conversationDetails,
-      officialFarcaster,
-      haatzQuery.data,
+      farcaster,
       clearedBefore,
       dismissedKeys,
       mutedConversations,
@@ -329,7 +317,7 @@ export function useUnifiedNotifications(
     farcasterFeedItems: partition.farcasterFeedItems,
     unreadCount: partition.unreadCount,
     dismissedCount: partition.dismissedCount,
-    isLoading: farcasterQuery.isLoading || haatzQuery.isLoading,
+    isLoading: farcasterQuery.isLoading,
     isFetchingMore: farcasterQuery.isFetchingNextPage,
     // Stop paging once the fetched pages reach the dismissal watermark —
     // everything older is dismissed, so further pages would be entirely
@@ -346,16 +334,7 @@ export function useUnifiedNotifications(
     },
     refetch: () => {
       void farcasterQuery.refetch();
-      void haatzQuery.refetch();
     },
-    farcasterEnabled: !!farcasterAuthToken,
-    // Only surface the official-feed error when the blended list is empty —
-    // if haatz (or anything) filled the feed, a farcaster.xyz auth lapse or
-    // 5xx shouldn't show an error banner. Per the resilience requirement:
-    // don't error out just because the official source didn't appear.
-    farcasterError:
-      partition.farcasterFeedItems.length > 0
-        ? null
-        : ((farcasterQuery.error as Error | null) ?? null),
+    farcasterEnabled: (user?.farcaster?.fid ?? 0) > 0,
   };
 }

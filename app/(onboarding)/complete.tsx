@@ -185,7 +185,7 @@ export default function CompleteScreen() {
                   <FarcasterLogoIcon size={20} color={theme.colors.primary} />
                 </View>
                 <View style={styles.summaryContent}>
-                  <Text style={styles.summaryLabel}>Farcaster</Text>
+                  <Text style={styles.summaryLabel}>Hypersnap</Text>
                   <Text style={styles.summaryValue}>
                     {`@${state.farcasterAccount.username}`}
                   </Text>

@@ -1077,7 +1077,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(fu
                 {alsoReplyOnFarcaster && <IconSymbol name="checkmark" size={11} color="#fff" />}
               </View>
               <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(13) }}>
-                Also reply on Farcaster
+                Also reply on Hypersnap
               </Text>
             </TouchableOpacity>
           )}

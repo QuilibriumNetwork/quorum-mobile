@@ -1,13 +1,12 @@
 /**
  * Farcaster notification dismissal.
  *
- * Farcaster rows are NOT stored on device — they are two live remote feeds
- * (farcaster.xyz `notifications-for-tab` + haatz) re-polled every 60s and
- * rendered straight from the React Query cache. Neither can be cleared
- * server-side: the only Farcaster write endpoint we have is
- * `mark-all-notifications-read`, which flips read state, not list membership,
- * and haatz mirrors protocol-level hub events (a like/reply/follow is a record
- * on the network — there is nothing there to delete).
+ * Farcaster rows are NOT stored on device — they are a live remote feed
+ * (Hypersnap's `/v2/farcaster/notifications`, "haatz") re-polled every 60s and
+ * rendered straight from the React Query cache. It cannot be cleared
+ * server-side: it mirrors protocol-level hub events (a like/reply/follow is a
+ * record on the network — there is nothing there to delete), and Hypersnap has
+ * no read state.
  *
  * So "clear" is a LOCAL dismissal: we remember the instant the user cleared and
  * hide every Farcaster item at or below it. One number, bounded, no growth.
@@ -15,14 +14,8 @@
  * Why a watermark and not a set of dismissed ids:
  *  - haatz synthesizes ids from `type:actor:castHash:timestamp`, so they aren't
  *    stable across polls.
- *  - the official feed AGGREGATES ("X and 5 others liked"), so a group's shape
- *    and id shift as activity accrues.
  *  - an id set grows unbounded and would need a cap, which re-introduces the
  *    reappearance it was meant to prevent.
- *
- * The watermark also gets aggregation right for free: the normalizer keys a
- * group off `latestTimestamp`, so a cleared like-group whose cast gets a NEW
- * like rises back above the watermark and correctly reappears.
  *
  * Device-local by design, matching the mention log and the chat log.
  *
@@ -33,12 +26,9 @@
  * alone cannot express it. The three objections above are what shape the
  * design, and each is answered rather than waived:
  *
- *  - NOT keyed by `n.id`. Keyed by the SEMANTIC dedup key the blend already
- *    computes (`farcasterDismissKey` in partitionNotifications.ts), which is
- *    stable across polls and identical for the same event arriving from both
- *    sources. Keying on `n.id` would hide the official aggregate and leave the
- *    haatz per-actor duplicates behind the moment the official feed stopped
- *    covering them — the exact resurfacing bug the blend order guards against.
+ *  - NOT keyed by `n.id`. Keyed by a SEMANTIC key (`farcasterDismissKey` in
+ *    partitionNotifications.ts), which is stable across polls where the
+ *    synthesized id is not.
  *
  *  - Aggregation still works, because we store an INSTANT per key, not a
  *    boolean, and hide only `timestamp <= dismissedAt`. That is the watermark

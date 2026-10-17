@@ -1,8 +1,9 @@
 /**
  * useFeedOptimistic — the React action layer over `optimisticFeedStore`.
  *
- * The store owns persistent state; this hook binds the actions that need
- * the auth token + submit API (like/recast/follow/block/reply/quote) and
+ * The store owns persistent state; this hook binds the actions that write to
+ * Farcaster (like/recast/follow/block/reply/quote/delete), all signed with the
+ * account's Hypersnap signer, and
  * runs a single background submission queue that retries pending casts and
  * flips them to `failed` after a few attempts (so the user can be
  * reprompted). All views read the same store, so an action in the feed is
@@ -14,15 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
-import {
-  likeCast,
-  unlikeCast,
-  recastCast,
-  unrecastCast,
-  followUser,
-  unfollowUser,
-} from '@/services/farcasterClient';
-import { removeFarcasterCast } from '@/services/farcaster/removeCast';
+import { removeOwnCast, setCastReaction, setFollowing } from '@/services/farcaster/hypersnapWrites';
 import { logger } from '@quilibrium/quorum-shared';
 import * as store from '@/services/feed/optimisticFeedStore';
 import type { PendingCast, PendingAuthor } from '@/services/feed/optimisticFeedStore';
@@ -56,8 +49,9 @@ export interface PostQuoteArgs {
 export function useFeedOptimistic() {
   // Subscribe to the store so consumers re-render on any optimistic change
   // (see `version` below — that single subscription drives re-renders).
-  const { farcasterAuthToken, user } = useAuth();
-  const { submitCast } = useFarcasterSubmitCast({ token: farcasterAuthToken ?? undefined });
+  const { user } = useAuth();
+  const fid = user?.farcaster?.fid;
+  const { submitCast } = useFarcasterSubmitCast();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
@@ -85,57 +79,56 @@ export function useFeedOptimistic() {
   };
 
   // ---- reactions --------------------------------------------------------
+  // `castAuthorFid` saves a lookup when the caller has it; without it the
+  // author is resolved from the hash.
   const toggleLike = useCallback(
-    async (castHash: string, currentlyLiked: boolean, currentCount: number) => {
-      if (!farcasterAuthToken) return;
+    async (castHash: string, currentlyLiked: boolean, currentCount: number, castAuthorFid?: number) => {
+      if (!fid) return;
       const next = !currentlyLiked;
       const nextCount = next ? currentCount + 1 : Math.max(0, currentCount - 1);
       store.setLike(castHash, next, nextCount);
       try {
-        if (next) await likeCast({ token: farcasterAuthToken, castHash });
-        else await unlikeCast({ token: farcasterAuthToken, castHash });
+        await setCastReaction({ fid, castHash, castAuthorFid, kind: 'like', active: next });
       } catch (e) {
         store.setLike(castHash, currentlyLiked, currentCount); // rollback
         logger.warn('[feedOptimistic] like failed:', e instanceof Error ? e.message : e);
         showToast({ type: 'error', title: "Couldn't update", message: 'Check your connection and try again.' });
       }
     },
-    [farcasterAuthToken, showToast],
+    [fid, showToast],
   );
 
   const toggleRecast = useCallback(
-    async (castHash: string, currentlyRecasted: boolean, currentCount: number) => {
-      if (!farcasterAuthToken) return;
+    async (castHash: string, currentlyRecasted: boolean, currentCount: number, castAuthorFid?: number) => {
+      if (!fid) return;
       const next = !currentlyRecasted;
       const nextCount = next ? currentCount + 1 : Math.max(0, currentCount - 1);
       store.setRecast(castHash, next, nextCount);
       try {
-        if (next) await recastCast({ token: farcasterAuthToken, castHash });
-        else await unrecastCast({ token: farcasterAuthToken, castHash });
+        await setCastReaction({ fid, castHash, castAuthorFid, kind: 'recast', active: next });
       } catch (e) {
         store.setRecast(castHash, currentlyRecasted, currentCount);
         logger.warn('[feedOptimistic] recast failed:', e instanceof Error ? e.message : e);
         showToast({ type: 'error', title: "Couldn't update", message: 'Check your connection and try again.' });
       }
     },
-    [farcasterAuthToken, showToast],
+    [fid, showToast],
   );
 
   const toggleFollow = useCallback(
     async (targetFid: number, currentlyFollowing: boolean) => {
-      if (!farcasterAuthToken || !targetFid) return;
+      if (!fid || !targetFid) return;
       const next = !currentlyFollowing;
       store.setFollow(targetFid, next);
       try {
-        if (next) await followUser({ token: farcasterAuthToken, targetFid });
-        else await unfollowUser({ token: farcasterAuthToken, targetFid });
+        await setFollowing({ fid, targetFid, following: next });
       } catch (e) {
         store.setFollow(targetFid, currentlyFollowing);
         logger.warn('[feedOptimistic] follow failed:', e instanceof Error ? e.message : e);
         showToast({ type: 'error', title: "Couldn't update", message: 'Check your connection and try again.' });
       }
     },
-    [farcasterAuthToken, showToast],
+    [fid, showToast],
   );
 
   // Block has no write endpoint yet — this is an immediate local hide; if a
@@ -146,17 +139,14 @@ export function useFeedOptimistic() {
   }, []);
 
   // Delete one of the user's own casts. Hides it immediately, then removes it
-  // server-side in the background (hypersnap CAST_REMOVE when a signer is
-  // provisioned, legacy DELETE otherwise). Restores it if the removal fails.
+  // server-side in the background (a signed CAST_REMOVE). Restores it if the
+  // removal fails.
   const deleteCast = useCallback(
     async (castHash: string) => {
+      if (!fid) return;
       store.setDeleted(castHash, true);
       try {
-        await removeFarcasterCast({
-          castHash,
-          fid: user?.farcaster?.fid,
-          token: farcasterAuthToken ?? undefined,
-        });
+        await removeOwnCast({ fid, castHash });
         // Reflect the removal once the server catches up (and drop the stale
         // copy from any cached feed/thread).
         refetchAfterSubmit();
@@ -166,7 +156,7 @@ export function useFeedOptimistic() {
         showToast({ type: 'error', title: "Couldn't delete", message: 'Check your connection and try again.' });
       }
     },
-    [user?.farcaster?.fid, farcasterAuthToken, refetchAfterSubmit, showToast],
+    [fid, refetchAfterSubmit, showToast],
   );
 
   // ---- background submission queue --------------------------------------
@@ -193,7 +183,7 @@ export function useFeedOptimistic() {
   );
 
   const drainQueue = useCallback(async () => {
-    if (draining || !farcasterAuthToken) return;
+    if (draining || !fid) return;
     draining = true;
     let anySucceeded = false;
     try {
@@ -235,9 +225,9 @@ export function useFeedOptimistic() {
     }
     // A landed cast won't show until the view it lives in refetches.
     if (anySucceeded) refetchAfterSubmit();
-  }, [farcasterAuthToken, submitOne, refetchAfterSubmit]);
+  }, [fid, submitOne, refetchAfterSubmit]);
 
-  // Kick the queue whenever the pending set changes or the token arrives.
+  // Kick the queue whenever the pending set changes or the account arrives.
   const version = store.useOptimisticVersion();
   useEffect(() => {
     void drainQueue();

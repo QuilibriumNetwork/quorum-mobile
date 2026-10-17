@@ -2,7 +2,9 @@ import { BaseModal } from '@/components/shared';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth, useWebSocket } from '@/context';
-import { useFarcasterProfile, type ProfilePage, type ProfileAuthor } from '@/hooks/useFarcasterProfile';
+import type { ProfilePage, ProfileAuthor } from '@/hooks/useFarcasterProfile';
+import { useFarcasterUserPersistent } from '@/hooks/useFarcasterUserPersistent';
+import { setCachedFarcasterUser } from '@/services/farcaster/farcasterUserCache';
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { updateFarcasterProfile } from '@/services/farcaster/updateProfile';
 import { getAllSpaces } from '@/services/config/spaceStorage';
@@ -17,9 +19,11 @@ import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
 import { getMMKVAdapter } from '@/services/storage/mmkvAdapter';
 import {
+  farcasterQueryKeys,
   validateDisplayName,
   validateUserBio,
   queryKeys,
+  type NormalizedUser,
   type SpaceMember,
 } from '@quilibrium/quorum-shared';
 import {
@@ -59,9 +63,7 @@ export default function UnifiedProfileEditModal({
 
   // Load the live Farcaster profile so farcaster-scoped edits seed from
   // the Farcaster-side fields rather than the Quorum-side fields.
-  const { author: farcasterAuthor } = useFarcasterProfile({
-    fid: user?.farcaster?.fid ?? 0,
-    token: farcasterAuthToken ?? undefined,
+  const { data: farcasterUser } = useFarcasterUserPersistent(user?.farcaster?.fid, {
     enabled: Boolean(visible && user?.farcaster?.fid && scope !== 'quorum'),
   });
 
@@ -69,15 +71,15 @@ export default function UnifiedProfileEditModal({
   useEffect(() => {
     if (!visible || !user) return;
     if (scope === 'farcaster') {
-      setDisplayName(farcasterAuthor?.displayName ?? user.farcaster?.username ?? '');
-      setBio(farcasterAuthor?.profile?.bio?.text ?? '');
-      setAvatar(farcasterAuthor?.pfp?.url ?? user.farcaster?.pfpUrl ?? null);
+      setDisplayName(farcasterUser?.displayName ?? user.farcaster?.username ?? '');
+      setBio(farcasterUser?.bio ?? '');
+      setAvatar(farcasterUser?.pfpUrl ?? user.farcaster?.pfpUrl ?? null);
     } else {
       setDisplayName(user.displayName ?? '');
       setBio(user.bio ?? '');
       setAvatar(user.profileImage ?? user.farcaster?.pfpUrl ?? null);
     }
-  }, [visible, user, scope, farcasterAuthor]);
+  }, [visible, user, scope, farcasterUser]);
 
   if (!user) return null;
 
@@ -85,14 +87,14 @@ export default function UnifiedProfileEditModal({
     scope === 'quorum'
       ? 'Edit Quorum profile'
       : scope === 'farcaster'
-        ? 'Edit Farcaster profile'
+        ? 'Edit Hypersnap profile'
         : 'Edit profile';
 
   const subtitle =
     scope === 'both'
-      ? 'Changes apply to both Quorum and Farcaster.'
+      ? 'Changes apply to both Quorum and Hypersnap.'
       : scope === 'farcaster'
-        ? 'Changes apply to Farcaster only.'
+        ? 'Changes apply to Hypersnap only.'
         : 'Changes apply to Quorum only.';
 
   const handlePickImage = async () => {
@@ -251,8 +253,9 @@ export default function UnifiedProfileEditModal({
   };
 
   const saveFarcaster = async (): Promise<{ errors: string[]; pfpUrl?: string }> => {
-    if (!farcasterAuthToken) {
-      return { errors: ['Farcaster not connected'] };
+    const fid = user?.farcaster?.fid;
+    if (!fid) {
+      return { errors: ['Hypersnap not connected'] };
     }
     const name = displayName.trim();
     const b = bio.trim();
@@ -268,7 +271,7 @@ export default function UnifiedProfileEditModal({
       fields.pfp = avatar!;
     }
 
-    const res = await updateFarcasterProfile(farcasterAuthToken, fields);
+    const res = await updateFarcasterProfile({ fid, token: farcasterAuthToken, fields });
     if (!res.ok) return { errors: [res.error ?? 'Unknown error'] };
     // Canonical pfp URL to reflect in the UI: the uploaded URL for a new image,
     // otherwise whatever the avatar already was (an existing https URL).
@@ -279,6 +282,9 @@ export default function UnifiedProfileEditModal({
   // Optimistically patch the cached Farcaster profile so the new name/bio/pfp
   // show immediately, then invalidate to reconcile with the server. Without this
   // the display reads the stale useFarcasterProfile cache for up to staleTime.
+  // The user record (seed source above, and every author lookup by FID) is
+  // patched in memory and on disk but not refetched: the hub can lag the write,
+  // and a refetch would put the old values back.
   // Patches BOTH the page-level author (profile header) AND every own cast's
   // embedded author (each cast row carries its own author snapshot), so the
   // cast list updates instantly too.
@@ -305,6 +311,15 @@ export default function UnifiedProfileEditModal({
       return { ...prev, pages: nextPages };
     });
     void queryClient.invalidateQueries({ queryKey: ['farcaster-profile', fid] });
+    const patchUser = (prev: NormalizedUser | null | undefined): NormalizedUser | null | undefined =>
+      prev
+        ? { ...prev, displayName: name || prev.displayName, bio: b, pfpUrl: pfpUrl ?? prev.pfpUrl }
+        : prev;
+    const nextUser = patchUser(queryClient.getQueryData<NormalizedUser | null>(farcasterQueryKeys.user(fid)));
+    if (nextUser) {
+      queryClient.setQueryData(farcasterQueryKeys.user(fid), nextUser);
+      setCachedFarcasterUser(nextUser);
+    }
   };
 
   const handleSave = async () => {
@@ -333,7 +348,7 @@ export default function UnifiedProfileEditModal({
         const { errors: fcErrors, pfpUrl } = await saveFarcaster();
         if (fcErrors.length > 0) {
           Alert.alert(
-            'Farcaster update failed',
+            'Hypersnap update failed',
             fcErrors.join('\n\n'),
           );
           setSaving(false);

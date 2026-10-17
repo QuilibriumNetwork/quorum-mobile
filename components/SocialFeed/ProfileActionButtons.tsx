@@ -1,7 +1,7 @@
 /**
  * ProfileActionButtons — Follow/Following + Message row for another user's
- * Farcaster profile. Follow toggles via the Farcaster web-client follows
- * endpoint (optimistic); Message opens (or creates) the 1:1 direct-cast
+ * Farcaster profile. Follow toggles with a signed follow link submitted to
+ * Hypersnap (optimistic); Message opens (or creates) the 1:1 direct-cast
  * conversation and navigates to the DM screen. Renders nothing on your own
  * profile.
  */
@@ -13,7 +13,7 @@ import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { followUser, unfollowUser } from '@/services/farcasterClient';
+import { setFollowing as submitFollowing } from '@/services/farcaster/hypersnapWrites';
 import type { AppTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -44,7 +44,7 @@ export function ProfileActionButtons({
   isFollowing,
   theme,
 }: ProfileActionButtonsProps) {
-  const { user, farcasterAuthToken } = useAuth();
+  const { user } = useAuth();
   const { showToast } = useToast();
   const ownFid = user?.farcaster?.fid;
 
@@ -58,13 +58,12 @@ export function ProfileActionButtons({
   if (!fid || fid <= 0 || fid === ownFid) return null;
 
   const toggleFollow = async () => {
-    if (!farcasterAuthToken || busy) return;
+    if (!ownFid || busy) return;
     const next = !following;
     setFollowing(next); // optimistic
     setBusy(true);
     try {
-      if (next) await followUser({ token: farcasterAuthToken, targetFid: fid });
-      else await unfollowUser({ token: farcasterAuthToken, targetFid: fid });
+      await submitFollowing({ fid: ownFid, targetFid: fid, following: next });
     } catch {
       setFollowing(!next); // rollback
       showToast({
@@ -79,7 +78,7 @@ export function ProfileActionButtons({
 
   const openDm = () => {
     if (!ownFid) {
-      Alert.alert('Sign in required', 'Connect your Farcaster account to send messages.');
+      Alert.alert('Sign in required', 'Connect your Hypersnap account to send messages.');
       return;
     }
     const convId = `farcaster:${buildDmConversationId(ownFid, fid)}`;
@@ -97,7 +96,7 @@ export function ProfileActionButtons({
 
   return (
     <View style={{ flexDirection: 'row', gap: Skin.space(8), marginTop: Skin.space(12) }}>
-      {farcasterAuthToken ? (
+      {ownFid ? (
         <TouchableOpacity
           onPress={toggleFollow}
           disabled={busy}

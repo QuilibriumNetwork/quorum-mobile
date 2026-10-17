@@ -16,7 +16,8 @@ ENV['RCT_NEW_ARCH_ENABLED'] ||= '0' if podfile_properties['newArchEnabled'] == '
 ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] ||= podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
 ENV['RCT_USE_RN_DEP'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true' && podfile_properties['newArchEnabled'] != 'false'
 ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true' && podfile_properties['newArchEnabled'] != 'false'
-platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
+ios_deployment_target = podfile_properties['ios.deploymentTarget'] || '15.1'
+platform :ios, ios_deployment_target
 
 prepare_react_native_project!
 
@@ -65,6 +66,20 @@ target 'Quorum' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+
+    # Xcode 27 rejects an iOS deployment target below 15.0. React Native's
+    # post_install raises each pod's own target to the app's floor but not
+    # its resource-bundle targets (SDWebImage-SDWebImage,
+    # RNCAsyncStorage-RNCAsyncStorage_resources, ...), which keep the
+    # podspec's older value and fail the build.
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        current = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+        if current && Gem::Version.new(current) < Gem::Version.new(ios_deployment_target)
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = ios_deployment_target
+        end
+      end
+    end
   end
 end
 

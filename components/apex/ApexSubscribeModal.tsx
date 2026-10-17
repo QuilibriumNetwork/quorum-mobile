@@ -20,7 +20,6 @@ import { useApexEligibleSpaces, useApexSubscription, type ApexEligibleSpace } fr
 import { getWalletPrivateKey } from '@/hooks/useQNSPayment';
 import { useWalletKeys } from '@/hooks/useWallet';
 import { useWalletSelection } from '@/hooks/useWalletSelection';
-import { useWarpcastWallet } from '@/hooks/useWarpcastWallet';
 import {
   APEX_CHAIN_ID,
   APEX_PRICE_USD,
@@ -78,7 +77,6 @@ export default function ApexSubscribeModal({ visible, onClose, mode }: ApexSubsc
 
   const { refetch: fetchKeys } = useWalletKeys();
   const { activeWallet, activeType } = useWalletSelection();
-  const { importedWallet } = useWarpcastWallet();
   const { subscription } = useApexSubscription();
 
   const [selectedToken, setSelectedToken] = React.useState<ApexToken | null>(null);
@@ -227,7 +225,7 @@ export default function ApexSubscribeModal({ visible, onClose, mode }: ApexSubsc
 
     let txHash: string;
     try {
-      const privateKey = await getWalletPrivateKey(activeType, importedWallet, fetchKeys);
+      const privateKey = await getWalletPrivateKey(activeType, fetchKeys);
       const result = await payApexSubscription({
         privateKey,
         token: selectedToken,

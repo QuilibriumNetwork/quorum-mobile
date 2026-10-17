@@ -186,12 +186,11 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
   const unpinMessageMutation = useUnpinMessage();
 
   const { data: pinnedMessages } = usePinnedMessages(spaceId, channelId);
-  // Chat → Farcaster cast: hypersnap-first with the user's signer, legacy
-  // fallback on absence. Mention extraction is OFF — chat handles may
-  // collide with Farcaster usernames and we don't want to false-tag.
-  const { submitCast: submitFarcasterCast } = useFarcasterSubmitCast({
-    token: farcasterAuthToken ?? undefined,
-  });
+  // Chat → Farcaster cast, signed with the user's Hypersnap signer. Mention
+  // extraction is OFF — chat handles may collide with Farcaster usernames and
+  // we don't want to false-tag.
+  const { submitCast: submitFarcasterCast } = useFarcasterSubmitCast();
+  const farcasterFid = user?.farcaster?.fid;
   const { filteredMessages: filterBlockedMessages } = useBlockUser(spaceId);
 
   // Moderation-mute: if the CURRENT user has been muted in this space, their
@@ -532,19 +531,15 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
 
       // Optionally also post a Farcaster reply when the user opted in for
       // this specific send (toggle resets per reply target).
-      if (alsoReplyOnFarcaster && isCastReply && replyCastHashRef.current && farcasterAuthToken) {
+      if (alsoReplyOnFarcaster && isCastReply && replyCastHashRef.current && farcasterFid) {
         const parentHash = replyCastHashRef.current;
-        // No parent fid here — chat surfaces don't track the cast's
-        // author. submitCast falls through to the legacy path which
-        // accepts just the hash. The hypersnap path requires fid so
-        // it'll be skipped, which is the safer behavior anyway for
-        // chat-originated replies (no signed key consent at compose).
+        // The parent's author FID, when the chat row carried it; otherwise
+        // submitCast looks it up from the hash. Always a reply, never a
+        // top-level cast.
         const parentFid = replyParentFidRef.current;
         submitFarcasterCast({
           text,
-          parent: parentFid != null
-            ? { castHashHex: parentHash, fid: parentFid }
-            : undefined,
+          parent: { castHashHex: parentHash, fid: parentFid ?? undefined },
           extractMentions: false,
         }).catch((err) => {
           logger.debug('[SpaceChatArea] Farcaster reply failed:', err);
@@ -556,7 +551,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
       setAlsoReplyOnFarcaster(false);
       replyCastHashRef.current = null;
     }
-  }, [messageText, spaceId, channelId, sendMessageMutation, sendEmbedMutation, pendingAttachment, replyToMessage, editingMessage, editSpaceMessageMutation, draftsRef, alsoReplyOnFarcaster, isCastReply, farcasterAuthToken, spaceData, channelsData, canMentionEveryone, skipSigning, isReadOnlyChannel]);
+  }, [messageText, spaceId, channelId, sendMessageMutation, sendEmbedMutation, pendingAttachment, replyToMessage, editingMessage, editSpaceMessageMutation, draftsRef, alsoReplyOnFarcaster, isCastReply, farcasterFid, spaceData, channelsData, canMentionEveryone, skipSigning, isReadOnlyChannel]);
 
   const handleAttachmentPress = useCallback(async () => {
     const result = await pickImage('library');
@@ -761,7 +756,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
                 lineHeight: Skin.font(18),
               }}
             >
-              {`Linked to /${primaryLinkedChannel}. Connect Farcaster in your profile to see casts here.`}
+              {`Linked to /${primaryLinkedChannel}. Connect Hypersnap in your profile to see casts here.`}
             </Text>
           </View>
         )}
@@ -842,7 +837,7 @@ export const SpaceChatArea = React.memo(function SpaceChatArea({
             restingChromeHeight={restingChromeHeight}
             replyTo={replyToMessage}
             onDismissReply={handleDismissReply}
-            castReplyAvailable={isCastReply && Boolean(farcasterAuthToken)}
+            castReplyAvailable={isCastReply && Boolean(farcasterFid)}
             alsoReplyOnFarcaster={alsoReplyOnFarcaster}
             onToggleAlsoReplyOnFarcaster={setAlsoReplyOnFarcaster}
             customEmojis={spaceData?.emojis}

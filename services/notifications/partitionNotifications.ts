@@ -2,8 +2,8 @@
  * Pure core of the unified notifications panel.
  *
  * Everything here is a plain function over plain data — no React, no MMKV, no
- * network — so the panel's real behavior (dedup across the two Farcaster
- * sources, dismissal, muted-DM exclusion, badge arithmetic) can be unit-tested
+ * network — so the panel's real behavior (Farcaster dismissal, muted-DM
+ * exclusion, badge arithmetic) can be unit-tested
  * without a renderer. `useUnifiedNotifications` is a thin wrapper that gathers
  * the inputs and calls `partitionNotifications`.
  */
@@ -62,15 +62,14 @@ export interface UnifiedNotification {
   /**
    * Farcaster feed rows only: the stable key that hides this row locally.
    *
-   * Computed here rather than in the renderer because it is the same key the
-   * cross-source blend deduplicates on, and the two must not drift — a row
-   * dismissed under one key and deduplicated under another would come back
-   * from the other source.
+   * Computed here rather than in the renderer so the panel and the dismissal
+   * filter cannot drift: a row trashed under one key and filtered under
+   * another would come straight back on the next poll.
    */
   dismissKey?: string;
   /**
    * Farcaster feed rows only: which activity this is, already collapsed across
-   * the two sources' type vocabularies. Exists so the renderer picks a glyph
+   * the type vocabulary's spellings. Exists so the renderer picks a glyph
    * from a closed set instead of re-deriving it from `raw.farcaster.type`,
    * which is where the spelling differences live.
    */
@@ -212,15 +211,13 @@ export type CanonicalType =
   | 'other';
 
 /**
- * Collapse the two sources' wildly different type vocabularies into one
- * canonical bucket so we can dedup across them. The official farcaster.xyz
- * feed and haatz use different (and, on the official side, not fully
- * documented) spellings — `cast-like` vs `likes` vs `reactions`, `cast-reply`
- * vs `replies`, etc. Substring matching is deliberately tolerant so an
- * unanticipated spelling on either side doesn't silently fall to `other` and
- * break dedup (the bug that let mirrored notifications show twice).
+ * Collapse the notification type vocabulary into one canonical bucket for
+ * keying and row styling. Spellings vary (`cast-like` vs `likes` vs
+ * `reactions`, `cast-reply` vs `replies`, etc.), and substring matching is
+ * deliberately tolerant so an unanticipated spelling doesn't silently fall to
+ * `other`.
  *
- * `reactions` is ambiguous (Warpcast groups likes AND recasts under it), so we
+ * `reactions` is ambiguous (it can group likes AND recasts), so we
  * disambiguate with `reactionType` when the type itself is generic.
  */
 function canonicalType(n: FarcasterNotification): CanonicalType {
@@ -242,17 +239,15 @@ function normHash(hash: string | undefined): string | undefined {
 }
 
 /**
- * Heuristic cross-source dedup key. The two sources share no ids and won't
- * agree on timestamps to the second, so we key on stable semantic fields:
+ * Semantic key for a notification event. Ids are synthesized client-side and
+ * timestamps can drift between polls, so we key on stable semantic fields:
  *
- *   - likes/recasts: the official feed AGGREGATES these per cast ("X and 5
- *     others liked"), so we key at cast level — this drops every per-actor
- *     haatz like for a cast already covered by the official aggregate.
- *   - replies/mentions/quotes: distinct per (actor, cast).
+ *   - likes/recasts: keyed at cast level (`farcasterDismissKey` adds the
+ *     actor, so a row's trash stays row-granular).
+ *   - replies/mentions/quotes: keyed by the new cast's hash.
  *   - follows: keyed by actor fid (no cast involved).
  *
- * Returns null when the notification lacks the fields to build a key, in
- * which case it's never treated as a duplicate.
+ * Returns null when the notification lacks the fields to build a key.
  */
 function dedupKey(n: FarcasterNotification): string | null {
   const ct = canonicalType(n);
@@ -265,11 +260,9 @@ function dedupKey(n: FarcasterNotification): string | null {
   if (ct === 'like' || ct === 'recast') return castHash ? `${ct}:${castHash}` : null;
   // Replies/mentions/quotes (and any other cast-bearing notification) each
   // reference the NEW cast that was created, whose hash is globally unique —
-  // so key by the hash ALONE. This deliberately ignores both the actor (the
-  // official feed often omits it for mentions, putting the author on the cast
-  // instead — the actor-fid asymmetry that let mentions slip through) and the
-  // specific label (a reply that also mentions you can arrive as `reply` from
-  // one source and `mention` from the other — same cast, one notification).
+  // so key by the hash ALONE. This deliberately ignores both the actor and
+  // the specific label (a reply that also mentions you is one event whether
+  // it is labelled `reply` or `mention`).
   if (castHash) return `cast:${castHash}`;
   return null;
 }
@@ -277,34 +270,12 @@ function dedupKey(n: FarcasterNotification): string | null {
 /**
  * The key the row trash dismisses under.
  *
- * Built from the dedup key, but NOT identical to it. The two answer different
- * questions and the difference is load-bearing:
- *
- *   dedup key  — "are these the same EVENT?"  Must be coarse enough that the
- *                official aggregate and its haatz per-actor copies collapse.
- *   dismiss key — "are these the same ROW?"   Must be fine enough that trashing
- *                one row cannot hide a row the user never touched.
- *
- * Those coincide everywhere except likes and recasts, where `dedupKey` keys at
- * CAST level on purpose (`like:${hash}`), ignoring the actor, because the
- * official feed aggregates them into one "X and 5 others liked" row.
- *
- * That assumption only holds while the official feed is present. It is absent
- * routinely — no token, an expired token, a poll gap — and haatz aggregates
- * nothing, so three people liking one cast become three distinct visible rows
- * sharing a single cast-level key. Dismissal stamps that key with `now`, and
- * since every visible row is older than `now`, trashing any one of them hid all
- * three. Unrecoverable, too: haatz re-fetches from a capped window, so once the
- * swept rows aged out nothing could bring them back.
- *
- * So likes and recasts carry the actor as well. Every other branch is already
- * row-granular: `follow` keys by actor fid, and reply/mention/quote key by the
- * hash of the NEW cast, which is unique to the single event that created it.
- *
- * Keeping the cast-level PREFIX matters — dismissing the official aggregate
- * still cannot be confused with dismissing a per-actor row, and the blend runs
- * before dismissal, so a dismissed official row keeps its haatz copies
- * suppressed regardless of what this returns.
+ * Built from `dedupKey`, plus the actor for likes and recasts: those are keyed
+ * at CAST level, and three people liking one cast are three rows sharing that
+ * cast-level key. Dismissal stamps a key with `now`, and every visible row is
+ * older than `now`, so trashing one of them by the cast key alone would hide
+ * all three. Every other branch is already row-granular: `follow` keys by
+ * actor fid, and reply/mention/quote key by the hash of the NEW cast.
  *
  * Falls back to the raw id where no semantic key exists (mini-app/frame rows
  * with neither a cast nor an actor fid). Ids are unique per notification, so
@@ -320,27 +291,6 @@ export function farcasterDismissKey(n: FarcasterNotification): string {
     if (fid != null) return `${base}:${fid}`;
   }
   return base;
-}
-
-/**
- * Merge the official farcaster.xyz feed with the haatz feed, dropping any
- * haatz item that the official feed already represents. Official items are
- * preferred (richer: stable id, unread flag, aggregation counts, pfp).
- */
-export function blendFarcasterSources(
-  official: readonly FarcasterNotification[],
-  haatz: readonly FarcasterNotification[],
-): FarcasterNotification[] {
-  const officialKeys = new Set<string>();
-  for (const n of official) {
-    const k = dedupKey(n);
-    if (k) officialKeys.add(k);
-  }
-  const extra = haatz.filter((n) => {
-    const k = dedupKey(n);
-    return !k || !officialKeys.has(k);
-  });
-  return [...official, ...extra];
 }
 
 /**
@@ -540,8 +490,8 @@ export interface PartitionInput {
    * time, which is what this module did before and is still the fallback.
    */
   resolveName?: NotificationNameResolver;
-  officialFarcaster: readonly FarcasterNotification[];
-  haatzFarcaster: readonly FarcasterNotification[];
+  /** The viewer's Farcaster notifications, as fetched (all pages). */
+  farcaster: readonly FarcasterNotification[];
   /** Farcaster dismissal watermark; 0 = never cleared. */
   clearedBefore: number;
   /**
@@ -564,7 +514,7 @@ export interface PartitionResult {
   /** Both sections merged, newest-first. */
   items: UnifiedNotification[];
   unreadCount: number;
-  /** True once the fetched official pages reach the dismissal watermark. */
+  /** True once the fetched pages reach the dismissal watermark. */
   reachedWatermark: boolean;
   /**
    * How many fetched Farcaster items dismissal is currently suppressing —
@@ -582,8 +532,7 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
     chatEntries,
     conversationDetails,
     resolveName,
-    officialFarcaster,
-    haatzFarcaster,
+    farcaster,
     clearedBefore,
     dismissedKeys = {},
     mutedConversations,
@@ -591,31 +540,16 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
     quorumTabSeenAt,
   } = input;
 
-  const official = officialFarcaster.filter(isNotScam);
-  const haatz = haatzFarcaster.filter(isNotScam);
-
-  // BLEND BEFORE DISMISSING — order matters and is load-bearing.
-  // `blendFarcasterSources` drops haatz items whose key an official item
-  // already covers. Filter the official list FIRST and a dismissed like-group
-  // falls out of that key set, so its per-actor haatz duplicates stop being
-  // deduped and resurface as one fresh row per liker for a cast the user just
-  // cleared.
-  // Both dismissal mechanisms are applied AFTER the blend, for that same
-  // reason: a per-item dismissal keyed at cast level covers the official
-  // aggregate and every haatz row that shares the key, and it can only do that
-  // while they are still in one list being deduplicated against each other.
-  const blended = blendFarcasterSources(official, haatz);
-  const visibleFarcaster = blended.filter(
+  const fetched = farcaster.filter(isNotScam);
+  const visibleFarcaster = fetched.filter(
     (n) =>
       !isDismissed(n.timestamp, clearedBefore) &&
       !isItemDismissed(farcasterDismissKey(n), n.timestamp, dismissedKeys),
   );
 
-  // Gate pagination on the OFFICIAL feed only — it is the paginated source
-  // (haatz is a single capped fetch, so its depth says nothing about whether
-  // more official pages are worth loading). Uses the raw pre-dismissal list:
-  // the filtered one has by definition dropped the evidence this needs.
-  const reached = reachedWatermark(official, clearedBefore);
+  // Uses the raw pre-dismissal list: the filtered one has by definition
+  // dropped the evidence this needs.
+  const reached = reachedWatermark(fetched, clearedBefore);
 
   // Muted DMs are excluded from the panel entirely, consistent with the badge
   // and push suppression. The conversation stays reachable via the Messages
@@ -667,8 +601,7 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
   //  - background pings: the chat log's lastSeen. These are NOT covered by the
   //    mention log's watermark, so they must be counted separately — folding
   //    them in silently stops the badge from reflecting them.
-  //  - Farcaster: prefer the server isUnread flag (survives a mark-all-read
-  //    performed on the web client), else fall back to lastSeen.
+  //  - Farcaster: the chat log's lastSeen too (Hypersnap has no read state).
   // Counted over `chatItems` (both origins) and `farcasterOnly` (real Farcaster
   // notifications) rather than the two SECTION arrays — the Farcaster section
   // also holds Farcaster direct-cast pings, which are chat rows, so summing the
@@ -678,11 +611,7 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
     0,
   );
   const chatUnread = chatItems.reduce((n, e) => (e.timestamp > lastSeen ? n + 1 : n), 0);
-  const farcasterUnread = farcasterOnly.reduce((n, e) => {
-    const isUnread = e.raw?.farcaster?.isUnread;
-    if (typeof isUnread === 'boolean') return isUnread ? n + 1 : n;
-    return e.timestamp > lastSeen ? n + 1 : n;
-  }, 0);
+  const farcasterUnread = farcasterOnly.reduce((n, e) => (e.timestamp > lastSeen ? n + 1 : n), 0);
 
   return {
     quorumItems,
@@ -690,6 +619,6 @@ export function partitionNotifications(input: PartitionInput): PartitionResult {
     items,
     unreadCount: quorumUnread + chatUnread + farcasterUnread,
     reachedWatermark: reached,
-    dismissedCount: blended.length - visibleFarcaster.length,
+    dismissedCount: fetched.length - visibleFarcaster.length,
   };
 }

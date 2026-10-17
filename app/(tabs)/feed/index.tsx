@@ -1,9 +1,7 @@
 import FarcasterReimportSheet from '@/components/FarcasterReimportSheet';
-import HypersnapSignerPromptModal from '@/components/HypersnapSignerPromptModal';
 import SocialFeedModal, { type SocialFeedModalHandle } from '@/components/SocialFeedModal';
 import { ListBottomFade } from '@/components/ui/ListBottomFade';
 import { useAuth } from '@/context/AuthContext';
-import { useHypersnapSignerLifecycle } from '@/hooks/useHypersnapSignerLifecycle';
 import { getFarcasterCustodyKey, getFarcasterFid } from '@/services/onboarding/secureStorage';
 import { feedActiveTabBus } from '@/services/ui/feedActiveTab';
 import { useTheme } from '@/theme';
@@ -43,21 +41,22 @@ export default function FeedScreen() {
     });
   }, []);
 
-  // Hypersnap signer opt-in prompt + background renewal. Mounted on the
-  // feed view since that's where the user is when they'd act on it.
-  const hypersnap = useHypersnapSignerLifecycle({ fid: user?.farcaster?.fid });
-
   type FcState =
     | { kind: 'checking' }
     | { kind: 'connected' }
-    | { kind: 'token-missing'; detail?: string; reason: 'no-credentials' | 'api-rejected' | 'unknown' }
+    | { kind: 'keys-missing'; detail?: string }
     | { kind: 'no-account' };
 
-  // Render-then-validate: show the feed immediately if we have a token OR
-  // a Farcaster account is already known (fid on the user profile), and
-  // validate/refresh the token in the background. Only a genuine cold
-  // start with no account on file gets the blocking spinner — otherwise a
-  // tab re-focus on a slow connection blocked the whole feed for seconds.
+  // The feed needs a Farcaster account and, to post, react or follow, the
+  // account's custody key on this device (it provisions the Hypersnap
+  // signer). It does not need the farcaster.xyz auth token: feed reads and
+  // every protocol write go through Hypersnap, and AuthContext refreshes the
+  // token in the background for the few farcaster.xyz-only features. A
+  // farcaster.xyz refusal therefore never blocks this screen.
+  //
+  // Render-then-validate: with an account on file the feed shows at once and
+  // the key check runs in the background. Only a cold start with no account
+  // gets the blocking spinner.
   const knownFarcasterAccount = (user?.farcaster?.fid ?? 0) > 0;
   const [fcState, setFcState] = useState<FcState>(
     farcasterAuthToken || knownFarcasterAccount ? { kind: 'connected' } : { kind: 'checking' },
@@ -66,49 +65,40 @@ export default function FeedScreen() {
 
   const attempt = useCallback(async (blocking: boolean = true) => {
     // Background validations (blocking=false) never flip to the spinner;
-    // they only downgrade to an error state if there's definitively no
-    // usable token, so the feed stays on screen meanwhile.
+    // they only downgrade to an error state once the keys are definitely
+    // gone, so the feed stays on screen meanwhile.
     if (blocking) setFcState({ kind: 'checking' });
-    const result = await refreshFarcasterToken();
-    if ('token' in result) {
+    if (await getFarcasterCustodyKey()) {
       setFcState({ kind: 'connected' });
       return;
     }
-    // No token. Decide which message to show.
+    // No custody key. A forced refreshFarcasterToken re-derives it from the
+    // account mnemonic when it can (unforced, a stored token short-circuits
+    // that); the token it may also return is incidental here.
+    const result = await refreshFarcasterToken({ force: true });
     const [custodyKey, fid] = await Promise.all([
       getFarcasterCustodyKey(),
       getFarcasterFid(),
     ]);
+    if (custodyKey) {
+      setFcState({ kind: 'connected' });
+      return;
+    }
     const hasAccount =
-      !!custodyKey ||
       (fid != null && fid > 0) ||
       (user?.farcaster?.fid != null && user.farcaster.fid > 0);
     if (!hasAccount) {
       setFcState({ kind: 'no-account' });
       return;
     }
-    // We have an account on file but the refresh failed.
-    setFcState({
-      kind: 'token-missing',
-      reason:
-        result.error === 'no-credentials'
-          ? 'no-credentials'
-          : result.error === 'api-rejected'
-            ? 'api-rejected'
-            : 'unknown',
-      detail: result.detail,
-    });
+    setFcState({ kind: 'keys-missing', detail: 'error' in result ? result.detail : undefined });
   }, [refreshFarcasterToken, user?.farcaster?.fid]);
 
   useEffect(() => {
-    if (farcasterAuthToken) {
-      setFcState({ kind: 'connected' });
-      return;
-    }
     // Known account → validate in the background without blocking the
     // feed; no account on file → blocking check (first-run sign-in path).
     void attempt(!knownFarcasterAccount);
-  }, [farcasterAuthToken, attempt, knownFarcasterAccount]);
+  }, [attempt, knownFarcasterAccount]);
 
   // `username` is optional now — miniapp `viewCast` and other surfaces
   // give us just the hash. The thread fetcher's hypersnap path doesn't
@@ -133,24 +123,16 @@ export default function FeedScreen() {
     );
   }
 
-  if (fcState.kind === 'token-missing') {
-    // Different copy depending on why the refresh failed. The
-    // "no-credentials" path means SecureStore is missing the custody
-    // key and mnemonic recovery couldn't derive one — most reliable
-    // fix is re-import. "api-rejected" usually means the Farcaster
-    // API rate-limited us or the token rotated; a plain retry works.
-    const isCredentialIssue = fcState.reason === 'no-credentials';
-    const title = isCredentialIssue
-      ? 'Re-import needed'
-      : 'Reconnecting to Farcaster';
-    const body = isCredentialIssue
-      ? "Your Farcaster account info is in your profile but the keys that authenticate you to Farcaster aren't on this device anymore. Re-importing restores them in a few seconds."
-      : "Your account is imported but the auth token isn't reachable right now. Tap Retry — this usually clears within a few seconds.";
+  if (fcState.kind === 'keys-missing') {
+    // SecureStore has lost the custody key and mnemonic recovery couldn't
+    // derive it. The fix is a re-import.
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.surface1 }]}>
         <View style={styles.center}>
-          <Text style={[styles.title, { color: theme.colors.textStrong }]}>{title}</Text>
-          <Text style={[styles.body, { color: theme.colors.textSubtle }]}>{body}</Text>
+          <Text style={[styles.title, { color: theme.colors.textStrong }]}>Re-import needed</Text>
+          <Text style={[styles.body, { color: theme.colors.textSubtle }]}>
+            Your Hypersnap account info is in your profile but the keys that authenticate you to Hypersnap aren&apos;t on this device anymore. Re-importing restores them in a few seconds.
+          </Text>
           {fcState.detail ? (
             <Text style={[styles.detail, { color: theme.colors.textSubtle }]}>{fcState.detail}</Text>
           ) : null}
@@ -161,23 +143,19 @@ export default function FeedScreen() {
             >
               <Text style={[styles.actionText, { color: theme.colors.textMain }]}>Retry</Text>
             </TouchableOpacity>
-            {isCredentialIssue && (
-              <TouchableOpacity
-                onPress={() => setReimportOpen(true)}
-                style={[styles.action, { backgroundColor: theme.colors.primary }]}
-              >
-                <Text style={[styles.actionText, { color: '#fff' }]}>Re-import</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              onPress={() => setReimportOpen(true)}
+              style={[styles.action, { backgroundColor: theme.colors.primary }]}
+            >
+              <Text style={[styles.actionText, { color: '#fff' }]}>Re-import</Text>
+            </TouchableOpacity>
           </View>
         </View>
         <FarcasterReimportSheet
           visible={reimportOpen}
           onClose={() => setReimportOpen(false)}
           onImported={() => {
-            // The sheet just persisted custody/signer keys. Trigger
-            // refresh; the token comes back from refreshFarcasterAuthToken
-            // since the new custody key is now in SecureStore.
+            // The sheet just persisted the custody key; re-check.
             void attempt();
           }}
         />
@@ -200,10 +178,6 @@ export default function FeedScreen() {
         initialChannel={initialChannel}
         initialProfile={initialProfile}
         isRouteMode={true}
-      />
-      <HypersnapSignerPromptModal
-        visible={hypersnap.promptVisible}
-        onClose={hypersnap.dismissPrompt}
       />
       <ListBottomFade surfaceColor={theme.colors.surface1} isDark={isDark} />
     </View>

@@ -9,7 +9,7 @@
 import { useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createMMKV } from 'react-native-mmkv';
-import { useWarpcastWallet } from './useWarpcastWallet';
+import { useImportedWarpcastWallet } from './useWarpcastWallet';
 import { useWalletAddresses } from './useWallet';
 
 // Storage for wallet preferences
@@ -58,8 +58,10 @@ export function useWalletSelection() {
   // Get built-in wallet addresses (cached, fast)
   const { data: builtinAddresses, isLoading: builtinLoading } = useWalletAddresses();
 
-  // Get imported Warpcast wallet
-  const { importedWallet, isImported: hasWarpcastWallet, isLoading: warpcastLoading } = useWarpcastWallet();
+  // Get imported Warpcast wallet. Read from the device only: whether a wallet
+  // is available to import is a farcaster.xyz call this hook does not need.
+  const { data: importedWallet, isLoading: warpcastLoading } = useImportedWarpcastWallet();
+  const hasWarpcastWallet = !!importedWallet;
 
   // Query for active wallet selection
   const { data: activeType } = useQuery({
@@ -158,20 +160,17 @@ export function useWalletSelection() {
 }
 
 /**
- * Hook to get just the active wallet address for display
- * Use useWalletKeysOnDemand for private keys when signing
+ * Hook to get just the active wallet address for display.
+ *
+ * Carries no private key for either wallet type. Read keys at the moment of
+ * signing: `getWarpcastWalletPrivateKey()` for an imported Warpcast wallet,
+ * `useWalletKeys().refetch()` for the built-in one.
  */
 export function useActiveWalletKeys() {
-  const { activeWallet, activeType, isLoading } = useWalletSelection();
-  const { importedWallet } = useWarpcastWallet();
-
-  // For warpcast wallet, private key is available immediately
-  // For builtin wallet, keys must be fetched on-demand when signing
-  const privateKey = activeType === 'warpcast' ? importedWallet?.privateKey ?? null : null;
+  const { activeWallet, isLoading } = useWalletSelection();
 
   return {
     address: activeWallet?.address ?? null,
-    privateKey, // Only available for warpcast, null for builtin (fetch on-demand)
     walletType: activeWallet?.type ?? 'builtin',
     isLoading,
   };

@@ -10,7 +10,7 @@
  * When we publish via hypersnap from a composer the user has typed
  * `@username` into, we have to do that translation client-side:
  *   1. find every `@username` token in the composed text,
- *   2. resolve each to a FID (hypersnap → farcaster.xyz fallback),
+ *   2. resolve each to a FID through Hypersnap,
  *   3. strip the `@username` substring from the text,
  *   4. record the byte offset (in the *stripped* text) where the
  *      mention used to start.
@@ -20,9 +20,7 @@
  */
 
 import { QueryClient } from '@tanstack/react-query';
-import { getDefaultHypersnapClient } from '@quilibrium/quorum-shared';
-
-const LEGACY_USER_LOOKUP = 'https://farcaster.xyz/~api/v2/user-by-username';
+import { DEFAULT_HYPERSNAP_BASE_URL, getDefaultHypersnapClient } from '@quilibrium/quorum-shared';
 
 /** Pattern that matches a composed @-handle. Same character class as the
  *  composer's autocomplete trigger (`MentionAutocomplete.getMentionInfo`):
@@ -41,10 +39,39 @@ export interface ExtractMentionsResult {
   mentionsPositions: number[];
 }
 
-/** Resolve a username to a FID, trying hypersnap first then the legacy
- *  endpoint (which accepts the `.eth` suffix). Cached on the supplied
- *  React Query client so the same handle isn't re-resolved across
- *  composers / per-keystroke.
+/**
+ * Resolve a Farcaster username to a FID through Hypersnap, uncached. Handles
+ * both kinds of username: an fname (`alice`) via the user lookup, and an ENS
+ * name (`alice.eth`) via the hub's username proofs, which the user lookup does
+ * not cover. The name is never rewritten: `alice.eth` and `alice` can be
+ * different accounts. Null for unknown names or on network failure.
+ */
+export async function lookupFidByUsername(username: string): Promise<number | null> {
+  const name = username.trim().replace(/^@/, '');
+  if (!name) return null;
+  if (!name.includes('.')) {
+    try {
+      const u = await getDefaultHypersnapClient().getUserByUsername(name);
+      if (u?.fid && Number.isFinite(u.fid)) return u.fid;
+    } catch {
+      // Fall through to the username-proof lookup.
+    }
+  }
+  try {
+    const res = await fetch(
+      `${DEFAULT_HYPERSNAP_BASE_URL}/v1/userNameProofByName?name=${encodeURIComponent(name.toLowerCase())}`,
+      { headers: { accept: 'application/json' } },
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as { fid?: number };
+    return typeof json.fid === 'number' && json.fid > 0 ? json.fid : null;
+  } catch {
+    return null;
+  }
+}
+
+/** {@link lookupFidByUsername}, cached on the supplied React Query client so
+ *  the same handle isn't re-resolved across composers / per keystroke.
  *
  *  Returns `null` for unknown handles — caller should leave the `@…`
  *  inline rather than silently dropping it. */
@@ -55,36 +82,7 @@ export async function resolveFidByUsername(
   if (!username) return null;
   return qc.fetchQuery({
     queryKey: ['farcaster', 'fid-by-username', username.toLowerCase()] as const,
-    queryFn: async () => {
-      // Hypersnap accepts the canonical username (no `.eth`).
-      const canonical = username.replace(/\.eth$/i, '');
-      try {
-        const u = await getDefaultHypersnapClient().getUserByUsername(canonical);
-        if (u?.fid && Number.isFinite(u.fid)) return u.fid;
-      } catch {
-        // Try the legacy fallback below.
-      }
-      try {
-        const res = await fetch(
-          `${LEGACY_USER_LOOKUP}?username=${encodeURIComponent(username)}`,
-          {
-            method: 'GET',
-            headers: {
-              accept: '*/*',
-              'content-type': 'application/json',
-              origin: 'https://farcaster.xyz',
-              referer: 'https://farcaster.xyz/',
-            },
-          },
-        );
-        if (!res.ok) return null;
-        const json = (await res.json()) as { result?: { user?: { fid?: number } } };
-        const fid = json.result?.user?.fid;
-        return typeof fid === 'number' && Number.isFinite(fid) ? fid : null;
-      } catch {
-        return null;
-      }
-    },
+    queryFn: () => lookupFidByUsername(username),
     staleTime: 24 * 60 * 60 * 1000,
     gcTime: Number.POSITIVE_INFINITY,
   });

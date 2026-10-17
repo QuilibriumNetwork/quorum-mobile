@@ -69,6 +69,7 @@
         "translucent": true
       },
       "package": "com.quilibrium.quorummobile",
+      "allowBackup": false,
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",

@@ -10,12 +10,19 @@
  * pairs in `fromHypersnapEmbeds`, but submitting the canonical form
  * keeps the protocol-level message clean).
  *
+ * Cast links come in two hosts, `farcaster.xyz` and `warpcast.com` (quote
+ * casts are composed with the latter). A link carrying a full 40-hex hash is
+ * resolved through Hypersnap. A link carrying only the usual short hash prefix
+ * is resolved through farcaster.xyz's thread endpoint, because Hypersnap has no
+ * lookup by hash prefix (FARCASTER_TECH_DEBT.md).
+ *
  * Resolution failures fall back to the URL form, so the embed is never
  * lost.
  */
 
 import { QueryClient } from '@tanstack/react-query';
 import { fetchFarcasterCastByUrl, type CastEmbed } from '@quilibrium/quorum-shared';
+import { isFullCastHash, resolveCastAuthorFid } from './hypersnapWrites';
 
 /** 0x-prefixed lowercase hex → bytes. Tiny — not worth bringing in a
  *  package-level helper for the one site that needs it. */
@@ -30,7 +37,7 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 const FARCASTER_CAST_URL_RE =
-  /^https?:\/\/(?:www\.)?farcaster\.xyz\/([^\/\s]+)\/(0x[a-fA-F0-9]+)/;
+  /^https?:\/\/(?:www\.)?(?:farcaster\.xyz|warpcast\.com)\/([^\/\s~]+)\/(0x[a-fA-F0-9]+)/;
 
 function parseFarcasterCastUrl(url: string): { username: string; prefix: string } | null {
   const m = url.match(FARCASTER_CAST_URL_RE);
@@ -38,8 +45,8 @@ function parseFarcasterCastUrl(url: string): { username: string; prefix: string 
 }
 
 /**
- * For each URL: if it's a `farcaster.xyz/<user>/0x<hash>` cast link,
- * try to resolve it to a `{ fid, fullHash }` pair and emit the
+ * For each URL: if it's a `farcaster.xyz|warpcast.com/<user>/0x<hash>` cast
+ * link, try to resolve it to a `{ fid, fullHash }` pair and emit the
  * `castId` embed. Anything else (or a failed resolve) stays as `{ url }`.
  */
 export async function translateEmbedUrls(
@@ -51,6 +58,10 @@ export async function translateEmbedUrls(
     urls.map(async (url): Promise<CastEmbed> => {
       const parsed = parseFarcasterCastUrl(url);
       if (!parsed) return { url };
+      if (isFullCastHash(parsed.prefix)) {
+        const fid = await resolveCastAuthorFid(parsed.prefix);
+        return fid ? { castId: { fid, hash: hexToBytes(parsed.prefix) } } : { url };
+      }
       try {
         const cast = await qc.fetchQuery({
           queryKey: ['farcaster', 'cast-by-url', { username: parsed.username, castHashPrefix: parsed.prefix }] as const,

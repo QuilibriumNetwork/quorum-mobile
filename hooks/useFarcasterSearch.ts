@@ -1,9 +1,21 @@
 /**
- * Farcaster Search hooks for users, channels, and casts
+ * Farcaster Search hooks for users, channels, and casts.
+ *
+ * Users and casts are searched on Hypersnap. Channels and a user's followed
+ * channels are searched on client.warpcast.com: Hypersnap has no channel
+ * metadata or channel follows (FARCASTER_TECH_DEBT.md).
  */
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useMemo, useCallback, useState, useEffect } from 'react';
+import {
+  DEFAULT_HYPERSNAP_BASE_URL,
+  fromHypersnapCast,
+  type HypersnapCast,
+  type HypersnapUser,
+} from '@quilibrium/quorum-shared';
+import { normalizedCastToLegacy } from '@/services/farcaster/hypersnapToLegacyShape';
+import { rememberCastAuthor } from '@/services/farcaster/hypersnapWrites';
 
 // Types matching the Farcaster API
 export interface SearchUser {
@@ -48,6 +60,62 @@ export interface SearchCast {
   reactions?: { count?: number };
   recasts?: { count?: number };
   channel?: { key?: string; name?: string };
+}
+
+/** Search users on Hypersnap: username prefix, then display-name words,
+ *  each ranked by follower count. One page, no viewer context. */
+async function searchUsersOnHypersnap(q: string, limit: number): Promise<SearchUser[]> {
+  // The server strips leading `@`s and answers 400 if nothing is left.
+  if (!q.trim().replace(/^@+/, '')) return [];
+  const res = await fetch(
+    `${DEFAULT_HYPERSNAP_BASE_URL}/v2/farcaster/user/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+    { headers: { accept: 'application/json' } },
+  );
+  if (!res.ok) throw new Error('Failed to search users');
+  const json = (await res.json()) as { users?: HypersnapUser[] };
+  return (json.users ?? []).map((u) => {
+    const bio = u.profile?.bio?.text;
+    return {
+      fid: u.fid,
+      username: u.username,
+      displayName: u.display_name ?? '',
+      pfp: u.pfp_url ? { url: u.pfp_url } : undefined,
+      profile: bio ? { bio: { text: bio } } : undefined,
+      followerCount: u.follower_count,
+      followingCount: u.following_count,
+    };
+  });
+}
+
+/** Search casts on Hypersnap. Its search has no paging (`next` is always
+ *  empty) and returns no counts beyond what the cast object carries. */
+async function searchCastsOnHypersnap(q: string, limit: number): Promise<SearchCast[]> {
+  const res = await fetch(
+    `${DEFAULT_HYPERSNAP_BASE_URL}/v2/farcaster/cast/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+    { headers: { accept: 'application/json' } },
+  );
+  if (!res.ok) throw new Error('Failed to search casts');
+  const json = (await res.json()) as { result?: { casts?: HypersnapCast[] } };
+  return (json.result?.casts ?? []).map((c) => {
+    const cast = normalizedCastToLegacy(fromHypersnapCast(c));
+    rememberCastAuthor(cast.hash, cast.author.fid);
+    return {
+      hash: cast.hash,
+      threadHash: cast.hash,
+      author: {
+        fid: cast.author.fid,
+        username: cast.author.username,
+        displayName: cast.author.displayName,
+        pfp: cast.author.pfp,
+      },
+      text: cast.text,
+      timestamp: cast.timestamp,
+      replies: cast.replies,
+      reactions: cast.reactions,
+      recasts: cast.recasts,
+      channel: cast.channel,
+    };
+  });
 }
 
 interface SearchSummaryResult {
@@ -99,23 +167,19 @@ export function useSearchSummary({
         headers['authorization'] = `Bearer ${token}`;
       }
 
-      // Fetch users and channels in parallel
-      const [usersRes, channelsRes, castsRes] = await Promise.all([
-        fetch(`https://client.warpcast.com/v2/search-users?q=${encodeURIComponent(q)}&limit=${maxUsers}`, { headers }),
+      // Fetch all three in parallel
+      const [users, channelsRes, casts] = await Promise.all([
+        searchUsersOnHypersnap(q, maxUsers).catch(() => [] as SearchUser[]),
         fetch(`https://client.warpcast.com/v2/search-channels?q=${encodeURIComponent(q)}&limit=${maxChannels}`, { headers }),
-        fetch(`https://client.warpcast.com/v2/search-casts?q=${encodeURIComponent(q)}&limit=5`, { headers }),
+        searchCastsOnHypersnap(q, 5).catch(() => [] as SearchCast[]),
       ]);
 
-      const [usersData, channelsData, castsData] = await Promise.all([
-        usersRes.ok ? usersRes.json() : { result: { users: [] } },
-        channelsRes.ok ? channelsRes.json() : { result: { channels: [] } },
-        castsRes.ok ? castsRes.json() : { result: { casts: [] } },
-      ]);
+      const channelsData = channelsRes.ok ? await channelsRes.json() : { result: { channels: [] } };
 
       return {
-        users: usersData.result?.users ?? [],
+        users,
         channels: channelsData.result?.channels ?? [],
-        casts: castsData.result?.casts ?? [],
+        casts,
       };
     },
     enabled: enabled && q.trim().length > 0,
@@ -124,56 +188,26 @@ export function useSearchSummary({
   });
 }
 
-// Search users with pagination
+// Search users (Hypersnap; one page — its search does not paginate)
 export function useSearchUsers({
   q,
-  token,
-  limit = 20,
+  limit = 50,
   enabled = true,
 }: {
   q: string;
-  token?: string;
   limit?: number;
   enabled?: boolean;
 }) {
   const result = useInfiniteQuery({
     queryKey: ['farcasterSearchUsers', q, limit],
-    queryFn: async ({ pageParam }) => {
+    queryFn: async (): Promise<{ users: SearchUser[]; next?: string }> => {
       if (!q.trim()) {
         return { users: [], next: undefined };
       }
-
-      const headers: Record<string, string> = {
-        accept: '*/*',
-        'content-type': 'application/json',
-        origin: 'https://warpcast.com',
-        referer: 'https://warpcast.com/',
-      };
-      if (token) {
-        headers['authorization'] = `Bearer ${token}`;
-      }
-
-      let url = `https://client.warpcast.com/v2/search-users?q=${encodeURIComponent(q)}&limit=${limit}`;
-      if (pageParam) {
-        url += `&cursor=${pageParam}`;
-      }
-
-      const response = await fetch(url, { headers });
-      if (!response.ok) {
-        throw new Error('Failed to search users');
-      }
-
-      const data = await response.json();
-      return {
-        users: data.result?.users ?? [],
-        next: data.next?.cursor,
-      };
+      return { users: await searchUsersOnHypersnap(q, limit), next: undefined };
     },
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => {
-      if (!lastPage.next) return undefined;
-      return lastPage.next;
-    },
+    getNextPageParam: (lastPage) => lastPage.next,
     enabled: enabled && q.trim().length > 0,
     staleTime: 60 * 1000,
     maxPages: 6,
@@ -268,56 +302,26 @@ export function useSearchChannels({
   };
 }
 
-// Search casts with pagination
+// Search casts (Hypersnap; one page — its search does not paginate)
 export function useSearchCasts({
   q,
-  token,
-  limit = 20,
+  limit = 50,
   enabled = true,
 }: {
   q: string;
-  token?: string;
   limit?: number;
   enabled?: boolean;
 }) {
   const result = useInfiniteQuery({
     queryKey: ['farcasterSearchCasts', q, limit],
-    queryFn: async ({ pageParam }) => {
+    queryFn: async (): Promise<{ casts: SearchCast[]; next?: string }> => {
       if (!q.trim()) {
         return { casts: [], next: undefined };
       }
-
-      const headers: Record<string, string> = {
-        accept: '*/*',
-        'content-type': 'application/json',
-        origin: 'https://warpcast.com',
-        referer: 'https://warpcast.com/',
-      };
-      if (token) {
-        headers['authorization'] = `Bearer ${token}`;
-      }
-
-      let url = `https://client.warpcast.com/v2/search-casts?q=${encodeURIComponent(q)}&limit=${limit}`;
-      if (pageParam) {
-        url += `&cursor=${pageParam}`;
-      }
-
-      const response = await fetch(url, { headers });
-      if (!response.ok) {
-        throw new Error('Failed to search casts');
-      }
-
-      const data = await response.json();
-      return {
-        casts: data.result?.casts ?? [],
-        next: data.next?.cursor,
-      };
+      return { casts: await searchCastsOnHypersnap(q, limit), next: undefined };
     },
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => {
-      if (!lastPage.next) return undefined;
-      return lastPage.next;
-    },
+    getNextPageParam: (lastPage) => lastPage.next,
     enabled: enabled && q.trim().length > 0,
     staleTime: 60 * 1000,
     maxPages: 6,

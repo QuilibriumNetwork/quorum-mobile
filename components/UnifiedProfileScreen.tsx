@@ -12,7 +12,8 @@ import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/Segmente
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { useQueryClient } from '@tanstack/react-query';
-import { useFarcasterProfile } from '@/hooks/useFarcasterProfile';
+import type { ProfileAuthor } from '@/hooks/useFarcasterProfile';
+import { useFarcasterUserPersistent } from '@/hooks/useFarcasterUserPersistent';
 import { updateFarcasterProfile } from '@/services/farcaster/updateProfile';
 import { compressAvatarImage } from '@/services/media/imageAttachment';
 import { capDisplayName, capBio } from '@/hooks/validation/errorTranslator';
@@ -69,11 +70,23 @@ export default function UnifiedProfileScreen({
     }
   }, [hasFarcaster]);
 
-  const { author: farcasterAuthor } = useFarcasterProfile({
-    fid: user?.farcaster?.fid ?? 0,
-    token: farcasterAuthToken ?? undefined,
+  const { data: farcasterUser } = useFarcasterUserPersistent(user?.farcaster?.fid, {
     enabled: hasFarcaster,
   });
+  // The header takes the profile-view author shape; it reads name and picture.
+  const farcasterAuthor = useMemo<ProfileAuthor | null>(
+    () =>
+      farcasterUser
+        ? {
+            fid: farcasterUser.fid,
+            displayName: farcasterUser.displayName,
+            username: farcasterUser.username,
+            pfp: farcasterUser.pfpUrl ? { url: farcasterUser.pfpUrl } : undefined,
+            profile: farcasterUser.bio ? { bio: { text: farcasterUser.bio } } : undefined,
+          }
+        : null,
+    [farcasterUser],
+  );
 
   // One flat pill row replaces the old two-level nav. Profile / Premium /
   // Settings always show; Farcaster + Casts only when a Farcaster account is
@@ -87,7 +100,7 @@ export default function UnifiedProfileScreen({
     // The Farcaster pill (account, feed prefs, Hypersnap, Warpcast, "My Casts")
     // only applies when a Farcaster account is connected.
     if (hasFarcaster) {
-      list.push({ key: 'farcaster', label: 'Farcaster' });
+      list.push({ key: 'farcaster', label: 'Hypersnap' });
     }
     return list;
   }, [hasFarcaster]);
@@ -188,38 +201,41 @@ export default function UnifiedProfileScreen({
     }
 
     // --- Push Quorum -> Farcaster for fields Quorum has (Quorum wins) ---
-    if (farcasterAuthToken) {
-      const fcFields: { displayName?: string; bio?: string; pfp?: string } = {};
-      // Only push a field to Farcaster when it would actually change it (Quorum
-      // had content that differs), capped to Farcaster's byte limits.
-      if (qName && capDisplayName(qName) !== fcName) fcFields.displayName = capDisplayName(qName);
-      if (qBio && capBio(qBio) !== fcBio) fcFields.bio = capBio(qBio);
-      // Push the Quorum pfp (data URI) to Farcaster only when Quorum had its own.
-      if (qPfp) fcFields.pfp = qPfp;
+    const fid = user?.farcaster?.fid;
+    if (!fid) return;
+    const fcFields: { displayName?: string; bio?: string; pfp?: string } = {};
+    // Only push a field to Farcaster when it would actually change it (Quorum
+    // had content that differs), capped to Farcaster's byte limits.
+    if (qName && capDisplayName(qName) !== fcName) fcFields.displayName = capDisplayName(qName);
+    if (qBio && capBio(qBio) !== fcBio) fcFields.bio = capBio(qBio);
+    // Push the Quorum pfp to Farcaster only when Quorum had its own. A local
+    // image has to be uploaded to Farcaster's CDN first, which needs the
+    // farcaster.xyz token; without it the picture waits for the next edit.
+    const pfpNeedsUpload = !!qPfp && !/^https?:\/\//i.test(qPfp);
+    const pfpSkipped = pfpNeedsUpload && !farcasterAuthToken;
+    if (qPfp && !pfpSkipped) fcFields.pfp = qPfp;
 
-      if (Object.keys(fcFields).length > 0) {
-        try {
-          const res = await updateFarcasterProfile(farcasterAuthToken, fcFields);
-          if (!res.ok) {
-            showToast({ type: 'error', title: 'Farcaster not fully updated', message: res.error });
-            return;
-          }
-        } catch {
-          showToast({ type: 'error', title: "Couldn't update Farcaster", message: 'Your profiles are merged; Farcaster will sync on your next edit.' });
+    if (Object.keys(fcFields).length > 0) {
+      try {
+        const res = await updateFarcasterProfile({ fid, token: farcasterAuthToken, fields: fcFields });
+        if (!res.ok) {
+          showToast({ type: 'error', title: 'Hypersnap not fully updated', message: res.error });
           return;
         }
+      } catch {
+        showToast({ type: 'error', title: "Couldn't update Hypersnap", message: 'Your profiles are merged; Hypersnap will sync on your next edit.' });
+        return;
       }
-    } else if (qName || qBio || qPfp) {
-      // No Farcaster token — can't push. Display already merged; warn.
-      showToast({ type: 'info', title: 'Reconnect Farcaster to sync', message: 'Your profiles are merged; Farcaster will update when you reconnect.' });
-      return;
     }
 
     // Refresh the Farcaster profile query so My Casts (header + cast rows) picks
     // up the new name/pfp instead of serving the stale cache until staleTime.
-    const fid = user?.farcaster?.fid;
-    if (fid) void queryClient.invalidateQueries({ queryKey: ['farcaster-profile', fid] });
+    void queryClient.invalidateQueries({ queryKey: ['farcaster-profile', fid] });
 
+    if (pfpSkipped) {
+      showToast({ type: 'info', title: 'Profiles merged', message: 'Reconnect Hypersnap to sync your picture.' });
+      return;
+    }
     showToast({ type: 'success', title: 'Profiles merged' });
   }, [farcasterAuthor, user?.displayName, user?.bio, user?.profileImage, user?.farcaster?.fid, farcasterAuthToken, updateProfile, showToast, queryClient]);
 
@@ -478,7 +494,7 @@ function EditTargetPicker({
           onPress={() => onPick('farcaster')}
         >
           <IconSymbol name="person.2.fill" size={20} color={theme.colors.textMuted} />
-          <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(15) }}>Farcaster profile</Text>
+          <Text style={{ color: theme.colors.textMain, fontSize: Skin.font(15) }}>Hypersnap profile</Text>
         </TouchableOpacity>
       </View>
     </View>

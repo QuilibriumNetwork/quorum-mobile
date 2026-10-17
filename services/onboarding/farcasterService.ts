@@ -14,6 +14,7 @@ import { hmac } from '@noble/hashes/hmac.js';
 import { sha512 } from '@noble/hashes/sha2.js';
 import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
+import { DEFAULT_HYPERSNAP_BASE_URL } from '@quilibrium/quorum-shared';
 
 export interface FarcasterKeys {
   custodyAddress: string;      // Ethereum address (0x...)
@@ -240,80 +241,78 @@ function buildCustodyBearerToken(
   return 'eip191:' + sigBase64;
 }
 
+/** The subset of a Hypersnap `User` the app reads. */
+interface HypersnapUserJson {
+  fid?: number;
+  username?: string;
+  display_name?: string;
+  pfp_url?: string;
+}
+
 /**
- * Look up FID and user info from custody address via official Farcaster API
- * Uses the /v2/onboarding-state endpoint with custody bearer authentication
+ * GET a `{ user }` lookup from Hypersnap. Null when Hypersnap answers that there
+ * is no such user; throws when Hypersnap can't be reached or errors, so callers
+ * can tell "no account" from "try again".
+ */
+async function fetchHypersnapUser(pathAndQuery: string): Promise<HypersnapUserJson | null> {
+  const response = await fetch(`${DEFAULT_HYPERSNAP_BASE_URL}${pathAndQuery}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new Error(`Hypersnap error: ${response.status} - ${errorText.slice(0, 200)}`);
+  }
+  const data = (await response.json()) as { user?: HypersnapUserJson };
+  return data.user && typeof data.user.fid === 'number' && data.user.fid > 0 ? data.user : null;
+}
+
+/**
+ * Look up the Farcaster account a custody address owns.
+ *
+ * The FID and profile come from Hypersnap, so connecting an account does not
+ * depend on farcaster.xyz. The farcaster.xyz auth token (needed only for the
+ * features listed in FARCASTER_TECH_DEBT.md) is requested afterwards and is
+ * best-effort: the account is returned without one if farcaster.xyz refuses.
+ *
+ * Null when the address owns no account; throws when Hypersnap can't be reached.
  */
 export async function lookupFarcasterAccount(
   custodyAddress: string,
   custodyPrivateKey: string
 ): Promise<FarcasterAccount | null> {
-  try {
-    // Build the auth request payload
-    const authRequest = buildCustodyBearerPayload();
+  const user = await fetchHypersnapUser(
+    `/v2/farcaster/user/custody-address?custody_address=${encodeURIComponent(custodyAddress.toLowerCase())}`,
+  );
+  if (!user) return null;
 
-    // Build the bearer token
-    const bearerToken = buildCustodyBearerToken(authRequest, custodyPrivateKey);
+  const token = await refreshFarcasterAuthToken(custodyPrivateKey);
 
-    // Call the Farcaster API to get onboarding state and auth token
-    const response = await fetch(
-      `${FARCASTER_API_BASE_URL}/v2/onboarding-state`,
-      {
-        method: 'PUT',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${bearerToken}`,
-        },
-        body: JSON.stringify({ authRequest }),
-      }
-    );
-
-    if (!response.ok) {
-      if (response.status === 404 || response.status === 401) {
-        return null; // No account found for this address
-      }
-      const errorText = await response.text();
-      throw new Error(`Farcaster API error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-
-    // Check if user exists in the onboarding state
-    if (!data.result?.state?.user) {
-      return null;
-    }
-
-    const user = data.result.state.user;
-    // Token is an object with { secret, expiresAt } — expiresAt is unix ms
-    // (mirrors the request's own params.expiresAt in buildCustodyBearerPayload).
-    const tokenObj = data.result?.token;
-    const authToken = tokenObj?.secret;
-    const authTokenExpiresAt =
-      typeof tokenObj?.expiresAt === 'number' ? tokenObj.expiresAt : null;
-
-    return {
-      fid: user.fid,
-      username: user.username,
-      displayName: user.displayName,
-      pfpUrl: user.pfp?.url,
-      custodyAddress: custodyAddress,
-      signerPublicKey: '', // Will be set by caller
-      authToken,
-      authTokenExpiresAt,
-    };
-  } catch (error) {
-    throw error;
-  }
+  return {
+    fid: user.fid as number,
+    username: user.username ?? '',
+    displayName: user.display_name,
+    pfpUrl: user.pfp_url,
+    custodyAddress: custodyAddress,
+    signerPublicKey: '', // Will be set by caller
+    authToken: token?.secret,
+    authTokenExpiresAt: token?.expiresAt ?? null,
+  };
 }
 
+/** farcaster.xyz is not on any critical path; don't let a slow one stall import. */
+const AUTH_TOKEN_TIMEOUT_MS = 15_000;
+
 /**
- * Refresh/fetch the Farcaster auth token using custody key
- * Use this when we have custody key but no stored auth token
+ * Refresh/fetch the farcaster.xyz auth token using custody key.
+ * Null on any failure (refused, banned, unreachable, timed out).
  */
 export async function refreshFarcasterAuthToken(
   custodyPrivateKey: string
 ): Promise<{ secret: string; expiresAt: number | null } | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), AUTH_TOKEN_TIMEOUT_MS);
   try {
     // Build the auth request payload
     const authRequest = buildCustodyBearerPayload();
@@ -332,6 +331,7 @@ export async function refreshFarcasterAuthToken(
           'Authorization': `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({ authRequest }),
+        signal: controller.signal,
       }
     );
 
@@ -353,6 +353,8 @@ export async function refreshFarcasterAuthToken(
     };
   } catch (error) {
     return null;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -552,8 +554,7 @@ export function createSignedSiweMessage(
 // Profile Fetching
 
 /**
- * Fetch a Farcaster user's profile by FID
- * Uses the public Farcaster API to get profile info including pfpUrl
+ * Fetch a Farcaster user's profile by FID, from Hypersnap.
  */
 export async function fetchFarcasterProfileByFid(fid: number): Promise<{
   fid: number;
@@ -562,34 +563,15 @@ export async function fetchFarcasterProfileByFid(fid: number): Promise<{
   pfpUrl?: string;
 } | null> {
   try {
-    const response = await fetch(
-      `${FARCASTER_API_BASE_URL}/v2/user-by-fid?fid=${fid}`,
-      {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-      }
-    );
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = await response.json();
-    const user = data.result?.user;
-
-    if (!user) {
-      return null;
-    }
-
+    const user = await fetchHypersnapUser(`/v2/farcaster/user?fid=${fid}`);
+    if (!user) return null;
     return {
-      fid: user.fid,
+      fid: user.fid as number,
       username: user.username,
-      displayName: user.displayName,
-      pfpUrl: user.pfp?.url,
+      displayName: user.display_name,
+      pfpUrl: user.pfp_url,
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }

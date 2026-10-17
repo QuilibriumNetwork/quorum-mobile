@@ -1,6 +1,11 @@
 /**
  * Mobile-side glue for provisioning + renewing the Hypersnap signer.
  *
+ * Every account with a Farcaster custody key on the device gets a signer,
+ * without asking: all Farcaster writes (casts, reactions, follows, profile
+ * edits, deletes) are signed with it and submitted to Hypersnap. Use
+ * `ensureHypersnapSigner` to get one; the other exports are its parts.
+ *
  * Combines:
  *   - SecureStore-backed signer record (hypersnapAdapters.ts)
  *   - SecureStore-stored Farcaster custody secp256k1 key
@@ -13,6 +18,7 @@ import { mmkvStorage } from '@/services/offline/storage';
 import { hypersnapSignerStore } from './hypersnapAdapters';
 import {
   getDefaultHypersnapClient,
+  logger,
   provisionSigner as sharedProvisionSigner,
   renewIfNearExpiry as sharedRenewIfNearExpiry,
   type SignerRecord,
@@ -79,12 +85,6 @@ export async function renewHypersnapSignerIfNeeded(): Promise<SignerRecord | nul
   });
 }
 
-/** Delete the local signer record. The on-chain KEY_REMOVE is a separate
- *  concern (we'd want a confirmation modal); this just clears the device. */
-export async function forgetHypersnapSigner(): Promise<void> {
-  await hypersnapSignerStore.clear();
-}
-
 /**
  * Verify the locally-stored signer's pubkey is one of the Ed25519
  * keys hypersnap currently considers valid for its FID. Returns:
@@ -114,4 +114,88 @@ export async function verifyOnChainSignerPresence(
   } catch {
     return 'unknown';
   }
+}
+
+export type EnsureSignerResult =
+  /** A signer for this FID is stored and not known to be stale. */
+  | { status: 'ready'; record: SignerRecord }
+  /** No custody key on this device, so no signer can be made. Re-importing the
+   *  Farcaster account restores the key. */
+  | { status: 'no-custody-key' }
+  /** Provisioning failed (network, hub rejection). Safe to retry. */
+  | { status: 'failed'; error: string };
+
+const inflightEnsure = new Map<number, Promise<EnsureSignerResult>>();
+/** Signer public keys confirmed registered on Hypersnap this session. */
+const confirmedOnHub = new Set<string>();
+
+/**
+ * Make sure this device holds a working Hypersnap signer for `fid`, creating
+ * one if needed. Never throws. Concurrent calls for the same FID share one run.
+ *
+ * - A stored signer for `fid` is checked against the hub's signer list once per
+ *   session. If the hub says it is not registered, it is replaced; if the hub
+ *   cannot be reached, it is kept and checked again on the next call.
+ * - A stored signer for a different FID (another account was connected before)
+ *   is replaced.
+ * - A signer near the end of its TTL is renewed in the background.
+ */
+export function ensureHypersnapSigner(fid: number): Promise<EnsureSignerResult> {
+  const pending = inflightEnsure.get(fid);
+  if (pending) return pending;
+  const run = ensureSignerOnce(fid).finally(() => inflightEnsure.delete(fid));
+  inflightEnsure.set(fid, run);
+  return run;
+}
+
+async function ensureSignerOnce(fid: number): Promise<EnsureSignerResult> {
+  try {
+    const existing = await hypersnapSignerStore.get();
+    if (existing && existing.fid === fid) {
+      const pub = existing.publicKeyHex.toLowerCase();
+      let stale = false;
+      if (!confirmedOnHub.has(pub)) {
+        // The local record can drift from the hub if an earlier KEY_ADD never
+        // landed (rate-limited, dropped), leaving a keypair the network rejects.
+        const presence = await verifyOnChainSignerPresence(existing);
+        if (presence === 'present') confirmedOnHub.add(pub);
+        stale = presence === 'absent';
+      }
+      if (!stale) {
+        renewHypersnapSignerIfNeeded().catch((e) => {
+          logger.warn('[hypersnap] signer renew failed', e);
+        });
+        return { status: 'ready', record: existing };
+      }
+      logger.warn(
+        `[hypersnap] stored signer is not registered for fid=${fid} (pub=${pub.slice(0, 16)}…); replacing it`,
+      );
+      await hypersnapSignerStore.clear();
+    }
+
+    if (!(await getFarcasterCustodyKey())) return { status: 'no-custody-key' };
+
+    const record = await provisionHypersnapSigner(fid);
+    confirmedOnHub.add(record.publicKeyHex.toLowerCase());
+    logger.log(
+      `[hypersnap] signer provisioned: fid=${record.fid}, pub=${record.publicKeyHex.slice(0, 16)}…, ttl=${record.ttlSeconds}s`,
+    );
+    return { status: 'ready', record };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    logger.warn(`[hypersnap] could not provision a signer for fid=${fid}:`, error);
+    return { status: 'failed', error };
+  }
+}
+
+/**
+ * The signer to sign a Farcaster write with for `fid`, provisioning one first
+ * if the device has none yet. Null when none can be had right now; the caller
+ * reports that as a failed write.
+ */
+export async function getHypersnapSignerFor(fid: number): Promise<SignerRecord | null> {
+  const existing = await hypersnapSignerStore.get();
+  if (existing && existing.fid === fid) return existing;
+  const result = await ensureHypersnapSigner(fid);
+  return result.status === 'ready' ? result.record : null;
 }

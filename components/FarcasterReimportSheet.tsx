@@ -114,7 +114,7 @@ export default function FarcasterReimportSheet({ visible, onClose, onImported }:
       );
       if (!account?.fid) {
         setError(
-          'No Farcaster account was found for that recovery phrase. Double-check you used the Farcaster phrase (not your Quorum one).',
+          'No Hypersnap account was found for that recovery phrase. Double-check you used the Hypersnap phrase (not your Quorum one).',
         );
         return;
       }
@@ -174,10 +174,10 @@ export default function FarcasterReimportSheet({ visible, onClose, onImported }:
             showsVerticalScrollIndicator={false}
           >
             <Text style={[styles.title, { color: theme.colors.textStrong }]}>
-              Re-import Farcaster
+              Re-import Hypersnap
             </Text>
             <Text style={[styles.body, { color: theme.colors.textSubtle /* secondary text → subtle (muted is unreadable in light) */ }]}>
-              Paste your Farcaster recovery phrase. We derive the signing keys
+              Paste your Hypersnap recovery phrase. We derive the signing keys
               locally and store them in this device&apos;s keychain.
             </Text>
             <TextInput

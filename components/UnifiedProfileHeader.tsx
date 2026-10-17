@@ -40,7 +40,7 @@ interface UnifiedProfileHeaderProps {
 
 const IDENTITY_PILLS: SegmentedPillItem[] = [
   { key: 'quorum', label: 'Quorum', leading: <QuorumLogoIcon size={14} /> },
-  { key: 'farcaster', label: 'Farcaster', leading: <FarcasterLogoIcon size={14} /> },
+  { key: 'farcaster', label: 'Hypersnap', leading: <FarcasterLogoIcon size={14} /> },
 ];
 
 export default function UnifiedProfileHeader({

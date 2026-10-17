@@ -13,13 +13,13 @@ import { CastText, LinkPreview, QuoteCast, FrameEmbed, LikeIcon, getLikeIconType
 import { QuorumIdentityBadge } from '../content/QuorumIdentityBadge';
 import { ProfileOverflowButton } from '../ProfileOverflowButton';
 import { ProfileActionButtons } from '../ProfileActionButtons';
-import { SCREEN_WIDTH, SCREEN_HEIGHT, formatTimestamp, lookupUserByUsername } from '../utils';
+import { SCREEN_WIDTH, SCREEN_HEIGHT, formatTimestamp } from '../utils';
+import { lookupFidByUsername } from '@/services/farcaster/mentionExtraction';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
 interface ProfileViewProps {
   fid: number;
-  token?: string;
   theme: AppTheme;
   onClose: () => void;
   onOpenThread: (username: string, hashPrefix: string) => void;
@@ -33,7 +33,6 @@ interface ProfileViewProps {
 
 export function ProfileView({
   fid,
-  token,
   theme,
   onClose,
   onOpenThread,
@@ -52,14 +51,14 @@ export function ProfileView({
     error,
     hasNextPage,
     fetchNextPage,
-  } = useFarcasterProfile({ fid, token });
+  } = useFarcasterProfile({ fid });
 
   const [viewerState, setViewerState] = useState<{ images: string[]; index: number } | null>(null);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const handleMentionPress = async (username: string) => {
-    const userFid = await lookupUserByUsername(username);
+    const userFid = await lookupFidByUsername(username);
     if (userFid) {
       onOpenProfile(userFid, username);
     }
@@ -198,7 +197,7 @@ export function ProfileView({
 
     const navigateToThread = () => {
       if (cast.author.username && cast.hash) {
-        onOpenThread(cast.author.username, cast.hash.slice(0, 10));
+        onOpenThread(cast.author.username, cast.hash);
       }
     };
 
@@ -337,7 +336,7 @@ export function ProfileView({
                 key={index}
                 cast={embeddedCast as EmbeddedCast}
                 theme={theme}
-                onPress={() => onOpenThread(embeddedCast.author.username, embeddedCast.hash.slice(0, 10))}
+                onPress={() => onOpenThread(embeddedCast.author.username, embeddedCast.hash)}
               />
             ))}
           </View>

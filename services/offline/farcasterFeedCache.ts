@@ -21,12 +21,15 @@ import type { FeedPage, PageContext } from '@/hooks/useFarcasterFeed';
 import type { ProfilePage } from '@/hooks/useFarcasterProfile';
 import type { ThreadCast } from '@/hooks/useFarcasterThread';
 
-const feedKey = (fid: number | undefined) => `fc-feed-cache:v1:${fid ?? 'anon'}`;
-const profileKey = (fid: number) => `fc-profile-cache:v1:${fid}`;
+// v2: pages come from Hypersnap and carry its cursor. v1 pages held
+// farcaster.xyz feed items and cursors and are never read back.
+const feedKey = (fid: number | undefined) => `fc-feed-cache:v2:${fid ?? 'anon'}`;
+// v2: Hypersnap pages and cursors (v1 held farcaster.xyz ones).
+const profileKey = (fid: number) => `fc-profile-cache:v2:${fid}`;
 const threadKey = (castHashPrefix: string) =>
   `fc-thread-cache:v1:${castHashPrefix.toLowerCase()}`;
 
-const PROFILE_INDEX_KEY = 'fc-profile-cache:index:v1';
+const PROFILE_INDEX_KEY = 'fc-profile-cache:index:v2';
 const THREAD_INDEX_KEY = 'fc-thread-cache:index:v1';
 
 /** Cap the cached first page so a deep feed doesn't bloat MMKV. */
@@ -119,8 +122,6 @@ export function setCachedFeed(
           {
             items: first.items.slice(0, MAX_CACHED_ITEMS),
             nextCursor: first.nextCursor,
-            latestMainCastTimestamp: first.latestMainCastTimestamp,
-            excludeItemIdPrefixes: first.excludeItemIdPrefixes,
           },
         ],
         pageParams: [undefined],

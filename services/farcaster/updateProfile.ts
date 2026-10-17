@@ -2,12 +2,16 @@
  * Farcaster profile update helpers.
  *
  * Flow:
- *  - POST /v1/generate-image-upload-url → { url, optimisticImageId }
- *  - multipart POST to the returned Cloudflare URL
- *  - PATCH /v2/me  with { displayName?, bio?, pfp?, location? }
+ *  - a new picture is uploaded to Farcaster's image CDN:
+ *    POST /v1/generate-image-upload-url → { url, optimisticImageId }, then a
+ *    multipart POST to the returned Cloudflare URL. Hypersnap hosts no images,
+ *    so this is the one step that needs the farcaster.xyz token.
+ *  - every field (display name, bio, picture URL) is then set with a signed
+ *    USER_DATA_ADD submitted to Hypersnap (`setProfileFields`).
  */
 
 import { MAX_BIO_BYTES, MAX_DISPLAY_NAME_BYTES } from '@quilibrium/quorum-shared';
+import { setProfileFields, type ProfileFields } from './hypersnapWrites';
 
 const FARCASTER_API = 'https://client.farcaster.xyz';
 const CLOUDFLARE_CDN = 'https://imagedelivery.net/BXluQx4ige9GuW0Ia56BHw';
@@ -17,11 +21,6 @@ const CLOUDFLARE_CDN = 'https://imagedelivery.net/BXluQx4ige9GuW0Ia56BHw';
 // letter 2). Matches the shared validators' own byteLength.
 function utf8ByteLength(s: string): number {
   return new TextEncoder().encode(s).length;
-}
-
-interface UpdateResult {
-  ok: boolean;
-  error?: string;
 }
 
 interface GenerateImageUploadUrlResponse {
@@ -87,51 +86,25 @@ export async function uploadFarcasterPfpImage(
   }
 }
 
-interface UpdateUserBody {
-  displayName?: string;
-  bio?: string;
-  pfp?: string;
-}
-
-export async function patchFarcasterMe(
-  token: string,
-  body: UpdateUserBody,
-): Promise<UpdateResult> {
-  try {
-    const res = await fetch(`${FARCASTER_API}/v2/me`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      return { ok: false, error: `HTTP ${res.status}: ${text}` };
-    }
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-}
-
 /**
  * High-level helper: uploads a new pfp if a local/data URI is provided, then
- * patches /v2/me with all supplied fields.
+ * sets all supplied fields on the account's Farcaster profile.
  */
-export async function updateFarcasterProfile(
-  token: string,
+export async function updateFarcasterProfile(params: {
+  fid: number;
+  /** farcaster.xyz bearer token. Only needed to upload a new picture. */
+  token?: string | null;
   fields: {
     displayName?: string;
     bio?: string;
     /** data URI or file URI for a new image; or an existing https:// URL to keep */
     pfp?: string;
-  },
-): Promise<{ ok: boolean; error?: string; uploadedPfpUrl?: string }> {
+  };
+}): Promise<{ ok: boolean; error?: string; uploadedPfpUrl?: string }> {
+  const { fid, token, fields } = params;
   // Hard byte-limit guard at the publish chokepoint. Every Farcaster profile
   // save passes through here regardless of caller, so blocking over-limit
-  // values here turns the relay's opaque HTTP 400 into a clear local error.
+  // values here turns the hub's opaque rejection into a clear local error.
   // Defense-in-depth: the UI editor already validates, but this protects any
   // other/future caller too.
   if (fields.displayName !== undefined && utf8ByteLength(fields.displayName) > MAX_DISPLAY_NAME_BYTES) {
@@ -141,7 +114,7 @@ export async function updateFarcasterProfile(
     return { ok: false, error: 'Bio is too long' };
   }
 
-  const body: UpdateUserBody = {};
+  const body: ProfileFields = {};
   if (fields.displayName !== undefined) body.displayName = fields.displayName;
   if (fields.bio !== undefined) body.bio = fields.bio;
 
@@ -151,6 +124,9 @@ export async function updateFarcasterProfile(
     if (isRemote) {
       body.pfp = fields.pfp;
     } else {
+      if (!token) {
+        return { ok: false, error: 'Reconnect Hypersnap to upload a new picture' };
+      }
       const up = await uploadFarcasterPfpImage(token, fields.pfp);
       if (!up.ok || !up.url) {
         return { ok: false, error: up.error ?? 'pfp upload failed' };
@@ -160,7 +136,10 @@ export async function updateFarcasterProfile(
     }
   }
 
-  const patch = await patchFarcasterMe(token, body);
-  if (!patch.ok) return { ok: false, error: patch.error };
+  try {
+    await setProfileFields({ fid, fields: body });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
   return { ok: true, uploadedPfpUrl };
 }
