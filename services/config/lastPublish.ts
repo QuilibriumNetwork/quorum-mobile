@@ -115,6 +115,14 @@ export function recordLastPublish(
  * like a device that has simply never published. `logger.debug` rather than
  * `warn`: there is nothing here for a user to act on.
  */
+/** Call `cb` whenever the last-publish record is written. Returns the unsubscribe. */
+export function subscribeLastPublish(cb: () => void): () => void {
+  const listener = storage.addOnValueChangedListener((changed) => {
+    if (changed === KEY) cb();
+  });
+  return () => listener.remove();
+}
+
 export function readLastPublish(): LastPublish | null {
   try {
     const raw = storage.getString(KEY);

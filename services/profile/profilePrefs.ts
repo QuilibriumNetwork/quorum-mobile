@@ -42,12 +42,17 @@ export function hasDecidedSplitMode(): boolean {
 export function useProfileSplitMode(): [boolean, (split: boolean) => void] {
   const [value, setLocal] = useState<boolean>(() => getProfileSplitMode());
 
+  // Re-read when another screen changes it (this used to poll every 2s).
   useEffect(() => {
-    const interval = setInterval(() => {
+    const sync = () => {
       const next = getProfileSplitMode();
       setLocal((prev) => (prev === next ? prev : next));
-    }, 2000);
-    return () => clearInterval(interval);
+    };
+    sync();
+    const listener = storage.addOnValueChangedListener((changed) => {
+      if (changed === SPLIT_MODE_KEY) sync();
+    });
+    return () => listener.remove();
   }, []);
 
   const setValue = useCallback((next: boolean) => {

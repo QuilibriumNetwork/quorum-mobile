@@ -28,6 +28,7 @@ import * as SecureStore from 'expo-secure-store';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { storage } from '../offline/storage';
+import { applyReactionOp, type ReactionOp } from '../../utils/reactionOps';
 import type {
   GetMessagesParams,
   GetMessagesResult,
@@ -275,6 +276,26 @@ function openAndInit(cipherKeyHex: string): SQLite.SQLiteDatabase {
       attempted_at  INTEGER NOT NULL
     );
   `);
+  // Reactions that arrived before the message they react to (see
+  // `addPendingReaction`). In this encrypted database, not MMKV: who reacted
+  // to which message is user data.
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS pending_reactions (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      space_id     TEXT    NOT NULL,
+      channel_id   TEXT    NOT NULL,
+      message_id   TEXT    NOT NULL,
+      received_at  INTEGER NOT NULL,
+      op           TEXT    NOT NULL
+    );
+  `);
+  db.execSync(`
+    CREATE INDEX IF NOT EXISTS idx_pending_reactions_target
+      ON pending_reactions (space_id, channel_id, message_id);
+  `);
+  db.runSync(`DELETE FROM pending_reactions WHERE received_at < ?;`, [Date.now() - PENDING_REACTION_TTL_MS]);
+  hasPendingReactions =
+    (db.getFirstSync<{ n: number }>(`SELECT COUNT(*) AS n FROM pending_reactions;`)?.n ?? 0) > 0;
   return db;
 }
 
@@ -600,6 +621,84 @@ export async function getMessage(params: {
   }
 }
 
+// ---- reactions whose message hasn't arrived -------------------------------
+
+/** A pending reaction waits this long for its message, then is dropped. */
+const PENDING_REACTION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+/** At most this many pending reactions are kept; the oldest go first. */
+const MAX_PENDING_REACTIONS = 2000;
+/** Skips the per-save lookup while the table is empty (nearly always). */
+let hasPendingReactions = false;
+
+/**
+ * Keep a reaction whose target message isn't stored yet, to apply when it is.
+ *
+ * The receive handlers used to apply such a reaction to the cache only (where
+ * the message usually wasn't either), skip the storage write, and still delete
+ * the reaction from the server inbox, so it was gone for good. Now `saveMessage`
+ * folds it into the message whenever that message is saved, by any path: a
+ * later delivery, a history backfill, or sync from another device.
+ */
+export async function addPendingReaction(
+  spaceId: string,
+  channelId: string,
+  messageId: string,
+  op: ReactionOp,
+): Promise<void> {
+  const db = await ensureDb();
+  if (!db) return;
+  db.runSync(
+    `INSERT INTO pending_reactions (space_id, channel_id, message_id, received_at, op) VALUES (?, ?, ?, ?, ?);`,
+    [spaceId, channelId, messageId, Date.now(), JSON.stringify(op)],
+  );
+  db.runSync(
+    `DELETE FROM pending_reactions WHERE id NOT IN
+       (SELECT id FROM pending_reactions ORDER BY id DESC LIMIT ?);`,
+    [MAX_PENDING_REACTIONS],
+  );
+  hasPendingReactions = true;
+}
+
+/** The pending reactions for a message, oldest first, and their row ids. */
+function pendingReactionsFor(
+  db: SQLite.SQLiteDatabase,
+  message: Message,
+): { ids: number[]; ops: ReactionOp[] } {
+  const rows = db.getAllSync<{ id: number; op: string }>(
+    `SELECT id, op FROM pending_reactions
+     WHERE space_id = ? AND channel_id = ? AND message_id = ?
+     ORDER BY id ASC;`,
+    [message.spaceId, message.channelId, message.messageId],
+  );
+  const ops: ReactionOp[] = [];
+  for (const row of rows) {
+    try {
+      ops.push(JSON.parse(row.op) as ReactionOp);
+    } catch {
+      // An unreadable row is dropped with the rest.
+    }
+  }
+  return { ids: rows.map((r) => r.id), ops };
+}
+
+/**
+ * Marks a message object whose `reactions` are the result of applying a
+ * reaction, so `saveMessage` stores them as they are. Without it the
+ * reaction-preservation rule (for replays, whose copies carry no reactions)
+ * restored the previous reactions when the last one was removed, so a removed
+ * reaction came back. A symbol: object spreads carry it along, and
+ * `JSON.stringify` leaves it out of what's stored.
+ */
+const AUTHORITATIVE_REACTIONS = Symbol('authoritativeReactions');
+
+export function withAuthoritativeReactions<T extends Message>(message: T): T {
+  return Object.assign(message, { [AUTHORITATIVE_REACTIONS]: true });
+}
+
+function hasAuthoritativeReactions(message: Message): boolean {
+  return (message as Message & { [AUTHORITATIVE_REACTIONS]?: boolean })[AUTHORITATIVE_REACTIONS] === true;
+}
+
 export async function saveMessage(message: Message): Promise<void> {
   // Use the async path so we never lose a message just because sync
   // SecureStore happened to fail. ensureDb populates the cipher key
@@ -627,7 +726,7 @@ export async function saveMessage(message: Message): Promise<void> {
 
   let toSave = message;
   const incomingHasReactions = Array.isArray(message.reactions) && message.reactions.length > 0;
-  if (existing && !incomingHasReactions) {
+  if (existing && !incomingHasReactions && !hasAuthoritativeReactions(message)) {
     try {
       const prev = JSON.parse(existing.payload) as Message;
       if (Array.isArray(prev.reactions) && prev.reactions.length > 0) {
@@ -636,6 +735,12 @@ export async function saveMessage(message: Message): Promise<void> {
     } catch {
       // Fall through to plain replace if the existing row is unparseable.
     }
+  }
+
+  // Reactions that arrived before this message did.
+  const pending = hasPendingReactions ? pendingReactionsFor(db, toSave) : { ids: [], ops: [] };
+  if (pending.ops.length > 0) {
+    toSave = { ...toSave, reactions: pending.ops.reduce(applyReactionOp, toSave.reactions) };
   }
 
   db.runSync(
@@ -651,6 +756,14 @@ export async function saveMessage(message: Message): Promise<void> {
       JSON.stringify(toSave),
     ]
   );
+  if (pending.ids.length > 0) {
+    db.runSync(
+      `DELETE FROM pending_reactions WHERE id IN (${pending.ids.map(() => '?').join(',')});`,
+      pending.ids,
+    );
+    hasPendingReactions =
+      (db.getFirstSync<{ n: number }>(`SELECT COUNT(*) AS n FROM pending_reactions;`)?.n ?? 0) > 0;
+  }
 }
 
 export async function deleteMessage(messageId: string): Promise<void> {
@@ -791,6 +904,7 @@ export function clearAllMessages(): void {
   // the connection. The process keeps running across a reset, so a key
   // left cached here gets used to encrypt the NEXT identity's database.
   clearCipherKeyCache();
+  hasPendingReactions = false;
   try {
     SQLite.deleteDatabaseSync(DB_NAME);
   } catch {

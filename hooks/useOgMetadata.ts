@@ -121,12 +121,64 @@ function parseMiniappMeta(head: string): ParsedFrameMeta | undefined {
   };
 }
 
-export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null> {
+/** Snap responses carry this media type; servers that don't serve snaps
+ *  answer the same request with their page. */
+const SNAP_MEDIA_TYPE = 'application/vnd.farcaster.snap+json';
+
+/** What one GET of a link told us: whether it is a snap and, for a web page,
+ *  its parsed metadata. */
+export interface LinkProbe {
+  isSnap: boolean;
+  metadata: UrlMetadata | null;
+}
+
+/** Most links probed recently. Bounded, oldest first out. */
+const PROBE_CACHE_MAX = 300;
+const probeCache = new Map<string, LinkProbe>();
+const probesInFlight = new Map<string, Promise<LinkProbe>>();
+
+function rememberProbe(url: string, probe: LinkProbe): void {
+  probeCache.delete(url);
+  probeCache.set(url, probe);
+  if (probeCache.size > PROBE_CACHE_MAX) {
+    const oldest = probeCache.keys().next().value;
+    if (oldest !== undefined) probeCache.delete(oldest);
+  }
+}
+
+/** A finished probe for this URL, if one is cached. */
+export function getCachedLinkProbe(url: string): LinkProbe | undefined {
+  return probeCache.get(url);
+}
+
+/**
+ * Fetch a link once and answer both questions the feed asks of it: is it a
+ * snap, and what is its OpenGraph / inline mini-app metadata. Snap detection
+ * and the link preview used to GET the same page separately, and React
+ * Native's `fetch` downloads the whole body either way. The request asks for
+ * a snap first and a page otherwise, the header the Farcaster client sends.
+ * Concurrent callers share one request; results are cached, failures too.
+ */
+export function probeLink(url: string): Promise<LinkProbe> {
+  const cached = probeCache.get(url);
+  if (cached) return Promise.resolve(cached);
+  const inFlight = probesInFlight.get(url);
+  if (inFlight) return inFlight;
+  const request = fetchLinkProbe(url).then((probe) => {
+    rememberProbe(url, probe);
+    probesInFlight.delete(url);
+    return probe;
+  });
+  probesInFlight.set(url, request);
+  return request;
+}
+
+async function fetchLinkProbe(url: string): Promise<LinkProbe> {
   let domain: string | undefined;
   try {
     domain = new URL(url).hostname;
   } catch {
-    return null;
+    return { isSnap: false, metadata: null };
   }
 
   const controller = new AbortController();
@@ -140,19 +192,20 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null>
       headers: {
         'user-agent':
           'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-        accept: 'text/html,application/xhtml+xml',
+        accept: `${SNAP_MEDIA_TYPE},text/html,application/xhtml+xml,*/*`,
       },
       signal: controller.signal,
     });
   } catch {
     clearTimeout(timer);
-    return null;
+    return { isSnap: false, metadata: null };
   }
   clearTimeout(timer);
 
-  if (!res.ok) return null;
   const contentType = res.headers.get('content-type') ?? '';
-  if (contentType && !contentType.includes('html')) return null;
+  if (contentType.includes(SNAP_MEDIA_TYPE)) return { isSnap: true, metadata: null };
+  if (!res.ok) return { isSnap: false, metadata: null };
+  if (contentType && !contentType.includes('html')) return { isSnap: false, metadata: null };
 
   // Stream the response only up to MAX_HTML_BYTES — saves time + memory
   // on long pages. RN's `Response.text()` reads the whole body, so we
@@ -176,7 +229,7 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null>
       html = full.slice(0, MAX_HTML_BYTES);
     }
   } catch {
-    return null;
+    return { isSnap: false, metadata: null };
   }
 
   // Restrict pattern matching to the <head> when present — bodies often
@@ -196,14 +249,27 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null>
   const miniapp = parseMiniappMeta(head);
 
   return {
-    url,
-    domain,
-    title,
-    description,
-    image,
-    siteName,
-    miniapp,
+    isSnap: false,
+    metadata: {
+      url,
+      domain,
+      title,
+      description,
+      image,
+      siteName,
+      miniapp,
+    },
   };
+}
+
+export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null> {
+  return (await probeLink(url)).metadata;
+}
+
+/** Test reset. */
+export function __resetLinkProbes(): void {
+  probeCache.clear();
+  probesInFlight.clear();
 }
 
 export function useOgMetadata(

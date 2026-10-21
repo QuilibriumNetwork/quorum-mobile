@@ -125,10 +125,12 @@ export function useFarcasterConversations(options?: { enabled?: boolean }) {
     // block on a network round-trip (the old `refetchOnMount:'always'`
     // gated first paint for up to ~5s on slow connections). Cached
     // conversations show immediately; the `refetchInterval` below keeps
-    // them fresh in the background so they're never more than ~15s stale.
+    // them fresh while the app is in the foreground, never more than ~30s
+    // stale. It stops in the background (it used to keep polling every 15s
+    // there); an open conversation polls on its own, faster.
     staleTime: 60000,
-    refetchInterval: 15000,
-    refetchIntervalInBackground: true,
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
     refetchOnMount: false,
     refetchOnWindowFocus: true,
   });

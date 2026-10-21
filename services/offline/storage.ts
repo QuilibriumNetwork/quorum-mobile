@@ -3,9 +3,17 @@ import { encryptionStateStorage } from '../crypto/encryption-state-storage';
 import { clearConfigStorage } from '../config';
 
 /**
- * MMKV storage instance for query persistence.
+ * The app's shared cache store: conversations, space members, navigation
+ * state, the Farcaster user cache and more. Earlier builds also kept the
+ * persisted React Query cache here; it now has its own instance below.
  */
 const storage: MMKV = createMMKV({ id: 'quorum-cache' });
+
+/**
+ * The persisted React Query cache, on its own: a small allow-list of queries
+ * (`shouldPersistQuery.ts`), apart from the data the app keeps elsewhere.
+ */
+const queryCacheStorage: MMKV = createMMKV({ id: 'quorum-query-cache' });
 
 /**
  * Wallet balance cache storage
@@ -44,12 +52,41 @@ const SCRUB_FILLER_KEY = '__scrub_filler__';
  * when the old value must not survive, never on a routine write.
  */
 export function replaceAndScrubFile(key: string, value: string): void {
-  storage.set(key, value);
-  storage.trim();
-  storage.set(SCRUB_FILLER_KEY, '0'.repeat(storage.size + 64 * 1024));
-  storage.remove(SCRUB_FILLER_KEY);
-  storage.trim();
+  scrubbedWrite(storage, key, value);
 }
+
+/** `replaceAndScrubFile` for a removal: `key` goes, and no copy of its value
+ *  is left behind in the file. */
+export function removeAndScrubFile(key: string): void {
+  scrubbedWrite(storage, key, null);
+}
+
+function scrubbedWrite(store: MMKV, key: string, value: string | null): void {
+  if (value === null) store.remove(key);
+  else store.set(key, value);
+  store.trim();
+  store.set(SCRUB_FILLER_KEY, '0'.repeat(store.size + 64 * 1024));
+  store.remove(SCRUB_FILLER_KEY);
+  store.trim();
+}
+
+/** Whether the shared cache store holds `key`. */
+export function sharedCacheHas(key: string): boolean {
+  return storage.contains(key);
+}
+
+/** The persisted React Query cache's own store. */
+export const queryCacheStore = {
+  getItem: (key: string): string | null => queryCacheStorage.getString(key) ?? null,
+  setItem: (key: string, value: string): void => {
+    queryCacheStorage.set(key, value);
+  },
+  removeItem: (key: string): void => {
+    queryCacheStorage.remove(key);
+  },
+  /** Replace `key`'s value, leaving no copy of the previous one in the file. */
+  replaceAndScrub: (key: string, value: string): void => scrubbedWrite(queryCacheStorage, key, value),
+};
 
 /**
  * Storage for the mutation queue
@@ -82,6 +119,7 @@ export const mutationQueueStorage = {
  */
 export function clearAllMMKVStorage(): void {
   storage.clearAll();
+  queryCacheStorage.clearAll();
   mutationStorage.clearAll();
   walletCacheStorage.clearAll();
   encryptionStateStorage.clearAll();

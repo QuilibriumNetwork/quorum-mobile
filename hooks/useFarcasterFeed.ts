@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { useMMKVBoolean } from 'react-native-mmkv';
 import { isScamCast } from '@/services/farcaster/scamFilter';
@@ -7,6 +7,7 @@ import { rememberCastAuthor } from '@/services/farcaster/hypersnapWrites';
 import { useAuth } from '@/context/AuthContext';
 import { useFollowingFids } from '@/hooks/useFollowingFids';
 import { useFarcasterUsersPrefetch } from '@/hooks/useFarcasterUsersPrefetch';
+import { prefetchReplyAncestors, type AncestorSeed } from '@/hooks/useFeedThreadAncestors';
 import { getCachedFeed, setCachedFeed } from '@/services/offline/farcasterFeedCache';
 import {
   feedPrefsStore,
@@ -19,6 +20,7 @@ import {
 } from '@quilibrium/quorum-shared';
 
 const PAGE_SIZE = 25;
+const FEED_STALE_TIME_MS = 2 * 60 * 1000;
 
 export interface FarcasterFeedItem {
   id: string;
@@ -218,10 +220,62 @@ async function fetchFeedPage(fid: number, pageContext?: PageContext): Promise<Fe
   };
 }
 
+/**
+ * Pull the newest casts into the top of the viewer's cached feed, leaving the
+ * pages below as they are. For after the viewer posts: invalidating the feed
+ * refetched every page it held (six, one after another) to surface one cast.
+ * Only casts the feed doesn't already hold, and no older than its newest,
+ * are added, so nothing is duplicated and nothing below moves.
+ */
+export async function prependNewestToFeed(queryClient: QueryClient, fid: number): Promise<void> {
+  const queryKey = ['farcaster-feed', fid];
+  const current = queryClient.getQueryData<InfiniteData<FeedPage>>(queryKey);
+  if (!current || current.pages.length === 0) return;
+  const fresh = await fetchFeedPage(fid);
+  queryClient.setQueryData<InfiniteData<FeedPage>>(queryKey, (data) => {
+    if (!data || data.pages.length === 0) return data;
+    const known = new Set(data.pages.flatMap((page) => page.items.map((item) => item.id)));
+    const newest = data.pages[0].items[0]?.timestamp ?? 0;
+    const added = fresh.items.filter((item) => !known.has(item.id) && item.timestamp >= newest);
+    if (added.length === 0) return data;
+    const [head, ...rest] = data.pages;
+    return { ...data, pages: [{ ...head, items: [...added, ...head.items] }, ...rest] };
+  });
+}
+
+/** How long a page waits for its reply ancestors before showing anyway. */
+const ANCESTOR_PREFETCH_BUDGET_MS = 1500;
+
+/**
+ * Resolve the page's reply ancestors before it's shown, so reply cards render
+ * complete rather than growing after mount (`prefetchReplyAncestors`). Bounded
+ * in time: past the budget the page shows and the cards finish on their own.
+ */
+async function prefetchPageAncestors(queryClient: QueryClient, page: FeedPage): Promise<void> {
+  const seeds: AncestorSeed[] = [];
+  const pageHashes = new Set<string>();
+  for (const item of page.items) {
+    pageHashes.add(item.cast.hash.toLowerCase().replace(/^0x/, ''));
+    if (item.cast.parentHash) {
+      seeds.push({ parentHash: item.cast.parentHash, parentAuthorFid: item.cast.parentAuthor?.fid });
+    }
+  }
+  if (seeds.length === 0) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    prefetchReplyAncestors(queryClient, seeds, pageHashes).catch(() => {}),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, ANCESTOR_PREFETCH_BUDGET_MS);
+    }),
+  ]);
+  if (timer !== undefined) clearTimeout(timer);
+}
+
 export function useFarcasterFeed({ enabled = true }: UseFarcasterFeedOptions = {}) {
   const { user } = useAuth();
   const fid = user?.farcaster?.fid;
   const queryKey = ['farcaster-feed', fid];
+  const queryClient = useQueryClient();
 
   // Paint the last-known feed instantly from MMKV on cold start, then
   // refresh in the background. `initialDataUpdatedAt` carries the persist
@@ -230,16 +284,22 @@ export function useFarcasterFeed({ enabled = true }: UseFarcasterFeedOptions = {
 
   const query = useInfiniteQuery({
     queryKey,
-    queryFn: ({ pageParam }) =>
-      fetchFeedPage(fid as number, isPageContext(pageParam) ? pageParam : undefined),
+    queryFn: async ({ pageParam }) => {
+      const page = await fetchFeedPage(fid as number, isPageContext(pageParam) ? pageParam : undefined);
+      await prefetchPageAncestors(queryClient, page);
+      return page;
+    },
     initialPageParam: undefined as PageContext | undefined,
     getNextPageParam: (lastPage) =>
       isPageContext(lastPage.nextCursor) ? lastPage.nextCursor : undefined,
     enabled: enabled && typeof fid === 'number' && fid > 0,
-    staleTime: 1000 * 60 * 2, // 2 minutes
-    // Cap retained pages so a long scroll session doesn't pin every page
-    // in the JS heap; dropped pages refetch from the network on demand.
-    maxPages: 6,
+    staleTime: FEED_STALE_TIME_MS,
+    // No `maxPages`. This feed only pages older, so a dropped first page never
+    // came back: the page after it led the list, and every refetch started from
+    // that page's cursor, so the top of the feed froze at that time for as long
+    // as the query lived (and across launches, while the whole query was
+    // persisted). Memory is bounded instead by `refresh` trimming to the first
+    // page.
     initialData: cached?.data,
     initialDataUpdatedAt: cached?.updatedAt,
   });
@@ -315,8 +375,31 @@ export function useFarcasterFeed({ enabled = true }: UseFarcasterFeedOptions = {
   // (Previously this called resetQueries which dumped everything and
   // produced a blank feed during the loading window — see the loading
   // state cleanup in SocialFeedModal.)
+  //
+  // It refetches the first page only. An infinite query refetches every page
+  // it holds, one after another, so a pull fetched every page scrolled through;
+  // the user is at the top when they pull, so dropping the rest doesn't move
+  // anything.
   const refresh = async () => {
+    queryClient.setQueryData<InfiniteData<FeedPage>>(queryKey, (data) =>
+      data && data.pages.length > 1
+        ? { pages: data.pages.slice(0, 1), pageParams: data.pageParams.slice(0, 1) }
+        : data,
+    );
     await query.refetch();
+  };
+
+  /**
+   * `refresh`, only when what's loaded is older than the feed's staleTime.
+   * Staleness is read from the cache, not `query.isStale`: that is this
+   * render's snapshot, and a feed fetched just before the app was backgrounded
+   * still reads fresh when it comes back days later, until something
+   * re-renders it.
+   */
+  const refreshIfStale = async () => {
+    const current = queryClient.getQueryCache().find({ queryKey, exact: true });
+    if (!current || current.state.data === undefined || current.state.fetchStatus === 'fetching') return;
+    if (current.isStaleByTime(FEED_STALE_TIME_MS)) await refresh();
   };
 
   const wrappedFetchNextPage = () => {
@@ -331,6 +414,8 @@ export function useFarcasterFeed({ enabled = true }: UseFarcasterFeedOptions = {
     hasNextPage: query.hasNextPage ?? true, // Default to true until we know otherwise
     fetchNextPage: wrappedFetchNextPage,
     refetch: refresh,
-    isRefetching: query.isRefetching || query.isFetching,
+    refreshIfStale,
+    // A refetch of what's loaded, not a next page.
+    isRefetching: query.isRefetching && !query.isFetchingNextPage,
   };
 }

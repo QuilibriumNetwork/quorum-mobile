@@ -32,7 +32,7 @@
  * ## What is mocked, and why
  *
  * Every OTHER input `useUnifiedNotifications` gathers
- * (`useFarcasterNotifications`, `useHaatzNotifications`, `useDMMute`,
+ * (`useHaatzNotifications`, `useDMMute`,
  * `useUnifiedConversations`, the notification/mention logs, Farcaster
  * dismissal) is mocked wholesale — this file's job is only the
  * `conversationDetails` join, and `partitionNotifications` itself (real,
@@ -73,24 +73,19 @@ let mockGetPublicProfile: jest.Mock;
 let mockResolveClaimedNames: jest.Mock;
 
 jest.mock('@/context/AuthContext', () => ({
-  useAuth: () => ({ farcasterAuthToken: undefined }),
+  useAuth: () => ({ user: undefined }),
 }));
 
-jest.mock('@/hooks/useFarcasterNotifications', () => ({
-  useFarcasterNotifications: () => ({
+jest.mock('@/hooks/useHaatzNotifications', () => ({
+  useHaatzNotifications: () => ({
     data: undefined,
     isLoading: false,
     isFetchingNextPage: false,
     hasNextPage: false,
     fetchNextPage: jest.fn(),
     refetch: jest.fn(),
-    error: null,
   }),
   flattenFarcasterNotifications: () => [],
-}));
-
-jest.mock('@/hooks/useHaatzNotifications', () => ({
-  useHaatzNotifications: () => ({ data: [], isLoading: false, refetch: jest.fn() }),
 }));
 
 jest.mock('@/hooks/chat/useDMMute', () => ({

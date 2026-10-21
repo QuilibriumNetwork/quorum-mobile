@@ -16,6 +16,7 @@ import { useMiniappManifest } from '@/hooks/useMiniappManifest';
 import { useOgMetadata } from '@/hooks/useOgMetadata';
 import { SnapEmbed, useSnapDetection } from '@/components/SocialFeed/content/SnapEmbed';
 import { AutoHeightImage } from '@/components/SocialFeed/media/AutoHeightImage';
+import { PREVIEW_SETTLE_MS, useVideoPreviewSlot } from '@/components/SocialFeed/media/videoPreviewSlots';
 import { ImageViewer } from '@/components/SocialFeed/media/ImageViewer';
 import { VideoViewer } from '@/components/SocialFeed/media/VideoViewer';
 import { extractYouTubeMatchesFromText, YouTubeEmbed, parseYouTubeUrl } from '@/components/SocialFeed/media/YouTubeEmbed';
@@ -81,8 +82,24 @@ import { lookupFidByUsername } from '@/services/farcaster/mentionExtraction';
 import { useCastByFullHash } from '@/services/farcaster/hypersnapCastLookup';
 import { isFullCastHash } from '@/services/farcaster/hypersnapWrites';
 import { useFarcasterSubmitCast } from '@/hooks/useFarcasterSubmitCast';
-import { useFeedOptimistic } from '@/context/FeedOptimisticContext';
-import type { PendingCast } from '@/services/feed/optimisticFeedStore';
+import { useFeedOptimisticActions, type PostReplyArgs } from '@/context/FeedOptimisticContext';
+import {
+  pendingRepliesAsThreadCasts,
+  useDeletedSet,
+  useFollowOverride,
+  useFollowsMap,
+  useIsCastDeleted,
+  useLikeOverride,
+  usePendingList,
+  usePendingTopLevel,
+  useRecastOverride,
+  useViewerLiked,
+  useViewerRecasted,
+  type PendingCast,
+} from '@/services/feed/optimisticFeedStore';
+import { useViewerReactions } from '@/hooks/useViewerReactions';
+import { useScreenFocused } from '@/hooks/useScreenFocused';
+import { useFeedRefreshOnReturn } from '@/hooks/useFeedRefreshOnReturn';
 import { uploadVideoForCast } from '@/services/farcaster/videoUpload';
 import { pickMedia, type ProcessedAttachment } from '@/services/media/imageAttachment';
 import { useTheme, type AppTheme } from '@/theme';
@@ -193,12 +210,24 @@ function ImageCarousel({
   onImagePress?: (url: string, index: number) => void;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
+  // Tiles mount progressively: the first two, then one past the furthest page
+  // reached, and stay mounted. All of them used to mount (and download) as the
+  // cast scrolled into view, though most carousels are never swiped. Reset
+  // during render when a recycled cell shows another cast's images.
+  const urlsKey = urls.join('|');
+  const [furthest, setFurthest] = useState({ urlsKey, index: 0 });
+  if (furthest.urlsKey !== urlsKey) {
+    setFurthest({ urlsKey, index: 0 });
+    setActiveIndex(0);
+  }
+  const mountedThrough = (furthest.urlsKey === urlsKey ? furthest.index : 0) + 1;
 
   const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { x: number } } }) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffsetX / width);
     setActiveIndex(index);
-  }, [width]);
+    setFurthest((prev) => (prev.urlsKey === urlsKey && index > prev.index ? { urlsKey, index } : prev));
+  }, [width, urlsKey]);
 
   return (
     <View style={{ width }}>
@@ -213,17 +242,21 @@ function ImageCarousel({
         snapToAlignment="start"
         contentContainerStyle={{ width: width * urls.length }}
       >
-        {urls.map((url, index) => (
-          <CarouselImageTile
-            key={index}
-            url={url}
-            index={index}
-            maxHeight={maxHeight}
-            width={width}
-            theme={theme}
-            onImagePress={onImagePress}
-          />
-        ))}
+        {urls.map((url, index) =>
+          index <= mountedThrough ? (
+            <CarouselImageTile
+              key={index}
+              url={url}
+              index={index}
+              maxHeight={maxHeight}
+              width={width}
+              theme={theme}
+              onImagePress={onImagePress}
+            />
+          ) : (
+            <View key={index} style={{ width }} />
+          ),
+        )}
       </ScrollView>
       <View style={{
         flexDirection: 'row',
@@ -283,24 +316,20 @@ function resolveChannelChip(
 }
 
 // Parse cast text and render @mentions and /channels as tappable links
-function CastText({
-  text,
-  style,
-  theme,
-  onMentionPress,
-  onChannelPress,
-  onLinkPress,
-}: {
-  text: string;
-  style?: StyleProp<TextStyle>;
-  theme: AppTheme;
-  onMentionPress?: (username: string) => void;
-  onChannelPress?: (channelKey: string) => void;
-  onLinkPress?: (url: string) => void;
-}) {
+type CastTextPart = { type: 'text' | 'mention' | 'channel' | 'link' | 'inviteLink'; value: string };
+
+/** Parsed cast text by text, so a cell that re-renders (or a recycled cell
+ *  that shows the same cast again) doesn't re-run the regex. Bounded, oldest
+ *  out first. */
+const CAST_TEXT_CACHE_MAX = 1000;
+const castTextCache = new Map<string, CastTextPart[]>();
+
+function parseCastText(text: string): CastTextPart[] {
+  const cached = castTextCache.get(text);
+  if (cached) return cached;
   // Match URLs, @mentions (after whitespace/start), and /channels (after whitespace/start)
   // URLs are matched first to prevent their paths being parsed as channels
-  const parts: { type: 'text' | 'mention' | 'channel' | 'link' | 'inviteLink'; value: string }[] = [];
+  const parts: CastTextPart[] = [];
   let lastIndex = 0;
 
   const combinedRegex = /(https?:\/\/[^\s]+)|(?<=^|[\s])(@[a-zA-Z0-9._-]+)|(?<=^|[\s])(\/[a-zA-Z0-9_-]+)/g;
@@ -336,6 +365,31 @@ function CastText({
   if (lastIndex < text.length) {
     parts.push({ type: 'text', value: text.slice(lastIndex) });
   }
+
+  castTextCache.set(text, parts);
+  if (castTextCache.size > CAST_TEXT_CACHE_MAX) {
+    const oldest = castTextCache.keys().next().value;
+    if (oldest !== undefined) castTextCache.delete(oldest);
+  }
+  return parts;
+}
+
+function CastText({
+  text,
+  style,
+  theme,
+  onMentionPress,
+  onChannelPress,
+  onLinkPress,
+}: {
+  text: string;
+  style?: StyleProp<TextStyle>;
+  theme: AppTheme;
+  onMentionPress?: (username: string) => void;
+  onChannelPress?: (channelKey: string) => void;
+  onLinkPress?: (url: string) => void;
+}) {
+  const parts = parseCastText(text);
 
   // Check if we have any invite links - if so, we need to render as View with blocks
   const hasInviteLinks = parts.some(p => p.type === 'inviteLink');
@@ -889,16 +943,8 @@ export function ShareToChatModal({
   );
 }
 
-function VideoPlayer({
-  url,
-  downloadUrl,
-  thumbnailUrl,
-  width,
-  height,
-  duration,
-  displayWidth = SCREEN_WIDTH,
-  theme
-}: {
+/** Props shared by the feed's video poster and its live player. */
+interface FeedVideoProps {
   url: string;
   downloadUrl?: string;
   thumbnailUrl?: string;
@@ -908,18 +954,186 @@ function VideoPlayer({
   /** On-screen width. Defaults to edge-to-edge; narrower inside a thread unit. */
   displayWidth?: number;
   theme: AppTheme;
-}) {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
-  // Natural aspect ratio measured from the loaded video, used when the
-  // embed doesn't carry width/height (common for HLS) so the container
-  // matches the real video instead of a 9/16 guess.
-  const [measuredAspect, setMeasuredAspect] = useState<number | null>(null);
-  const videoRef = useRef<VideoView>(null);
+}
+
+/**
+ * A feed video. It renders as a sized poster and creates a native player only
+ * when one is needed: when the user taps play, or for a first-frame preview of
+ * a video with no poster image, which a few rows on screen at a time get (see
+ * `videoPreviewSlots`). Hypersnap sends videos with no poster, so this used to
+ * mean a native player, a `VideoView` and a stream download for every video
+ * row as soon as it mounted. Exported for tests (feedVideoPlayersOnDemand).
+ */
+export function VideoPlayer(props: FeedVideoProps) {
+  const { url, thumbnailUrl, width, height, duration, displayWidth = SCREEN_WIDTH, theme } = props;
+  // Natural aspect ratio measured from the poster, the manifest or the loaded
+  // video, used when the embed doesn't carry width/height (common for HLS) so
+  // the container matches the real video instead of a 9/16 guess.
+  const [measured, setMeasured] = useState<{ url: string; aspect: number } | null>(null);
+  const measuredAspect = measured?.url === url ? measured.aspect : null;
+  const setMeasuredAspect = useCallback((aspect: number) => {
+    setMeasured((prev) => (prev?.url === url && prev.aspect === aspect ? prev : { url, aspect }));
+  }, [url]);
   const aspectRatio = measuredAspect ?? (width && height ? height / width : 9 / 16);
   // Full-width, natural aspect ratio — no max-height cap.
   const calculatedHeight = displayWidth * aspectRatio;
+
+  // Started by the user, so a player exists from here on. Reset when a
+  // recycled cell moves to another video.
+  const [activated, setActivated] = useState<string | null>(null);
+  const isActivated = activated === url;
+  const [fullscreen, setFullscreen] = useState(false);
+  const hasPreviewSlot = useVideoPreviewSlot(!thumbnailUrl && !isActivated ? url : undefined);
+
+  // HLS posters: the feed API often omits video dimensions, and expo-video
+  // can't report an HLS track's size before playback — so without this the
+  // poster sits at the 9/16 fallback until the user presses play. Parse
+  // `RESOLUTION=WxH` from the m3u8 master manifest (a tiny text fetch) to
+  // size the box correctly up front. Only runs when nothing else sized it,
+  // and only once the row has stayed on screen a moment.
+  useEffect(() => {
+    if (thumbnailUrl || (width && height)) return;
+    if (!/\.m3u8(\?|#|$)/i.test(url)) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      fetch(url)
+        .then((r) => r.text())
+        .then((text) => {
+          if (cancelled) return;
+          const m = text.match(/RESOLUTION=(\d+)x(\d+)/i);
+          if (m) {
+            const w = parseInt(m[1], 10);
+            const h = parseInt(m[2], 10);
+            if (w > 0 && h > 0) setMeasuredAspect(h / w);
+          }
+        })
+        .catch(() => {});
+    }, PREVIEW_SETTLE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [url, thumbnailUrl, width, height, setMeasuredAspect]);
+
+  const sizeStyle = { width: displayWidth, height: calculatedHeight, backgroundColor: theme.colors.surface3 };
+  const viewer = fullscreen ? (
+    <VideoViewer visible url={url} downloadUrl={props.downloadUrl} onClose={() => setFullscreen(false)} />
+  ) : null;
+
+  if (isActivated || hasPreviewSlot) {
+    return (
+      <>
+        <LiveVideoPlayer
+          {...props}
+          sizeStyle={sizeStyle}
+          startPlaying={isActivated}
+          onMeasuredAspect={setMeasuredAspect}
+          onOpenFullscreen={() => setFullscreen(true)}
+        />
+        {viewer}
+      </>
+    );
+  }
+
+  const handlePlayButtonTap = () => setActivated(url);
+
+  return (
+    <>
+    <Pressable onPress={() => setFullscreen(true)} style={{ position: 'relative' }}>
+      {thumbnailUrl ? (
+        // The poster's own load reports its size (it matches the video's
+        // aspect), so it's downloaded once rather than measured first.
+        <ExpoImage
+          source={{ uri: thumbnailUrl }}
+          style={sizeStyle}
+          contentFit="cover"
+          recyclingKey={thumbnailUrl}
+          onLoad={(e) => {
+            const { width: w, height: h } = e.source;
+            if (w > 0 && h > 0) setMeasuredAspect(h / w);
+          }}
+        />
+      ) : (
+        <View style={sizeStyle} />
+      )}
+      {/* Play button overlay — tappable on top of the poster, but
+          the surrounding area falls through to the outer Pressable
+          (which enters fullscreen). */}
+      <View
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+        pointerEvents="box-none"
+      >
+        <Pressable
+          onPress={handlePlayButtonTap}
+          accessibilityRole="button"
+          accessibilityLabel="Play video"
+          hitSlop={12}
+          style={{
+            width: 60,
+            height: 60,
+            borderRadius: Skin.circleOrSquare(30),
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <IconSymbol name="play.fill" color="#fff" size={28} />
+        </Pressable>
+      </View>
+      {/* Duration badge */}
+      {duration && duration > 0 && (
+        <View style={{
+          position: 'absolute',
+          bottom: 8,
+          right: 8,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          paddingHorizontal: Skin.space(6),
+          paddingVertical: Skin.space(2),
+          borderRadius: Skin.radius(4),
+        }}>
+          <Text style={{ color: '#fff', fontSize: Skin.font(12), fontWeight: '500' }}>
+            {formatDuration(duration)}
+          </Text>
+        </View>
+      )}
+    </Pressable>
+    {viewer}
+    </>
+  );
+}
+
+/** The feed video with its native player: playing, paused, or showing its
+ *  first frame as the preview. */
+function LiveVideoPlayer({
+  url,
+  thumbnailUrl,
+  sizeStyle,
+  startPlaying,
+  onMeasuredAspect,
+  onOpenFullscreen,
+}: FeedVideoProps & {
+  sizeStyle: { width: number; height: number; backgroundColor: string };
+  /** Start playback as soon as the player exists (the user tapped play). */
+  startPlaying: boolean;
+  onMeasuredAspect: (aspect: number) => void;
+  onOpenFullscreen: () => void;
+}) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const videoRef = useRef<VideoView>(null);
+  // Player listeners can outlive a recycled cell's URL change; always report
+  // to the current setter.
+  const onMeasuredAspectRef = useRef(onMeasuredAspect);
+  onMeasuredAspectRef.current = onMeasuredAspect;
+  const setMeasuredAspect = useCallback((aspect: number) => onMeasuredAspectRef.current(aspect), []);
 
   // Configure audio mode on mount
   useEffect(() => {
@@ -986,54 +1200,15 @@ function VideoPlayer({
       trackSubscription.remove();
       statusSubscription.remove();
     };
-  }, [player]);
+  }, [player, setMeasuredAspect]);
 
-  // HLS posters: the feed API often omits video dimensions, and expo-video
-  // can't report an HLS track's size before playback — so without this the
-  // poster sits at the 9/16 fallback until the user presses play (the
-  // thread works only because its API *does* include dimensions). Parse
-  // `RESOLUTION=WxH` from the m3u8 master manifest (a tiny text fetch) to
-  // size the box correctly up front. Only runs when nothing else sized it.
+  // Mounted by a tap on play: start right away.
   useEffect(() => {
-    if (thumbnailUrl || (width && height)) return;
-    if (!/\.m3u8(\?|#|$)/i.test(url)) return;
-    let cancelled = false;
-    fetch(url)
-      .then((r) => r.text())
-      .then((text) => {
-        if (cancelled) return;
-        const m = text.match(/RESOLUTION=(\d+)x(\d+)/i);
-        if (m) {
-          const w = parseInt(m[1], 10);
-          const h = parseInt(m[2], 10);
-          if (w > 0 && h > 0) setMeasuredAspect(h / w);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [url, thumbnailUrl, width, height]);
-
-  // Also measure the poster thumbnail's aspect ratio when one is present.
-  // With a thumbnail poster the VideoView isn't mounted until playback, so
-  // the player may not load and `sourceLoad` may not fire — measuring the
-  // thumbnail (which matches the video's aspect) keeps the box at the right
-  // height in the feed too, not just the thread.
-  useEffect(() => {
-    if (!thumbnailUrl) return;
-    let cancelled = false;
-    Image.getSize(
-      thumbnailUrl,
-      (w, h) => {
-        if (!cancelled && w > 0 && h > 0) setMeasuredAspect(h / w);
-      },
-      () => {},
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [thumbnailUrl]);
+    if (!startPlaying) return;
+    setHasStarted(true);
+    setIsPlaying(true);
+    player.play();
+  }, [startPlaying, player]);
 
   // Tap on the play-button overlay → play/pause toggle (or start on
   // first tap). Kept narrow so it doesn't swallow the rest of the
@@ -1061,24 +1236,15 @@ function VideoPlayer({
       player.pause();
       setIsPlaying(false);
     }
-    setFullscreen(true);
+    onOpenFullscreen();
   };
 
   return (
-    <>
     <Pressable onPress={handleSurfaceTap} style={{ position: 'relative' }}>
       {!hasStarted ? (
         <>
           {thumbnailUrl ? (
-            <Image
-              source={{ uri: thumbnailUrl }}
-              style={{
-                width: displayWidth,
-                height: calculatedHeight,
-                backgroundColor: theme.colors.surface3,
-              }}
-              resizeMode="cover"
-            />
+            <ExpoImage source={{ uri: thumbnailUrl }} style={sizeStyle} contentFit="cover" recyclingKey={thumbnailUrl} />
           ) : (
             // No poster URL from the API (typical for hypersnap-bare HLS
             // streams). Show the video's own first frame as the preview via
@@ -1087,11 +1253,7 @@ function VideoPlayer({
             // fall through to the play overlay / fullscreen handler.
             <VideoView
               player={player}
-              style={{
-                width: displayWidth,
-                height: calculatedHeight,
-                backgroundColor: theme.colors.surface3,
-              }}
+              style={sizeStyle}
               contentFit="contain"
               nativeControls={false}
               pointerEvents="none"
@@ -1122,6 +1284,8 @@ function VideoPlayer({
           >
             <Pressable
               onPress={handlePlayButtonTap}
+              accessibilityRole="button"
+              accessibilityLabel="Play video"
               hitSlop={12}
               style={{
                 width: 60,
@@ -1135,33 +1299,13 @@ function VideoPlayer({
               <IconSymbol name="play.fill" color="#fff" size={28} />
             </Pressable>
           </View>
-          {/* Duration badge */}
-          {duration && duration > 0 && (
-            <View style={{
-              position: 'absolute',
-              bottom: 8,
-              right: 8,
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              paddingHorizontal: Skin.space(6),
-              paddingVertical: Skin.space(2),
-              borderRadius: Skin.radius(4),
-            }}>
-              <Text style={{ color: '#fff', fontSize: Skin.font(12), fontWeight: '500' }}>
-                {formatDuration(duration)}
-              </Text>
-            </View>
-          )}
         </>
       ) : (
         <>
           <VideoView
             ref={videoRef}
             player={player}
-            style={{
-              width: displayWidth,
-              height: calculatedHeight,
-              backgroundColor: theme.colors.surface3,
-            }}
+            style={sizeStyle}
             contentFit="contain"
             nativeControls={false}
             allowsFullscreen
@@ -1183,6 +1327,8 @@ function VideoPlayer({
             >
               <Pressable
                 onPress={handlePlayButtonTap}
+                accessibilityRole="button"
+                accessibilityLabel="Play video"
                 hitSlop={12}
                 style={{
                   width: 60,
@@ -1200,10 +1346,6 @@ function VideoPlayer({
         </>
       )}
     </Pressable>
-    {fullscreen && (
-      <VideoViewer visible url={url} downloadUrl={downloadUrl} onClose={() => setFullscreen(false)} />
-    )}
-    </>
   );
 }
 
@@ -1718,7 +1860,9 @@ function SnapAwareUrlPreview({
   // embeds and Snap embeds — so it's only a candidate, not a guarantee. Probe
   // the URL's content-type to decide which renderer to use.
   const candidateUrl = snapUrl || url;
-  const isSnap = useSnapDetection(candidateUrl);
+  // A YouTube link renders its player whatever the probe says, and probing it
+  // downloads the whole watch page.
+  const isSnap = useSnapDetection(parseYouTubeUrl(candidateUrl) ? undefined : candidateUrl);
 
   if (isSnap === true && candidateUrl) {
     return (
@@ -1749,6 +1893,24 @@ function SnapAwareUrlPreview({
         actionUrl={frameActionUrl}
         theme={theme}
         onPress={() => onOpenMiniApp?.(frameActionUrl)}
+      />
+    );
+  }
+
+  // Until snap detection answers, show the plain card without probing the
+  // manifest or metadata: a snap needs neither, and for a page the metadata
+  // comes from the same GET the detection is making.
+  if (isSnap === null) {
+    return (
+      <LinkPreview
+        url={url}
+        title={title}
+        description={description}
+        domain={domain}
+        image={image}
+        useLargeImage={useLargeImage}
+        theme={theme}
+        onPress={onPress}
       />
     );
   }
@@ -1803,11 +1965,11 @@ function MiniappAwareLinkPreview({
   // Probe only when we lack OG enrichment — saves a hit per cell for
   // already-enriched legacy embeds.
   const shouldProbe = Boolean(url) && !title;
-  const { data: manifest } = useMiniappManifest(url, { enabled: shouldProbe });
-  // Page-level OG / inline-miniapp scrape, only when the manifest
-  // didn't resolve. Runs sequentially with the manifest probe so we
-  // don't issue both requests for the same URL.
-  const ogEnabled = shouldProbe && !manifest;
+  const { data: manifest, isFetched: manifestSettled } = useMiniappManifest(url, { enabled: shouldProbe });
+  // Page-level OG / inline-miniapp scrape, only once the manifest probe has
+  // answered and found nothing (`manifest` is undefined while it's still in
+  // flight, so gating on it alone ran both at once).
+  const ogEnabled = shouldProbe && manifestSettled && !manifest;
   const { data: og } = useOgMetadata(url, { enabled: ogEnabled });
 
   // Self-hosted manifest wins — strongest signal.
@@ -2195,6 +2357,455 @@ function FrameEmbed({
   );
 }
 
+/** A thread cast's stats row (like, reply, recast, tip). It reads that cast's
+ *  like/recast state itself, so a like re-renders this row, not the thread. */
+const ThreadCastStats = React.memo(function ThreadCastStats({
+  cast,
+  theme,
+  currentUserFid,
+  onLikeToggle,
+  onOpenThread,
+  onOpenShareSheet,
+  onTipPress,
+}: {
+  cast: FlattenedCast;
+  theme: AppTheme;
+  currentUserFid?: number;
+  onLikeToggle: (castHash: string, currentlyLiked: boolean, currentCount: number) => void;
+  onOpenThread: (username: string, castHashPrefix: string, placeholderCast?: unknown) => void;
+  onOpenShareSheet: (target: {
+    hash: string;
+    author: string;
+    authorFid?: number;
+    text: string;
+    isRecasted: boolean;
+    recastCount: number;
+  }) => void;
+  onTipPress?: (target: TipTarget) => void;
+}) {
+  const likeOverride = useLikeOverride(cast.hash);
+  const recastOverride = useRecastOverride(cast.hash);
+  const viewerLiked = useViewerLiked(cast.hash);
+  const viewerRecasted = useViewerRecasted(cast.hash);
+  const isLiked = likeOverride?.liked ?? (viewerLiked || (cast.viewerContext?.reacted ?? false));
+  const likeCount = likeOverride?.count ?? (cast.reactions?.count ?? 0);
+  const isRecasted = recastOverride?.recasted ?? (viewerRecasted || (cast.viewerContext?.recast ?? false));
+  const recastCount = recastOverride?.count ?? (cast.recasts?.count ?? 0);
+  return (
+    <View style={{ flexDirection: 'row', gap: Skin.space(16), marginTop: Skin.space(4) }}>
+      <TouchableOpacity
+        style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
+        onPress={() => onLikeToggle(cast.hash, isLiked, likeCount)}
+        hitSlop={12}
+      >
+        <LikeIcon
+          type={getLikeIconType(cast.text)}
+          isLiked={isLiked}
+          color={theme.colors.textMuted}
+          activeColor={theme.colors.danger}
+          size={20}
+        />
+        {likeCount > 0 && (
+          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6), paddingVertical: Skin.space(4), paddingHorizontal: Skin.space(2) }}
+        onPress={() => onOpenThread(cast.author.username, cast.hash, cast)}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
+        {(cast.replies?.count ?? 0) > 0 && (
+          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6), paddingVertical: Skin.space(4), paddingHorizontal: Skin.space(2) }}
+        onPress={() => {
+          onOpenShareSheet({
+            hash: cast.hash,
+            author: cast.author.username,
+            authorFid: cast.author.fid,
+            text: cast.text || '',
+            isRecasted,
+            recastCount,
+          });
+        }}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <IconSymbol
+          name="arrow.triangle.2.circlepath"
+          color={isRecasted ? theme.colors.success : theme.colors.textMuted}
+          size={20}
+        />
+        {recastCount > 0 && (
+          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{recastCount}</Text>
+        )}
+      </TouchableOpacity>
+      {onTipPress && cast.author.fid > 0 && cast.author.fid !== currentUserFid && (
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6), paddingVertical: Skin.space(4), paddingHorizontal: Skin.space(2) }}
+          onPress={() => onTipPress({
+            castHash: cast.hash,
+            castText: cast.text ?? '',
+            authorFid: cast.author.fid,
+            authorUsername: cast.author.username,
+            authorDisplayName: cast.author.displayName,
+          })}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <SnapIcon color={theme.colors.textMuted} size={24} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+});
+
+/**
+ * The thread's inline reply editor. It owns its text, cursor, attachments and
+ * posting state, so typing re-renders the editor and not the thread around it
+ * (the thread maps every cast without virtualisation; it re-rendered all of
+ * them on each keystroke). The thread hears only focus changes.
+ */
+function ThreadReplyComposer({
+  theme,
+  token,
+  username,
+  maxCastLength,
+  regularCastByteLimit,
+  avatarUri,
+  displayName,
+  farcasterUsername,
+  canPost,
+  replyTarget,
+  onPostReply,
+  inputRef,
+  onFocusChange,
+}: {
+  theme: AppTheme;
+  token?: string;
+  /** The thread author's username, for the placeholder. */
+  username: string;
+  maxCastLength: number;
+  regularCastByteLimit: number;
+  avatarUri: string | null;
+  displayName: string;
+  farcasterUsername?: string;
+  /** Whether the viewer can post at all (has a Farcaster account). */
+  canPost: boolean;
+  /** The cast a reply goes to; null while it's loading. */
+  replyTarget: { hash: string; authorFid: number } | null;
+  onPostReply: (args: PostReplyArgs) => void;
+  inputRef: React.RefObject<TextInput | null>;
+  onFocusChange: (focused: boolean) => void;
+}) {
+  // Reply state
+  const [replyText, setReplyText] = useState('');
+  const [replyCursorPosition, setReplyCursorPosition] = useState(0);
+  const [isPosting, setIsPosting] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [replyImages, setReplyImages] = useState<ProcessedAttachment[]>([]);
+
+  // Mention autocomplete state for reply
+  const replyMentionInfo = useMemo(
+    () => getMentionInfo(replyText, replyCursorPosition),
+    [replyText, replyCursorPosition]
+  );
+
+  // Handle selecting a user mention in reply
+  const handleReplySelectUser = useCallback((user: SearchUser) => {
+    if (!replyMentionInfo) return;
+    const newText = replaceMention(replyText, replyMentionInfo, user.username);
+    setReplyText(newText.slice(0, maxCastLength));
+    // Move cursor to after the inserted mention
+    setReplyCursorPosition(replyMentionInfo.replaceStart + user.username.length + 1);
+  }, [replyText, replyMentionInfo, maxCastLength]);
+
+  // Handle selecting a channel mention in reply
+  const handleReplySelectChannel = useCallback((channel: SearchChannel) => {
+    if (!replyMentionInfo) return;
+    const newText = replaceMention(replyText, replyMentionInfo, channel.key);
+    setReplyText(newText.slice(0, maxCastLength));
+    // Move cursor to after the inserted mention
+    setReplyCursorPosition(replyMentionInfo.replaceStart + channel.key.length + 1);
+  }, [replyText, replyMentionInfo, maxCastLength]);
+
+  // Allow replying if there's text OR images. Replies are signed with the
+  // Hypersnap signer, so they need a Farcaster account, not the token.
+  const canReply = canPost && (replyText.trim().length > 0 || replyImages.length > 0) && !isPosting && !!replyTarget;
+
+  const handlePickReplyImage = async () => {
+    if (!token) {
+      setReplyError(MEDIA_UPLOAD_UNAVAILABLE);
+      return;
+    }
+    if (replyImages.length >= 2) {
+      setReplyError('Maximum 2 images per reply');
+      return;
+    }
+    const result = await pickMedia('library');
+    if (result.success && result.attachment) {
+      setReplyImages(prev => [...prev, result.attachment!]);
+      setReplyError(null);
+    } else if (result.error) {
+      setReplyError(result.error);
+    }
+  };
+
+  const handleRemoveReplyImage = (index: number) => {
+    setReplyImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmitReply = async () => {
+    if (!canReply || !replyTarget) return;
+    setReplyError(null);
+    const text = replyText.trim();
+
+    try {
+      setIsPosting(true);
+
+      // Upload any attachments first — their URLs are needed for the cast.
+      // Videos go through TUS upload, images through the direct upload.
+      const embeds: string[] = [];
+      if (replyImages.length > 0 && !token) {
+        setReplyError(MEDIA_UPLOAD_UNAVAILABLE);
+        setIsPosting(false);
+        return;
+      }
+      for (const a of replyImages) {
+        try {
+          if (a.kind === 'video') {
+            const v = await uploadVideoForCast(token as string, a.localUri);
+            embeds.push(v.url);
+          } else {
+            const uploaded = await uploadImageForCast(token as string, a.localUri, a.mimeType);
+            embeds.push(uploaded.url);
+          }
+        } catch (uploadErr: any) {
+          // Nothing was posted yet — keep the text so it isn't lost.
+          setReplyError(`Failed to upload attachment: ${uploadErr?.message ?? 'Unknown error'}`);
+          setIsPosting(false);
+          return;
+        }
+      }
+
+      // Optimistically insert the reply and submit it in the background
+      // (with auto-retry). The composer clears, but the text lives in the
+      // pending stub — a failed send is recoverable, never lost. The reply
+      // shows instantly in the thread via the merge above.
+      onPostReply({
+        threadHash: replyTarget.hash,
+        parentHash: replyTarget.hash,
+        parentFid: replyTarget.authorFid,
+        text,
+        embedUrls: embeds,
+      });
+      setReplyText('');
+      setReplyImages([]);
+    } catch (err: unknown) {
+      logger.warn(
+        '[SocialFeedModal] reply submit threw:',
+        err instanceof Error ? err.message : String(err),
+      );
+      setReplyError(err instanceof Error ? err.message : 'Failed to post reply');
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  return (
+    <>
+    {/* Mention autocomplete - positioned above the editor */}
+    {replyMentionInfo && (
+      <View style={{ zIndex: 10, marginBottom: Skin.space(-2) }}>
+        <MentionAutocomplete
+          mentionInfo={replyMentionInfo}
+          token={token}
+          onSelectUser={handleReplySelectUser}
+          onSelectChannel={handleReplySelectChannel}
+          theme={theme}
+          maxHeight={160}
+        />
+      </View>
+    )}
+
+    {/* Header row - avatar + name, matching cast layout */}
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <View style={{ marginRight: Skin.space(12) }}>
+        <CachedAvatar
+          source={avatarUri ? { uri: avatarUri } : null}
+          // Last rung is 'You', matching the label directly below —
+          // `''` would render "?" beside text reading "You".
+          fallbackName={displayName}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: Skin.circleOrSquare(22),
+            backgroundColor: theme.colors.surface3,
+          }}
+        />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}>
+          {displayName}
+        </Text>
+        {farcasterUsername && (
+          <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>
+            @{farcasterUsername}
+          </Text>
+        )}
+      </View>
+    </View>
+
+    {/* Text input - styled like cast body text, no border/background */}
+    <View style={{ marginLeft: Skin.space(56) }}>
+      <TextInput
+        ref={inputRef}
+        onBlur={() => onFocusChange(false)}
+        style={{
+          minHeight: 40,
+          color: theme.colors.textMain,
+          fontSize: Skin.font(15),
+          lineHeight: Skin.font(20),
+          padding: 0,
+          textAlignVertical: 'top',
+        }}
+        placeholder={`Reply to @${username}...`}
+        placeholderTextColor={theme.colors.textMuted}
+        value={replyText}
+        onChangeText={(text) => {
+          setReplyText(text.slice(0, maxCastLength));
+        }}
+        onSelectionChange={(e) => {
+          setReplyCursorPosition(e.nativeEvent.selection.end);
+        }}
+        onFocus={() => onFocusChange(true)}
+        multiline
+      />
+
+      {/* Image previews */}
+      {replyImages.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginTop: Skin.space(10) }}
+          contentContainerStyle={{ gap: Skin.space(8) }}
+        >
+          {replyImages.map((image, index) => (
+            <View key={index} style={{ position: 'relative' }}>
+              <Image
+                source={{ uri: image.thumbnailLocalUri ?? image.localUri }}
+                style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: Skin.radius(8),
+                  backgroundColor: theme.colors.surface3,
+                }}
+                resizeMode="cover"
+              />
+              {image.kind === 'video' && (
+                <View style={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <IconSymbol name="play.fill" size={20} color="#fff" />
+                </View>
+              )}
+              <TouchableOpacity
+                onPress={() => handleRemoveReplyImage(index)}
+                style={{
+                  position: 'absolute',
+                  top: 4,
+                  right: 4,
+                  width: 22,
+                  height: 22,
+                  borderRadius: Skin.circleOrSquare(11),
+                  backgroundColor: 'rgba(0,0,0,0.6)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <IconSymbol name="xmark" size={12} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* Error message */}
+      {replyError && (
+        <Text style={{ color: theme.colors.danger, fontSize: Skin.font(13), marginTop: Skin.space(6) }}>
+          {replyError}
+        </Text>
+      )}
+
+      {/* Bottom row: photo button, post button, character count */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          marginTop: Skin.space(10),
+        }}
+      >
+        <TouchableOpacity
+          onPress={handlePickReplyImage}
+          disabled={isPosting || replyImages.length >= 2}
+          style={{
+            opacity: replyImages.length >= 2 ? 0.4 : 1,
+            padding: Skin.space(4),
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <IconSymbol name="photo" size={20} color={theme.colors.textMuted} />
+        </TouchableOpacity>
+
+        <View style={{ flex: 1 }} />
+
+        {replyText.length > 0 && (
+          <Text style={{
+            fontSize: Skin.font(12),
+            marginRight: Skin.space(10),
+            color: replyText.length > regularCastByteLimit && replyText.length <= maxCastLength
+              ? (theme.colors.warning || '#FFA500')
+              : theme.colors.textMuted,
+          }}>
+            {replyText.length}/{maxCastLength}
+          </Text>
+        )}
+
+        <TouchableOpacity
+          onPress={handleSubmitReply}
+          disabled={!canReply}
+          style={{
+            paddingHorizontal: Skin.space(16),
+            paddingVertical: Skin.space(8),
+            borderRadius: Skin.radius(16),
+            backgroundColor: canReply ? theme.colors.accent : theme.colors.surface3,
+          }}
+        >
+          {isPosting ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={{
+              color: canReply ? '#fff' : theme.colors.textMuted,
+              fontSize: Skin.font(14),
+              fontWeight: '600',
+            }}>
+              Post
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+    </>
+  );
+}
+
 /** The feed's own thread screen (not `SocialFeed/views/ThreadDetailView`).
  *  Exported for tests (threadReplyEditorTabBarClearance). */
 export function ThreadDetailView({
@@ -2207,13 +2818,10 @@ export function ThreadDetailView({
   onOpenProfile,
   onOpenChannel,
   onOpenThread,
-  likeStates,
   onLikeToggle,
   onRecastToggle,
-  recastStates,
   onQuoteCast,
   onShareToChat,
-  followStates,
   onFollow,
   focusReply = false,
   placeholderCast,
@@ -2234,13 +2842,10 @@ export function ThreadDetailView({
   onOpenProfile: (fid: number, username?: string) => void;
   onOpenChannel: (channelKey: string) => void;
   onOpenThread: (username: string, castHashPrefix: string, placeholderCast?: unknown) => void;
-  likeStates: Map<string, { liked: boolean; count: number }>;
   onLikeToggle: (castHash: string, currentlyLiked: boolean, currentCount: number) => void;
   onRecastToggle: (castHash: string, currentlyRecasted: boolean, currentCount: number) => void;
-  recastStates: Map<string, { recasted: boolean; count: number }>;
   onQuoteCast: (castHash: string, castAuthor: string, castText: string) => void;
   onShareToChat: (castUrl: string) => void;
-  followStates: Map<number, boolean>;
   onFollow: (fid: number) => void;
   focusReply?: boolean;
   /** Optional cast snapshot from the surface that pushed this screen.
@@ -2258,13 +2863,21 @@ export function ThreadDetailView({
   governanceByHash?: Map<string, GovernanceChannelCast>;
   onGovernanceVoted?: () => void;
 }) {
-  const optimistic = useFeedOptimistic();
+  // The actions, plus the store collections this view reads while rendering.
+  // It re-renders when pending replies, deletions or follows change, not on a
+  // like or recast: each cast's stats row reads those itself.
+  const optimistic = useFeedOptimisticActions();
+  // Subscribes only: `useFarcasterThread` merges pending replies on every
+  // render, so a change to the list has to re-render this view.
+  usePendingList();
+  const deletedSet = useDeletedSet();
+  const followStates = useFollowsMap();
   const { parentCasts, mainCast: fetchedMainCast, replies, allCasts, isLoading, error, channelContext, refetch } = useFarcasterThread({
     username,
     castHashPrefix,
     // Merge optimistic pending replies into the thread so a just-posted
     // reply shows instantly in the right place.
-    getPendingReplies: optimistic.pendingRepliesAsThreadCasts,
+    getPendingReplies: pendingRepliesAsThreadCasts,
   });
   // Use the fetched cast once it arrives; fall back to the placeholder
   // for the loading window. Cast shapes from FeedPostCard / search /
@@ -2346,6 +2959,16 @@ export function ThreadDetailView({
   const scrollViewRef = useRef<KeyboardAwareScrollViewRef>(null);
   const replyInputRef = useRef<TextInput>(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
+  // The composer reports focus; on focus, scroll to the end so the editor is
+  // visible.
+  const handleEditorFocusChange = useCallback((focused: boolean) => {
+    setIsEditorFocused(focused);
+    if (focused) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 300);
+    }
+  }, []);
   // Whether the on-screen keyboard is actually up. Focus alone doesn't say:
   // with a hardware keyboard (or after Android's back button hides the
   // keyboard but leaves the input focused) the editor is focused and the
@@ -2385,37 +3008,6 @@ export function ThreadDetailView({
     }
   }, [focusReply, mainCast, isLoading, scrollToReplyAndFocus]);
 
-  // Reply state
-  const [replyText, setReplyText] = useState('');
-  const [replyCursorPosition, setReplyCursorPosition] = useState(0);
-  const [isPosting, setIsPosting] = useState(false);
-  const [replyError, setReplyError] = useState<string | null>(null);
-  const [replyImages, setReplyImages] = useState<ProcessedAttachment[]>([]);
-
-  // Mention autocomplete state for reply
-  const replyMentionInfo = useMemo(
-    () => getMentionInfo(replyText, replyCursorPosition),
-    [replyText, replyCursorPosition]
-  );
-
-  // Handle selecting a user mention in reply
-  const handleReplySelectUser = useCallback((user: SearchUser) => {
-    if (!replyMentionInfo) return;
-    const newText = replaceMention(replyText, replyMentionInfo, user.username);
-    setReplyText(newText.slice(0, maxCastLength));
-    // Move cursor to after the inserted mention
-    setReplyCursorPosition(replyMentionInfo.replaceStart + user.username.length + 1);
-  }, [replyText, replyMentionInfo, maxCastLength]);
-
-  // Handle selecting a channel mention in reply
-  const handleReplySelectChannel = useCallback((channel: SearchChannel) => {
-    if (!replyMentionInfo) return;
-    const newText = replaceMention(replyText, replyMentionInfo, channel.key);
-    setReplyText(newText.slice(0, maxCastLength));
-    // Move cursor to after the inserted mention
-    setReplyCursorPosition(replyMentionInfo.replaceStart + channel.key.length + 1);
-  }, [replyText, replyMentionInfo, maxCastLength]);
-
   // Share action sheet state
   const [shareSheetCast, setShareSheetCast] = useState<{
     hash: string;
@@ -2431,89 +3023,6 @@ export function ThreadDetailView({
     castHash: string;
     castAuthorFid?: number;
   } | null>(null);
-
-  // Allow replying if there's text OR images. Replies are signed with the
-  // Hypersnap signer, so they need a Farcaster account, not the token.
-  const canReply = Boolean(currentUserFid && (replyText.trim().length > 0 || replyImages.length > 0) && !isPosting && mainCast);
-
-  const handlePickReplyImage = async () => {
-    if (!token) {
-      setReplyError(MEDIA_UPLOAD_UNAVAILABLE);
-      return;
-    }
-    if (replyImages.length >= 2) {
-      setReplyError('Maximum 2 images per reply');
-      return;
-    }
-    const result = await pickMedia('library');
-    if (result.success && result.attachment) {
-      setReplyImages(prev => [...prev, result.attachment!]);
-      setReplyError(null);
-    } else if (result.error) {
-      setReplyError(result.error);
-    }
-  };
-
-  const handleRemoveReplyImage = (index: number) => {
-    setReplyImages(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleSubmitReply = async () => {
-    if (!canReply || !mainCast) return;
-    setReplyError(null);
-    const text = replyText.trim();
-
-    try {
-      setIsPosting(true);
-
-      // Upload any attachments first — their URLs are needed for the cast.
-      // Videos go through TUS upload, images through the direct upload.
-      const embeds: string[] = [];
-      if (replyImages.length > 0 && !token) {
-        setReplyError(MEDIA_UPLOAD_UNAVAILABLE);
-        setIsPosting(false);
-        return;
-      }
-      for (const a of replyImages) {
-        try {
-          if (a.kind === 'video') {
-            const v = await uploadVideoForCast(token as string, a.localUri);
-            embeds.push(v.url);
-          } else {
-            const uploaded = await uploadImageForCast(token as string, a.localUri, a.mimeType);
-            embeds.push(uploaded.url);
-          }
-        } catch (uploadErr: any) {
-          // Nothing was posted yet — keep the text so it isn't lost.
-          setReplyError(`Failed to upload attachment: ${uploadErr?.message ?? 'Unknown error'}`);
-          setIsPosting(false);
-          return;
-        }
-      }
-
-      // Optimistically insert the reply and submit it in the background
-      // (with auto-retry). The composer clears, but the text lives in the
-      // pending stub — a failed send is recoverable, never lost. The reply
-      // shows instantly in the thread via the merge above.
-      optimistic.postReply({
-        threadHash: mainCast.hash,
-        parentHash: mainCast.hash,
-        parentFid: mainCast.author.fid,
-        text,
-        embedUrls: embeds,
-      });
-      setReplyText('');
-      setReplyImages([]);
-    } catch (err: unknown) {
-      logger.warn(
-        '[SocialFeedModal] reply submit threw:',
-        err instanceof Error ? err.message : String(err),
-      );
-      setReplyError(err instanceof Error ? err.message : 'Failed to post reply');
-    } finally {
-      setIsPosting(false);
-    }
-  };
 
   const handleMentionPress = async (mentionUsername: string) => {
     const fid = await lookupFidByUsername(mentionUsername);
@@ -2543,9 +3052,9 @@ export function ThreadDetailView({
   const renderPendingReply = (cast: FlattenedCast, pending: PendingCast) => {
     const indent = Math.min(cast.depth * 12, 48);
     const failed = pending.status === 'failed';
-    // 'sent' = the submit landed (realHash set); we're just waiting for the
-    // server to index it so the real cast replaces this stub. Show it as
-    // settled, not still "Sending…", so it never looks stuck.
+    // 'sent' = seen on the network; we're just waiting for the thread to
+    // refetch so the real cast replaces this stub. Show it as settled. Until
+    // it's seen ('pending', 'confirming') it reads "Sending…".
     const sent = pending.status === 'sent';
     // Always the current user, so prefer the freshly-resolved Farcaster avatar
     // over the (possibly stale/missing) cached pfp on the pending author.
@@ -2631,7 +3140,7 @@ export function ThreadDetailView({
     if (pendingReply) return renderPendingReply(cast, pendingReply);
 
     // Optimistically deleted (the user just removed it) — hide immediately.
-    if (cast.hash && optimistic.isDeleted(cast.hash)) return null;
+    if (cast.hash && deletedSet.has(cast.hash.toLowerCase())) return null;
 
     // Governance: annotate FOR/AGAINST vote replies with the voter's points,
     // but only inside a proposal thread (never in a normal thread).
@@ -3043,82 +3552,15 @@ export function ThreadDetailView({
         )}
 
         {/* Stats row */}
-        {(() => {
-          const optimistic = likeStates.get(cast.hash);
-          const isLiked = optimistic?.liked ?? cast.viewerContext?.reacted ?? false;
-          const likeCount = optimistic?.count ?? (cast.reactions?.count ?? 0);
-          const recastOptimistic = recastStates.get(cast.hash);
-          const isRecasted = recastOptimistic?.recasted ?? cast.viewerContext?.recast ?? false;
-          const recastCount = recastOptimistic?.count ?? (cast.recasts?.count ?? 0);
-          return (
-            <View style={{ flexDirection: 'row', gap: Skin.space(16), marginTop: Skin.space(4) }}>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
-                onPress={() => onLikeToggle(cast.hash, isLiked, likeCount)}
-                hitSlop={12}
-              >
-                <LikeIcon
-                  type={getLikeIconType(cast.text)}
-                  isLiked={isLiked}
-                  color={theme.colors.textMuted}
-                  activeColor={theme.colors.danger}
-                  size={20}
-                />
-                {likeCount > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6), paddingVertical: Skin.space(4), paddingHorizontal: Skin.space(2) }}
-                onPress={() => onOpenThread(cast.author.username, cast.hash, cast)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
-                {(cast.replies?.count ?? 0) > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6), paddingVertical: Skin.space(4), paddingHorizontal: Skin.space(2) }}
-                onPress={() => {
-                  setShareSheetCast({
-                    hash: cast.hash,
-                    author: cast.author.username,
-                    authorFid: cast.author.fid,
-                    text: cast.text || '',
-                    isRecasted,
-                    recastCount,
-                  });
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <IconSymbol
-                  name="arrow.triangle.2.circlepath"
-                  color={isRecasted ? theme.colors.success : theme.colors.textMuted}
-                  size={20}
-                />
-                {recastCount > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{recastCount}</Text>
-                )}
-              </TouchableOpacity>
-              {onTipPress && cast.author.fid > 0 && cast.author.fid !== currentUserFid && (
-                <TouchableOpacity
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6), paddingVertical: Skin.space(4), paddingHorizontal: Skin.space(2) }}
-                  onPress={() => onTipPress({
-                    castHash: cast.hash,
-                    castText: cast.text ?? '',
-                    authorFid: cast.author.fid,
-                    authorUsername: cast.author.username,
-                    authorDisplayName: cast.author.displayName,
-                  })}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <SnapIcon color={theme.colors.textMuted} size={24} />
-                </TouchableOpacity>
-              )}
-            </View>
-          );
-        })()}
+        <ThreadCastStats
+          cast={cast}
+          theme={theme}
+          currentUserFid={currentUserFid}
+          onLikeToggle={onLikeToggle}
+          onOpenThread={onOpenThread}
+          onOpenShareSheet={setShareSheetCast}
+          onTipPress={onTipPress}
+        />
       </View>
     );
   };
@@ -3260,199 +3702,21 @@ export function ThreadDetailView({
                 gap: Skin.space(10),
               }}
             >
-              {/* Mention autocomplete - positioned above the editor */}
-              {replyMentionInfo && (
-                <View style={{ zIndex: 10, marginBottom: Skin.space(-2) }}>
-                  <MentionAutocomplete
-                    mentionInfo={replyMentionInfo}
-                    token={token}
-                    onSelectUser={handleReplySelectUser}
-                    onSelectChannel={handleReplySelectChannel}
-                    theme={theme}
-                    maxHeight={160}
-                  />
-                </View>
-              )}
-
-              {/* Header row - avatar + name, matching cast layout */}
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ marginRight: Skin.space(12) }}>
-                  <CachedAvatar
-                    source={replyAvatarUri ? { uri: replyAvatarUri } : null}
-                    // Last rung is 'You', matching the label directly below —
-                    // `''` would render "?" beside text reading "You".
-                    fallbackName={currentUser?.displayName || currentUser?.farcaster?.username || 'You'}
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: Skin.circleOrSquare(22),
-                      backgroundColor: theme.colors.surface3,
-                    }}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}>
-                    {currentUser?.displayName || currentUser?.farcaster?.username || 'You'}
-                  </Text>
-                  {currentUser?.farcaster?.username && (
-                    <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13), marginTop: Skin.space(2) }}>
-                      @{currentUser.farcaster.username}
-                    </Text>
-                  )}
-                </View>
-              </View>
-
-              {/* Text input - styled like cast body text, no border/background */}
-              <View style={{ marginLeft: Skin.space(56) }}>
-                <TextInput
-                  ref={replyInputRef}
-                  onBlur={() => setIsEditorFocused(false)}
-                  style={{
-                    minHeight: 40,
-                    color: theme.colors.textMain,
-                    fontSize: Skin.font(15),
-                    lineHeight: Skin.font(20),
-                    padding: 0,
-                    textAlignVertical: 'top',
-                  }}
-                  placeholder={`Reply to @${username}...`}
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={replyText}
-                  onChangeText={(text) => {
-                    setReplyText(text.slice(0, maxCastLength));
-                  }}
-                  onSelectionChange={(e) => {
-                    setReplyCursorPosition(e.nativeEvent.selection.end);
-                  }}
-                  onFocus={() => {
-                    setIsEditorFocused(true);
-                    // Scroll to bottom when input is focused so the editor is visible
-                    setTimeout(() => {
-                      scrollViewRef.current?.scrollToEnd({ animated: true });
-                    }, 300);
-                  }}
-                  multiline
-                />
-
-                {/* Image previews */}
-                {replyImages.length > 0 && (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ marginTop: Skin.space(10) }}
-                    contentContainerStyle={{ gap: Skin.space(8) }}
-                  >
-                    {replyImages.map((image, index) => (
-                      <View key={index} style={{ position: 'relative' }}>
-                        <Image
-                          source={{ uri: image.thumbnailLocalUri ?? image.localUri }}
-                          style={{
-                            width: 80,
-                            height: 80,
-                            borderRadius: Skin.radius(8),
-                            backgroundColor: theme.colors.surface3,
-                          }}
-                          resizeMode="cover"
-                        />
-                        {image.kind === 'video' && (
-                          <View style={{
-                            position: 'absolute',
-                            top: 0,
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}>
-                            <IconSymbol name="play.fill" size={20} color="#fff" />
-                          </View>
-                        )}
-                        <TouchableOpacity
-                          onPress={() => handleRemoveReplyImage(index)}
-                          style={{
-                            position: 'absolute',
-                            top: 4,
-                            right: 4,
-                            width: 22,
-                            height: 22,
-                            borderRadius: Skin.circleOrSquare(11),
-                            backgroundColor: 'rgba(0,0,0,0.6)',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <IconSymbol name="xmark" size={12} color="#fff" />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </ScrollView>
-                )}
-
-                {/* Error message */}
-                {replyError && (
-                  <Text style={{ color: theme.colors.danger, fontSize: Skin.font(13), marginTop: Skin.space(6) }}>
-                    {replyError}
-                  </Text>
-                )}
-
-                {/* Bottom row: photo button, post button, character count */}
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    marginTop: Skin.space(10),
-                  }}
-                >
-                  <TouchableOpacity
-                    onPress={handlePickReplyImage}
-                    disabled={isPosting || replyImages.length >= 2}
-                    style={{
-                      opacity: replyImages.length >= 2 ? 0.4 : 1,
-                      padding: Skin.space(4),
-                    }}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <IconSymbol name="photo" size={20} color={theme.colors.textMuted} />
-                  </TouchableOpacity>
-
-                  <View style={{ flex: 1 }} />
-
-                  {replyText.length > 0 && (
-                    <Text style={{
-                      fontSize: Skin.font(12),
-                      marginRight: Skin.space(10),
-                      color: replyText.length > regularCastByteLimit && replyText.length <= maxCastLength
-                        ? (theme.colors.warning || '#FFA500')
-                        : theme.colors.textMuted,
-                    }}>
-                      {replyText.length}/{maxCastLength}
-                    </Text>
-                  )}
-
-                  <TouchableOpacity
-                    onPress={handleSubmitReply}
-                    disabled={!canReply}
-                    style={{
-                      paddingHorizontal: Skin.space(16),
-                      paddingVertical: Skin.space(8),
-                      borderRadius: Skin.radius(16),
-                      backgroundColor: canReply ? theme.colors.accent : theme.colors.surface3,
-                    }}
-                  >
-                    {isPosting ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Text style={{
-                        color: canReply ? '#fff' : theme.colors.textMuted,
-                        fontSize: Skin.font(14),
-                        fontWeight: '600',
-                      }}>
-                        Post
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
+              <ThreadReplyComposer
+                theme={theme}
+                token={token}
+                username={username}
+                maxCastLength={maxCastLength}
+                regularCastByteLimit={regularCastByteLimit}
+                avatarUri={replyAvatarUri}
+                displayName={currentUser?.displayName || currentUser?.farcaster?.username || 'You'}
+                farcasterUsername={currentUser?.farcaster?.username}
+                canPost={Boolean(currentUserFid && mainCast)}
+                replyTarget={mainCast ? { hash: mainCast.hash, authorFid: mainCast.author.fid } : null}
+                onPostReply={optimistic.postReply}
+                inputRef={replyInputRef}
+                onFocusChange={handleEditorFocusChange}
+              />
             </View>
           )}
         </KeyboardAwareScrollView>
@@ -3543,6 +3807,76 @@ export function ThreadDetailView({
   );
 }
 
+/** A cast's like button and count. It reads that cast's optimistic override
+ *  itself, so a like re-renders this button and not the list around it. */
+const LikeAction = React.memo(function LikeAction({
+  castHash,
+  castText,
+  serverLiked,
+  serverCount,
+  theme,
+  onToggle,
+}: {
+  castHash: string;
+  castText: string;
+  serverLiked: boolean;
+  serverCount: number;
+  theme: AppTheme;
+  onToggle: (castHash: string, currentlyLiked: boolean, currentCount: number) => void;
+}) {
+  const override = useLikeOverride(castHash);
+  const viewerLiked = useViewerLiked(castHash);
+  const isLiked = override?.liked ?? (viewerLiked || serverLiked);
+  const likeCount = override?.count ?? serverCount;
+  return (
+    <TouchableOpacity
+      style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
+      onPress={() => onToggle(castHash, isLiked, likeCount)}
+      hitSlop={12}
+    >
+      <LikeIcon
+        type={getLikeIconType(castText)}
+        isLiked={isLiked}
+        color={theme.colors.textMuted}
+        activeColor={theme.colors.danger}
+        size={20}
+      />
+      {likeCount > 0 && (
+        <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
+      )}
+    </TouchableOpacity>
+  );
+});
+
+/** A cast's recast indicator and count, read-only. Like `LikeAction`, it reads
+ *  that cast's state itself. */
+const RecastStat = React.memo(function RecastStat({
+  castHash,
+  serverRecasted,
+  serverCount,
+  theme,
+}: {
+  castHash: string;
+  serverRecasted: boolean;
+  serverCount: number;
+  theme: AppTheme;
+}) {
+  const override = useRecastOverride(castHash);
+  const viewerRecasted = useViewerRecasted(castHash);
+  const isRecasted = override?.recasted ?? (viewerRecasted || serverRecasted);
+  const count = override?.count ?? serverCount;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
+      <IconSymbol
+        name="arrow.triangle.2.circlepath"
+        color={isRecasted ? theme.colors.success : theme.colors.textMuted}
+        size={20}
+      />
+      {count > 0 && <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{count}</Text>}
+    </View>
+  );
+});
+
 export function ProfileView({
   fid,
   token,
@@ -3552,7 +3886,6 @@ export function ProfileView({
   onOpenMiniApp,
   onOpenProfile,
   onOpenChannel,
-  likeStates,
   onLikeToggle,
   bottomInset = 0,
   currentUserFid,
@@ -3568,7 +3901,6 @@ export function ProfileView({
   onOpenMiniApp: (url: string) => void;
   onOpenProfile: (fid: number, username?: string) => void;
   onOpenChannel: (channelKey: string) => void;
-  likeStates: Map<string, { liked: boolean; count: number }>;
   onLikeToggle: (castHash: string, currentlyLiked: boolean, currentCount: number) => void;
   bottomInset?: number;
   /** Opens the tip flow for a cast. Tip button hidden when omitted. */
@@ -4006,65 +4338,46 @@ export function ProfileView({
         )}
 
         {/* Stats row */}
-        {(() => {
-          const optimistic = likeStates.get(cast.hash);
-          const isLiked = optimistic?.liked ?? cast.viewerContext?.reacted ?? false;
-          const likeCount = optimistic?.count ?? (cast.reactions?.count ?? 0);
-          return (
-            <View style={{ flexDirection: 'row', gap: Skin.space(16), marginTop: Skin.space(4) }}>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
-                onPress={() => onLikeToggle(cast.hash, isLiked, likeCount)}
-                hitSlop={12}
-              >
-                <LikeIcon
-                  type={getLikeIconType(cast.text)}
-                  isLiked={isLiked}
-                  color={theme.colors.textMuted}
-                  activeColor={theme.colors.danger}
-                  size={20}
-                />
-                {likeCount > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
-                onPress={navigateToThread}
-              >
-                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
-                {(cast.replies?.count ?? 0) > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
-                )}
-              </TouchableOpacity>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
-                <IconSymbol
-                  name="arrow.triangle.2.circlepath"
-                  color={cast.viewerContext?.recast ? theme.colors.success : theme.colors.textMuted}
-                  size={20}
-                />
-                {(cast.recasts?.count ?? 0) > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.recasts?.count}</Text>
-                )}
-              </View>
-              {onTipPress && cast.author.fid > 0 && cast.author.fid !== currentUserFid && (
-                <TouchableOpacity
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
-                  onPress={() => onTipPress({
-                    castHash: cast.hash,
-                    castText: cast.text ?? '',
-                    authorFid: cast.author.fid,
-                    authorUsername: cast.author.username,
-                    authorDisplayName: cast.author.displayName,
-                  })}
-                  hitSlop={12}
-                >
-                  <SnapIcon color={theme.colors.textMuted} size={24} />
-                </TouchableOpacity>
-              )}
-            </View>
-          );
-        })()}
+        <View style={{ flexDirection: 'row', gap: Skin.space(16), marginTop: Skin.space(4) }}>
+          <LikeAction
+            castHash={cast.hash}
+            castText={cast.text}
+            serverLiked={cast.viewerContext?.reacted ?? false}
+            serverCount={cast.reactions?.count ?? 0}
+            theme={theme}
+            onToggle={onLikeToggle}
+          />
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
+            onPress={navigateToThread}
+          >
+            <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
+            {(cast.replies?.count ?? 0) > 0 && (
+              <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
+            )}
+          </TouchableOpacity>
+          <RecastStat
+            castHash={cast.hash}
+            serverRecasted={cast.viewerContext?.recast ?? false}
+            serverCount={cast.recasts?.count ?? 0}
+            theme={theme}
+          />
+          {onTipPress && cast.author.fid > 0 && cast.author.fid !== currentUserFid && (
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
+              onPress={() => onTipPress({
+                castHash: cast.hash,
+                castText: cast.text ?? '',
+                authorFid: cast.author.fid,
+                authorUsername: cast.author.username,
+                authorDisplayName: cast.author.displayName,
+              })}
+              hitSlop={12}
+            >
+              <SnapIcon color={theme.colors.textMuted} size={24} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   };
@@ -4085,9 +4398,10 @@ export function ProfileView({
 
       <FlashList
         data={casts}
-        extraData={likeStates}
         keyExtractor={(item) => item.hash}
-        ListHeaderComponent={renderProfileHeader}
+        // An element, not the function: a function is a new component type on
+        // every render, so the header remounted each time.
+        ListHeaderComponent={renderProfileHeader()}
         renderItem={({ item }) => renderCast(item)}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Skin.space(32) + bottomInset }}
@@ -4144,7 +4458,6 @@ function ChannelView({
   onOpenMiniApp,
   onOpenProfile,
   onOpenChannel,
-  likeStates,
   onLikeToggle,
   bottomInset = 0,
   currentUserFid,
@@ -4159,7 +4472,6 @@ function ChannelView({
   onOpenMiniApp: (url: string) => void;
   onOpenProfile: (fid: number, username?: string) => void;
   onOpenChannel: (channelKey: string) => void;
-  likeStates: Map<string, { liked: boolean; count: number }>;
   onLikeToggle: (castHash: string, currentlyLiked: boolean, currentCount: number) => void;
   bottomInset?: number;
   /** Opens the tip flow for a cast. Tip button hidden when omitted. */
@@ -4592,65 +4904,46 @@ function ChannelView({
         )}
 
         {/* Stats row */}
-        {(() => {
-          const optimistic = likeStates.get(cast.hash);
-          const isLiked = optimistic?.liked ?? cast.viewerContext?.reacted ?? false;
-          const likeCount = optimistic?.count ?? (cast.reactions?.count ?? 0);
-          return (
-            <View style={{ flexDirection: 'row', gap: Skin.space(16), marginTop: Skin.space(4) }}>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
-                onPress={() => onLikeToggle(cast.hash, isLiked, likeCount)}
-                hitSlop={12}
-              >
-                <LikeIcon
-                  type={getLikeIconType(cast.text)}
-                  isLiked={isLiked}
-                  color={theme.colors.textMuted}
-                  activeColor={theme.colors.danger}
-                  size={20}
-                />
-                {likeCount > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{likeCount}</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
-                onPress={navigateToThread}
-              >
-                <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
-                {(cast.replies?.count ?? 0) > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
-                )}
-              </TouchableOpacity>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}>
-                <IconSymbol
-                  name="arrow.triangle.2.circlepath"
-                  color={cast.viewerContext?.recast ? theme.colors.success : theme.colors.textMuted}
-                  size={20}
-                />
-                {(cast.recasts?.count ?? 0) > 0 && (
-                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.recasts?.count}</Text>
-                )}
-              </View>
-              {onTipPress && cast.author.fid > 0 && cast.author.fid !== currentUserFid && (
-                <TouchableOpacity
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
-                  onPress={() => onTipPress({
-                    castHash: cast.hash,
-                    castText: cast.text ?? '',
-                    authorFid: cast.author.fid,
-                    authorUsername: cast.author.username,
-                    authorDisplayName: cast.author.displayName,
-                  })}
-                  hitSlop={12}
-                >
-                  <SnapIcon color={theme.colors.textMuted} size={24} />
-                </TouchableOpacity>
-              )}
-            </View>
-          );
-        })()}
+        <View style={{ flexDirection: 'row', gap: Skin.space(16), marginTop: Skin.space(4) }}>
+          <LikeAction
+            castHash={cast.hash}
+            castText={cast.text}
+            serverLiked={cast.viewerContext?.reacted ?? false}
+            serverCount={cast.reactions?.count ?? 0}
+            theme={theme}
+            onToggle={onLikeToggle}
+          />
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
+            onPress={navigateToThread}
+          >
+            <IconSymbol name="bubble.left" color={theme.colors.textMuted} size={20} />
+            {(cast.replies?.count ?? 0) > 0 && (
+              <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>{cast.replies?.count}</Text>
+            )}
+          </TouchableOpacity>
+          <RecastStat
+            castHash={cast.hash}
+            serverRecasted={cast.viewerContext?.recast ?? false}
+            serverCount={cast.recasts?.count ?? 0}
+            theme={theme}
+          />
+          {onTipPress && cast.author.fid > 0 && cast.author.fid !== currentUserFid && (
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: Skin.space(6) }}
+              onPress={() => onTipPress({
+                castHash: cast.hash,
+                castText: cast.text ?? '',
+                authorFid: cast.author.fid,
+                authorUsername: cast.author.username,
+                authorDisplayName: cast.author.displayName,
+              })}
+              hitSlop={12}
+            >
+              <SnapIcon color={theme.colors.textMuted} size={24} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   };
@@ -4665,9 +4958,10 @@ function ChannelView({
 
       <FlashList
         data={casts}
-        extraData={likeStates}
         keyExtractor={(item) => item.hash}
-        ListHeaderComponent={renderChannelHeader}
+        // An element, not the function: a function is a new component type on
+        // every render, so the header remounted each time.
+        ListHeaderComponent={renderChannelHeader()}
         // Loader lives inside the list (as the empty-state slot) so it
         // appears BELOW the channel header instead of above it. The
         // previous sibling-of-FlashList layout was claiming half the
@@ -4760,9 +5054,6 @@ interface FeedPostCardProps {
   post: FeedPost;
   theme: AppTheme;
   styles: ReturnType<typeof createStyles>;
-  likeState?: { liked: boolean; count: number };
-  recastState?: { recasted: boolean; count: number };
-  followState?: boolean;
   token?: string;
   currentUserFid?: number;
   onNavigateToThread: (username: string, hash: string, focusReply?: boolean, placeholderCast?: unknown) => void;
@@ -5082,9 +5373,6 @@ export const FeedPostCard = React.memo(function FeedPostCard({
   post,
   theme,
   styles,
-  likeState,
-  recastState,
-  followState,
   token,
   currentUserFid,
   onNavigateToThread,
@@ -5146,9 +5434,16 @@ export const FeedPostCard = React.memo(function FeedPostCard({
     }
   }, [post.authorFid, post.username, onNavigateToProfile]);
 
-  const isLiked = likeState?.liked ?? post.viewerHasLiked ?? false;
+  // This card's own optimistic state: a like re-renders this card, not the feed.
+  const likeState = useLikeOverride(post.hash);
+  const recastState = useRecastOverride(post.hash);
+  const followState = useFollowOverride(post.authorFid);
+  // Whether the viewer has liked / recast it, as the server has it.
+  const viewerLiked = useViewerLiked(post.hash);
+  const viewerRecasted = useViewerRecasted(post.hash);
+  const isLiked = likeState?.liked ?? (viewerLiked || (post.viewerHasLiked ?? false));
   const likeCount = likeState?.count ?? (parseInt(post.stats.likes, 10) || 0);
-  const isRecasted = recastState?.recasted ?? post.viewerHasRecast ?? false;
+  const isRecasted = recastState?.recasted ?? (viewerRecasted || (post.viewerHasRecast ?? false));
   const recastCount = recastState?.count ?? (parseInt(post.stats.shares, 10) || 0);
   // Show follow button only when we explicitly know the user is not following
   // If viewerIsFollowing is undefined, we don't know the state, so default to hiding button
@@ -5520,12 +5815,8 @@ export const FeedPostCard = React.memo(function FeedPostCard({
 });
 
 interface FeedReplyCardProps extends FeedPostCardProps {
-  /** Live interaction-state maps, so each promoted/chained cast resolves its
-   *  own like/recast/follow/apex state (the row's own state still comes in via
-   *  the inherited FeedPostCardProps). */
-  likeStates: Map<string, { liked: boolean; count: number }>;
-  recastStates: Map<string, { recasted: boolean; count: number }>;
-  followStates: Map<number, boolean>;
+  /** Apex status for every cast in the unit (the row's own comes in as
+   *  `authorIsApex`). Each card reads its own like/recast/follow state. */
   apexFids: Set<number>;
   /** A precomputed self-reply chain (root-first) to render stacked as one unit.
    *  Absent for a lone reply, which instead fetches its immediate parent. */
@@ -5548,13 +5839,7 @@ interface FeedReplyCardProps extends FeedPostCardProps {
  * URL-parent replies), so nothing regresses in those cases.
  */
 const FeedReplyCard = React.memo(function FeedReplyCard({
-  likeStates,
-  recastStates,
-  followStates,
   apexFids,
-  likeState,
-  recastState,
-  followState,
   authorIsApex,
   chain,
   ...shared
@@ -5575,6 +5860,11 @@ const FeedReplyCard = React.memo(function FeedReplyCard({
     { parentHash: root.parentHash, parentAuthorFid: root.parentAuthorFid },
     !hasChain,
   );
+  // Root-first, converted once per ancestor set so the cards keep their memo.
+  const ancestorPosts = useMemo(
+    () => [...ancestors].reverse().map(normalizedCastToFeedPost),
+    [ancestors],
+  );
 
   // A lone cast with no resolved ancestors (non-reply, URL-parent, or parent
   // still loading) — render it unchanged so its own ParentContextLine still
@@ -5583,9 +5873,6 @@ const FeedReplyCard = React.memo(function FeedReplyCard({
     return (
       <FeedPostCard
         {...shared}
-        likeState={likeState}
-        recastState={recastState}
-        followState={followState}
         authorIsApex={authorIsApex}
       />
     );
@@ -5594,9 +5881,7 @@ const FeedReplyCard = React.memo(function FeedReplyCard({
   // Root-first conversation slice ending at the cast that earned this feed
   // slot, capped to MAX_VISIBLE_THREAD_POSTS cards by buildThreadUnit (the
   // collapsed middle becomes one elision row).
-  const fullChain = hasChain
-    ? baseChain
-    : [...[...ancestors].reverse().map(normalizedCastToFeedPost), ...baseChain];
+  const fullChain = hasChain ? baseChain : [...ancestorPosts, ...baseChain];
   const unit = buildThreadUnit(fullChain, hasChain ? true : rootKnown);
   const tip = fullChain[fullChain.length - 1];
   const lastCastIndex = unit.length - 1; // buildThreadUnit always ends on the tip cast
@@ -5630,9 +5915,6 @@ const FeedReplyCard = React.memo(function FeedReplyCard({
             key={cast.hash}
             {...shared}
             post={cast}
-            likeState={likeStates.get(cast.hash)}
-            recastState={recastStates.get(cast.hash)}
-            followState={followStates.get(cast.authorFid)}
             authorIsApex={apexFids.has(cast.authorFid)}
             // Thread-gutter layout: the avatar column carries the connector
             // line between the parent's PFP and the reply's PFP.
@@ -5656,6 +5938,107 @@ const FeedReplyCard = React.memo(function FeedReplyCard({
     </View>
   );
 });
+
+const feedKeyExtractor = (item: FeedPost) => item.id;
+
+/** Hides a feed row once its cast is deleted. Subscribes to that one cast, so
+ *  the feed doesn't re-render when something is deleted. */
+function HideIfDeleted({ hash, children }: { hash: string; children: React.ReactNode }) {
+  return useIsCastDeleted(hash) ? null : <>{children}</>;
+}
+
+/** The user's own top-level casts and quotes still sending, sent, or failed,
+ *  shown at the top of the feed. It subscribes to the pending list itself so
+ *  the feed doesn't re-render when a send's status changes. */
+function PendingTopLevelCasts({
+  theme,
+  onRetry,
+  onDiscard,
+}: {
+  theme: AppTheme;
+  onRetry: (localId: string) => void;
+  onDiscard: (localId: string) => void;
+}) {
+  const pending = usePendingTopLevel();
+  return (
+    <>
+      {pending.map((p) => {
+        const failed = p.status === 'failed';
+        // 'sent' = seen on the network; waiting for the feed to carry it
+        // so the real cast replaces this stub. The home feed has no own
+        // casts for a viewer who doesn't follow themselves, so the store
+        // also expires it. Until it's seen ('pending', 'confirming') it
+        // reads "Sending…".
+        const sent = p.status === 'sent';
+        // Current user's own pfp captured at post time.
+        const avatarUri = p.author.pfpUrl;
+        const handle = p.author.username ? `@${p.author.username}` : '';
+        const statusText = failed ? 'Failed to send' : sent ? 'Posted' : 'Sending…';
+        return (
+          <View
+            key={p.localId}
+            style={{
+              flexDirection: 'row',
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: theme.colors.border,
+              opacity: failed || sent ? 1 : 0.7,
+            }}
+          >
+            {/* Avatar — mirrors a real feed cast */}
+            <CachedAvatar
+              source={avatarUri ? { uri: avatarUri } : null}
+              fallbackName={p.author.displayName || p.author.username}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: Skin.circleOrSquare(22),
+                backgroundColor: theme.colors.surface3,
+                marginRight: Skin.space(12),
+              }}
+            />
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}
+                numberOfLines={1}
+              >
+                {p.author.displayName || p.author.username || 'You'}
+              </Text>
+              {/* Handle • status (status sits where the timestamp would) */}
+              <Text style={{ fontSize: Skin.font(13), marginTop: Skin.space(2) }} numberOfLines={1}>
+                <Text style={{ color: theme.colors.textMuted }}>{handle ? `${handle} • ` : ''}</Text>
+                <Text style={{ color: failed ? theme.colors.danger : theme.colors.textMuted }}>
+                  {statusText}
+                </Text>
+              </Text>
+              <Text
+                style={{
+                  color: theme.colors.textMain,
+                  fontSize: Skin.font(15),
+                  lineHeight: Skin.font(21),
+                  marginTop: Skin.space(6),
+                }}
+              >
+                {p.text}
+              </Text>
+              {failed && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Skin.space(8), gap: Skin.space(16) }}>
+                  <TouchableOpacity onPress={() => onRetry(p.localId)} hitSlop={8}>
+                    <Text style={{ color: theme.colors.primary, fontSize: Skin.font(13), fontWeight: '600' }}>Retry</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => onDiscard(p.localId)} hitSlop={8}>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>Discard</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+        );
+      })}
+    </>
+  );
+}
 
 // Navigation stack types
 type NavScreen =
@@ -5926,15 +6309,13 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     pushScreen({ type: 'channel', channelKey });
   }, [pushScreen]);
 
-  // Optimistic like/recast/follow now live in the persistent feed-optimistic
-  // store (survive remounts, shared across every view). Reading its live
-  // immutable maps preserves the existing `likeStates`/`recastStates`/
-  // `followStates` prop + FlashList `extraData` contract unchanged.
-  // Mounting the hook here also keeps the background pending-cast submit
-  // queue running feed-wide.
-  const optimistic = useFeedOptimistic();
+  // Optimistic like/recast/follow live in the persistent feed-optimistic
+  // store (survive remounts, shared across every view). The feed takes only
+  // the actions, so a like doesn't re-render it: each card reads its own
+  // cast's state from the store. Mounting the hook here also keeps the
+  // background pending-cast submit queue running feed-wide.
+  const optimistic = useFeedOptimisticActions();
   const { toggleLike, toggleRecast, toggleFollow } = optimistic;
-  const likeStates = optimistic.getLikes();
 
   // Image viewer state for feed images
   const [feedViewerState, setFeedViewerState] = useState<{ images: string[]; index: number } | null>(null);
@@ -5961,18 +6342,12 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     [toggleLike],
   );
 
-  // Optimistic recast states now read from the store (see `optimistic` above).
-  const recastStates = optimistic.getRecasts();
-
   const handleRecastToggle = useCallback(
     (castHash: string, currentlyRecasted: boolean, currentCount: number) => {
       void toggleRecast(castHash, currentlyRecasted, currentCount);
     },
     [toggleRecast],
   );
-
-  // Optimistic follow states now read from the store.
-  const followStates = optimistic.getFollows();
 
   const handleFollow = useCallback(
     (fid: number) => {
@@ -6060,9 +6435,10 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     setFeedReportTarget({ castHash, castAuthorFid });
   }, []);
 
+  const { deleteCast } = optimistic;
   const handleDeleteCast = useCallback((castHash: string) => {
-    void optimistic.deleteCast(castHash);
-  }, [optimistic.deleteCast]);
+    void deleteCast(castHash);
+  }, [deleteCast]);
 
   // Stable ref so FeedPostCard's memo survives extraData (like/recast) changes.
   const handleFeedImagePress = useCallback((images: string[], index: number) => {
@@ -6077,10 +6453,11 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     hasNextPage,
     fetchNextPage,
     refetch,
-    isRefetching,
+    refreshIfStale,
   } = useFarcasterFeed({
     enabled: visible,
   });
+
 
   // Warm the viewer's block + mute lists as soon as the social feed opens
   // (rather than waiting until a thread is opened). Persisted to MMKV +
@@ -6099,6 +6476,15 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   // whether tapping the active feed tab should scroll-to-top or
   // refresh. Ref instead of state since we don't need re-renders.
   const feedScrollYRef = useRef(0);
+
+  // Refresh a stale feed when it comes back into view (the app returning, or
+  // the feed tab being opened), or once scrolled back to the top.
+  const feedFocused = useScreenFocused();
+  const { onScrollY: refreshOnScrollY } = useFeedRefreshOnReturn({
+    inView: visible && feedFocused,
+    scrollYRef: feedScrollYRef,
+    refreshIfStale,
+  });
 
   // Exposed via forwardRef. Drives the "tap feed tab while on feed"
   // behavior: pop a thread/profile/channel back to the feed; else
@@ -6176,8 +6562,17 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   const styles = useMemo(() => createStyles(theme, isDark, insets), [theme, isDark, insets]);
   const floatingTabBarPadding = useFloatingTabBarPadding();
 
+  // Mapped posts by source item, so a page load or refetch hands an unchanged
+  // cast the same FeedPost and its card skips re-rendering. React Query's
+  // structural sharing keeps an unchanged item's identity across refetches.
+  // The relative time is the one field that moves on while the item stays the
+  // same, so a post whose label changed is rebuilt.
+  const postCacheRef = useRef(new WeakMap<object, FeedPost>());
   const posts = useMemo<FeedPost[]>(() => {
+    const cache = postCacheRef.current;
     return farcasterItems.map((item) => {
+      const cached = cache.get(item);
+      if (cached && cached.time === formatTimestamp(item.cast.timestamp)) return cached;
       const cast = item.cast;
       const mediaUrls = (cast.embeds?.images ?? [])
         .map((img) => img.url)
@@ -6274,7 +6669,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
       const filter = deriveFilter(cast, hasMedia);
 
       const accountLevel = cast.author?.profile?.accountLevel?.toLowerCase();
-      return {
+      const post: FeedPost = {
         id: item.id,
         hash: cast.hash,
         username: cast.author?.username ?? '',
@@ -6305,6 +6700,8 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         viewerHasRecast: cast.viewerContext?.recast,
         viewerIsFollowing: cast.author?.viewerContext?.following,
       };
+      cache.set(item, post);
+      return post;
     });
   }, [farcasterItems]);
 
@@ -6580,6 +6977,120 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     return m;
   }, [governanceCasts]);
 
+  // The home list's row renderer, kept stable so a re-render of this screen
+  // (typing in the composer, the search bar, the keyboard) doesn't re-run it
+  // for every visible row.
+  const renderFeedItem = useCallback(({ item: post }: { item: FeedPost }) => (
+    <HideIfDeleted hash={post.hash}>
+      {activeFilter === 'media' ? (
+        <MediaGridCell
+          post={post}
+          theme={theme}
+          onPress={() =>
+            handleNavigateToThread(
+              post.username,
+              post.hash,
+              false,
+              feedPostToCastPlaceholder(post),
+            )
+          }
+        />
+      ) : (
+        <>
+          {/* FeedReplyCard promotes a reply's parent into the
+              primary card (with the reply indented beneath); for a
+              non-reply it renders a plain FeedPostCard. */}
+          <FeedReplyCard
+            post={post}
+            theme={theme}
+            styles={styles}
+            token={token}
+            currentUserFid={currentUserFid}
+            onNavigateToThread={handleNavigateToThread}
+            onNavigateToProfile={handleNavigateToProfile}
+            onOpenChannel={openChannel}
+            onMentionPress={handleMentionPress}
+            onLinkPress={openMiniApp}
+            onImagePress={handleFeedImagePress}
+            onLikeToggle={handleLikeToggle}
+            onOpenShareSheet={handleOpenShareSheet}
+            onFollow={handleFollow}
+            onReport={handleReportCast}
+            onDelete={handleDeleteCast}
+            onTipPress={handleOpenTip}
+            authorIsApex={feedApexFids.has(post.authorFid)}
+            apexFids={feedApexFids}
+            chain={(post as FeedPostWithChain).__chain}
+          />
+          {post.isProposal && (
+            <ProposalVoteBlock
+              hash={post.hash}
+              votesFor={post.votesFor ?? 0}
+              votesAgainst={post.votesAgainst ?? 0}
+              theme={theme}
+              onVoted={refetchGovernance}
+            />
+          )}
+        </>
+      )}
+    </HideIfDeleted>
+  ), [
+    activeFilter,
+    theme,
+    styles,
+    token,
+    currentUserFid,
+    handleNavigateToThread,
+    handleNavigateToProfile,
+    openChannel,
+    handleMentionPress,
+    openMiniApp,
+    handleFeedImagePress,
+    handleLikeToggle,
+    handleOpenShareSheet,
+    handleFollow,
+    handleReportCast,
+    handleDeleteCast,
+    handleOpenTip,
+    feedApexFids,
+    refetchGovernance,
+  ]);
+
+  const feedListData = useMemo(
+    () =>
+      activeFilter === 'governance'
+        ? governanceProposals
+        : activeFilter === 'media'
+          ? filteredPosts.filter((p) => p.mediaUrls.length > 0 || p.videos.some((v) => v.thumbnailUrl))
+          : collapsedFeedData,
+    [activeFilter, governanceProposals, filteredPosts, collapsedFeedData],
+  );
+
+  // Recycle cells within same-shape pools so a video row isn't
+  // reused as a text row (lighter rebind on scroll).
+  const getFeedItemType = useCallback(
+    (item: FeedPost) =>
+      activeFilter === 'media'
+        ? 'media-grid'
+        : item.isProposal
+          ? 'proposal'
+          : (item as FeedPostWithChain).__chain
+            ? 'chain'
+            : isThreadableReply(item)
+              ? 'reply'
+              : item.videos.length > 0
+                ? 'video'
+                : item.mediaUrls.length > 0
+                  ? 'image'
+                  : 'text',
+    [activeFilter],
+  );
+
+  // The pull-to-refresh spinner shows for a refresh the user pulled for, not
+  // for background refetches or next-page loads (it used to turn on for every
+  // fetch, so it flashed at the top whenever a page loaded).
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+
   // Drop optimistic pending top-level casts once the server feed includes
   // them (matched by the confirmed hash set after the background submit).
   // Must run before the `if (!rendered)` early return so hook order stays
@@ -6588,6 +7099,15 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     if (posts && posts.length) optimistic.reconcilePendingByHash(posts.map((p) => p.hash));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [posts, optimistic.reconcilePendingByHash]);
+
+  // What the viewer has liked and recast, from the server, for every card.
+  // Overrides from this session are dropped once it and the casts' counts
+  // agree with them (`reconcileReactions`).
+  const viewerReactions = useViewerReactions();
+  const { reconcileReactions } = optimistic;
+  useEffect(() => {
+    if (farcasterItems.length) reconcileReactions(farcasterItems.map((item) => item.cast));
+  }, [farcasterItems, viewerReactions, reconcileReactions]);
 
   if (!rendered) {
     return null;
@@ -6742,12 +7262,13 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
     }
   };
 
-  const handleRefresh = () => {
-    if (activeFilter === 'governance') {
-      refetchGovernance();
-      return;
+  const handleRefresh = async () => {
+    setIsPullRefreshing(true);
+    try {
+      await (activeFilter === 'governance' ? refetchGovernance() : refetch());
+    } finally {
+      setIsPullRefreshing(false);
     }
-    refetch();
   };
 
   // Calculate userPanel height to match index.tsx: paddingTop(8) + content(~32) + paddingBottom(max(8, insets.bottom))
@@ -6981,35 +7502,10 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             <FlashList
               ref={feedListRef}
               key={activeFilter === 'media' ? 'media-grid' : 'list'}
-              data={
-                activeFilter === 'governance'
-                  ? governanceProposals
-                  : activeFilter === 'media'
-                    ? filteredPosts.filter((p) => p.mediaUrls.length > 0 || p.videos.some((v) => v.thumbnailUrl))
-                    : collapsedFeedData
-              }
+              data={feedListData}
               numColumns={activeFilter === 'media' ? 3 : 1}
-              // Hint FlashList with the row size so recycling computes
-              // accurate slot positions without measuring during scroll.
-              extraData={likeStates}
-              keyExtractor={(item) => item.id}
-              // Recycle cells within same-shape pools so a video row isn't
-              // reused as a text row (lighter rebind on scroll).
-              getItemType={(item) =>
-                activeFilter === 'media'
-                  ? 'media-grid'
-                  : item.isProposal
-                    ? 'proposal'
-                    : (item as FeedPostWithChain).__chain
-                      ? 'chain'
-                      : isThreadableReply(item)
-                        ? 'reply'
-                        : item.videos.length > 0
-                          ? 'video'
-                          : item.mediaUrls.length > 0
-                            ? 'image'
-                            : 'text'
-              }
+              keyExtractor={feedKeyExtractor}
+              getItemType={getFeedItemType}
               showsVerticalScrollIndicator={false}
               // Let taps reach buttons (e.g. the proposal "Post vote") while a
               // text input's keyboard is open, instead of being swallowed to
@@ -7030,6 +7526,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               onScroll={(e) => {
                 const y = e.nativeEvent.contentOffset.y;
                 feedScrollYRef.current = y;
+                refreshOnScrollY(y);
                 const h = searchBarHeightRef.current;
                 if (h <= 0) return;
                 const out = y > h - 8;
@@ -7038,7 +7535,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
               scrollEventThrottle={64}
               refreshControl={
                 <RefreshControl
-                  refreshing={isRefetching}
+                  refreshing={isPullRefreshing}
                   onRefresh={handleRefresh}
                   tintColor={theme.colors.textMain}
                 />
@@ -7151,78 +7648,13 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   {/* Optimistic pending top-level casts / quotes — shown at
                       the top of the feed while they submit in the
                       background, with a Retry/Discard reprompt on failure. */}
-                  {activeFilter !== 'media' && activeFilter !== 'governance' &&
-                    optimistic.pendingTopLevel().map((p) => {
-                      const failed = p.status === 'failed';
-                      // 'sent' = landed; waiting for the server to index it so
-                      // the real cast replaces this stub (never a stuck "Sending…").
-                      const sent = p.status === 'sent';
-                      // Current user's own pfp captured at post time.
-                      const avatarUri = p.author.pfpUrl;
-                      const handle = p.author.username ? `@${p.author.username}` : '';
-                      const statusText = failed ? 'Failed to send' : sent ? 'Posted' : 'Sending…';
-                      return (
-                        <View
-                          key={p.localId}
-                          style={{
-                            flexDirection: 'row',
-                            paddingHorizontal: 16,
-                            paddingVertical: 12,
-                            borderBottomWidth: StyleSheet.hairlineWidth,
-                            borderBottomColor: theme.colors.border,
-                            opacity: failed || sent ? 1 : 0.7,
-                          }}
-                        >
-                          {/* Avatar — mirrors a real feed cast */}
-                          <CachedAvatar
-                            source={avatarUri ? { uri: avatarUri } : null}
-                            fallbackName={p.author.displayName || p.author.username}
-                            style={{
-                              width: 44,
-                              height: 44,
-                              borderRadius: Skin.circleOrSquare(22),
-                              backgroundColor: theme.colors.surface3,
-                              marginRight: Skin.space(12),
-                            }}
-                          />
-                          <View style={{ flex: 1 }}>
-                            <Text
-                              style={{ color: theme.colors.textStrong, fontWeight: '600', fontSize: Skin.font(15) }}
-                              numberOfLines={1}
-                            >
-                              {p.author.displayName || p.author.username || 'You'}
-                            </Text>
-                            {/* Handle • status (status sits where the timestamp would) */}
-                            <Text style={{ fontSize: Skin.font(13), marginTop: Skin.space(2) }} numberOfLines={1}>
-                              <Text style={{ color: theme.colors.textMuted }}>{handle ? `${handle} • ` : ''}</Text>
-                              <Text style={{ color: failed ? theme.colors.danger : theme.colors.textMuted }}>
-                                {statusText}
-                              </Text>
-                            </Text>
-                            <Text
-                              style={{
-                                color: theme.colors.textMain,
-                                fontSize: Skin.font(15),
-                                lineHeight: Skin.font(21),
-                                marginTop: Skin.space(6),
-                              }}
-                            >
-                              {p.text}
-                            </Text>
-                            {failed && (
-                              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Skin.space(8), gap: Skin.space(16) }}>
-                                <TouchableOpacity onPress={() => optimistic.retryPending(p.localId)} hitSlop={8}>
-                                  <Text style={{ color: theme.colors.primary, fontSize: Skin.font(13), fontWeight: '600' }}>Retry</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity onPress={() => optimistic.discardPending(p.localId)} hitSlop={8}>
-                                  <Text style={{ color: theme.colors.textMuted, fontSize: Skin.font(13) }}>Discard</Text>
-                                </TouchableOpacity>
-                              </View>
-                            )}
-                          </View>
-                        </View>
-                      );
-                    })}
+                  {activeFilter !== 'media' && activeFilter !== 'governance' && (
+                    <PendingTopLevelCasts
+                      theme={theme}
+                      onRetry={optimistic.retryPending}
+                      onDiscard={optimistic.discardPending}
+                    />
+                  )}
                 </>
               }
               ListFooterComponent={
@@ -7232,66 +7664,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   </View>
                 ) : null
               }
-              renderItem={({ item: post }) =>
-                optimistic.isDeleted(post.hash) ? null :
-                activeFilter === 'media' ? (
-                  <MediaGridCell
-                    post={post}
-                    theme={theme}
-                    onPress={() =>
-                      handleNavigateToThread(
-                        post.username,
-                        post.hash,
-                        false,
-                        feedPostToCastPlaceholder(post),
-                      )
-                    }
-                  />
-                ) : (
-                  <>
-                    {/* FeedReplyCard promotes a reply's parent into the
-                        primary card (with the reply indented beneath); for a
-                        non-reply it renders a plain FeedPostCard. */}
-                    <FeedReplyCard
-                      post={post}
-                      theme={theme}
-                      styles={styles}
-                      likeState={likeStates.get(post.hash)}
-                      recastState={recastStates.get(post.hash)}
-                      followState={followStates.get(post.authorFid)}
-                      token={token}
-                      currentUserFid={currentUserFid}
-                      onNavigateToThread={handleNavigateToThread}
-                      onNavigateToProfile={handleNavigateToProfile}
-                      onOpenChannel={openChannel}
-                      onMentionPress={handleMentionPress}
-                      onLinkPress={openMiniApp}
-                      onImagePress={handleFeedImagePress}
-                      onLikeToggle={handleLikeToggle}
-                      onOpenShareSheet={handleOpenShareSheet}
-                      onFollow={handleFollow}
-                      onReport={handleReportCast}
-                      onDelete={handleDeleteCast}
-                      onTipPress={handleOpenTip}
-                      authorIsApex={feedApexFids.has(post.authorFid)}
-                      likeStates={likeStates}
-                      recastStates={recastStates}
-                      followStates={followStates}
-                      apexFids={feedApexFids}
-                      chain={(post as FeedPostWithChain).__chain}
-                    />
-                    {post.isProposal && (
-                      <ProposalVoteBlock
-                        hash={post.hash}
-                        votesFor={post.votesFor ?? 0}
-                        votesAgainst={post.votesAgainst ?? 0}
-                        theme={theme}
-                        onVoted={refetchGovernance}
-                      />
-                    )}
-                  </>
-                )
-              }
+              renderItem={renderFeedItem}
             />
           )}
 
@@ -7458,13 +7831,10 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   onOpenProfile={(fid, username) => pushScreen({ type: 'profile', fid, username })}
                   onOpenChannel={(channelKey) => pushScreen({ type: 'channel', channelKey })}
                   onOpenThread={(username, hashPrefix, placeholderCast) => pushScreen({ type: 'thread', username, castHashPrefix: hashPrefix, placeholderCast })}
-                  likeStates={likeStates}
                   onLikeToggle={handleLikeToggle}
-                  recastStates={recastStates}
                   onRecastToggle={handleRecastToggle}
                   onQuoteCast={handleQuoteCast}
                   onShareToChat={handleShareToChat}
-                  followStates={followStates}
                   onFollow={handleFollow}
                   // In route mode these stack screens render UNDER the floating
                   // tab bar, so the reply editor + FAB + list padding must clear
@@ -7494,7 +7864,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   onOpenMiniApp={openMiniApp}
                   onOpenProfile={(fid, username) => pushScreen({ type: 'profile', fid, username })}
                   onOpenChannel={(channelKey) => pushScreen({ type: 'channel', channelKey })}
-                  likeStates={likeStates}
                   onLikeToggle={handleLikeToggle}
                   bottomInset={isRouteMode ? floatingTabBarPadding : insets.bottom}
                   onTipPress={handleOpenTip}
@@ -7515,7 +7884,6 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
                   onOpenMiniApp={openMiniApp}
                   onOpenProfile={(fid, username) => pushScreen({ type: 'profile', fid, username })}
                   onOpenChannel={(channelKey) => pushScreen({ type: 'channel', channelKey })}
-                  likeStates={likeStates}
                   onLikeToggle={handleLikeToggle}
                   bottomInset={isRouteMode ? floatingTabBarPadding : insets.bottom}
                   onTipPress={handleOpenTip}

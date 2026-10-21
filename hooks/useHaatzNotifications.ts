@@ -31,11 +31,15 @@ export function useHaatzNotifications() {
     getNextPageParam: (last) =>
       last && last.notifications.length > 0 && last.nextCursor ? last.nextCursor : undefined,
     enabled: fid != null && fid > 0,
-    // Cap retained pages so a long session doesn't pin every page in the
-    // JS heap; dropped pages refetch from the network on demand.
-    maxPages: 6,
+    // No `maxPages`: notifications only page older, so a dropped first page
+    // never came back, and every refetch started from the page after it; the
+    // list and the badge stopped seeing new notifications.
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    // Polls for the badge, which needs the first page. An infinite query
+    // refetches every page it holds, so once the list has been scrolled
+    // into more pages the poll stops; it's someone reading the list then,
+    // and pull-to-refresh and coming back to the app still refresh it.
+    refetchInterval: (query) => ((query.state.data?.pages.length ?? 0) > 1 ? false : 60_000),
     refetchOnWindowFocus: true,
     retry: 1,
   });

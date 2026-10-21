@@ -210,7 +210,8 @@ export function useSearchUsers({
     getNextPageParam: (lastPage) => lastPage.next,
     enabled: enabled && q.trim().length > 0,
     staleTime: 60 * 1000,
-    maxPages: 6,
+    // No `maxPages`: results only page forward, so a dropped first page would
+    // never come back, and a refetch would start from the page after it.
   });
 
   const users = useMemo(() => {
@@ -282,7 +283,8 @@ export function useSearchChannels({
     },
     enabled: enabled && q.trim().length > 0,
     staleTime: 60 * 1000,
-    maxPages: 6,
+    // No `maxPages`: results only page forward, so a dropped first page would
+    // never come back, and a refetch would start from the page after it.
   });
 
   const channels = useMemo(() => {
@@ -324,7 +326,8 @@ export function useSearchCasts({
     getNextPageParam: (lastPage) => lastPage.next,
     enabled: enabled && q.trim().length > 0,
     staleTime: 60 * 1000,
-    maxPages: 6,
+    // No `maxPages`: results only page forward, so a dropped first page would
+    // never come back, and a refetch would start from the page after it.
   });
 
   const casts = useMemo(() => {

@@ -1,0 +1,330 @@
+diff --git a/node_modules/@quilibrium/quorum-shared/dist/index.js b/node_modules/@quilibrium/quorum-shared/dist/index.js
+index 109a81a..c481d33 100644
+--- a/node_modules/@quilibrium/quorum-shared/dist/index.js
++++ b/node_modules/@quilibrium/quorum-shared/dist/index.js
+@@ -4765,6 +4765,7 @@ var RNWebSocketClient = class {
+     this.pendingEnvelopes = [];
+     this.isProcessing = false;
+     this.processIntervalId = null;
++    this.reconnectTimer = null;
+     // Handlers
+     this.messageHandler = null;
+     this.resubscribeHandler = null;
+@@ -4811,11 +4812,29 @@ var RNWebSocketClient = class {
+     return this.doConnect();
+   }
+   doConnect() {
++    // A reconnect scheduled before disconnect() must not reopen the socket.
++    if (!this.shouldReconnect) {
++      return Promise.resolve();
++    }
+     return new Promise((resolve, reject) => {
+       this.setState("connecting");
+       try {
+-        this.ws = new WebSocket(this.url);
+-        this.ws.onopen = () => {
++        // Every handler below acts only for the socket that is still current.
++        // disconnect() + connect() replaces the socket before the old one's
++        // close event arrives; without this, that stale onclose stopped the
++        // live client's queue, reported it disconnected, and scheduled a
++        // reconnect that overwrote this.ws, orphaning the socket that had just
++        // connected and subscribed (whose frames then arrived twice).
++        const ws = new WebSocket(this.url);
++        this.ws = ws;
++        ws.onopen = () => {
++          if (ws !== this.ws) {
++            try {
++              ws.close();
++            } catch {
++            }
++            return;
++          }
+           this.reconnectAttempts = 0;
+           this.setState("connected");
+           this.startQueueProcessing();
+@@ -4828,22 +4847,36 @@ var RNWebSocketClient = class {
+           this.processQueues();
+           resolve();
+         };
+-        this.ws.onclose = () => {
++        ws.onclose = () => {
++          if (ws !== this.ws) {
++            return;
++          }
+           this.sendRetention.sealOnClose(Date.now());
+           this.setState("disconnected");
+           this.stopQueueProcessing();
+           if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+             this.reconnectAttempts++;
+             this.setState("reconnecting");
+-            setTimeout(() => this.doConnect(), this.reconnectInterval);
++            this.clearReconnectTimer();
++            this.reconnectTimer = setTimeout(() => {
++              this.reconnectTimer = null;
++              this.doConnect().catch(() => {
++              });
++            }, this.reconnectInterval);
+           }
+         };
+-        this.ws.onerror = () => {
++        ws.onerror = () => {
++          if (ws !== this.ws) {
++            return;
++          }
+           const error = new Error("WebSocket error");
+           this.emitError(error);
+           reject(error);
+         };
+-        this.ws.onmessage = (event) => {
++        ws.onmessage = (event) => {
++          if (ws !== this.ws) {
++            return;
++          }
+           try {
+             logger.debug("[WS-RN] Raw message received:", event.data?.substring(0, 200));
+             if (!event.data || !event.data.startsWith("{")) {
+@@ -4871,12 +4904,23 @@ var RNWebSocketClient = class {
+       }
+     });
+   }
++  clearReconnectTimer() {
++    if (this.reconnectTimer) {
++      clearTimeout(this.reconnectTimer);
++      this.reconnectTimer = null;
++    }
++  }
+   disconnect() {
+     this.shouldReconnect = false;
++    this.clearReconnectTimer();
+     this.stopQueueProcessing();
+     if (this.ws) {
+-      this.ws.close();
++      // Detach first, so the close event this triggers is ignored as stale;
++      // seal its frames here, as that close would have.
++      const ws = this.ws;
+       this.ws = null;
++      this.sendRetention.sealOnClose(Date.now());
++      ws.close();
+     }
+     this.setState("disconnected");
+   }
+diff --git a/node_modules/@quilibrium/quorum-shared/dist/index.mjs b/node_modules/@quilibrium/quorum-shared/dist/index.mjs
+index ef0c40f..00aaa1a 100644
+--- a/node_modules/@quilibrium/quorum-shared/dist/index.mjs
++++ b/node_modules/@quilibrium/quorum-shared/dist/index.mjs
+@@ -4335,6 +4335,7 @@ var RNWebSocketClient = class {
+     this.pendingEnvelopes = [];
+     this.isProcessing = false;
+     this.processIntervalId = null;
++    this.reconnectTimer = null;
+     // Handlers
+     this.messageHandler = null;
+     this.resubscribeHandler = null;
+@@ -4381,11 +4382,29 @@ var RNWebSocketClient = class {
+     return this.doConnect();
+   }
+   doConnect() {
++    // A reconnect scheduled before disconnect() must not reopen the socket.
++    if (!this.shouldReconnect) {
++      return Promise.resolve();
++    }
+     return new Promise((resolve, reject) => {
+       this.setState("connecting");
+       try {
+-        this.ws = new WebSocket(this.url);
+-        this.ws.onopen = () => {
++        // Every handler below acts only for the socket that is still current.
++        // disconnect() + connect() replaces the socket before the old one's
++        // close event arrives; without this, that stale onclose stopped the
++        // live client's queue, reported it disconnected, and scheduled a
++        // reconnect that overwrote this.ws, orphaning the socket that had just
++        // connected and subscribed (whose frames then arrived twice).
++        const ws = new WebSocket(this.url);
++        this.ws = ws;
++        ws.onopen = () => {
++          if (ws !== this.ws) {
++            try {
++              ws.close();
++            } catch {
++            }
++            return;
++          }
+           this.reconnectAttempts = 0;
+           this.setState("connected");
+           this.startQueueProcessing();
+@@ -4398,22 +4417,36 @@ var RNWebSocketClient = class {
+           this.processQueues();
+           resolve();
+         };
+-        this.ws.onclose = () => {
++        ws.onclose = () => {
++          if (ws !== this.ws) {
++            return;
++          }
+           this.sendRetention.sealOnClose(Date.now());
+           this.setState("disconnected");
+           this.stopQueueProcessing();
+           if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+             this.reconnectAttempts++;
+             this.setState("reconnecting");
+-            setTimeout(() => this.doConnect(), this.reconnectInterval);
++            this.clearReconnectTimer();
++            this.reconnectTimer = setTimeout(() => {
++              this.reconnectTimer = null;
++              this.doConnect().catch(() => {
++              });
++            }, this.reconnectInterval);
+           }
+         };
+-        this.ws.onerror = () => {
++        ws.onerror = () => {
++          if (ws !== this.ws) {
++            return;
++          }
+           const error = new Error("WebSocket error");
+           this.emitError(error);
+           reject(error);
+         };
+-        this.ws.onmessage = (event) => {
++        ws.onmessage = (event) => {
++          if (ws !== this.ws) {
++            return;
++          }
+           try {
+             logger.debug("[WS-RN] Raw message received:", event.data?.substring(0, 200));
+             if (!event.data || !event.data.startsWith("{")) {
+@@ -4441,12 +4474,23 @@ var RNWebSocketClient = class {
+       }
+     });
+   }
++  clearReconnectTimer() {
++    if (this.reconnectTimer) {
++      clearTimeout(this.reconnectTimer);
++      this.reconnectTimer = null;
++    }
++  }
+   disconnect() {
+     this.shouldReconnect = false;
++    this.clearReconnectTimer();
+     this.stopQueueProcessing();
+     if (this.ws) {
+-      this.ws.close();
++      // Detach first, so the close event this triggers is ignored as stale;
++      // seal its frames here, as that close would have.
++      const ws = this.ws;
+       this.ws = null;
++      this.sendRetention.sealOnClose(Date.now());
++      ws.close();
+     }
+     this.setState("disconnected");
+   }
+diff --git a/node_modules/@quilibrium/quorum-shared/dist/index.native.js b/node_modules/@quilibrium/quorum-shared/dist/index.native.js
+index 808855b..0f82021 100644
+--- a/node_modules/@quilibrium/quorum-shared/dist/index.native.js
++++ b/node_modules/@quilibrium/quorum-shared/dist/index.native.js
+@@ -5016,6 +5016,7 @@ var RNWebSocketClient = class {
+     this.pendingEnvelopes = [];
+     this.isProcessing = false;
+     this.processIntervalId = null;
++    this.reconnectTimer = null;
+     // Handlers
+     this.messageHandler = null;
+     this.resubscribeHandler = null;
+@@ -5062,11 +5063,29 @@ var RNWebSocketClient = class {
+     return this.doConnect();
+   }
+   doConnect() {
++    // A reconnect scheduled before disconnect() must not reopen the socket.
++    if (!this.shouldReconnect) {
++      return Promise.resolve();
++    }
+     return new Promise((resolve, reject) => {
+       this.setState("connecting");
+       try {
+-        this.ws = new WebSocket(this.url);
+-        this.ws.onopen = () => {
++        // Every handler below acts only for the socket that is still current.
++        // disconnect() + connect() replaces the socket before the old one's
++        // close event arrives; without this, that stale onclose stopped the
++        // live client's queue, reported it disconnected, and scheduled a
++        // reconnect that overwrote this.ws, orphaning the socket that had just
++        // connected and subscribed (whose frames then arrived twice).
++        const ws = new WebSocket(this.url);
++        this.ws = ws;
++        ws.onopen = () => {
++          if (ws !== this.ws) {
++            try {
++              ws.close();
++            } catch {
++            }
++            return;
++          }
+           this.reconnectAttempts = 0;
+           this.setState("connected");
+           this.startQueueProcessing();
+@@ -5079,22 +5098,36 @@ var RNWebSocketClient = class {
+           this.processQueues();
+           resolve();
+         };
+-        this.ws.onclose = () => {
++        ws.onclose = () => {
++          if (ws !== this.ws) {
++            return;
++          }
+           this.sendRetention.sealOnClose(Date.now());
+           this.setState("disconnected");
+           this.stopQueueProcessing();
+           if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+             this.reconnectAttempts++;
+             this.setState("reconnecting");
+-            setTimeout(() => this.doConnect(), this.reconnectInterval);
++            this.clearReconnectTimer();
++            this.reconnectTimer = setTimeout(() => {
++              this.reconnectTimer = null;
++              this.doConnect().catch(() => {
++              });
++            }, this.reconnectInterval);
+           }
+         };
+-        this.ws.onerror = () => {
++        ws.onerror = () => {
++          if (ws !== this.ws) {
++            return;
++          }
+           const error = new Error("WebSocket error");
+           this.emitError(error);
+           reject(error);
+         };
+-        this.ws.onmessage = (event) => {
++        ws.onmessage = (event) => {
++          if (ws !== this.ws) {
++            return;
++          }
+           try {
+             logger.debug("[WS-RN] Raw message received:", event.data?.substring(0, 200));
+             if (!event.data || !event.data.startsWith("{")) {
+@@ -5122,12 +5155,23 @@ var RNWebSocketClient = class {
+       }
+     });
+   }
++  clearReconnectTimer() {
++    if (this.reconnectTimer) {
++      clearTimeout(this.reconnectTimer);
++      this.reconnectTimer = null;
++    }
++  }
+   disconnect() {
+     this.shouldReconnect = false;
++    this.clearReconnectTimer();
+     this.stopQueueProcessing();
+     if (this.ws) {
+-      this.ws.close();
++      // Detach first, so the close event this triggers is ignored as stale;
++      // seal its frames here, as that close would have.
++      const ws = this.ws;
+       this.ws = null;
++      this.sendRetention.sealOnClose(Date.now());
++      ws.close();
+     }
+     this.setState("disconnected");
+   }

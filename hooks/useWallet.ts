@@ -32,6 +32,7 @@ import {
 import React from 'react';
 import { InteractionManager } from 'react-native';
 import { createMMKV } from 'react-native-mmkv';
+import { useScreenFocused } from '@/hooks/useScreenFocused';
 
 // MMKV storage for wallet balance cache
 const walletCacheStorage = createMMKV({ id: 'quorum-wallet-cache' });
@@ -258,6 +259,9 @@ export function useWalletKeys(): { refetch: () => Promise<{ data: ChainKeys | nu
  */
 export function useWalletBalances(options?: { enabled?: boolean; refetchInterval?: number }) {
   const { data: addresses } = useWalletAddresses();
+  // A visited wallet tab stays mounted; refresh on return to the app and poll
+  // only while it's in view. Each refresh queries 40+ chains.
+  const focused = useScreenFocused();
 
   // Load cached balances - memoize to prevent unnecessary re-reads
   const { cachedBalances, cacheTimestamp } = React.useMemo(() => {
@@ -285,7 +289,8 @@ export function useWalletBalances(options?: { enabled?: boolean; refetchInterval
     enabled: !!addresses && options?.enabled !== false,
     staleTime: 30 * 1000, // 30 seconds
     gcTime: 5 * 60 * 1000, // 5 minutes
-    refetchInterval: options?.refetchInterval,
+    refetchInterval: focused ? options?.refetchInterval : false,
+    refetchOnWindowFocus: focused,
     // Use cached data as initial data - this persists while refreshing
     initialData: cachedBalances ?? undefined,
     initialDataUpdatedAt: cacheTimestamp,

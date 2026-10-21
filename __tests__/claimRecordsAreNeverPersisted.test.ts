@@ -33,7 +33,7 @@
  */
 import { QueryClient, defaultShouldDehydrateQuery, type Query } from '@tanstack/react-query';
 
-import { shouldPersistQuery, QNS_VERIFY_CLAIMS_KEY } from '@/services/offline/shouldPersistQuery';
+import { PERSISTED_QUERY_ROOTS, shouldPersistQuery, QNS_VERIFY_CLAIMS_KEY } from '@/services/offline/shouldPersistQuery';
 
 /**
  * A real `Query` in the state the persister sees: successful, with data.
@@ -78,12 +78,19 @@ describe('shouldPersistQuery', () => {
     expect(QNS_VERIFY_CLAIMS_KEY).toBe('qns-verify-claims');
   });
 
-  it('CONTROL: still persists an ordinary query', () => {
+  it('CONTROL: still persists an allow-listed query', () => {
     // Without this arm, narrowing the predicate to `() => false` would pass
     // every assertion above while disabling offline support entirely.
-    const query = successfulQuery(['spaces'], [{ id: 'space-1' }]);
+    const query = successfulQuery(['user-public-profile', '0xabc'], { display_name: 'Alice' });
 
     expect(shouldPersistQuery(query)).toBe(true);
+  });
+
+  it('GUARD: claim verification is not allow-listed', () => {
+    // Persistence is an allow-list, so the refusal above currently holds
+    // twice. This keeps the explicit rule from becoming the only line, unseen,
+    // if the allow-list ever grows to include it.
+    expect(PERSISTED_QUERY_ROOTS.has(QNS_VERIFY_CLAIMS_KEY)).toBe(false);
   });
 
   it('CONTROL: still defers to React Query on a query it would not persist itself', () => {
@@ -109,7 +116,7 @@ describe('shouldPersistQuery', () => {
     // `Query` that `shouldPersistQuery` and `defaultShouldDehydrateQuery` take.
     const pending: Query = client
       .getQueryCache()
-      .build(client, { queryKey: ['spaces'] as readonly unknown[] });
+      .build(client, { queryKey: ['user-public-profile', '0xabc'] as readonly unknown[] });
 
     // Fail loudly if the fixture ever stops producing a real query — that is
     // the exact failure mode this test just had.

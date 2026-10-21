@@ -5,7 +5,8 @@ export const SCREEN_WIDTH = Dimensions.get('window').width;
 export const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 /**
- * LRU cache for image dimensions to prevent recalculation during scroll.
+ * LRU cache of image aspect ratios (height ÷ width) by URL, so an image seen
+ * before gets its box size on first render instead of after it loads.
  * Limited to maxSize entries to prevent unbounded memory growth.
  */
 class ImageDimensionCache {
@@ -22,7 +23,7 @@ class ImageDimensionCache {
     return value;
   }
 
-  set(uri: string, height: number): void {
+  set(uri: string, ratio: number): void {
     // If at capacity, remove oldest entry (first in map)
     if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value;
@@ -30,7 +31,7 @@ class ImageDimensionCache {
         this.cache.delete(firstKey);
       }
     }
-    this.cache.set(uri, height);
+    this.cache.set(uri, ratio);
   }
 
   has(uri: string): boolean {

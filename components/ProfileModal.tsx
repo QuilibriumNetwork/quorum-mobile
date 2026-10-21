@@ -94,6 +94,7 @@ import { isDevModeLocal, setDevModeLocal, getApiConfig } from '@/services/api/co
 // Dev-only; rendered behind a `__DEV__` gate at the call site, same as the
 // notifications tab's FarcasterDismissalPanel.
 import { DevPanel, DevRow } from '@/components/dev/DevPanel';
+import { isPerfProbeEnabled, setPerfProbeEnabled } from '@/services/observability/perfProbe';
 import { QnsFakePanel } from '@/components/dev/QnsFakePanel';
 import { QnsExplainPanel } from '@/components/dev/QnsExplainPanel';
 import { FarcasterReimportPanel } from '@/components/dev/FarcasterReimportPanel';
@@ -184,12 +185,26 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 function DevModeSection({ theme }: { theme: AppTheme }) {
   const [isLocal, setIsLocal] = React.useState(isDevModeLocal());
+  const [perfProbeOn, setPerfProbeOn] = React.useState(isPerfProbeEnabled());
   const config = getApiConfig();
 
   return (
     <View style={{ marginBottom: Skin.space(24), gap: Skin.space(12) }}>
       {/* One row, so folding it would cost a tap to save nothing. */}
       <DevPanel title="Developer" collapsible={false}>
+        <DevRow
+          label="Perf probe"
+          hint="Logs JS-thread long tasks, lag and heap every 30s ([perf] in the device log)"
+        >
+          <Switch
+            value={perfProbeOn}
+            onValueChange={(v) => {
+              setPerfProbeEnabled(v);
+              setPerfProbeOn(v);
+            }}
+            trackColor={{ true: theme.colors.warning }}
+          />
+        </DevRow>
         <DevRow
           label="Use Local API"
           hint={isLocal ? config.baseUrl : 'Connects to production'}
@@ -1328,15 +1343,19 @@ export default function ProfileModal({
   // QNS launch countdown - Jan 7, 2026 14:00 UTC
   const QNS_LAUNCH_DATE = React.useMemo(() => new Date('2026-01-07T14:00:00Z'), []);
 
-  // Always calculate countdown - will be displayed when service is unavailable
+  // Calculate the countdown while the launch is ahead (it's shown when the
+  // service is unavailable). Once it has passed the timer stops: it used to
+  // keep waking the JS thread every second, from a screen that stays mounted.
   React.useEffect(() => {
-    const updateCountdown = () => {
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const updateCountdown = (): boolean => {
       const now = new Date();
       const diff = QNS_LAUNCH_DATE.getTime() - now.getTime();
 
       if (diff <= 0) {
         setCountdown(null);
-        return;
+        if (interval !== undefined) clearInterval(interval);
+        return false;
       }
 
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -1345,12 +1364,14 @@ export default function ProfileModal({
       const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
       setCountdown({ days, hours, minutes, seconds });
+      return true;
     };
 
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
+    if (updateCountdown()) interval = setInterval(updateCountdown, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      if (interval !== undefined) clearInterval(interval);
+    };
   }, [QNS_LAUNCH_DATE]);
 
   // QNS hooks for username registration

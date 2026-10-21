@@ -16,6 +16,32 @@ import {
 import type { PersistedClient } from '@tanstack/react-query-persist-client';
 
 /**
+ * The only query families written to disk. Everything else either keeps its
+ * own on-device copy (messages in SQLCipher; conversations, spaces, rosters
+ * and members in MMKV; the Farcaster feed, threads, profiles, users and DMs in
+ * their own caches; wallet balances; block, mute and follow lists) or is
+ * refetched after launch.
+ *
+ * An allow-list, not a deny-list: a query added later stays off disk until
+ * someone decides it belongs here. The deny-list it replaced persisted
+ * everything, including decrypted message pages copied out of the encrypted
+ * messages database into this unencrypted file.
+ *
+ * - `hypersnap-notifications`: no other copy; the badge and list paint at
+ *   launch from it. Its first page only (see `queryPersister.ts`).
+ * - `user-public-profile`: names and avatars for members with no local
+ *   profile; no other copy.
+ */
+export const PERSISTED_QUERY_ROOTS: ReadonlySet<string> = new Set([
+  'hypersnap-notifications',
+  'user-public-profile',
+]);
+
+function isPersistedRoot(queryKey: readonly unknown[]): boolean {
+  return typeof queryKey[0] === 'string' && PERSISTED_QUERY_ROOTS.has(queryKey[0]);
+}
+
+/**
  * The claim-verification query key. Must match the key `useClaimRecords`
  * builds; they are two halves of one rule living in two files.
  */
@@ -48,6 +74,7 @@ export const QNS_VERIFY_CLAIMS_KEY = 'qns-verify-claims';
  */
 export function shouldPersistQuery(query: Query): boolean {
   return (
+    isPersistedRoot(query.queryKey) &&
     query.queryKey[0] !== QNS_VERIFY_CLAIMS_KEY &&
     !isSecretQueryKey(query.queryKey) &&
     !isNeverPersistMeta(query.meta) &&
@@ -102,29 +129,47 @@ export function carriesKeyMaterial(variables: unknown): boolean {
 }
 
 /**
- * Which mutations are allowed onto disk. React Query persists only PAUSED
- * mutations (an offline queue), and their variables go with them.
+ * Which mutations are allowed onto disk: none.
+ *
+ * React Query persists PAUSED mutations (an offline queue), and their
+ * variables go with them. A restored one can't run: this app registers no
+ * `setMutationDefaults`, so it comes back with no `mutationFn` and fails with
+ * "No mutationFn found" when resumed. Writing them only put their variables
+ * on disk. The key-material and opt-out checks stay, so the rule still holds
+ * if someone makes them resumable and returns this to the default.
  */
 export function shouldPersistMutation(mutation: Mutation): boolean {
   return (
+    PERSIST_PAUSED_MUTATIONS &&
     !isNeverPersistMeta(mutation.meta) &&
     !carriesKeyMaterial(mutation.state.variables) &&
     defaultShouldDehydrateMutation(mutation)
   );
 }
 
+/** Off until paused mutations can resume after a restart (see above). */
+const PERSIST_PAUSED_MUTATIONS = false;
+
 /**
- * Apply the same rules to a cache read back from disk, before it is hydrated.
- * Returns the cleaned client and how many entries were dropped, so the caller
- * can rewrite the file when anything was.
+ * Apply the same rules to a cache read back from disk, before it is hydrated:
+ * only allow-listed, non-secret queries, and no mutations. React Query
+ * hydrates whatever the blob holds, whatever the write rules say, so this is
+ * what stops a cache written under other rules coming back. Returns the
+ * cleaned client and how many entries were dropped, so the caller can rewrite
+ * the file when anything was.
  */
 export function stripNeverPersisted(client: PersistedClient): { client: PersistedClient; removed: number } {
   const { queries, mutations } = client.clientState;
   const keptQueries = queries.filter(
-    (q) => q.queryKey[0] !== QNS_VERIFY_CLAIMS_KEY && !isSecretQueryKey(q.queryKey) && !isNeverPersistMeta(q.meta),
+    (q) =>
+      isPersistedRoot(q.queryKey) &&
+      q.queryKey[0] !== QNS_VERIFY_CLAIMS_KEY &&
+      !isSecretQueryKey(q.queryKey) &&
+      !isNeverPersistMeta(q.meta),
   );
   const keptMutations = mutations.filter(
-    (m) => !isNeverPersistMeta(m.meta) && !carriesKeyMaterial(m.state.variables),
+    (m) =>
+      PERSIST_PAUSED_MUTATIONS && !isNeverPersistMeta(m.meta) && !carriesKeyMaterial(m.state.variables),
   );
   const removed = queries.length - keptQueries.length + (mutations.length - keptMutations.length);
   if (removed === 0) return { client, removed };

@@ -34,9 +34,102 @@ const KEYS = {
   SYNC_TIME: (key: string) => `sync:${key}`,
 } as const;
 
+// ---- parsed JSON lists, cached ---------------------------------------------
+//
+// Space rosters and conversation lists are JSON arrays read on the receive hot
+// path: the sender's roster for every space message, the conversation list for
+// every DM. Each read parsed the whole array again (rosters carry inline
+// avatars, up to ~150 KB each), and each DM also re-parsed the list to rewrite
+// it. These keep the parsed array per key, written through on save and dropped
+// whenever MMKV reports the key changed, so a write from anywhere in the
+// process invalidates it. Bounded, least recently used first out. Callers get
+// copies of arrays, never the cached one.
+
+const PARSED_CACHE_MAX = 32;
+const parsedCache = new Map<string, unknown[]>();
+
+/**
+ * Subscribe to the store's change events on first use, not at module load:
+ * this module can load inside an import cycle through `offline/storage`
+ * before `storage` is assigned. Without change events (a store that can't
+ * report them) nothing is cached, so nothing can go stale.
+ */
+let changeEvents: 'unknown' | 'subscribed' | 'unavailable' = 'unknown';
+function cacheEnabled(): boolean {
+  if (changeEvents === 'unknown') {
+    if (typeof storage?.addOnValueChangedListener === 'function') {
+      storage.addOnValueChangedListener((key) => {
+        parsedCache.delete(key);
+      });
+      changeEvents = 'subscribed';
+    } else {
+      changeEvents = 'unavailable';
+    }
+  }
+  return changeEvents === 'subscribed';
+}
+
+function readJsonList<T>(key: string): T[] {
+  const caching = cacheEnabled();
+  const cached = caching ? parsedCache.get(key) : undefined;
+  if (cached) {
+    parsedCache.delete(key);
+    parsedCache.set(key, cached);
+    return cached as T[];
+  }
+  const data = storage.getString(key);
+  const list = data ? (JSON.parse(data) as T[]) : [];
+  if (caching) rememberParsed(key, list);
+  return list;
+}
+
+function writeJsonList<T>(key: string, list: T[]): void {
+  storage.set(key, JSON.stringify(list));
+  // After the set: its change event has already dropped the old entry.
+  if (cacheEnabled()) rememberParsed(key, list);
+}
+
+function rememberParsed(key: string, list: unknown[]): void {
+  parsedCache.delete(key);
+  parsedCache.set(key, list);
+  if (parsedCache.size > PARSED_CACHE_MAX) {
+    const oldest = parsedCache.keys().next().value;
+    if (oldest !== undefined) parsedCache.delete(oldest);
+  }
+}
+
+/**
+ * A page of conversations straight from MMKV. Synchronous, so the list can be
+ * seeded before the first render (`services/offline/seedLocalQueries.ts`);
+ * the adapter's `getConversations` is this behind a promise.
+ */
+export function getConversationsSync(params: {
+  type: 'direct' | 'group';
+  cursor?: number;
+  limit?: number;
+}): { conversations: Conversation[]; nextCursor: number | null } {
+  const { type, cursor, limit = 50 } = params;
+
+  // Sort by timestamp descending (a copy: the parsed list is cached).
+  const all = [...readJsonList<Conversation>(KEYS.CONVERSATIONS(type))];
+  all.sort((a, b) => b.timestamp - a.timestamp);
+
+  let startIdx = 0;
+  if (cursor) {
+    const cursorIdx = all.findIndex((c) => c.timestamp <= cursor);
+    startIdx = cursorIdx >= 0 ? cursorIdx : all.length;
+  }
+
+  const slice = all.slice(startIdx, startIdx + limit);
+
+  return {
+    conversations: slice,
+    nextCursor: startIdx + limit < all.length ? all[startIdx + limit].timestamp : null,
+  };
+}
+
 export class MMKVAdapter implements StorageAdapter {
   // In-memory index for O(1) member lookups by address
-  private memberIndexCache = new Map<string, { index: Map<string, number>; raw: string }>();
 
   async init(): Promise<void> {
     // MMKV is ready synchronously. The SQLite messages database, though,
@@ -134,26 +227,7 @@ export class MMKVAdapter implements StorageAdapter {
     cursor?: number;
     limit?: number;
   }): Promise<{ conversations: Conversation[]; nextCursor: number | null }> {
-    const { type, cursor, limit = 50 } = params;
-
-    const data = storage.getString(KEYS.CONVERSATIONS(type));
-    const all: Conversation[] = data ? JSON.parse(data) : [];
-
-    // Sort by timestamp descending
-    all.sort((a, b) => b.timestamp - a.timestamp);
-
-    let startIdx = 0;
-    if (cursor) {
-      const cursorIdx = all.findIndex((c) => c.timestamp <= cursor);
-      startIdx = cursorIdx >= 0 ? cursorIdx : all.length;
-    }
-
-    const slice = all.slice(startIdx, startIdx + limit);
-
-    return {
-      conversations: slice,
-      nextCursor: startIdx + limit < all.length ? all[startIdx + limit].timestamp : null,
-    };
+    return getConversationsSync(params);
   }
 
   async getConversation(conversationId: string): Promise<Conversation | undefined> {
@@ -165,8 +239,7 @@ export class MMKVAdapter implements StorageAdapter {
     storage.set(KEYS.CONVERSATION(conversation.conversationId), JSON.stringify(conversation));
 
     // Update list
-    const data = storage.getString(KEYS.CONVERSATIONS(conversation.type));
-    const conversations: Conversation[] = data ? JSON.parse(data) : [];
+    const conversations = [...readJsonList<Conversation>(KEYS.CONVERSATIONS(conversation.type))];
 
     const existingIdx = conversations.findIndex(
       (c) => c.conversationId === conversation.conversationId
@@ -177,7 +250,7 @@ export class MMKVAdapter implements StorageAdapter {
       conversations.push(conversation);
     }
 
-    storage.set(KEYS.CONVERSATIONS(conversation.type), JSON.stringify(conversations));
+    writeJsonList(KEYS.CONVERSATIONS(conversation.type), conversations);
   }
 
   async deleteConversation(conversationId: string): Promise<void> {
@@ -187,10 +260,9 @@ export class MMKVAdapter implements StorageAdapter {
     storage.remove(KEYS.CONVERSATION(conversationId));
 
     // Update list
-    const data = storage.getString(KEYS.CONVERSATIONS(conversation.type));
-    const conversations: Conversation[] = data ? JSON.parse(data) : [];
+    const conversations = readJsonList<Conversation>(KEYS.CONVERSATIONS(conversation.type));
     const filtered = conversations.filter((c) => c.conversationId !== conversationId);
-    storage.set(KEYS.CONVERSATIONS(conversation.type), JSON.stringify(filtered));
+    writeJsonList(KEYS.CONVERSATIONS(conversation.type), filtered);
   }
 
   // User Config
@@ -207,41 +279,24 @@ export class MMKVAdapter implements StorageAdapter {
   // Space Members
 
   async getSpaceMembers(spaceId: string): Promise<SpaceMember[]> {
-    const data = storage.getString(KEYS.SPACE_MEMBERS(spaceId));
-    return data ? JSON.parse(data) : [];
+    return [...readJsonList<SpaceMember>(KEYS.SPACE_MEMBERS(spaceId))];
   }
 
   async getSpaceMember(spaceId: string, address: string): Promise<SpaceMember | undefined> {
-    const key = KEYS.SPACE_MEMBERS(spaceId);
-    const data = storage.getString(key);
-    if (!data) return undefined;
-
-    const cached = this.memberIndexCache.get(spaceId);
-    if (cached && cached.raw === data) {
-      const idx = cached.index.get(address);
-      if (idx === undefined) return undefined;
-      const members: SpaceMember[] = JSON.parse(data);
-      return members[idx];
-    }
-
-    const members: SpaceMember[] = JSON.parse(data);
-    const index = new Map<string, number>();
-    members.forEach((m, i) => index.set(m.address, i));
-    this.memberIndexCache.set(spaceId, { index, raw: data });
-    const idx = index.get(address);
-    return idx !== undefined ? members[idx] : undefined;
+    // Called for every incoming space message: a lookup in the cached roster,
+    // not a parse of it.
+    return readJsonList<SpaceMember>(KEYS.SPACE_MEMBERS(spaceId)).find((m) => m.address === address);
   }
 
   async saveSpaceMember(spaceId: string, member: SpaceMember): Promise<void> {
-    const members = await this.getSpaceMembers(spaceId);
+    const members = [...readJsonList<SpaceMember>(KEYS.SPACE_MEMBERS(spaceId))];
     const existingIdx = members.findIndex((m) => m.address === member.address);
     if (existingIdx >= 0) {
       members[existingIdx] = member;
     } else {
       members.push(member);
     }
-    storage.set(KEYS.SPACE_MEMBERS(spaceId), JSON.stringify(members));
-    this.memberIndexCache.delete(spaceId);
+    writeJsonList(KEYS.SPACE_MEMBERS(spaceId), members);
   }
 
   // Per-device signing-key admissions (mirrors desktop's space_member_devices

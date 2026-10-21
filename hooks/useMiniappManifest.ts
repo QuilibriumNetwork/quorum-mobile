@@ -119,7 +119,9 @@ export function useMiniappManifest(
     queryFn: () => fetchMiniappManifest(url as string),
     enabled,
     staleTime: 24 * 60 * 60 * 1000,
-    gcTime: Number.POSITIVE_INFINITY,
+    // Kept a day like the link metadata; an unbounded gcTime let every link
+    // ever seen pile up in the query cache (and the persisted copy).
+    gcTime: 24 * 60 * 60 * 1000,
     retry: false,
   } satisfies UseQueryOptions<MiniappManifest | null, Error>);
 }

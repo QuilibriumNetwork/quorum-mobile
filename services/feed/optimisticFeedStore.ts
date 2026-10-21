@@ -33,13 +33,24 @@ const PENDING_KEY = 'feed-optimistic-pending:v1';
 /** Drop pending stubs older than this if the server never echoed them
  *  back (we assume the send is dead and stop re-surfacing it). */
 const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
+/** How long a stub stays once its cast is on the network. The views refetch
+ *  over the next ~5 s (`refetchAfterSubmit`) so the real cast can replace it,
+ *  but a feed may never carry the cast: Hypersnap's following feed leaves out
+ *  the viewer's own casts unless they follow themselves. Past this the stub
+ *  goes, rather than sitting on "Posted" for good. */
+export const SENT_STUB_TTL_MS = 20_000;
 
 export type PendingKind = 'reply' | 'quote' | 'top';
-// 'sent' is terminal-success: the submit landed (realHash set) and the stub
-// only lingers until a refetch reconciles it away. The queue MUST NOT
-// re-submit a 'sent' item — leaving it 'pending' caused an infinite
-// re-submit loop (duplicate casts + an ANR).
-export type PendingStatus = 'pending' | 'sent' | 'failed';
+// - 'pending': not yet accepted by Hypersnap; the queue submits it.
+// - 'confirming': Hypersnap accepted it (realHash set), which only means its
+//   mempool took it. The queue looks the cast up until it shows up ('sent') or
+//   CONFIRM_TIMEOUT_MS passes ('failed'); see services/feed/castConfirmation.
+// - 'sent': on the network. Terminal: the stub only lingers until a refetch
+//   reconciles it away, or SENT_STUB_TTL_MS passes.
+// - 'failed': not sent, or never showed up; the user can retry or discard.
+// The queue MUST NOT re-submit a 'confirming' or 'sent' item — leaving a sent
+// item 'pending' caused an infinite re-submit loop (duplicate casts + an ANR).
+export type PendingStatus = 'pending' | 'confirming' | 'sent' | 'failed';
 
 export interface PendingAuthor {
   fid: number;
@@ -68,8 +79,15 @@ export interface PendingCast {
   status: PendingStatus;
   attempts: number;
   error?: string;
-  /** Real cast hash once the server confirms the submit. */
+  /** Hash of the copy Hypersnap last accepted. */
   realHash?: string;
+  /** When Hypersnap accepted that copy (ms); confirmation times out from here. */
+  acceptedAt?: number;
+  /** Hashes of earlier accepted copies that hadn't shown up when the cast was
+   *  retried. A retry re-signs (new timestamp, new hash), so an earlier copy
+   *  could still land; these are checked before re-signing and while
+   *  confirming, so a late copy isn't posted twice. */
+  priorHashes?: string[];
 }
 
 export interface LikeState {
@@ -93,6 +111,11 @@ interface OptimisticState {
   blocks: Set<number>; // fids hidden optimistically
   deleted: Set<string>; // cast hashes hidden optimistically after delete
   pending: PendingCast[];
+  // What the server says the viewer has liked / recast (lowercase hashes):
+  // their newest reactions, from the hub API (`services/farcaster/viewerReactions.ts`),
+  // kept current with their own writes. The overrides above sit on top.
+  viewerLikes: Set<string>;
+  viewerRecasts: Set<string>;
 }
 
 const state: OptimisticState = {
@@ -102,6 +125,8 @@ const state: OptimisticState = {
   blocks: new Set(),
   deleted: new Set(),
   pending: loadPending(),
+  viewerLikes: new Set(),
+  viewerRecasts: new Set(),
 };
 
 // ---- subscription (useSyncExternalStore) --------------------------------
@@ -125,6 +150,62 @@ export function useOptimisticVersion(): number {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
+/** Run `cb` after every store change, outside React. Returns the unsubscribe. */
+export function subscribeOptimistic(cb: () => void): () => void {
+  return subscribe(cb);
+}
+
+// Per-key subscriptions. Each returns the entry for one cast or account, and
+// re-renders its caller only when that entry changes: the maps are replaced on
+// every write, but untouched entries keep their identity, so a like re-renders
+// the cell showing that cast and nothing else.
+export function useLikeOverride(castHash: string): LikeState | undefined {
+  const read = () => state.likes.get(castHash);
+  return useSyncExternalStore(subscribe, read, read);
+}
+export function useRecastOverride(castHash: string): RecastState | undefined {
+  const read = () => state.recasts.get(castHash);
+  return useSyncExternalStore(subscribe, read, read);
+}
+export function useFollowOverride(fid: number): boolean | undefined {
+  const read = () => state.follows.get(fid);
+  return useSyncExternalStore(subscribe, read, read);
+}
+export function useIsCastDeleted(castHash: string): boolean {
+  const read = () => state.deleted.has(lc(castHash));
+  return useSyncExternalStore(subscribe, read, read);
+}
+/** Whether the server says the viewer has liked this cast. */
+export function useViewerLiked(castHash: string): boolean {
+  const read = () => state.viewerLikes.has(lc(castHash));
+  return useSyncExternalStore(subscribe, read, read);
+}
+/** Whether the server says the viewer has recast this cast. */
+export function useViewerRecasted(castHash: string): boolean {
+  const read = () => state.viewerRecasts.has(lc(castHash));
+  return useSyncExternalStore(subscribe, read, read);
+}
+// Whole-collection subscriptions, for a view that reads these while rendering
+// (the thread view): it re-renders when the collection changes, and not on a
+// like or recast elsewhere, which only touch the like/recast maps.
+export function usePendingList(): PendingCast[] {
+  const read = () => state.pending;
+  return useSyncExternalStore(subscribe, read, read);
+}
+export function useDeletedSet(): Set<string> {
+  const read = () => state.deleted;
+  return useSyncExternalStore(subscribe, read, read);
+}
+export function useFollowsMap(): Map<number, boolean> {
+  const read = () => state.follows;
+  return useSyncExternalStore(subscribe, read, read);
+}
+
+/** The pending top-level casts and quotes; re-renders only when that list changes. */
+export function usePendingTopLevel(): PendingCast[] {
+  return useSyncExternalStore(subscribe, pendingTopLevelSnapshot, pendingTopLevelSnapshot);
+}
+
 // ---- persistence --------------------------------------------------------
 function loadPending(): PendingCast[] {
   try {
@@ -133,7 +214,9 @@ function loadPending(): PendingCast[] {
     const parsed = JSON.parse(raw) as PendingCast[];
     if (!Array.isArray(parsed)) return [];
     const now = Date.now();
-    return parsed.filter((p) => now - p.timestamp < PENDING_TTL_MS);
+    // A 'sent' stub from an earlier run already landed and has outlived its
+    // refetch window, so only unsent, unconfirmed and failed casts come back.
+    return parsed.filter((p) => p.status !== 'sent' && now - p.timestamp < PENDING_TTL_MS);
   } catch {
     return [];
   }
@@ -167,23 +250,66 @@ export function getRecasts(): Map<string, RecastState> {
   return state.recasts;
 }
 
-/** Drop like/recast overrides the server now reflects, so the live server
- *  count shows through again instead of the frozen click-time count. */
+// ---- the viewer's reactions, as the server has them -----------------------
+/** Replace the viewer's reaction sets with a fresh fetch (or clear them, for
+ *  an account switch). */
+export function setViewerReactions(likes: Iterable<string>, recasts: Iterable<string>): void {
+  state.viewerLikes = new Set(Array.from(likes, lc));
+  state.viewerRecasts = new Set(Array.from(recasts, lc));
+  emit();
+}
+/** Record the viewer's own like/recast once the write has landed, so the set
+ *  stays current between fetches. */
+export function setViewerReaction(kind: 'like' | 'recast', castHash: string, active: boolean): void {
+  const key = lc(castHash);
+  const current = kind === 'like' ? state.viewerLikes : state.viewerRecasts;
+  if (current.has(key) === active) return;
+  const next = new Set(current);
+  if (active) next.add(key);
+  else next.delete(key);
+  if (kind === 'like') state.viewerLikes = next;
+  else state.viewerRecasts = next;
+  emit();
+}
+export function isViewerLiked(castHash: string): boolean {
+  return state.viewerLikes.has(lc(castHash));
+}
+export function isViewerRecasted(castHash: string): boolean {
+  return state.viewerRecasts.has(lc(castHash));
+}
+
+/**
+ * Drop like/recast overrides the server now reflects, so the live server
+ * count shows through again instead of the frozen click-time count.
+ *
+ * An override goes once the server agrees on both counts: the viewer's
+ * reaction set says the same liked/recast state, and the cast's count from the
+ * server has caught up with the one the override holds (at least it, for a
+ * like; at most it, for an unlike). Comparing the state alone would drop an
+ * override while the cast's count was still from before the click, and the
+ * count would step back by one.
+ */
 export function reconcileReactions(
-  casts: { hash?: string; viewerContext?: { reacted?: boolean; recast?: boolean } }[],
+  casts: { hash?: string; reactions?: { count?: number }; recasts?: { count?: number } }[],
 ): void {
   let likes = state.likes;
   let recasts = state.recasts;
+  const caughtUp = (active: boolean, serverCount: number | undefined, overrideCount: number) =>
+    typeof serverCount === 'number' && (active ? serverCount >= overrideCount : serverCount <= overrideCount);
   for (const c of casts) {
     const key = c.hash;
     if (!key) continue;
     const lo = likes.get(key);
-    if (lo && (c.viewerContext?.reacted ?? false) === lo.liked) {
+    if (lo && state.viewerLikes.has(lc(key)) === lo.liked && caughtUp(lo.liked, c.reactions?.count, lo.count)) {
       if (likes === state.likes) likes = new Map(likes);
       likes.delete(key);
     }
     const ro = recasts.get(key);
-    if (ro && (c.viewerContext?.recast ?? false) === ro.recasted) {
+    if (
+      ro &&
+      state.viewerRecasts.has(lc(key)) === ro.recasted &&
+      caughtUp(ro.recasted, c.recasts?.count, ro.count)
+    ) {
       if (recasts === state.recasts) recasts = new Map(recasts);
       recasts.delete(key);
     }
@@ -238,8 +364,12 @@ export function isBlocked(fid: number): boolean {
 // Hashes are normalized lowercase (matching the reaction/reconcile reads).
 export function setDeleted(castHash: string, deleted: boolean): void {
   const key = lc(castHash);
-  if (deleted) state.deleted.add(key);
-  else state.deleted.delete(key);
+  if (state.deleted.has(key) === deleted) return;
+  // Replaced, not mutated, so a subscriber to the set sees the change.
+  const next = new Set(state.deleted);
+  if (deleted) next.add(key);
+  else next.delete(key);
+  state.deleted = next;
   emit();
 }
 export function isDeleted(castHash: string): boolean {
@@ -247,6 +377,19 @@ export function isDeleted(castHash: string): boolean {
 }
 
 // ---- pending casts ------------------------------------------------------
+const sentStubTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function expireSentStub(localId: string): void {
+  if (sentStubTimers.has(localId)) return;
+  sentStubTimers.set(
+    localId,
+    setTimeout(() => {
+      sentStubTimers.delete(localId);
+      removePending(localId);
+    }, SENT_STUB_TTL_MS),
+  );
+}
+
 export function addPending(p: PendingCast): void {
   state.pending = [...state.pending, p];
   savePending();
@@ -262,6 +405,7 @@ export function updatePending(localId: string, partial: Partial<PendingCast>): v
   if (changed) {
     savePending();
     emit();
+    if (partial.status === 'sent') expireSentStub(localId);
   }
 }
 export function removePending(localId: string): void {
@@ -308,6 +452,21 @@ export function pendingRepliesAsThreadCasts(threadHash: string): (ThreadCast & {
 /** Pending top-level casts / quotes (rendered at the top of the feed). */
 export function pendingTopLevel(): PendingCast[] {
   return state.pending.filter((p) => p.kind === 'top' || p.kind === 'quote');
+}
+
+// useSyncExternalStore needs the same array back while nothing changed, so the
+// filtered list is cached against the `pending` array it came from.
+let topLevelSource: PendingCast[] | undefined;
+let topLevelCache: PendingCast[] = [];
+function pendingTopLevelSnapshot(): PendingCast[] {
+  if (topLevelSource !== state.pending) {
+    topLevelSource = state.pending;
+    const next = pendingTopLevel();
+    const same =
+      next.length === topLevelCache.length && next.every((p, i) => p === topLevelCache[i]);
+    if (!same) topLevelCache = next;
+  }
+  return topLevelCache;
 }
 
 /**
@@ -359,6 +518,10 @@ export function __resetOptimisticFeed(): void {
   state.follows = new Map();
   state.blocks = new Set();
   state.pending = [];
+  state.viewerLikes = new Set();
+  state.viewerRecasts = new Set();
+  for (const timer of sentStubTimers.values()) clearTimeout(timer);
+  sentStubTimers.clear();
   savePending();
   emit();
 }

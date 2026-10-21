@@ -70,8 +70,9 @@ export function getSpaceActivity(spaceId: string): SpaceActivity | undefined {
 }
 
 /**
- * Hook that exposes the full activity map, refreshed on an interval.
- * Matches the polling pattern used by useReplyTracking.
+ * Hook that exposes the full activity map, re-read when it changes. It used to
+ * re-read and set a fresh object every 2s, which re-rendered the Spaces list
+ * every 2s whether anything had changed or not.
  */
 export function useSpaceActivity() {
   const [activity, setActivity] = useState<Record<string, SpaceActivity>>(() =>
@@ -79,10 +80,12 @@ export function useSpaceActivity() {
   );
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setActivity(loadActivity());
-    }, 2000);
-    return () => clearInterval(interval);
+    // Writes made before this subscribed (between the first render and now).
+    setActivity(loadActivity());
+    const listener = storage.addOnValueChangedListener((key) => {
+      if (key === STORAGE_KEY) setActivity(loadActivity());
+    });
+    return () => listener.remove();
   }, []);
 
   const getActivity = useCallback(

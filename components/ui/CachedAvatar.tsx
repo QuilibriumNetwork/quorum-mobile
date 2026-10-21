@@ -36,6 +36,7 @@ import React, { useEffect, useState } from 'react';
 import { Image, ImageStyle, type ImageProps } from 'expo-image';
 import { StyleProp, ImageSourcePropType, StyleSheet } from 'react-native';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
+import { sizedImageUrl } from '@/utils/imageVariants';
 
 interface CachedAvatarProps {
   source: ImageSourcePropType | { uri: string } | null | undefined;
@@ -83,6 +84,8 @@ export function CachedAvatar({
   cachePolicy = 'disk',
 }: CachedAvatarProps) {
   const [imageError, setImageError] = useState(false);
+  // Tried the original after the sized copy failed (see utils/imageVariants).
+  const [triedOriginal, setTriedOriginal] = useState(false);
 
   // Handle null/undefined source or empty uri
   const hasValidSource = source &&
@@ -106,21 +109,28 @@ export function CachedAvatar({
   // reset since it was written; mobile's copy was missing it.
   useEffect(() => {
     setImageError(false);
+    setTriedOriginal(false);
   }, [sourceUri]);
+
+  // Avatars are small: ask for a still copy at the size shown, not the full
+  // upload, where the host can make one.
+  const flatStyle = StyleSheet.flatten(style) ?? {};
+  const displayWidth = typeof flatStyle.width === 'number' ? flatStyle.width : 0;
+  const sizedUri = sourceUri ? sizedImageUrl(sourceUri, displayWidth, { stillFrame: true }) : undefined;
+  const useSized = !!sizedUri && sizedUri !== sourceUri && !triedOriginal;
 
   // No usable photo, or it failed to load: render DefaultAvatar sized to the
   // style's width/height.
   if (!hasValidSource || imageError) {
-    const flat = StyleSheet.flatten(style) ?? {};
-    const size = (typeof flat.width === 'number' ? flat.width : undefined)
-      ?? (typeof flat.height === 'number' ? flat.height : undefined)
+    const size = (typeof flatStyle.width === 'number' ? flatStyle.width : undefined)
+      ?? (typeof flatStyle.height === 'number' ? flatStyle.height : undefined)
       ?? 40;
-    return <DefaultAvatar resolvedName={fallbackName} size={size} style={flat} />;
+    return <DefaultAvatar resolvedName={fallbackName} size={size} style={flatStyle} />;
   }
 
   return (
     <Image
-      source={source}
+      source={useSized ? { uri: sizedUri } : source}
       style={style}
       cachePolicy={cachePolicy}
       transition={transition}
@@ -131,7 +141,7 @@ export function CachedAvatar({
       // decoded backing store is purged under memory pressure — see
       // AutoHeightImage for the crash.
       recyclingKey={sourceUri}
-      onError={() => setImageError(true)}
+      onError={() => (useSized ? setTriedOriginal(true) : setImageError(true))}
     />
   );
 }

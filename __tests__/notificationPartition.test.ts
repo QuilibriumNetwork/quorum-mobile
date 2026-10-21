@@ -1,6 +1,6 @@
 /**
- * Notifications panel partitioning: Farcaster dismissal, cross-source dedup
- * ordering, muted-DM exclusion, and badge arithmetic.
+ * Notifications panel partitioning: Farcaster dismissal, muted-DM exclusion,
+ * and badge arithmetic.
  *
  * Pure functions only — `partitionNotifications` is the non-React core of
  * `useUnifiedNotifications`, and `isDismissed`/`reachedWatermark` are the pure
@@ -59,11 +59,10 @@ const T = {
 
 function farcasterLike(over: Partial<FarcasterNotification> = {}): FarcasterNotification {
   return {
-    id: 'official-1',
+    id: 'like-1',
     type: 'cast-like',
     timestamp: T.fresh,
     reactionType: 'like',
-    totalItemCount: 6,
     actor: { fid: 111, username: 'alice' },
     content: { cast: { hash: '0xABC', text: 'hello' } },
     ...over,
@@ -126,8 +125,7 @@ function input(over: Partial<PartitionInput> = {}): PartitionInput {
   return {
     quorumEntries: [],
     chatEntries: [],
-    officialFarcaster: [],
-    haatzFarcaster: [],
+    farcaster: [],
     clearedBefore: 0,
     mutedConversations: new Set<string>(),
     lastSeen: 0,
@@ -195,7 +193,7 @@ describe('partitionNotifications — Farcaster dismissal', () => {
   it('hides Farcaster items at or below the watermark and keeps newer ones', () => {
     const result = partitionNotifications(
       input({
-        officialFarcaster: [
+        farcaster: [
           farcasterLike({ id: 'stale', timestamp: T.old, content: { cast: { hash: '0x1' } } }),
           farcasterLike({ id: 'new', timestamp: T.fresh, content: { cast: { hash: '0x2' } } }),
         ],
@@ -205,13 +203,12 @@ describe('partitionNotifications — Farcaster dismissal', () => {
     expect(result.farcasterFeedItems.map((i) => i.id)).toEqual(['fc:new']);
   });
 
-  it('shows an aggregated group again once new activity lifts its timestamp', () => {
-    // The official feed keys a group off `latestTimestamp`, so a cleared
-    // like-group that gets a NEW like must come back. This is the property
+  it('shows new activity on a cast again after a clear', () => {
+    // A cleared cast that gets a NEW like must come back. This is the property
     // that makes a watermark viable where a dismissed-id set would not be.
     const cleared = partitionNotifications(
       input({
-        officialFarcaster: [farcasterLike({ timestamp: T.old, totalItemCount: 6 })],
+        farcaster: [farcasterLike({ timestamp: T.old })],
         clearedBefore: T.clear,
       }),
     );
@@ -219,7 +216,7 @@ describe('partitionNotifications — Farcaster dismissal', () => {
 
     const relit = partitionNotifications(
       input({
-        officialFarcaster: [farcasterLike({ timestamp: T.fresh, totalItemCount: 7 })],
+        farcaster: [farcasterLike({ timestamp: T.fresh })],
         clearedBefore: T.clear,
       }),
     );
@@ -230,7 +227,7 @@ describe('partitionNotifications — Farcaster dismissal', () => {
     const result = partitionNotifications(
       input({
         quorumEntries: [mention({ createdAt: T.old })],
-        officialFarcaster: [farcasterLike({ timestamp: T.old })],
+        farcaster: [farcasterLike({ timestamp: T.old })],
         clearedBefore: T.clear,
       }),
     );
@@ -240,7 +237,7 @@ describe('partitionNotifications — Farcaster dismissal', () => {
 
   it('dismisses nothing when the user has never cleared', () => {
     const result = partitionNotifications(
-      input({ officialFarcaster: [farcasterLike({ timestamp: 1 })], clearedBefore: 0 }),
+      input({ farcaster: [farcasterLike({ timestamp: 1 })], clearedBefore: 0 }),
     );
     expect(result.farcasterFeedItems).toHaveLength(1);
   });
@@ -250,7 +247,7 @@ describe('partitionNotifications — dismissedCount (the dev instrument)', () =>
   it('reports how many rows the watermark is suppressing', () => {
     const result = partitionNotifications(
       input({
-        officialFarcaster: [
+        farcaster: [
           farcasterLike({ id: 'a', timestamp: T.old, content: { cast: { hash: '0x1' } } }),
           farcasterLike({ id: 'b', timestamp: T.old, content: { cast: { hash: '0x2' } } }),
           farcasterLike({ id: 'c', timestamp: T.fresh, content: { cast: { hash: '0x3' } } }),
@@ -266,94 +263,18 @@ describe('partitionNotifications — dismissedCount (the dev instrument)', () =>
     // The number has to be able to read 0 for a real reason, otherwise it
     // cannot distinguish "dismissal hid these" from "something else did".
     const result = partitionNotifications(
-      input({ officialFarcaster: [farcasterLike({ timestamp: T.old })], clearedBefore: 0 }),
+      input({ farcaster: [farcasterLike({ timestamp: T.old })], clearedBefore: 0 }),
     );
     expect(result.dismissedCount).toBe(0);
     expect(result.farcasterFeedItems).toHaveLength(1);
   });
 
-  it('counts post-dedup rows, so a suppressed haatz duplicate is not counted twice', () => {
-    const result = partitionNotifications(
-      input({
-        officialFarcaster: [farcasterLike({ timestamp: T.old })],
-        haatzFarcaster: [haatzLike({ timestamp: T.old })],
-        clearedBefore: T.clear,
-      }),
-    );
-    expect(result.dismissedCount).toBe(1);
-  });
-
-  it('counts haatz-only rows the official feed never covered', () => {
-    // Counting over the official list alone undercounts: a haatz item with no
-    // official counterpart survives the blend, gets dismissed, and would go
-    // unreported — so the panel would show fewer hidden rows than it hid.
-    // (The three cases above cannot catch this: with no haatz-only item,
-    // blended.length and official.length are identical.)
-    const result = partitionNotifications(
-      input({
-        officialFarcaster: [farcasterLike({ timestamp: T.old })],
-        haatzFarcaster: [
-          haatzLike({
-            id: 'haatz-follow',
-            type: 'follow',
-            timestamp: T.old,
-            actor: { fid: 999, username: 'erin' },
-            content: undefined,
-          }),
-        ],
-        clearedBefore: T.clear,
-      }),
-    );
-    expect(result.dismissedCount).toBe(2);
-    expect(result.farcasterFeedItems).toHaveLength(0);
-  });
-});
-
-describe('partitionNotifications — dedup must run before dismissal', () => {
-  it('does not resurface haatz per-actor likes for a dismissed official group', () => {
-    // The official feed aggregates ("alice and 5 others liked"); haatz reports
-    // one row per liker for the same cast. Dedup drops the haatz rows because
-    // the official group covers their key.
-    //
-    // The two sources do not agree on timestamps (different APIs, and haatz's
-    // are recovered by a magnitude heuristic over three possible epochs), so
-    // the same like can land either side of the watermark depending on who is
-    // reporting it. That is what makes the ORDER load-bearing: filter the
-    // official list first and its key vanishes from the dedup set, so these
-    // duplicates survive the blend and pop back as fresh rows — one per liker
-    // — for a cast the user just cleared.
-    //
-    // Dedup has to see the COMPLETE official key set to do its job. Filtering
-    // before blending corrupts its input.
-    const result = partitionNotifications(
-      input({
-        officialFarcaster: [farcasterLike({ timestamp: T.old })],
-        haatzFarcaster: [
-          haatzLike({ id: 'h1', timestamp: T.fresh }),
-          haatzLike({ id: 'h2', timestamp: T.fresh, actor: { fid: 333, username: 'dave' } }),
-        ],
-        clearedBefore: T.clear,
-      }),
-    );
-    expect(result.farcasterFeedItems).toHaveLength(0);
-  });
-
-  it('still dedups haatz against the official feed when nothing is dismissed', () => {
-    const result = partitionNotifications(
-      input({
-        officialFarcaster: [farcasterLike()],
-        haatzFarcaster: [haatzLike()],
-      }),
-    );
-    expect(result.farcasterFeedItems).toHaveLength(1);
-    expect(result.farcasterFeedItems[0].id).toBe('fc:official-1');
-  });
 });
 
 describe('partitionNotifications — sectioning', () => {
   it('files Quorum background pings under Quorum, not Farcaster', () => {
     const result = partitionNotifications(
-      input({ chatEntries: [chatEntry()], officialFarcaster: [farcasterLike()] }),
+      input({ chatEntries: [chatEntry()], farcaster: [farcasterLike()] }),
     );
     expect(result.quorumItems.map((i) => i.source)).toEqual(['chat']);
     expect(result.farcasterFeedItems.map((i) => i.source)).toEqual(['farcaster']);
@@ -416,7 +337,7 @@ describe('partitionNotifications — Quorum DM rows', () => {
     // The decision the plan settled: sections are named for the PRODUCT, so a
     // Quorum DM belongs under "Quorum". No fourth section, no fourth pill.
     const result = partitionNotifications(
-      input({ quorumEntries: [dm(), mention()], officialFarcaster: [farcasterLike()] }),
+      input({ quorumEntries: [dm(), mention()], farcaster: [farcasterLike()] }),
     );
     expect(result.quorumItems.map((i) => i.id)).toEqual(['quorum:dm:dm-conv', 'quorum:space:chan:msg']);
     expect(result.farcasterFeedItems.map((i) => i.source)).toEqual(['farcaster']);
@@ -645,20 +566,10 @@ describe('partitionNotifications — badge count', () => {
     expect(result.unreadCount).toBe(0);
   });
 
-  it('prefers the server isUnread flag for Farcaster rows over lastSeen', () => {
-    const result = partitionNotifications(
-      input({
-        officialFarcaster: [farcasterLike({ timestamp: T.fresh, isUnread: false })],
-        lastSeen: 0,
-      }),
-    );
-    expect(result.unreadCount).toBe(0);
-  });
-
   it('excludes dismissed Farcaster rows from the badge', () => {
     const result = partitionNotifications(
       input({
-        officialFarcaster: [farcasterLike({ timestamp: T.old, isUnread: true })],
+        farcaster: [farcasterLike({ timestamp: T.old })],
         clearedBefore: T.clear,
       }),
     );
@@ -688,7 +599,7 @@ describe('partitionNotifications — badge count', () => {
           mention({ id: 'm3', createdAt: T.fresh }),
         ],
         chatEntries: [chatEntry({ createdAt: T.fresh })],
-        officialFarcaster: [farcasterLike({ timestamp: T.fresh, isUnread: true })],
+        farcaster: [farcasterLike({ timestamp: T.fresh })],
         lastSeen: T.clear,
         quorumTabSeenAt: T.clear,
       }),
@@ -755,14 +666,9 @@ describe('isItemDismissed', () => {
 });
 
 describe('farcasterDismissKey', () => {
-  it('gives the same key to one event arriving from both sources', () => {
-    // Same like, same liker, seen by both feeds — one row, one key.
-    //
-    // The earlier version of this test compared the official fixture (actor
-    // fid 111) against the haatz fixture (fid 222) and asserted they matched.
-    // They are not the same event, and asserting they were is what justified a
-    // key too coarse to tell two likers apart. Pin the actor to compare like
-    // with like.
+  it('gives one like the same key whatever its hash spelling', () => {
+    // Same like, same liker, hash with and without `0x` and in either case —
+    // one row, one key, so a trashed row stays trashed across polls.
     const sameLiker = { actor: { fid: 111 } } as Partial<FarcasterNotification>;
     expect(farcasterDismissKey(farcasterLike(sameLiker))).toBe(
       farcasterDismissKey(haatzLike(sameLiker)),
@@ -870,34 +776,31 @@ describe('partitionNotifications — per-item Farcaster dismissal', () => {
 
   it('hides only the dismissed row', () => {
     const feed: Partial<PartitionInput> = {
-      officialFarcaster: [
+      farcaster: [
         farcasterLike(),
         farcasterLike({
-          id: 'official-2',
+          id: 'like-2',
           content: { cast: { hash: '0xDEF', text: 'other' } },
         } as Partial<FarcasterNotification>),
       ],
     };
-    const after = dismissRow(feed, 'fc:official-1');
+    const after = dismissRow(feed, 'fc:like-1');
     expect(after.farcasterFeedItems).toHaveLength(1);
-    expect(after.farcasterFeedItems[0].id).toBe('fc:official-2');
+    expect(after.farcasterFeedItems[0].id).toBe('fc:like-2');
     expect(after.dismissedCount).toBe(1);
   });
 
   it('hides only the row trashed when several people liked the SAME cast', () => {
     // THE REGRESSION THIS GUARDS.
     //
-    // The official feed aggregates same-cast likes into one row, which is why
-    // the DEDUP key is cast-level. But when the official feed is absent — no
-    // token, an expired token, a poll gap — haatz's per-actor rows are
-    // aggregated by nothing and render as several distinct rows. Keying
+    // Likes are keyed at cast level, and each liker is a distinct row. Keying
     // DISMISSAL at cast level too made one trash tap hide every one of them.
     //
     // Unrecoverable, which is what made it severe: haatz events are re-fetched
     // from a capped window, so once the swept rows aged out there was nothing
     // left to bring them back, and no signal that dismissal was the reason.
     const likes: Partial<PartitionInput> = {
-      haatzFarcaster: [
+      farcaster: [
         haatzLike({ id: 'h:bob', actor: { fid: 222 }, timestamp: 1_000 } as Partial<FarcasterNotification>),
         haatzLike({ id: 'h:carol', actor: { fid: 333 }, timestamp: 2_000 } as Partial<FarcasterNotification>),
         haatzLike({ id: 'h:dave', actor: { fid: 444 }, timestamp: 3_000 } as Partial<FarcasterNotification>),
@@ -910,29 +813,13 @@ describe('partitionNotifications — per-item Farcaster dismissal', () => {
     expect(after.farcasterFeedItems.map((i) => i.id).sort()).toEqual(['fc:h:carol', 'fc:h:dave']);
   });
 
-  it('still collapses one event that arrived from both sources', () => {
-    // The cross-source case, stated honestly. The BLEND drops the haatz copy
-    // because it shares a dedup key with the official row, so only one row is
-    // ever visible and dismissing it leaves nothing.
-    //
-    // This is all the previous version of this test ever proved. It was written
-    // as though DISMISSAL did the collapsing — it does not, and believing it did
-    // is what justified the too-coarse key.
-    const both: Partial<PartitionInput> = {
-      officialFarcaster: [farcasterLike()],
-      haatzFarcaster: [haatzLike()],
-    };
-    expect(partitionNotifications(input(both)).farcasterFeedItems).toHaveLength(1);
-    expect(dismissRow(both, 'fc:official-1').farcasterFeedItems).toEqual([]);
-  });
-
   it('brings the row back when the cast gets newer activity', () => {
-    const key = partitionNotifications(input({ officialFarcaster: [farcasterLike()] }))
+    const key = partitionNotifications(input({ farcaster: [farcasterLike()] }))
       .farcasterFeedItems[0].dismissKey!;
     // Dismissed at T.fresh; the group then gains a like and moves past it.
     const result = partitionNotifications(
       input({
-        officialFarcaster: [farcasterLike({ timestamp: T.fresh + 1 })],
+        farcaster: [farcasterLike({ timestamp: T.fresh + 1 })],
         dismissedKeys: { [key]: T.fresh },
       }),
     );
@@ -945,16 +832,14 @@ describe('partitionNotifications — per-item Farcaster dismissal', () => {
     // the feed, so treating one as a floor the way the watermark is treated
     // would halt infinite scroll at the first hidden row and make every older
     // notification unreachable.
-    const after = dismissRow({ officialFarcaster: [farcasterLike()] }, 'fc:official-1');
+    const after = dismissRow({ farcaster: [farcasterLike()] }, 'fc:like-1');
     expect(after.farcasterFeedItems).toEqual([]);
     expect(after.reachedWatermark).toBe(false);
   });
 
   it('leaves a user who has dismissed nothing completely unaffected', () => {
     // The control arm — same input, empty dismissal map.
-    const withNone = partitionNotifications(
-      input({ officialFarcaster: [farcasterLike()], haatzFarcaster: [haatzLike()] }),
-    );
+    const withNone = partitionNotifications(input({ farcaster: [farcasterLike()] }));
     expect(withNone.farcasterFeedItems).toHaveLength(1);
     expect(withNone.dismissedCount).toBe(0);
   });
@@ -962,7 +847,7 @@ describe('partitionNotifications — per-item Farcaster dismissal', () => {
   it('carries a dismiss key on every Farcaster row, so every row can be hidden', () => {
     const result = partitionNotifications(
       input({
-        officialFarcaster: [
+        farcaster: [
           farcasterLike(),
           farcasterLike({
             id: 'frame-1',
@@ -981,7 +866,7 @@ describe('row kind, for the leading glyph', () => {
   it('labels each Farcaster activity so the renderer picks from a closed set', () => {
     const kinds = partitionNotifications(
       input({
-        officialFarcaster: [
+        farcaster: [
           farcasterLike(),
           farcasterLike({ id: 'o2', type: 'follow', content: undefined } as Partial<FarcasterNotification>),
           farcasterLike({ id: 'o3', type: 'cast-reply' }),

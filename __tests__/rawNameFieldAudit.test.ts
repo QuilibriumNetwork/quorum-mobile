@@ -125,8 +125,6 @@ const EXCEPTIONS: Record<string, string> = {
     'Farcaster mention autocomplete — matches Farcaster handles, never space members.',
   'components/SocialFeed/ProfileActionButtons.tsx':
     'Threads a Farcaster display name into `fcDisplayName`; no Quorum identity involved.',
-  'components/SocialFeed/views/ChannelView.tsx':
-    'Renders Farcaster cast authors in a channel feed.',
   'components/SocialFeed/views/ProfileView.tsx':
     'Renders a Farcaster profile and that author’s casts; the remaining hits are StyleSheet keys.',
   'components/SocialFeed/views/ThreadDetailView.tsx':

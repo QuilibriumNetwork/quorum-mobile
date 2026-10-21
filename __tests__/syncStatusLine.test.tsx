@@ -20,8 +20,16 @@ import { render, act } from '@testing-library/react-native';
 import type { LastPublish, PublishOutcome } from '@quilibrium/quorum-shared';
 
 const mockReadLastPublish = jest.fn<LastPublish | null, []>();
+// The component re-reads when the record is written; tests fire that event.
+let mockOnWrite: (() => void) | undefined;
 jest.mock('@/services/config/lastPublish', () => ({
   readLastPublish: () => mockReadLastPublish(),
+  subscribeLastPublish: (cb: () => void) => {
+    mockOnWrite = cb;
+    return () => {
+      if (mockOnWrite === cb) mockOnWrite = undefined;
+    };
+  },
 }));
 
 import SyncStatusLine from '@/components/SyncStatusLine';
@@ -131,40 +139,35 @@ describe('SyncStatusLine renders only when publishing is failing', () => {
   });
 
   it('picks up a failure that happens while the panel is already open', () => {
-    // MMKV writes from this same process fire no event the component listens
-    // to, so without the poll a user watching the panel sees nothing change.
-    jest.useFakeTimers();
-    try {
-      mockReadLastPublish.mockReturnValue(record('published'));
-      const { queryByRole } = renderLine();
-      expect(queryByRole('alert')).toBeNull();
+    // The record is written while a user watches the panel; the write's
+    // change event (react-native-mmkv 4 fires one for every set in this
+    // process) makes the line appear without reopening it.
+    mockReadLastPublish.mockReturnValue(record('published'));
+    const { queryByRole } = renderLine();
+    expect(queryByRole('alert')).toBeNull();
 
-      mockReadLastPublish.mockReturnValue(record('rejected'));
-      act(() => {
-        jest.advanceTimersByTime(2000);
-      });
+    mockReadLastPublish.mockReturnValue(record('rejected'));
+    act(() => mockOnWrite?.());
 
-      expect(queryByRole('alert')).not.toBeNull();
-    } finally {
-      jest.useRealTimers();
-    }
+    expect(queryByRole('alert')).not.toBeNull();
   });
 
   it('clears once publishing recovers, without needing the panel reopened', () => {
-    jest.useFakeTimers();
-    try {
-      mockReadLastPublish.mockReturnValue(record('rejected'));
-      const { queryByRole } = renderLine();
-      expect(queryByRole('alert')).not.toBeNull();
+    mockReadLastPublish.mockReturnValue(record('rejected'));
+    const { queryByRole } = renderLine();
+    expect(queryByRole('alert')).not.toBeNull();
 
-      mockReadLastPublish.mockReturnValue(record('published'));
-      act(() => {
-        jest.advanceTimersByTime(2000);
-      });
+    mockReadLastPublish.mockReturnValue(record('published'));
+    act(() => mockOnWrite?.());
 
-      expect(queryByRole('alert')).toBeNull();
-    } finally {
-      jest.useRealTimers();
-    }
+    expect(queryByRole('alert')).toBeNull();
+  });
+
+  it('stops listening when it unmounts', () => {
+    mockReadLastPublish.mockReturnValue(record('published'));
+    const { unmount } = renderLine();
+    expect(mockOnWrite).toBeDefined();
+    unmount();
+    expect(mockOnWrite).toBeUndefined();
   });
 });

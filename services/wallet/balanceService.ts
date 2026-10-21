@@ -11,7 +11,6 @@ import { formatUnits } from 'viem';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { blake2b } from '@noble/hashes/blake2.js';
-import { InteractionManager } from 'react-native';
 import { getLocalTokenIconUri } from './tokenIcons';
 
 // In-flight request deduplication to prevent duplicate API calls
@@ -60,12 +59,9 @@ async function runInBatches<T, R>(
       results[i + j] = batchResults[j];
     }
 
-    // Delay + yield between batches
+    // Delay between batches (a real yield: the timer lets the UI run)
     if (i + batchSize < items.length) {
       await delay(delayMs);
-      await new Promise<void>(resolve => {
-        InteractionManager.runAfterInteractions(() => resolve());
-      });
     }
   }
 

@@ -1,7 +1,6 @@
 // Encrypted config sync: AES-GCM + Ed448 signatures, timestamp-based conflict resolution.
 
 import { base64ToHex, numberArrayToBase64 } from '@/utils/encoding';
-import { InteractionManager } from 'react-native';
 import { sha512 } from '@noble/hashes/sha2.js';
 import { gcm } from '@noble/ciphers/aes.js';
 // randomBytes lives in utils.js, NOT webcrypto.js, as of @noble/ciphers v2.
@@ -477,14 +476,17 @@ export async function getConfig(address: string): Promise<UserConfig> {
 
     // Sync spaces from spaceKeys - defer to after animations complete
     if (decryptedConfig.spaceKeys && decryptedConfig.spaceKeys.length > 0) {
-      // Schedule space sync after UI interactions complete to avoid jank
+      // Schedule space sync for the next task so the config load returns and
+      // the UI gets a frame first. (It used runAfterInteractions, which
+      // resolves as a microtask under the New Architecture, so the sync ran
+      // inside this same task.)
       const spaceKeysToSync = decryptedConfig.spaceKeys;
       const userInfo = {
         address,
         displayName: decryptedConfig.name,
         profileImage: decryptedConfig.profile_image,
       };
-      InteractionManager.runAfterInteractions(async () => {
+      setTimeout(async () => {
         try {
           const { syncSpacesFromConfig } = await import('./spaceSyncService');
           await syncSpacesFromConfig(
@@ -496,7 +498,7 @@ export async function getConfig(address: string): Promise<UserConfig> {
         } catch {
           // Space sync is best-effort during config load — spaces will sync on next app launch
         }
-      });
+      }, 0);
     }
 
     // Per-conversation DM overrides merge per ENTRY (last-write-wins on each

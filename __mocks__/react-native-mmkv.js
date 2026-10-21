@@ -37,32 +37,74 @@
  * would let an unrelated module's key collide with yours and pass.
  */
 
-function createStore() {
+/**
+ * Change listeners by store id. The real library keeps one process-wide
+ * registry keyed by the store's id and notifies it on every `set`, `remove`
+ * and `clearAll` (`cpp/MMKVValueChangedListenerRegistry.cpp`), so hooks that
+ * re-read on change (rather than poll) behave here as they do on a device.
+ */
+const listenersById = new Map();
+
+function notify(id, key) {
+  const listeners = listenersById.get(id);
+  if (!listeners) return;
+  for (const listener of [...listeners]) listener(key);
+}
+
+function createStore(id = 'mmkv.default') {
   const store = new Map();
+  const removeKey = (k) => {
+    const had = store.delete(k);
+    if (had) notify(id, k);
+    return had;
+  };
 
   return {
     getString: (k) => store.get(k),
     getNumber: (k) => (store.has(k) ? Number(store.get(k)) : undefined),
     getBoolean: (k) => (store.has(k) ? store.get(k) === true || store.get(k) === 'true' : undefined),
-    set: (k, v) => store.set(k, v),
-    delete: (k) => store.delete(k),
+    set: (k, v) => {
+      store.set(k, v);
+      notify(id, k);
+    },
+    delete: removeKey,
     // The adapter code calls `remove` in places and `delete` in others; the real
     // library has both, so a stub missing one fails only on some paths.
-    remove: (k) => store.delete(k),
+    remove: removeKey,
     getAllKeys: () => Array.from(store.keys()),
     contains: (k) => store.has(k),
-    clearAll: () => store.clear(),
+    clearAll: () => {
+      const keys = Array.from(store.keys());
+      store.clear();
+      for (const k of keys) notify(id, k);
+    },
     recrypt: () => {},
-    addOnValueChangedListener: () => ({ remove: () => {} }),
+    // Compaction has no in-memory equivalent. `size` approximates the live-data
+    // byte count the real one reports, which is all its callers use it for.
+    trim: () => {},
+    get size() {
+      let n = 0;
+      for (const [k, v] of store) n += String(k).length + String(v).length;
+      return n;
+    },
+    addOnValueChangedListener: (listener) => {
+      let listeners = listenersById.get(id);
+      if (!listeners) {
+        listeners = new Set();
+        listenersById.set(id, listeners);
+      }
+      listeners.add(listener);
+      return { remove: () => listeners.delete(listener) };
+    },
   };
 }
 
-const createMMKV = () => createStore();
+const createMMKV = (config) => createStore(config && config.id);
 
 /** Class form, for the `new MMKV()` call sites. */
 class MMKV {
-  constructor() {
-    Object.assign(this, createStore());
+  constructor(config) {
+    Object.assign(this, createStore(config && config.id));
   }
 }
 

@@ -120,19 +120,21 @@ export function toggleSpaceBinding(spaceId: string, channelKey: string): string[
   return next;
 }
 
-/** Same shape as `useWalletPref` — polls every 2s for cross-screen updates. */
+/** Same shape as `useWalletPref` — re-read when the bindings change in
+ *  storage, for cross-screen updates (this used to poll every 2s). */
 export function useEffectiveBindings(spaceId: string, channelId: string): string[] {
   const [value, setValue] = useState<string[]>(() => getEffectiveBindings(spaceId, channelId));
   useEffect(() => {
     // Sync immediately when keys change (initial mount or route param resolves
-    // from undefined to the real id), then poll for cross-screen updates.
+    // from undefined to the real id), then on every change to this store: the
+    // effective value depends on both the channel and the space keys.
     const sync = () => {
       const next = getEffectiveBindings(spaceId, channelId);
       setValue((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     };
     sync();
-    const interval = setInterval(sync, 2000);
-    return () => clearInterval(interval);
+    const listener = storage.addOnValueChangedListener(sync);
+    return () => listener.remove();
   }, [spaceId, channelId]);
   return value;
 }
@@ -145,8 +147,8 @@ export function useSpaceBindings(spaceId: string): [string[], (next: string[]) =
       setValueLocal((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     };
     sync();
-    const interval = setInterval(sync, 2000);
-    return () => clearInterval(interval);
+    const listener = storage.addOnValueChangedListener(sync);
+    return () => listener.remove();
   }, [spaceId]);
   const setValue = useCallback(
     (next: string[]) => {

@@ -4,8 +4,8 @@
  * Everything lives in one MMKV instance (`quorum-wallet-prefs`) as JSON.
  *
  * Exports:
- *   - `useWalletPref<T>(key, defaultValue)` — React hook, polls every 2s so
- *     cross-screen updates reflect (same pattern as useReplyTracking).
+ *   - `useWalletPref<T>(key, defaultValue)` — React hook, re-read when the key
+ *     changes in storage, so cross-screen updates reflect.
  *   - `loadPref / savePref` — standalone read/write (for non-React callers).
  *   - Recent-recipient helpers: `addRecentRecipient`, `getRecentRecipients`.
  *   - Favorite-token helpers: `isFavoriteToken`, `toggleFavoriteToken`,
@@ -37,9 +37,10 @@ export function savePref<T>(key: string, value: T): void {
 }
 
 /**
- * React hook bound to a single pref key. Polls every 2s so if another screen
- * updates the value, this one sees it. Calls to `setValue` are synchronous
- * local updates AND persisted to storage.
+ * React hook bound to a single pref key. Re-reads when the key changes in
+ * storage, so if another screen updates the value, this one sees it. (It used
+ * to poll every 2s, seven of them at once on the wallet screen.) Calls to
+ * `setValue` are synchronous local updates AND persisted to storage.
  */
 export function useWalletPref<T>(
   key: string,
@@ -48,14 +49,18 @@ export function useWalletPref<T>(
   const [value, setLocal] = useState<T>(() => loadPref<T>(key, defaultValue));
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const sync = () => {
       const next = loadPref<T>(key, defaultValue);
       // Cheap string compare — both are JSON-serializable scalars/records
       setLocal((prev) =>
         JSON.stringify(prev) === JSON.stringify(next) ? prev : next,
       );
-    }, 2000);
-    return () => clearInterval(interval);
+    };
+    sync();
+    const listener = storage.addOnValueChangedListener((changed) => {
+      if (changed === key) sync();
+    });
+    return () => listener.remove();
   }, [key, defaultValue]);
 
   const setValue = useCallback(
@@ -148,13 +153,17 @@ export function useFavoriteTokens(): FavoriteToken[] {
     getFavoriteTokens(),
   );
   useEffect(() => {
-    const interval = setInterval(() => {
+    const sync = () => {
       const next = getFavoriteTokens();
       setFavorites((prev) =>
         JSON.stringify(prev) === JSON.stringify(next) ? prev : next,
       );
-    }, 2000);
-    return () => clearInterval(interval);
+    };
+    sync();
+    const listener = storage.addOnValueChangedListener((changed) => {
+      if (changed === FAV_TOKENS_KEY) sync();
+    });
+    return () => listener.remove();
   }, []);
   return favorites;
 }

@@ -195,11 +195,14 @@ export function clearSpaceStorage(): void {
 }
 
 export function getSpaceByHubAddress(hubAddress: string): Space | null {
-  const spaces = getAllSpaces();
-  for (const space of spaces) {
-    const hubKey = getSpaceKey(space.spaceId, 'hub');
+  // Match on the (small) hub key first and parse only the space it belongs
+  // to. This runs on every hub log update, and parsing every space for it
+  // (custom-emoji data URIs and all) was most of its cost.
+  for (const spaceId of getSpaceIds()) {
+    const hubKey = getSpaceKey(spaceId, 'hub');
     if (hubKey && hubKey.address === hubAddress) {
-      return space;
+      const space = getSpace(spaceId);
+      if (space) return space;
     }
   }
   return null;

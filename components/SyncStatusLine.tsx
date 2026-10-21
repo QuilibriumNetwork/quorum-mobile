@@ -2,7 +2,7 @@ import * as React from 'react';
 import { Text, StyleSheet } from 'react-native';
 import * as Skin from '@/theme/skins/geometry';
 import { type AppTheme } from '@/theme';
-import { readLastPublish, type PublishOutcome } from '@/services/config/lastPublish';
+import { readLastPublish, subscribeLastPublish, type PublishOutcome } from '@/services/config/lastPublish';
 
 /**
  * Shows a line under the "Enable Sync" row ONLY when publishing is failing.
@@ -34,19 +34,12 @@ const SyncStatusLine: React.FunctionComponent<{
 }> = ({ allowSync, theme }) => {
   const [last, setLast] = React.useState(() => readLastPublish());
 
-  // Nothing here subscribes to the store, so a failure occurring while the
-  // panel is open would not appear and a recovery would not clear. Polling
-  // while mounted is what desktop settled on for the same reason.
-  //
-  // To be clear about what is and is not a library limit: react-native-mmkv
-  // DOES offer `useMMKVListener`. It is not wired up because the record is
-  // written through a plain module function rather than a hook, and a 2s poll
-  // on an open settings panel is not worth a second mechanism. Swapping to the
-  // listener later is a local change with no other consequence.
+  // Re-read when the record is written, so a failure occurring while the panel
+  // is open appears and a recovery clears. (Desktop polls; this used to poll
+  // every 2s too, from a panel that stays mounted.)
   React.useEffect(() => {
     setLast(readLastPublish());
-    const id = setInterval(() => setLast(readLastPublish()), 2000);
-    return () => clearInterval(id);
+    return subscribeLastPublish(() => setLast(readLastPublish()));
   }, [allowSync]);
 
   // Sync off is a setting working as asked, not a fault, and any stored failure

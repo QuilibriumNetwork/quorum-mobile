@@ -83,7 +83,7 @@ jest.mock('@/context/AuthContext', () => ({
   }),
 }));
 jest.mock('@/context/ToastContext', () => ({ useToast: () => ({ showToast: jest.fn() }) }));
-jest.mock('@/hooks/useFarcasterProfile', () => ({ useFarcasterProfile: () => ({ author: null }) }));
+jest.mock('@/hooks/useFarcasterUserPersistent', () => ({ useFarcasterUserPersistent: () => ({ data: null }) }));
 jest.mock('@/services/profile/profilePrefs', () => ({
   hasDecidedSplitMode: () => true,
   useProfileSplitMode: () => [false, jest.fn()],

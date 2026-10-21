@@ -220,9 +220,9 @@ export function useFarcasterProfile({
     },
     enabled: enabled && fid > 0,
     staleTime: 1000 * 60 * 2, // 2 minutes
-    // Cap retained pages so a long scroll session doesn't pin every page
-    // in the JS heap; dropped pages refetch from the network on demand.
-    maxPages: 6,
+    // No `maxPages`: casts only page older, so a dropped first page never
+    // came back, and every refetch (reopening the profile) started from the
+    // page after it, hiding the profile's newest casts.
     initialData: cached?.data,
     initialDataUpdatedAt: cached?.updatedAt,
   });

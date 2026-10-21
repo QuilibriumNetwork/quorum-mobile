@@ -13,6 +13,7 @@ import ReanimatedModule, {
   withTiming,
 } from 'react-native-reanimated';
 import { logger } from '@quilibrium/quorum-shared';
+import { getCachedLinkProbe, probeLink } from '@/hooks/useOgMetadata';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
@@ -195,37 +196,17 @@ function resolveGap(gap?: unknown): number {
 }
 
 // ---------------------------------------------------------------------------
-// Snap detection cache
+// Snap detection
 // ---------------------------------------------------------------------------
 
-const snapDetectionCache = new Map<string, boolean>();
-
 /**
- * Probe a URL to see if it responds with snap content-type.
- * The result is cached to avoid repeated probing on re-render.
+ * Whether a URL serves a snap. Shares one GET with the link preview's
+ * metadata (`probeLink`), so a plain link is downloaded once, not twice.
  */
 export async function isSnapUrl(url: string): Promise<boolean> {
-  const cached = snapDetectionCache.get(url);
-  if (cached !== undefined) return cached;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/vnd.farcaster.snap+json' },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    const ct = res.headers.get('content-type') ?? '';
-    const isSnap = ct.includes('application/vnd.farcaster.snap+json');
-    logger.debug(`[Snap] detection: ${url.slice(0, 60)} → ct="${ct}" isSnap=${isSnap}`);
-    snapDetectionCache.set(url, isSnap);
-    return isSnap;
-  } catch (e) {
-    logger.debug(`[Snap] detection failed: ${url.slice(0, 60)} → ${e}`);
-    snapDetectionCache.set(url, false);
-    return false;
-  }
+  const { isSnap } = await probeLink(url);
+  logger.debug(`[Snap] detection: ${url.slice(0, 60)} → isSnap=${isSnap}`);
+  return isSnap;
 }
 
 // ---------------------------------------------------------------------------
@@ -1403,11 +1384,14 @@ export function SnapEmbed({
  * Hook to detect if a URL is a snap. Returns `true`, `false`, or `null` (pending).
  * Uses the snap detection cache so subsequent renders are instant.
  */
+/** How long a link must stay on screen before it is probed, so scrolling
+ *  past a cell doesn't start a page download. Cached answers apply at once. */
+const SNAP_PROBE_DELAY_MS = 250;
+
 export function useSnapDetection(url: string | undefined): boolean | null {
   const [result, setResult] = useState<boolean | null>(() => {
     if (!url) return false;
-    const cached = snapDetectionCache.get(url);
-    return cached !== undefined ? cached : null;
+    return getCachedLinkProbe(url)?.isSnap ?? null;
   });
 
   useEffect(() => {
@@ -1415,16 +1399,22 @@ export function useSnapDetection(url: string | undefined): boolean | null {
       setResult(false);
       return;
     }
-    const cached = snapDetectionCache.get(url);
-    if (cached !== undefined) {
-      setResult(cached);
+    const cached = getCachedLinkProbe(url);
+    if (cached) {
+      setResult(cached.isSnap);
       return;
     }
+    setResult(null);
     let cancelled = false;
-    isSnapUrl(url).then((val) => {
-      if (!cancelled) setResult(val);
-    });
-    return () => { cancelled = true; };
+    const timer = setTimeout(() => {
+      isSnapUrl(url).then((val) => {
+        if (!cancelled) setResult(val);
+      });
+    }, SNAP_PROBE_DELAY_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [url]);
 
   return result;

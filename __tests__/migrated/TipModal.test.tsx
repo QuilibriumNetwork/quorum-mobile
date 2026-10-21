@@ -61,8 +61,9 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
+// No farcaster.xyz token: the recipient address comes from Hypersnap.
 jest.mock('@/context/AuthContext', () => ({
-  useAuth: () => ({ farcasterAuthToken: 'fc-token' }),
+  useAuth: () => ({ farcasterAuthToken: null }),
 }));
 jest.mock('@/context/ToastContext', () => ({
   useToast: () => ({ showToast: jest.fn() }),
@@ -110,7 +111,7 @@ jest.mock('@/hooks/useWarpcastWallet', () => ({
 jest.mock('@/hooks/useQNSPayment', () => ({
   getWalletPrivateKey: jest.fn().mockResolvedValue('0xprivatekey'),
 }));
-jest.mock('@/services/farcasterClient', () => ({
+jest.mock('@/services/farcaster/hypersnapUsers', () => ({
   fetchPrimaryEthAddress: jest.fn().mockResolvedValue('0xRecipientEthAddress'),
 }));
 jest.mock('@/services/wallet/swapService', () => ({

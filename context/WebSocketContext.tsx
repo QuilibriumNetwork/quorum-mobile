@@ -32,7 +32,9 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Alert, AppState, AppStateStatus, InteractionManager } from 'react-native';
+import { Alert, AppState, AppStateStatus } from 'react-native';
+import { yieldToEventLoop } from '@/utils/yieldToEventLoop';
+import { perfMark } from '@/services/observability/perfProbe';
 
 import type { Conversation } from '@/hooks/chat/useConversations';
 import type { SelfIdentity } from '@/utils/resolveMemberName';
@@ -69,7 +71,12 @@ import {
   getConversationSettingForCurrentUser,
   removeSpaceFromConfig,
 } from '../services/config/configService';
-import { updateMessageDeliveredAt, updateMessagesReadAt } from '../services/storage/messagesDb';
+import {
+  addPendingReaction,
+  updateMessageDeliveredAt,
+  updateMessagesReadAt,
+  withAuthoritativeReactions,
+} from '../services/storage/messagesDb';
 import { drainPiggybackAcks } from '../services/dm/piggybackAcks';
 import { sendEncryptedMessageToAllDevices } from '../hooks/chat/useSendDirectMessage';
 import { toAllDeviceInfos, type DeviceInfo } from '../hooks/chat/useRecipientRegistration';
@@ -2327,11 +2334,21 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 messageId: reactionContent.messageId,
               });
               if (existingMessage) {
-                const updatedMessage = {
+                const updatedMessage = withAuthoritativeReactions({
                   ...existingMessage,
                   reactions: computeNewReactions(existingMessage.reactions),
-                };
+                });
                 await storage.saveMessage(updatedMessage, updatedMessage.createdDate, '', '', '', '');
+              } else {
+                // The message hasn't arrived (or predates this device's
+                // history); keep the reaction for when it's saved, since the
+                // inbox copy is deleted below.
+                await addPendingReaction(spaceId, channelId, reactionContent.messageId, {
+                  kind: 'add',
+                  reaction: reactionContent.reaction,
+                  senderId: reactionContent.senderId,
+                  spaceId,
+                });
               }
               // Delete reaction message from inbox after processing
               if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
@@ -2383,11 +2400,20 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 messageId: reactionContent.messageId,
               });
               if (existingMessage) {
-                const updatedMessage = {
+                // Authoritative: removing the last reaction stores [] rather
+                // than letting the replay rule restore the old ones.
+                const updatedMessage = withAuthoritativeReactions({
                   ...existingMessage,
                   reactions: computeRemovedReactions(existingMessage.reactions),
-                };
+                });
                 await storage.saveMessage(updatedMessage, updatedMessage.createdDate, '', '', '', '');
+              } else {
+                await addPendingReaction(spaceId, channelId, reactionContent.messageId, {
+                  kind: 'remove',
+                  reaction: reactionContent.reaction,
+                  senderId: reactionContent.senderId,
+                  spaceId,
+                });
               }
               // Delete remove-reaction message from inbox after processing
               if (spaceInboxKey?.address && spaceInboxKey.publicKey && spaceInboxKey.privateKey) {
@@ -4430,6 +4456,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       let batchMembersCache: SpaceMember[] | null = null;
       const getBatchMembers = async () =>
         (batchMembersCache ??= await getMMKVAdapter().getSpaceMembers(spaceId));
+      // The space itself, read once per group the same way (it was parsed again
+      // for every message), and dropped after a control message, which can
+      // rewrite it (space-manifest). Read-only below.
+      let batchSpace: Space | null | undefined;
+      const getBatchSpace = () => (batchSpace === undefined ? (batchSpace = getSpace(spaceId)) : batchSpace);
 
       for (const msgResult of groupResult.messages) {
         deleteTimestamps.push(msgResult.timestamp);
@@ -4492,8 +4523,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               if (queuedAt !== -1) deleteTimestamps.splice(queuedAt, 1);
               logger.warn(`[batch-control] kept in inbox for retry (ts=${msgResult.timestamp})`);
             }
-            // Control messages (join/kick/…) may have written member rows.
+            // Control messages (join/kick/…) may have written member rows,
+            // and a space-manifest rewrites the space.
             batchMembersCache = null;
+            batchSpace = undefined;
           } else {
             logger.debug(`[batch-control] dropped: no original batch message for ts=${msgResult.timestamp}`);
           }
@@ -4509,7 +4542,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             continue;
           }
 
-          const space = getSpace(spaceId);
+          const space = getBatchSpace();
           const channelId = spaceMessage.channelId || space?.defaultChannelId || spaceId;
           const messagesKey = queryKeys.messages.infinite(spaceId, channelId);
           const contentType = spaceMessage.content?.type;
@@ -4550,7 +4583,18 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             const baseMsg = pendingStorageUpdates.get(reactionContent.messageId)
               ?? await storage.getMessage({ spaceId, channelId, messageId: reactionContent.messageId });
             if (baseMsg) {
-              pendingStorageUpdates.set(reactionContent.messageId, { ...baseMsg, reactions: computeNewReactions(baseMsg.reactions) });
+              pendingStorageUpdates.set(
+                reactionContent.messageId,
+                withAuthoritativeReactions({ ...baseMsg, reactions: computeNewReactions(baseMsg.reactions) }),
+              );
+            } else {
+              // Not stored yet: kept until the message is saved (live path's rule).
+              await addPendingReaction(spaceId, channelId, reactionContent.messageId, {
+                kind: 'add',
+                reaction: reactionContent.reaction,
+                senderId: reactionContent.senderId,
+                spaceId,
+              });
             }
             continue;
           }
@@ -4569,7 +4613,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
             const baseMsg = pendingStorageUpdates.get(reactionContent.messageId)
               ?? await storage.getMessage({ spaceId, channelId, messageId: reactionContent.messageId });
             if (baseMsg) {
-              pendingStorageUpdates.set(reactionContent.messageId, { ...baseMsg, reactions: computeRemoved(baseMsg.reactions) });
+              pendingStorageUpdates.set(
+                reactionContent.messageId,
+                withAuthoritativeReactions({ ...baseMsg, reactions: computeRemoved(baseMsg.reactions) }),
+              );
+            } else {
+              await addPendingReaction(spaceId, channelId, reactionContent.messageId, {
+                kind: 'remove',
+                reaction: reactionContent.reaction,
+                senderId: reactionContent.senderId,
+                spaceId,
+              });
             }
             continue;
           }
@@ -5300,10 +5354,19 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           });
           if (targetMsg) {
             await storage.saveMessage(
-              { ...targetMsg, reactions: apply(targetMsg.reactions) },
+              withAuthoritativeReactions({ ...targetMsg, reactions: apply(targetMsg.reactions) }),
               targetMsg.createdDate,
               resolvedSenderAddress, 'direct', senderIcon, senderDisplayName,
             );
+          } else {
+            // The message hasn't arrived; keep the reaction for when it's
+            // saved, since the inbox copy is deleted below.
+            await addPendingReaction(resolvedSenderAddress, resolvedSenderAddress, rc.messageId, {
+              kind: dmContentType === 'reaction' ? 'add' : 'remove',
+              reaction: rc.reaction,
+              senderId: rc.senderId,
+              spaceId: resolvedSenderAddress,
+            });
           }
 
           // Best-effort: delete processed message from inbox (same as below)
@@ -5677,6 +5740,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // empty; see MAX_BATCH_DRAIN_SIZE for why this matters on small
       // devices.
       let batch = messageQueueRef.current.splice(0, MAX_BATCH_DRAIN_SIZE);
+      perfMark('ws-drain');
 
       // Bounded-retry poison guard (DM / device-inbox only). Drop envelopes that
       // have already failed too many times, or are old and still failing, so a
@@ -5856,11 +5920,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
         // Process non-batchable messages (control messages, edge cases) individually
         for (let i = 0; i < nonBatchMessages.length; i++) {
-          // Yield to UI thread every 5 messages to prevent jank
+          // Yield to the UI thread every 5 messages to prevent jank. A real
+          // macrotask yield: runAfterInteractions resolves as a microtask
+          // under the New Architecture and never let anything in.
           if (i % 5 === 0) {
-            await new Promise<void>(resolve => {
-              InteractionManager.runAfterInteractions(() => resolve());
-            });
+            await yieldToEventLoop();
           }
 
           try {
@@ -5869,8 +5933,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
           // Brief yield between messages only if more work remains. Skipped
           // while a large backlog waits (catch-up storms) — the per-message
-          // sleep starves the drain; the every-5 InteractionManager yield
-          // above still protects the UI thread.
+          // sleep starves the drain; the every-5 yield above still protects
+          // the UI thread.
           if (
             (i < nonBatchMessages.length - 1 || messageQueueRef.current.length > 0) &&
             messageQueueRef.current.length < FAST_DRAIN_THRESHOLD
@@ -5882,9 +5946,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         // Fallback: if batch processing fails entirely, process all individually
         await batchPreUnsealSpaceMessages(batch);
         for (const message of batch) {
-          await new Promise<void>(resolve => {
-            InteractionManager.runAfterInteractions(() => resolve());
-          });
+          await yieldToEventLoop();
           try {
             await handleIncomingMessage(message);
           } catch { /* ignore */ }
@@ -6471,9 +6533,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // is handled exclusively by the per-hub log transport (listen-hub +
   // log-since). Joiners do not request history from peers.
 
-  // Connect/disconnect based on auth state
+  // Connect/disconnect based on auth state. Keyed on the account's address,
+  // not the `user` object: AuthContext replaces that object on every launch
+  // (the config merge, the avatar backfill) and on any profile edit, and each
+  // replacement tore the socket down and reconnected it, re-running every
+  // subscription. A different account is a different address, so a switch
+  // still reconnects.
+  const userAddress = user?.address;
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isAuthenticated && userAddress) {
       connect();
     } else {
       disconnect();
@@ -6483,7 +6551,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     return () => {
       disconnect();
     };
-  }, [isAuthenticated, user, connect, disconnect]);
+  }, [isAuthenticated, userAddress, connect, disconnect]);
 
   // Handle app state changes (reconnect when app comes to foreground)
   useEffect(() => {

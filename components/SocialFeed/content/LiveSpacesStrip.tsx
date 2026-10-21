@@ -24,6 +24,7 @@ import {
 import { useTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
+import { useScreenFocused } from '@/hooks/useScreenFocused';
 
 /** 5s stale, 10s refetch. Listener counts move on that cadence and
  *  tighter sync keeps the strip from drifting visibly. */
@@ -34,13 +35,15 @@ export function LiveSpacesStrip() {
   const { theme } = useTheme();
   const { farcasterAuthToken } = useAuth();
   const { join, active } = useAudioSpace();
+  // The feed tab stays mounted once visited; poll only while it's in view.
+  const focused = useScreenFocused();
 
   const { data: liveRooms } = useQuery<AudioRoom[]>({
     queryKey: ['discover-audio-rooms', 'live'] as const,
     queryFn: () => listLiveAudioRooms(farcasterAuthToken as string),
     enabled: Boolean(farcasterAuthToken),
     staleTime: STALE_TIME_MS,
-    refetchInterval: REFETCH_INTERVAL_MS,
+    refetchInterval: focused ? REFETCH_INTERVAL_MS : false,
   });
 
   // Scheduled rooms tick on a slower cadence — they only change when
@@ -51,7 +54,7 @@ export function LiveSpacesStrip() {
     queryFn: () => listScheduledAudioRooms(farcasterAuthToken as string),
     enabled: Boolean(farcasterAuthToken),
     staleTime: 60_000,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: focused ? 5 * 60_000 : false,
   });
 
   const live = React.useMemo(

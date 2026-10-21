@@ -8,15 +8,14 @@
  * user opens search in this session, and rebuilt only while search is
  * open. For a chat with ~1000 messages the build takes 50–100ms of
  * synchronous JS, which is wasted when the user never searches (the
- * common case). Indexing is also moved off the render path via
- * `InteractionManager.runAfterInteractions` so it doesn't compete with
+ * common case). Indexing is also moved off the render path to the next
+ * task (`setTimeout`) so it doesn't compete with
  * the chat update tick — there's a ~frame delay before the first
  * keystroke produces results, but that's invisible compared to the
  * typing latency it removes.
  */
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { InteractionManager } from 'react-native';
 import MiniSearch from 'minisearch';
 import type { DisplayMessage } from '@/components/Chat/types';
 import { logger } from '@quilibrium/quorum-shared';
@@ -77,14 +76,17 @@ export function useMessageSearch(messages: DisplayMessage[]) {
   useEffect(() => {
     if (!isSearchOpen) return;
     everOpenedRef.current = true;
+    // Build on the next task, so the search UI renders before the index
+    // build blocks the thread. (runAfterInteractions resolved as a microtask
+    // under the New Architecture, so it built before the UI got a frame.)
     let cancelled = false;
-    const handle = InteractionManager.runAfterInteractions(() => {
+    const timer = setTimeout(() => {
       if (cancelled) return;
       setMiniSearch(buildIndex(messages));
-    });
+    }, 0);
     return () => {
       cancelled = true;
-      handle.cancel?.();
+      clearTimeout(timer);
     };
   }, [messages, isSearchOpen]);
 

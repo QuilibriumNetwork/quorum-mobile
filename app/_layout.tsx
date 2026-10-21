@@ -20,6 +20,12 @@ installGlobalErrorReporter();
 import { installReactQueryRnBridges } from '@/services/observability/reactQueryRnBridges';
 installReactQueryRnBridges();
 
+// Perf probe (JS-thread long tasks, lag, heap). Off unless turned on with
+// EXPO_PUBLIC_PERF_PROBE=1 or from the developer panel.
+// eslint-disable-next-line import/first -- after the polyfills above, like the rest
+import { isPerfProbeEnabled, startPerfProbe } from '@/services/observability/perfProbe';
+if (isPerfProbeEnabled()) startPerfProbe();
+
 // Farcaster reads and writes go through Hypersnap only. quorum-shared's hooks
 // would otherwise fall back to farcaster.xyz on any Hypersnap error; install the
 // client that refuses those fallbacks before any of them runs.
@@ -68,7 +74,16 @@ import { ToastProvider } from '@/context/ToastContext';
 import { CallOverlay, SpaceCallOverlay } from '@/components/Call';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { queryConfig } from '@/services/api';
-import { queryPersister, shouldPersistMutation, shouldPersistQuery } from '@/services/offline';
+import {
+  PERSIST_BUSTER,
+  PERSIST_MAX_AGE_MS,
+  PERSISTED_QUERY_ROOTS,
+  queryPersister,
+  scrubLegacyQueryCache,
+  seedLocalQueries,
+  shouldPersistMutation,
+  shouldPersistQuery,
+} from '@/services/offline';
 import { RootIdentityScope } from '@/identity/RootIdentityScope';
 import {
   initializeNotifications,
@@ -259,6 +274,15 @@ function AuthRouter() {
   );
 }
 
+/** Delay before the one-time legacy cache scrub, so it misses startup. */
+const LEGACY_SCRUB_DELAY_MS = 5_000;
+let legacyScrubScheduled = false;
+function scheduleLegacyQueryCacheScrub() {
+  if (legacyScrubScheduled) return;
+  legacyScrubScheduled = true;
+  setTimeout(scrubLegacyQueryCache, LEGACY_SCRUB_DELAY_MS);
+}
+
 // Lazy-initialize QueryClient to preserve instance across Fast Refresh
 let queryClientInstance: QueryClient | null = null;
 function getQueryClient() {
@@ -269,9 +293,25 @@ function getQueryClient() {
           staleTime: queryConfig.staleTime.feed,
           gcTime: queryConfig.gcTime,
           retry: queryConfig.retry,
+          // Coming back to the app refetched every stale query mounted
+          // anywhere, hidden tabs included (they never unmount here). Queries
+          // that should refresh on return opt in (the DM inbox and thread,
+          // notifications), or are refreshed by their screen when it's in view
+          // (the feed, wallet balances). New messages arrive through the
+          // WebSocket catch-up, which writes the cache directly. The focus
+          // bridge stays installed: polls need it to pause in the background.
+          refetchOnWindowFocus: false,
         },
       },
     });
+    // A query is only written while it's in memory, so the persisted families
+    // stay there as long as they stay on disk; under the default gcTime they
+    // dropped out of the cache, and so out of the next write, minutes after
+    // their screen closed.
+    for (const root of PERSISTED_QUERY_ROOTS) {
+      queryClientInstance.setQueryDefaults([root], { gcTime: PERSIST_MAX_AGE_MS });
+    }
+    seedLocalQueries(queryClientInstance);
   }
   return queryClientInstance;
 }
@@ -348,18 +388,22 @@ export default function RootLayout() {
       client={queryClient}
       persistOptions={{
         persister: queryPersister,
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        maxAge: PERSIST_MAX_AGE_MS,
+        // A cache written by another release or persisted schema is dropped.
+        buster: PERSIST_BUSTER,
         dehydrateOptions: {
-          // Extracted so it can be tested — see the module for WHY QNS claim
-          // verification must never reach disk, and why that rule now stands
-          // alone rather than being backed up by a container that could not
-          // survive JSON.
+          // An allow-list, extracted so it can be tested — see the module for
+          // what is persisted and WHY QNS claim verification must never reach
+          // disk.
           shouldDehydrateQuery: shouldPersistQuery,
-          // Paused mutations are persisted with their variables. Same module,
-          // same rule: key material never reaches disk.
+          // Paused mutations are not persisted: they can't resume after a
+          // restart. Same module, which also keeps key material off disk.
           shouldDehydrateMutation: shouldPersistMutation,
         },
       }}
+      // The cache earlier builds wrote into the shared store is removed and
+      // scrubbed once, after the first screen is up (it's two compactions).
+      onSuccess={scheduleLegacyQueryCacheScrub}
     >
       <CustomThemeProvider defaultAccentColor="blue" defaultSkin={bootSkin} defaultAppearance={bootAppearance} defaultTextSize={bootTextSize}>
         <StorageProvider>
