@@ -2,7 +2,8 @@ import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
-import { Image } from 'expo-image';
+import { SizedImage } from '@/components/ui/SizedImage';
+import { SCREEN_WIDTH } from '../utils';
 import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import type { EmbeddedCast } from '@/hooks/useFarcasterFeed';
 import * as Skin from '@/theme/skins/geometry';
@@ -52,13 +53,14 @@ export function QuoteCast({ cast, theme, onPress }: QuoteCastProps) {
       </View>
       {/* Image preview */}
       {hasImage && cast.embeds?.images?.[0]?.url && (
-        <Image
-          source={{ uri: cast.embeds.images[0].url }}
+        // Same width the feed asks for the quoted photo at, so it's one
+        // download.
+        <SizedImage
+          uri={cast.embeds.images[0].url}
+          displayWidth={SCREEN_WIDTH}
           style={styles.image}
           contentFit="cover"
           cachePolicy="disk"
-          // Reset animated-GIF source on recycled cell reuse — see AutoHeightImage.
-          recyclingKey={cast.embeds.images[0].url}
         />
       )}
     </TouchableOpacity>

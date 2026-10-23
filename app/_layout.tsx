@@ -301,6 +301,14 @@ function getQueryClient() {
           // WebSocket catch-up, which writes the cache directly. The focus
           // bridge stays installed: polls need it to pause in the background.
           refetchOnWindowFocus: false,
+          // Same for the network coming back. Every NetInfo offline→online
+          // flip refetched every stale query with an observer, hidden tabs
+          // included, and an infinite query refetches every page it holds:
+          // the whole scrolled feed, profiles, the DM inbox and wallet
+          // balances across every chain, on each flap of a patchy
+          // connection. Screens refresh their own data when they're in view,
+          // and the sockets catch up when they reconnect.
+          refetchOnReconnect: false,
         },
       },
     });

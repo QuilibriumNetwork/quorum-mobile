@@ -66,7 +66,8 @@ export function planFarcasterPings(
     }
     // Muted on Farcaster itself. We only learn this per-conversation, so it
     // could not be honored while the run raised one aggregate ping.
-    if (conversation.muted) continue;
+    // The inbox reports it in viewerContext; older responses at the top level.
+    if (conversation.viewerContext?.muted ?? conversation.muted) continue;
     fresh.push(conversation);
   }
 

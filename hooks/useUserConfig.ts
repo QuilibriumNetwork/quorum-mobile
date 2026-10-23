@@ -12,7 +12,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   getConfig,
-  saveConfig,
   getLocalUserConfig,
   updateConfig,
   setAllowSync,
@@ -20,6 +19,10 @@ import {
   addBookmark as addBookmarkService,
   removeBookmark as removeBookmarkService,
 } from '../services/config';
+import {
+  CONFIG_REFRESH_MAX_AGE_MS,
+  scheduleConfigPublish,
+} from '../services/config/configService';
 import { type UserConfig, type Bookmark } from '@quilibrium/quorum-shared';
 
 interface UseUserConfigReturn {
@@ -57,11 +60,16 @@ export function useUserConfig(): UseUserConfigReturn {
       setConfig(cached);
     }
 
-    // Then refresh from server
+    // Then refresh from server. This runs on every mount — every DM screen
+    // open, and twice when the profile screen opens — so it may reuse a
+    // download made in the last few minutes rather than fetch the whole blob
+    // again. refreshConfig below always fetches.
     (async () => {
       setIsLoading(true);
       try {
-        const freshConfig = await getConfig(user.address);
+        const freshConfig = await getConfig(user.address, {
+          maxAgeMs: CONFIG_REFRESH_MAX_AGE_MS,
+        });
         setConfig(freshConfig);
         setError(null);
       } catch (err) {
@@ -104,43 +112,61 @@ export function useUserConfig(): UseUserConfigReturn {
     [user?.address]
   );
 
+  // Toggles. The change is shown at once, while the upload is coalesced with
+  // any other toggle made in the next couple of seconds (updateConfig's
+  // `coalesce`), so the returned promise settles only after that upload. A
+  // failure restores what is actually stored and rethrows, as before.
+  const applyToggle = useCallback(
+    async (address: string, updates: Partial<UserConfig>) => {
+      setConfig((prev) => (prev ? { ...prev, ...updates } : prev));
+      try {
+        const updated = await updateConfig(address, updates, { coalesce: true });
+        setConfig(updated);
+      } catch (err) {
+        setConfig((prev) => getLocalUserConfig(address) ?? prev);
+        throw err;
+      }
+    },
+    []
+  );
+
   const updateNotificationSettings = useCallback(
     async (settings: UserConfig['notificationSettings']) => {
       if (!user?.address || !config) return;
 
-      try {
-        const updated = await updateConfig(user.address, {
-          notificationSettings: {
-            ...config.notificationSettings,
-            ...settings,
-          },
-        });
-        setConfig(updated);
-      } catch (err) {
-        throw err;
-      }
+      await applyToggle(user.address, {
+        notificationSettings: {
+          ...config.notificationSettings,
+          ...settings,
+        },
+      });
     },
-    [user?.address, config]
+    [user?.address, config, applyToggle]
   );
 
   // DM receipt master switches. Persisted to the config blob (typed in shared
   // 2.1.0-34+) and synced cross-device via saveConfig like every other setting.
+  //
+  // Turning delivery off turns read off in the SAME write (you can't confirm
+  // reads without confirming delivery, matches desktop). It used to be a
+  // second call from the screen, which meant a second whole-blob upload.
   const updateDeliveryReceipts = useCallback(
     async (enabled: boolean) => {
       if (!user?.address) return;
-      const updated = await updateConfig(user.address, { deliveryReceipts: enabled });
-      setConfig(updated);
+      await applyToggle(
+        user.address,
+        enabled ? { deliveryReceipts: true } : { deliveryReceipts: false, readReceipts: false }
+      );
     },
-    [user?.address]
+    [user?.address, applyToggle]
   );
 
   const updateReadReceipts = useCallback(
     async (enabled: boolean) => {
       if (!user?.address) return;
-      const updated = await updateConfig(user.address, { readReceipts: enabled });
-      setConfig(updated);
+      await applyToggle(user.address, { readReceipts: enabled });
     },
-    [user?.address]
+    [user?.address, applyToggle]
   );
 
   return {
@@ -224,11 +250,13 @@ export function useBookmarks() {
       addBookmarkService(user.address, bookmark);
       setBookmarks(getLocalBookmarks(user.address));
 
-      // Trigger sync if allowSync is enabled
+      // Trigger sync if allowSync is enabled. Coalesced: the upload reads the
+      // bookmark store when it runs, so bookmarking several messages in a row
+      // costs one upload.
       try {
         const config = getLocalUserConfig(user.address);
         if (config?.allowSync) {
-          await saveConfig(config);
+          await scheduleConfigPublish(user.address);
         }
       } catch {
         // Config sync is best-effort — bookmark is already saved locally
@@ -244,11 +272,11 @@ export function useBookmarks() {
       removeBookmarkService(user.address, bookmarkId);
       setBookmarks(getLocalBookmarks(user.address));
 
-      // Trigger sync if allowSync is enabled
+      // Trigger sync if allowSync is enabled (coalesced, as above)
       try {
         const config = getLocalUserConfig(user.address);
         if (config?.allowSync) {
-          await saveConfig(config);
+          await scheduleConfigPublish(user.address);
         }
       } catch {
         // Config sync is best-effort — bookmark removal is already saved locally

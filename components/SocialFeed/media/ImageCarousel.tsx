@@ -42,6 +42,11 @@ interface ImageCarouselProps {
 
 /**
  * Horizontal scrollable image carousel with pagination dots.
+ *
+ * Only the page shown and its neighbour are mounted, so a cast with four
+ * images downloads one or two of them unless it's swiped. FlatList's defaults
+ * (ten up front, a window of 21 screens) mounted, and downloaded, every page
+ * as the cast scrolled into view.
  */
 export function ImageCarousel({
   urls,
@@ -87,6 +92,9 @@ export function ImageCarousel({
         })}
         decelerationRate="fast"
         snapToAlignment="start"
+        initialNumToRender={1}
+        maxToRenderPerBatch={1}
+        windowSize={3}
       />
       <View
         style={{

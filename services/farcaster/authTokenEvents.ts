@@ -1,12 +1,13 @@
 /**
  * authTokenEvents — reactive backstop for Farcaster auth-token expiry.
  *
- * farcaster.xyz call sites that use the auth token (the DM list) call
- * `reportFarcasterAuthFailure()` when they see a 401/403. That invokes a
+ * farcaster.xyz call sites that use the auth token (DM images and reactions)
+ * call `reportFarcasterAuthFailure()` when they see a 401/403. That invokes a
  * handler registered by AuthContext which force-refreshes the token via the
  * stored custody key; consumers read the new token from context. Feed,
  * notifications and protocol writes go through Hypersnap and never use the
- * token.
+ * token. The DM inbox, messages and text sends use the direct-cast token
+ * instead (`directCastAuth.ts`), which replaces itself when rejected.
  *
  * This module exists (instead of call sites importing AuthContext
  * directly) because the call sites are plain async functions, not

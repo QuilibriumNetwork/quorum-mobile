@@ -14,11 +14,16 @@
  * manifests; an indirection through farcaster.xyz is still needed for
  * the rest.
  *
- * Results cached with `gcTime: Infinity` since the manifest changes
- * rarely and a miss for a non-miniapp URL is itself a useful cache.
+ * The manifest belongs to the origin, not the link, so answers are cached per
+ * origin: ten links to one site cost one request, and a site without a
+ * manifest (often an SPA that answers the path with its whole index page) is
+ * asked once. Answers, found or not, are kept a day across launches since the
+ * manifest changes rarely and a miss is itself a useful cache.
  */
 
 import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
+import { fetchCapped, isTransientStatus, type CappedResponse } from '@/services/farcaster/cappedFetch';
+import { createPersistedTtlCache } from '@/services/offline/persistedTtlCache';
 
 export interface MiniappManifest {
   /** Domain origin the manifest was fetched from. */
@@ -50,44 +55,89 @@ interface RawFrame {
 }
 
 const FETCH_TIMEOUT_MS = 5_000;
+/** Manifests are a few hundred bytes of JSON. Anything near this is not one,
+ *  and its body is not downloaded past it. */
+const MAX_MANIFEST_BYTES = 64 * 1024;
 
-export async function fetchMiniappManifest(url: string): Promise<MiniappManifest | null> {
-  let origin: string;
+/** Answers per origin, `null` for "no manifest", kept a day across launches.
+ *  Bounded, oldest first out. */
+const manifestStore = createPersistedTtlCache<MiniappManifest | null>({
+  prefix: 'miniapp-manifest:v1:',
+  ttlMs: 24 * 60 * 60 * 1000,
+  maxEntries: 200,
+});
+const manifestsInFlight = new Map<string, Promise<MiniappManifest | null>>();
+
+/** The origin a manifest would be served from; null for anything not on the
+ *  web (whose `origin` is the string "null"). */
+function originOf(url: string): string | null {
   try {
-    origin = new URL(url).origin;
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.origin : null;
   } catch {
     return null;
   }
-  const manifestUrl = `${origin}/.well-known/farcaster.json`;
+}
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  let res: Response;
+/** Some hosts serve HTML on 404-as-200 (SPA index.html); only JSON, or a
+ *  server too plain to say, is worth reading. */
+function mayBeJson(contentType: string): boolean {
+  return !contentType || contentType.includes('json') || contentType.includes('text/plain');
+}
+
+/**
+ * The miniapp manifest of `url`'s origin, or null when it publishes none.
+ * Concurrent callers for one origin share one request.
+ */
+export function fetchMiniappManifest(url: string): Promise<MiniappManifest | null> {
+  const origin = originOf(url);
+  if (!origin) return Promise.resolve(null);
+  const cached = manifestStore.get(origin);
+  if (cached !== undefined) return Promise.resolve(cached);
+  const inFlight = manifestsInFlight.get(origin);
+  if (inFlight) return inFlight;
+  const request = fetchOriginManifest(origin)
+    .catch(() => ({ manifest: null, lasting: false }))
+    .then(({ manifest, lasting }) => {
+      // Failures of the moment (offline, timed out, a 5xx) aren't kept; the
+      // query's own cache answers them for this session.
+      if (lasting) manifestStore.set(origin, manifest);
+      manifestsInFlight.delete(origin);
+      return manifest;
+    });
+  manifestsInFlight.set(origin, request);
+  return request;
+}
+
+async function fetchOriginManifest(
+  origin: string,
+): Promise<{ manifest: MiniappManifest | null; lasting: boolean }> {
+  let res: CappedResponse;
   try {
-    res = await fetch(manifestUrl, {
-      method: 'GET',
+    res = await fetchCapped(`${origin}/.well-known/farcaster.json`, {
       headers: { accept: 'application/json' },
-      signal: controller.signal,
+      maxBytes: MAX_MANIFEST_BYTES,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      wantsBody: ({ ok, contentType }) => ok && mayBeJson(contentType),
     });
   } catch {
-    clearTimeout(timer);
-    return null;
+    return { manifest: null, lasting: false };
   }
-  clearTimeout(timer);
+  if (!res.ok) return { manifest: null, lasting: !isTransientStatus(res.status) };
+  if (!mayBeJson(res.contentType)) return { manifest: null, lasting: true };
+  if (res.bodyFailed) return { manifest: null, lasting: false };
+  return { manifest: parseManifest(origin, res.text), lasting: true };
+}
 
-  if (!res.ok) return null;
-  // Some hosts serve HTML on 404-as-200 (SPA index.html); short-circuit
-  // before trying to parse JSON.
-  const contentType = res.headers.get('content-type') ?? '';
-  if (contentType && !contentType.includes('json') && !contentType.includes('text/plain')) {
-    return null;
-  }
+function parseManifest(origin: string, text: string): MiniappManifest | null {
   let body: RawManifest;
   try {
-    body = (await res.json()) as RawManifest;
+    // A body cut off at the cap doesn't parse, and is rejected here.
+    body = JSON.parse(text) as RawManifest;
   } catch {
     return null;
   }
+  if (!body || typeof body !== 'object') return null;
 
   const frame = body.miniapp ?? body.frame;
   if (!frame || !frame.name) return null;
@@ -109,13 +159,23 @@ export async function fetchMiniappManifest(url: string): Promise<MiniappManifest
   };
 }
 
+/** Test reset. `keepPersisted` forgets only what a relaunch forgets. */
+export function __resetMiniappManifests(options: { keepPersisted?: boolean } = {}): void {
+  if (options.keepPersisted) manifestStore.forgetInMemory();
+  else manifestStore.clear();
+  manifestsInFlight.clear();
+}
+
 export function useMiniappManifest(
   url: string | undefined,
   options: { enabled?: boolean } = {},
 ) {
   const enabled = (options.enabled ?? true) && Boolean(url);
+  // Keyed by origin, so every link to one site shares one answer. A URL with
+  // no origin keys itself and answers null.
+  const origin = url ? originOf(url) : null;
   return useQuery({
-    queryKey: ['farcaster-miniapp-manifest', url],
+    queryKey: ['farcaster-miniapp-manifest', origin ?? url],
     queryFn: () => fetchMiniappManifest(url as string),
     enabled,
     staleTime: 24 * 60 * 60 * 1000,

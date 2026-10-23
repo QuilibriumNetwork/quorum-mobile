@@ -32,6 +32,7 @@ const STORAGE_KEYS = {
   FARCASTER_FID: 'farcaster.fid',
   FARCASTER_AUTH_TOKEN: 'farcaster.authToken',  // API auth token for Farcaster API calls
   FARCASTER_AUTH_TOKEN_EXPIRES_AT: 'farcaster.authTokenExpiresAt',  // Unix ms expiry of the auth token
+  FARCASTER_DIRECT_CAST_TOKEN: 'farcaster.directCastToken',  // {fid, token}: farcaster.xyz's direct-cast-only token
 
   // Warpcast embedded wallet (imported from Warpcast/Privy)
   WARPCAST_WALLET_ADDRESS: 'warpcast.walletAddress',
@@ -432,6 +433,30 @@ export async function deleteFarcasterAuthTokenExpiresAt(): Promise<void> {
   await SecureStore.deleteItemAsync(STORAGE_KEYS.FARCASTER_AUTH_TOKEN_EXPIRES_AT);
 }
 
+/** The direct-cast token and the FID it was minted for (services/farcaster/directCastAuth.ts). */
+export async function storeFarcasterDirectCastToken(value: { fid: number; token: string }): Promise<void> {
+  await SecureStore.setItemAsync(
+    STORAGE_KEYS.FARCASTER_DIRECT_CAST_TOKEN,
+    JSON.stringify(value),
+    SECURE_OPTIONS
+  );
+}
+
+export async function getFarcasterDirectCastToken(): Promise<{ fid: number; token: string } | null> {
+  const stored = await SecureStore.getItemAsync(STORAGE_KEYS.FARCASTER_DIRECT_CAST_TOKEN);
+  if (!stored) return null;
+  try {
+    const parsed = JSON.parse(stored);
+    return typeof parsed?.fid === 'number' && typeof parsed?.token === 'string' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteFarcasterDirectCastToken(): Promise<void> {
+  await SecureStore.deleteItemAsync(STORAGE_KEYS.FARCASTER_DIRECT_CAST_TOKEN);
+}
+
 // Onboarding State
 
 export interface OnboardingStateData {
@@ -576,6 +601,7 @@ export async function clearAllSecureStorage(): Promise<void> {
     SecureStore.deleteItemAsync(STORAGE_KEYS.FARCASTER_FID),
     deleteFarcasterAuthToken(),
     deleteFarcasterAuthTokenExpiresAt(),
+    deleteFarcasterDirectCastToken(),
     hypersnapSignerStore.clear(),
     clearOnboardingState(),
     deleteWarpcastWallet(),

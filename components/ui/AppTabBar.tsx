@@ -3,6 +3,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { QnsIcon } from '@/components/ui/QnsIcon';
 import { useAuth } from '@/context';
 import { useUnifiedNotifications } from '@/hooks/useUnifiedNotifications';
+import { useHaatzNotificationsPoll } from '@/hooks/useHaatzNotifications';
 import { feedActiveTabBus } from '@/services/ui/feedActiveTab';
 import { useMemberIdentity, useResolvedMemberName } from '@/identity';
 import { useTheme } from '@/theme';
@@ -119,6 +120,8 @@ export function AvatarButton() {
 
 function BellIcon({ color }: { color: string }) {
   const { unreadCount } = useUnifiedNotifications();
+  // The one place that polls for new notifications (the bell is always mounted).
+  useHaatzNotificationsPoll();
   return (
     <View>
       <IconSymbol size={24} name="bell" color={color} />

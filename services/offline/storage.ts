@@ -1,6 +1,9 @@
 import { createMMKV, type MMKV } from 'react-native-mmkv';
 import { encryptionStateStorage } from '../crypto/encryption-state-storage';
 import { clearConfigStorage } from '../config';
+import { clearPersistedTtlCaches } from './persistedTtlCache';
+import { clearSocialGraph } from '../farcaster/socialGraph';
+import { clearViewerReactions } from '../farcaster/viewerReactions';
 
 /**
  * The app's shared cache store: conversations, space members, navigation
@@ -124,6 +127,12 @@ export function clearAllMMKVStorage(): void {
   walletCacheStorage.clearAll();
   encryptionStateStorage.clearAll();
   clearConfigStorage();
+  // Stores of their own, kept out of the shared one so their modules don't
+  // load the config service: the links a feed showed, and the viewer's
+  // follows, blocks, mutes and recent reactions.
+  clearPersistedTtlCaches();
+  clearSocialGraph();
+  clearViewerReactions();
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const messagesDb = require('../storage/messagesDb') as typeof import('../storage/messagesDb');

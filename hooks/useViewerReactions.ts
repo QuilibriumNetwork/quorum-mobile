@@ -3,36 +3,42 @@
  * current: fetched from the hub API (`services/farcaster/viewerReactions.ts`)
  * and handed to the store, which feed cards read per cast. Mounted by the feed.
  *
- * Not persisted. It refetches when stale (10 minutes), and the viewer's own
- * likes and recasts are added to it as they land, so it doesn't need to
- * refetch after each one.
+ * Kept on the phone, so a launch shows the last window at once and a refresh
+ * downloads only the newest few (`refreshViewerReactions`). It refreshes when
+ * stale (10 minutes), and the viewer's own likes and recasts are added to it
+ * as they land, so it doesn't need to refetch after each one.
  */
-import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import {
-  VIEWER_LIKES_WINDOW,
-  VIEWER_RECASTS_WINDOW,
-  fetchViewerReactionHashes,
+  loadViewerReactions,
+  refreshViewerReactions,
+  saveViewerReactions,
+  type ViewerReactions,
 } from '@/services/farcaster/viewerReactions';
 import { setViewerReactions } from '@/services/feed/optimisticFeedStore';
 
 export const viewerReactionsQueryKey = (fid: number | undefined) => ['viewer-reactions', fid ?? 0] as const;
 
-export function useViewerReactions(): { likes: string[]; recasts: string[] } | undefined {
+export function useViewerReactions(): ViewerReactions | undefined {
   const { user } = useAuth();
   const fid = user?.farcaster?.fid;
+  const queryClient = useQueryClient();
+  const saved = useMemo(() => (typeof fid === 'number' && fid > 0 ? loadViewerReactions(fid) : null), [fid]);
 
   const { data } = useQuery({
     queryKey: viewerReactionsQueryKey(fid),
     queryFn: async () => {
-      const [likes, recasts] = await Promise.all([
-        fetchViewerReactionHashes(fid as number, 'Like', VIEWER_LIKES_WINDOW),
-        fetchViewerReactionHashes(fid as number, 'Recast', VIEWER_RECASTS_WINDOW),
-      ]);
-      return { likes, recasts };
+      const previous =
+        queryClient.getQueryData<ViewerReactions>(viewerReactionsQueryKey(fid)) ?? loadViewerReactions(fid as number);
+      const next = await refreshViewerReactions(fid as number, previous);
+      saveViewerReactions(fid as number, next);
+      return next;
     },
     enabled: typeof fid === 'number' && fid > 0,
+    initialData: saved ?? undefined,
+    initialDataUpdatedAt: saved?.fetchedAt,
     staleTime: 10 * 60 * 1000,
   });
 

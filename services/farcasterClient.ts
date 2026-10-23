@@ -1,4 +1,5 @@
 import { reportFarcasterAuthFailure } from './farcaster/authTokenEvents';
+import { FARCASTER_CLIENT_URL, FARCASTER_SITE_HEADERS, getDirectCastToken } from './farcaster/directCastAuth';
 import { stripImageMetadata } from '../utils/stripImageMetadata';
 
 const FARCASTER_BASE_URL = 'https://client.farcaster.xyz';
@@ -115,13 +116,20 @@ export async function reportWalletExportInitiated(token: string, address: string
 async function safeReadError(response: Response) {
   try {
     const data = await response.json();
-    return data?.message || data?.error;
+    // farcaster.xyz answers errors as { errors: [{ message }] }.
+    return data?.errors?.[0]?.message || data?.message || data?.error;
   } catch {
     return null;
   }
 }
 
 // Direct Cast (DM) API
+//
+// The same calls as Quilcast: the inbox, conversations, messages, mark-read and
+// sending text (with replies) use the direct-cast token
+// (`farcaster/directCastAuth.ts`). A message with an image and reactions go
+// through the session token and the older endpoints, as farcaster.xyz's own
+// client does. New messages arrive over the socket (`farcaster/directCastSocket.ts`).
 
 export interface DirectCastUser {
   fid: number;
@@ -164,69 +172,89 @@ export interface DirectCastConversation {
   conversationId: string;
   name?: string;
   photoUrl?: string;
-  participants: DirectCastUser[];
+  /** Not always in the inbox; `/v2/direct-cast-conversation` has it. */
+  participants?: DirectCastUser[];
   lastMessage?: DirectCastMessage;
   isGroup: boolean;
-  unreadCount: number;
-  muted: boolean;
+  /** Older responses only; the inbox has `viewerContext.unreadCount`. */
+  unreadCount?: number;
+  /** Older responses only; the inbox has `viewerContext.muted`. */
+  muted?: boolean;
   viewerContext: {
     category: 'default' | 'archived' | 'request';
-    lastReadAt: number;
-    unreadCount: number;
+    lastReadAt?: number;
+    unreadCount?: number;
+    muted?: boolean;
     counterParty?: DirectCastUser;
   };
 }
 
-interface GetDirectCastConversationsParams {
-  token: string;
-  category?: 'default' | 'archived' | 'request';
-  cursor?: string;
-  limit?: number;
+/** A 1:1 conversation's id is the two FIDs, sorted: `<fid>-<fid>`. */
+export function isOneToOneConversationId(conversationId: string): boolean {
+  return /^\d+-\d+$/.test(conversationId);
 }
 
+/**
+ * One direct-cast call with the direct-cast token. A 401 means the token was
+ * rejected: it's replaced and the call made once more.
+ */
+async function directCastCall<T>(
+  path: string,
+  init: { method?: string; body?: unknown; signal?: AbortSignal } = {},
+): Promise<T> {
+  const attempt = async (token: string) =>
+    fetch(`${FARCASTER_CLIENT_URL}${path}`, {
+      method: init.method ?? 'GET',
+      // A cancelled query stops downloading, rather than finishing in the
+      // background while its replacement downloads the same thing.
+      signal: init.signal,
+      headers: {
+        ...FARCASTER_SITE_HEADERS,
+        accept: 'application/json',
+        authorization: `Bearer ${token}`,
+        ...(init.body !== undefined && {
+          'content-type': 'application/json; charset=utf-8',
+          'idempotency-key': newIdempotencyKey(),
+        }),
+      },
+      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    });
+
+  const token = await getDirectCastToken();
+  if (!token) throw new Error("Couldn't open your messages");
+  let response = await attempt(token);
+  if (response.status === 401) {
+    const fresh = await getDirectCastToken({ fresh: true });
+    if (fresh) response = await attempt(fresh);
+  }
+  if (!response.ok) {
+    const message = await safeReadError(response);
+    throw new Error(message || `Direct casts: ${response.status}`);
+  }
+  if (response.status === 204) return undefined as T;
+  return (await response.json().catch(() => ({}))) as T;
+}
+
+function newIdempotencyKey(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** The inbox (the default category: no requests or archived), newest first. */
 export async function getDirectCastConversations({
-  token,
-  category = 'default',
   cursor,
-  limit = 20,
-}: GetDirectCastConversationsParams): Promise<{
+  limit = 100,
+  signal,
+}: { cursor?: string; limit?: number; signal?: AbortSignal } = {}): Promise<{
   conversations: DirectCastConversation[];
   nextCursor?: string;
   requestsCount: number;
 }> {
-  const params = new URLSearchParams({
-    category,
-    limit: String(limit),
-  });
-  if (cursor) {
-    params.set('cursor', cursor);
-  }
-
-  const response = await fetch(
-    `${FARCASTER_BASE_URL}/v2/direct-cast-conversation-list?${params}`,
-    {
-      method: 'GET',
-      headers: {
-        accept: '*/*',
-        authorization: `Bearer ${token}`,
-        origin: 'https://farcaster.xyz',
-        referer: 'https://farcaster.xyz/',
-      },
-    }
-  );
-
-  if (!response.ok) {
-    // The DM list is the most frequent farcaster.xyz token call left, so it
-    // is the one that reports a rejected token for a background re-auth.
-    if (response.status === 401 || response.status === 403) {
-      reportFarcasterAuthFailure();
-    }
-    const message = await safeReadError(response);
-    throw new Error(message || `Failed to fetch conversations (${response.status})`);
-  }
-
-  const json = await response.json();
-
+  const params = new URLSearchParams({ category: 'default', limit: String(limit) });
+  if (cursor) params.set('cursor', cursor);
+  const json = await directCastCall<{
+    result?: { conversations?: DirectCastConversation[]; requestsCount?: number };
+    next?: { cursor?: string };
+  }>(`/v2/direct-cast-inbox?${params}`, { signal });
   return {
     conversations: json.result?.conversations ?? [],
     nextCursor: json.next?.cursor,
@@ -234,50 +262,34 @@ export async function getDirectCastConversations({
   };
 }
 
-interface GetDirectCastMessagesParams {
-  token: string;
-  conversationId: string;
-  cursor?: string;
-  limit?: number;
+/** One conversation, with its participants. */
+export async function getDirectCastConversation(conversationId: string): Promise<DirectCastConversation | null> {
+  const json = await directCastCall<{ result?: { conversation?: DirectCastConversation } }>(
+    `/v2/direct-cast-conversation?${new URLSearchParams({ conversationId })}`,
+  );
+  return json.result?.conversation ?? null;
 }
 
 export async function getDirectCastMessages({
-  token,
   conversationId,
   cursor,
   limit = 50,
-}: GetDirectCastMessagesParams): Promise<{
+  signal,
+}: {
+  conversationId: string;
+  cursor?: string;
+  limit?: number;
+  signal?: AbortSignal;
+}): Promise<{
   messages: DirectCastMessage[];
   nextCursor?: string;
 }> {
-  const params = new URLSearchParams({
-    conversationId,
-    limit: String(limit),
-  });
-  if (cursor) {
-    params.set('cursor', cursor);
-  }
-
-  const response = await fetch(
-    `${FARCASTER_BASE_URL}/v2/direct-cast-conversation-messages?${params}`,
-    {
-      method: 'GET',
-      headers: {
-        accept: '*/*',
-        authorization: `Bearer ${token}`,
-        origin: 'https://farcaster.xyz',
-        referer: 'https://farcaster.xyz/',
-      },
-    }
-  );
-
-  if (!response.ok) {
-    const message = await safeReadError(response);
-    throw new Error(message || `Failed to fetch messages (${response.status})`);
-  }
-
-  const json = await response.json();
-
+  const params = new URLSearchParams({ conversationId, limit: String(limit) });
+  if (cursor) params.set('cursor', cursor);
+  const json = await directCastCall<{
+    result?: { messages?: DirectCastMessage[] };
+    next?: { cursor?: string };
+  }>(`/v2/direct-cast-conversation-messages?${params}`, { signal });
   return {
     messages: json.result?.messages ?? [],
     nextCursor: json.next?.cursor,
@@ -294,25 +306,55 @@ export interface DirectCastMessageMetadata {
   }[];
 }
 
-interface SendDirectCastParams {
-  token: string;
+/**
+ * Send a text message (or a reply) through `/fc/message`: a group by its id,
+ * a 1:1 by the other person's FID. Resolves farcaster.xyz's id for it.
+ */
+export async function sendDirectCast({
+  conversationId,
+  isGroup,
+  recipientFid,
+  message,
+  inReplyToId,
+}: {
   conversationId: string;
-  recipientFids: number[];
+  isGroup: boolean;
+  /** The other person in a 1:1. */
+  recipientFid?: number;
   message: string;
   inReplyToId?: string;
-  metadata?: DirectCastMessageMetadata;
+}): Promise<{ messageId?: string }> {
+  if (!isGroup && !recipientFid) throw new Error('No recipient for this message');
+  const json = await directCastCall<{ result?: { messageId?: string } }>('/fc/message', {
+    method: 'PUT',
+    body: {
+      ...(isGroup ? { groupId: conversationId } : { recipientFid }),
+      message,
+      ...(inReplyToId && { inReplyToId }),
+    },
+  });
+  return { messageId: json.result?.messageId };
 }
 
-export async function sendDirectCast({
+/**
+ * Send a message with an image: `/v2/direct-cast-send` with the session token,
+ * which is how farcaster.xyz sends media.
+ */
+export async function sendDirectCastWithMedia({
   token,
   conversationId,
   recipientFids,
   message,
   inReplyToId,
   metadata,
-}: SendDirectCastParams): Promise<{ success: boolean }> {
-  const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
+}: {
+  token: string;
+  conversationId: string;
+  recipientFids: number[];
+  message: string;
+  inReplyToId?: string;
+  metadata: DirectCastMessageMetadata;
+}): Promise<{ success: boolean }> {
   // Generate UUID manually since crypto.randomUUID may not be available in RN
   const messageId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
@@ -326,71 +368,42 @@ export async function sendDirectCast({
     recipientFids,
     messageId,
     message,
+    metadata,
   };
-
   if (inReplyToId) {
     body.inReplyToId = inReplyToId;
   }
 
-  if (metadata) {
-    body.metadata = metadata;
-  }
-
-  try {
-    const response = await fetch(`${FARCASTER_BASE_URL}/v2/direct-cast-send`, {
-      method: 'PUT',
-      headers: {
-        accept: '*/*',
-        'content-type': 'application/json; charset=utf-8',
-        authorization: `Bearer ${token}`,
-        'idempotency-key': idempotencyKey,
-        origin: 'https://farcaster.xyz',
-        referer: 'https://farcaster.xyz/',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      const errorMessage = await safeReadError({ json: async () => JSON.parse(errorBody) } as Response);
-      throw new Error(errorMessage || `Failed to send direct cast (${response.status})`);
-    }
-
-    const result = await response.json();
-    return { success: result.result?.success ?? true };
-  } catch (error) {
-    throw error;
-  }
-}
-
-interface MarkDirectCastReadParams {
-  token: string;
-  conversationId: string;
-}
-
-export async function markDirectCastRead({
-  token,
-  conversationId,
-}: MarkDirectCastReadParams): Promise<void> {
-  const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-  const response = await fetch(`${FARCASTER_BASE_URL}/v2/direct-cast-read`, {
-    method: 'POST',
+  const response = await fetch(`${FARCASTER_BASE_URL}/v2/direct-cast-send`, {
+    method: 'PUT',
     headers: {
       accept: '*/*',
       'content-type': 'application/json; charset=utf-8',
       authorization: `Bearer ${token}`,
-      'idempotency-key': idempotencyKey,
+      'idempotency-key': newIdempotencyKey(),
       origin: 'https://farcaster.xyz',
       referer: 'https://farcaster.xyz/',
     },
-    body: JSON.stringify({ conversationId }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
+    reportSessionRejection(response);
     const errorMessage = await safeReadError(response);
-    throw new Error(errorMessage || `Failed to mark as read (${response.status})`);
+    throw new Error(errorMessage || `Failed to send direct cast (${response.status})`);
   }
+
+  const result = await response.json();
+  return { success: result.result?.success ?? true };
+}
+
+export async function markDirectCastRead({ conversationId }: { conversationId: string }): Promise<void> {
+  await directCastCall('/v2/direct-cast-mark-read', { method: 'POST', body: { conversationId } });
+}
+
+/** A rejected session token is refreshed in the background (authTokenEvents). */
+function reportSessionRejection(response: Response) {
+  if (response.status === 401 || response.status === 403) reportFarcasterAuthFailure();
 }
 
 interface DirectCastReactionParams {
@@ -400,13 +413,14 @@ interface DirectCastReactionParams {
   reaction: string;
 }
 
+// Reactions take the session token, as on farcaster.xyz.
 export async function addDirectCastReaction({
   token,
   conversationId,
   messageId,
   reaction,
 }: DirectCastReactionParams): Promise<void> {
-  const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const idempotencyKey = newIdempotencyKey();
 
   const response = await fetch(`${FARCASTER_BASE_URL}/v2/direct-cast-message-reaction`, {
     method: 'PUT',
@@ -422,6 +436,7 @@ export async function addDirectCastReaction({
   });
 
   if (!response.ok) {
+    reportSessionRejection(response);
     const errorMessage = await safeReadError(response);
     throw new Error(errorMessage || `Failed to add reaction (${response.status})`);
   }
@@ -433,7 +448,7 @@ export async function removeDirectCastReaction({
   messageId,
   reaction,
 }: DirectCastReactionParams): Promise<void> {
-  const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const idempotencyKey = newIdempotencyKey();
 
   const response = await fetch(`${FARCASTER_BASE_URL}/v2/direct-cast-message-reaction`, {
     method: 'DELETE',
@@ -449,6 +464,7 @@ export async function removeDirectCastReaction({
   });
 
   if (!response.ok) {
+    reportSessionRejection(response);
     const errorMessage = await safeReadError(response);
     throw new Error(errorMessage || `Failed to remove reaction (${response.status})`);
   }
@@ -480,6 +496,7 @@ export async function getImageUploadUrl({
   });
 
   if (!response.ok) {
+    reportSessionRejection(response);
     const errorMessage = await safeReadError(response);
     throw new Error(errorMessage || `Failed to get image upload URL (${response.status})`);
   }

@@ -10,7 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +22,7 @@ import { accentThemes, brandColors } from '@/theme/colors';
 import { withAlpha } from '@/theme/skins/mergeSkin';
 import { useMiniappOverlay } from '@/context/MiniappOverlayContext';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
+import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { QuorumLogoIcon } from '@/components/SocialFeed/content/QuorumLogoIcon';
@@ -374,7 +375,7 @@ export default function NotificationsScreen() {
               <IconSymbol name={farcasterGlyph} color={theme.colors.accent} size={18} />
             </View>
           ) : item.actorAvatarUrl ? (
-            <Image source={{ uri: item.actorAvatarUrl }} style={styles.avatar} />
+            <CachedAvatar source={{ uri: item.actorAvatarUrl }} style={styles.avatar} fallbackName={item.title} />
           ) : showsActorFace(item) ? (
             // A person with no profile picture — a Quorum DM sender, or the
             // other side of a Farcaster direct cast. Initials, not a glyph: the

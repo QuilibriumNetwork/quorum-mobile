@@ -54,20 +54,29 @@ function getStore(): MMKV {
   return store;
 }
 
+/** Forget every saved follow, block and mute set (reset / sign-out). */
+export function clearSocialGraph(): void {
+  getStore().clearAll();
+}
+
 interface PersistedGraph {
   fids: number[];
   fetchedAt: number;
 }
 
-function load(key: string): number[] | null {
+function loadEntry(key: string): PersistedGraph | null {
   const raw = getStore().getString(key);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as PersistedGraph;
-    return Array.isArray(parsed.fids) ? parsed.fids : null;
+    return Array.isArray(parsed.fids) ? parsed : null;
   } catch {
     return null;
   }
+}
+
+function load(key: string): number[] | null {
+  return loadEntry(key)?.fids ?? null;
 }
 
 function save(key: string, fids: number[]): void {
@@ -86,6 +95,39 @@ export function loadFollowingFids(fid: number): number[] | null {
 
 export function saveFollowingFids(fid: number, fids: number[]): void {
   save(`${K_FOLLOWS_PREFIX}${fid}`, fids);
+}
+
+/** The last-known follow set with when it was fetched, or null if never fetched. */
+export function loadFollowingFidsEntry(fid: number): PersistedGraph | null {
+  return loadEntry(`${K_FOLLOWS_PREFIX}${fid}`);
+}
+
+const followChangeListeners = new Set<(fid: number) => void>();
+
+/** Called with the viewer's FID after `recordFollowChange` updates their set. */
+export function onFollowChange(fn: (fid: number) => void): () => void {
+  followChangeListeners.add(fn);
+  return () => {
+    followChangeListeners.delete(fn);
+  };
+}
+
+/**
+ * Apply a follow or unfollow this app just made to the persisted set, so it
+ * shows without downloading the whole list again. The set keeps its
+ * fetchedAt: it's still as old as its last full download, as far as changes
+ * made elsewhere go.
+ */
+export function recordFollowChange(fid: number, targetFid: number, following: boolean): void {
+  const key = `${K_FOLLOWS_PREFIX}${fid}`;
+  const entry = loadEntry(key);
+  if (!entry) return; // never fetched; the first fetch will include it
+  const fids = new Set(entry.fids);
+  if (following) fids.add(targetFid);
+  else fids.delete(targetFid);
+  const payload: PersistedGraph = { fids: Array.from(fids), fetchedAt: entry.fetchedAt };
+  getStore().set(key, JSON.stringify(payload));
+  followChangeListeners.forEach((fn) => fn(fid));
 }
 
 interface LinksByFidResponse {

@@ -3,6 +3,7 @@ import { AudioSpaceProvider } from '@/context/AudioSpaceContext';
 import { MiniappOverlayProvider } from '@/context/MiniappOverlayContext';
 import { useAuth } from '@/context/AuthContext';
 import { SwapModalProvider } from '@/context/SwapModalContext';
+import { useDirectCastLive } from '@/hooks/chat/useDirectCastLive';
 import { useHypersnapSignerLifecycle } from '@/hooks/useHypersnapSignerLifecycle';
 import { Tabs } from 'expo-router';
 import React from 'react';
@@ -24,6 +25,15 @@ function HypersnapSignerKeeper() {
   return null;
 }
 
+/**
+ * Keeps Farcaster direct casts live over farcaster.xyz's socket while the app
+ * is in front. Its own component, like the signer keeper.
+ */
+function DirectCastLiveKeeper() {
+  useDirectCastLive();
+  return null;
+}
+
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
 
@@ -32,6 +42,7 @@ export default function TabsLayout() {
     <MiniappOverlayProvider>
     <AudioSpaceProvider>
     <HypersnapSignerKeeper />
+    <DirectCastLiveKeeper />
     {/* AppTabBar is always mounted; it hides itself (UI-thread) while the emoji
         panel is open or a keyboard is up, so transitions never flash. */}
     <Tabs

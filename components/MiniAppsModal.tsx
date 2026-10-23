@@ -10,8 +10,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { getAddedMiniapps, type AddedMiniapp } from '@/services/miniapp/addedMiniapps';
 import { getRecentMiniapps, recordMiniappUse, type RecentMiniapp } from '@/services/miniapp/recentMiniapps';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Dimensions, Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Dimensions, FlatList, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
+import { SizedImage } from '@/components/ui/SizedImage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -82,7 +84,7 @@ interface MiniApp {
   author?: string;
 }
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const FARCASTER_API_BASE = 'https://client.warpcast.com';
 const BASE_CHAIN_ID = 'eip155:8453';
 
@@ -98,6 +100,27 @@ const isExcludedAuthor = (frame: ApiFrame): boolean => {
   const username = frame.author?.username?.toLowerCase();
   return Boolean(username && EXCLUDED_AUTHORS.has(username));
 };
+
+/**
+ * The discover list ("All"), cached so coming back to this screen doesn't
+ * fetch it again. It changes slowly, and the screen remounts every time the
+ * Wallet tab switches to Mini Apps, which refetched it each time.
+ */
+export const TOP_MINIAPPS_QUERY_KEY = ['miniapps', 'top-frameapps'] as const;
+const TOP_MINIAPPS_STALE_MS = 60 * 60 * 1000;
+const TOP_MINIAPPS_GC_MS = 6 * 60 * 60 * 1000;
+
+async function fetchTopFrames(): Promise<ApiFrame[]> {
+  const response = await fetch(`${FARCASTER_API_BASE}/v1/top-frameapps?limit=50`);
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status}`);
+  }
+  const data: TopFramesResponse = await response.json();
+  // Filter out apps that require Base chain, or are authored by excluded creators
+  return data.result.frames.filter(
+    frame => !requiresBase(frame) && !isExcludedAuthor(frame),
+  );
+}
 
 // Convert a locally-stored added/recent entry into the display MiniApp shape.
 const localToMiniApp = (e: {
@@ -151,11 +174,8 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
   const floatingTabBarPadding = useFloatingTabBarPadding();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [miniApps, setMiniApps] = useState<MiniApp[]>([]);
   const [searchResults, setSearchResults] = useState<MiniApp[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   // "Saved" tab: farcaster.xyz favorites (best-effort) merged with the
   // locally-added apps. "Recently used": device-local usage history.
   const [favoriteApps, setFavoriteApps] = useState<MiniApp[]>([]);
@@ -207,41 +227,23 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
     author: frame.author?.username,
   }), []);
 
-  // Fetch top frames from Farcaster API
-  useEffect(() => {
-    if (!visible) return;
-
-    const fetchTopFrames = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const response = await fetch(
-          `${FARCASTER_API_BASE}/v1/top-frameapps?limit=50`
-        );
-
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
-        }
-
-        const data: TopFramesResponse = await response.json();
-
-        // Filter out apps that require Base chain, or are authored by excluded creators
-        const filteredFrames = data.result.frames.filter(
-          frame => !requiresBase(frame) && !isExcludedAuthor(frame),
-        );
-
-        const apps = filteredFrames.map((frame, index) => frameToMiniApp(frame, index, true));
-        setMiniApps(apps);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch apps');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchTopFrames();
-  }, [visible, frameToMiniApp]);
+  // Top frames from the Farcaster API
+  const topFrames = useQuery({
+    queryKey: TOP_MINIAPPS_QUERY_KEY,
+    queryFn: fetchTopFrames,
+    enabled: visible,
+    staleTime: TOP_MINIAPPS_STALE_MS,
+    gcTime: TOP_MINIAPPS_GC_MS,
+    retry: 1,
+  });
+  const miniApps = useMemo(
+    () => (topFrames.data ?? []).map((frame, index) => frameToMiniApp(frame, index, true)),
+    [topFrames.data, frameToMiniApp],
+  );
+  const isLoading = topFrames.isLoading;
+  // A failed refresh keeps showing the list it already has.
+  const error =
+    topFrames.error && !topFrames.data ? topFrames.error.message || 'Failed to fetch apps' : null;
 
   // Search mini apps via API
   useEffect(() => {
@@ -410,7 +412,7 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
       )}
       <View style={styles.appIconContainer}>
         {app.icon ? (
-          <Image source={app.icon} style={styles.appIcon} />
+          <SizedImage uri={app.icon.uri} displayWidth={APP_ICON_SIZE} style={styles.appIcon} />
         ) : (
           <View style={styles.appIconPlaceholder}>
             <Text style={styles.iconPlaceholderText}>{app.name.charAt(0)}</Text>
@@ -424,6 +426,33 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
     </TouchableOpacity>
   );
 
+  // The two-column grid of app cards. A list, so only the rows on screen and
+  // a couple of screens either side are mounted: 50 cards and their icons
+  // used to load at once.
+  const renderAppsGrid = (
+    apps: MiniApp[],
+    header: React.ReactElement | null,
+    empty: React.ReactElement,
+  ) => (
+    <FlatList
+      data={apps}
+      keyExtractor={(app) => app.id}
+      renderItem={({ item }) => renderAppCard(item)}
+      numColumns={2}
+      columnWrapperStyle={styles.appsGridRow}
+      ItemSeparatorComponent={AppsGridRowGap}
+      ListHeaderComponent={header}
+      ListEmptyComponent={empty}
+      ListFooterComponent={<View style={styles.appsGridFooter} />}
+      initialNumToRender={8}
+      maxToRenderPerBatch={8}
+      windowSize={5}
+      showsVerticalScrollIndicator={false}
+      style={styles.scrollContent}
+      contentContainerStyle={isRouteMode ? { paddingBottom: floatingTabBarPadding } : undefined}
+    />
+  );
+
   // Grid body for the local tabs (Saved / Recently used), with loading +
   // empty states.
   const renderLocalTab = (
@@ -431,23 +460,22 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
     loading: boolean,
     emptyTitle: string,
     emptyText: string,
-  ) => (
-    <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
-      {loading && apps.length === 0 ? (
+  ) =>
+    renderAppsGrid(
+      apps,
+      null,
+      loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
-      ) : apps.length === 0 ? (
+      ) : (
         <View style={styles.emptyState}>
           <IconSymbol name="square.grid.2x2" size={48} color={theme.colors.textMuted} />
           <Text style={styles.emptyStateTitle}>{emptyTitle}</Text>
           <Text style={styles.emptyStateText}>{emptyText}</Text>
         </View>
-      ) : (
-        <View style={styles.appsGrid}>{apps.map(renderAppCard)}</View>
-      )}
-    </ScrollView>
-  );
+      ),
+    );
 
   const miniAppsContent = (
     <>
@@ -514,9 +542,7 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
           <TouchableOpacity
             style={styles.retryButton}
             onPress={() => {
-              // Trigger re-fetch by toggling visibility effect
-              setError(null);
-              setIsLoading(true);
+              void topFrames.refetch();
             }}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
@@ -524,12 +550,9 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
         </View>
       )}
 
-      {!isLoading && !error && (
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          style={styles.scrollContent}
-          contentContainerStyle={isRouteMode ? { paddingBottom: floatingTabBarPadding } : undefined}
-        >
+      {!isLoading && !error && renderAppsGrid(
+        filteredApps,
+        <>
           {/* Featured Section - hide during search */}
           {!isSearchMode && featuredApps.length > 0 && (
             <>
@@ -547,10 +570,15 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
                     activeOpacity={0.9}
                   >
                     {app.bannerImage ? (
-                      <Image source={app.bannerImage} style={styles.featuredBannerImage} />
+                      <SizedImage
+                        uri={app.bannerImage.uri}
+                        displayWidth={FEATURED_CARD_WIDTH}
+                        style={styles.featuredBannerImage}
+                        contentFit="cover"
+                      />
                     ) : app.icon ? (
                       <View style={styles.featuredIconBackground}>
-                        <Image source={app.icon} style={styles.featuredIconLarge} />
+                        <SizedImage uri={app.icon.uri} displayWidth={80} style={styles.featuredIconLarge} />
                       </View>
                     ) : null}
                     <LinearGradient
@@ -599,51 +627,14 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
               ? `Search Results${searchResults.length > 0 ? ` (${searchResults.length})` : ''}`
               : 'All Apps'}
           </Text>
-          <View style={styles.appsGrid}>
-            {filteredApps.map(app => (
-              <TouchableOpacity
-                key={app.id}
-                style={styles.appCard}
-                onPress={() => handleAppPress(app)}
-              >
-                {(app.requiresFarcaster || app.isQNative) && (
-                  <View style={styles.appCardBadge}>
-                    {app.requiresFarcaster ? (
-                      <FarcasterLogoIcon size={14} color={theme.colors.textMuted} />
-                    ) : (
-                      <IconSymbol name="lock.fill" size={13} color={theme.colors.textMuted} />
-                    )}
-                  </View>
-                )}
-                <View style={styles.appIconContainer}>
-                  {app.icon ? (
-                    <Image source={app.icon} style={styles.appIcon} />
-                  ) : (
-                    <View style={styles.appIconPlaceholder}>
-                      <Text style={styles.iconPlaceholderText}>{app.name.charAt(0)}</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.appName} numberOfLines={2}>{app.name}</Text>
-                {app.description ? (
-                  <Text style={styles.appDescription} numberOfLines={2}>
-                    {app.description}
-                  </Text>
-                ) : null}
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {filteredApps.length === 0 && (
-            <View style={styles.emptyState}>
-              <IconSymbol name="magnifyingglass" size={48} color={theme.colors.textMuted} />
-              <Text style={styles.emptyStateTitle}>No apps found</Text>
-              <Text style={styles.emptyStateText}>
-                Try adjusting your search or filters
-              </Text>
-            </View>
-          )}
-        </ScrollView>
+        </>,
+        <View style={styles.emptyState}>
+          <IconSymbol name="magnifyingglass" size={48} color={theme.colors.textMuted} />
+          <Text style={styles.emptyStateTitle}>No apps found</Text>
+          <Text style={styles.emptyStateText}>
+            Try adjusting your search or filters
+          </Text>
+        </View>,
       )}
         </>
       )}
@@ -687,6 +678,15 @@ export default function MiniAppsModal({ visible, onClose, onOpenMiniApp, isRoute
       {miniAppsContent}
     </BaseModal>
   );
+}
+
+const APP_ICON_SIZE = 56;
+const FEATURED_CARD_WIDTH = SCREEN_WIDTH - 52;
+const appCardSize = () => (SCREEN_WIDTH - 2 * Skin.space(20) - Skin.space(12)) / 2;
+
+/** Space between grid rows. */
+function AppsGridRowGap() {
+  return <View style={{ height: Skin.space(12) }} />;
 }
 
 const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
@@ -780,7 +780,7 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       marginBottom: Skin.space(24),
     },
     featuredCard: {
-      width: Dimensions.get('window').width - 52,
+      width: FEATURED_CARD_WIDTH,
       height: 180,
       backgroundColor: theme.colors.surface2,
       borderRadius: Skin.radius(16),
@@ -796,7 +796,6 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       bottom: 0,
       width: '100%',
       height: '100%',
-      resizeMode: 'cover',
     },
     featuredIconBackground: {
       position: 'absolute',
@@ -866,15 +865,16 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       alignItems: 'center',
       gap: Skin.space(4),
     },
-    appsGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+    appsGridRow: {
       gap: Skin.space(12),
-      marginBottom: Skin.space(20),
+    },
+    appsGridFooter: {
+      height: Skin.space(20),
     },
     appCard: {
-      width: (Dimensions.get('window').width - 52) / 2,
-      height: (Dimensions.get('window').width - 52) / 2,
+      // Two to a row: the screen less the list's side padding and the gap.
+      width: appCardSize(),
+      height: appCardSize(),
       backgroundColor: theme.colors.surface2,
       borderRadius: Skin.radius(12),
       padding: Skin.space(12),
@@ -894,19 +894,19 @@ const createStyles = (theme: AppTheme, isDark: boolean, insets: EdgeInsets) =>
       zIndex: 1,
     },
     appIconContainer: {
-      width: 56,
-      height: 56,
+      width: APP_ICON_SIZE,
+      height: APP_ICON_SIZE,
       marginBottom: Skin.space(10),
       position: 'relative',
     },
     appIcon: {
-      width: 56,
-      height: 56,
+      width: APP_ICON_SIZE,
+      height: APP_ICON_SIZE,
       borderRadius: Skin.radius(14),
     },
     appIconPlaceholder: {
-      width: 56,
-      height: 56,
+      width: APP_ICON_SIZE,
+      height: APP_ICON_SIZE,
       borderRadius: Skin.radius(14),
       backgroundColor: theme.colors.surface4,
       alignItems: 'center',

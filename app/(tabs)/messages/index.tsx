@@ -7,6 +7,7 @@
 
 import { useFloatingTabBarPadding } from '@/hooks/useFloatingTabBarPadding';
 import { FloatingTabScreen } from '@/components/ui/FloatingTabScreen';
+import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
@@ -30,7 +31,7 @@ import { isValidAvatarUri } from '@/utils/validation';
 import { FlashList } from '@shopify/flash-list';
 import { router, Stack } from 'expo-router';
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Platform, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Skin from '@/theme/skins/geometry';
@@ -90,7 +91,9 @@ const InboxRow = React.memo(function InboxRow({ item, styles, theme, onPress, on
     >
       <View style={styles.avatarContainer}>
         {isValidAvatarUri(item.icon) ? (
-          <Image source={{ uri: item.icon }} style={styles.dmAvatar} />
+          // Disk-cached and asked for at 48 pt; React Native's Image fetched
+          // the full upload and re-downloaded it after a relaunch.
+          <CachedAvatar source={{ uri: item.icon }} style={styles.dmAvatar} fallbackName={item.title} />
         ) : (
           <DefaultAvatar resolvedName={item.title} address={item.id} size={48} style={styles.dmAvatar} />
         )}

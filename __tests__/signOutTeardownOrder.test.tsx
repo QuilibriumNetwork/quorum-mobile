@@ -66,6 +66,7 @@ jest.mock('../services/crypto', () => ({ NativeSigningProvider: class {} }));
 jest.mock('../services/config', () => ({
   getConfig: async () => ({}),
   saveConfig: async () => {},
+  flushAllConfigPublishes: async () => {},
 }));
 jest.mock('../utils/primaryName', () => ({ mergeSyncedPrimaryName: (x: unknown) => x }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ clear: () => {} }) }));

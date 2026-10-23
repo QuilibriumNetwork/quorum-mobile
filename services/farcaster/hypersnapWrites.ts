@@ -22,6 +22,7 @@ import {
   type CastEmbed,
   type MessageDataInput,
 } from '@quilibrium/quorum-shared';
+import { recordFollowChange } from './socialGraph';
 
 export class FarcasterWriteError extends Error {
   constructor(message: string) {
@@ -207,6 +208,8 @@ export async function setFollowing(params: { fid: number; targetFid: number; fol
   await submit(params.fid, params.following ? MessageType.LINK_ADD : MessageType.LINK_REMOVE, {
     linkBody: { type: 'follow', targetFid: params.targetFid },
   });
+  // The viewer's follow set is refetched only every few hours; keep it in step.
+  recordFollowChange(params.fid, params.targetFid, params.following);
 }
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,13 @@ import { useOgMetadata } from '@/hooks/useOgMetadata';
 import { SnapEmbed, useSnapDetection } from '@/components/SocialFeed/content/SnapEmbed';
 import { AutoHeightImage } from '@/components/SocialFeed/media/AutoHeightImage';
 import { PREVIEW_SETTLE_MS, useVideoPreviewSlot } from '@/components/SocialFeed/media/videoPreviewSlots';
+import {
+  MediaOnTopContext,
+  PREVIEW_BUFFER_OPTIONS,
+  startPlayback,
+  usePauseWhenOffScreen,
+} from '@/components/SocialFeed/media/videoPlayback';
+import { SizedImage } from '@/components/ui/SizedImage';
 import { ImageViewer } from '@/components/SocialFeed/media/ImageViewer';
 import { VideoViewer } from '@/components/SocialFeed/media/VideoViewer';
 import { extractYouTubeMatchesFromText, YouTubeEmbed, parseYouTubeUrl } from '@/components/SocialFeed/media/YouTubeEmbed';
@@ -634,7 +641,7 @@ function QuorumShareRow({ conv, theme, enrich, onPress }: ShareToChatDMRowProps)
       leading={
         <View style={shareToChatStyles.dmAvatar(theme)}>
           {conv.icon ? (
-            <Image source={{ uri: conv.icon }} style={shareToChatStyles.dmAvatarImage} />
+            <SizedImage uri={conv.icon} displayWidth={40} stillFrame style={shareToChatStyles.dmAvatarImage} />
           ) : (
             <IconSymbol name="person.fill" size={20} color={theme.colors.textMuted} />
           )}
@@ -662,7 +669,7 @@ function FarcasterShareRow({ conv, theme, onPress }: Omit<ShareToChatDMRowProps,
       leading={
         <View style={shareToChatStyles.dmAvatar(theme)}>
           {conv.icon ? (
-            <Image source={{ uri: conv.icon }} style={shareToChatStyles.dmAvatarImage} />
+            <SizedImage uri={conv.icon} displayWidth={40} stillFrame style={shareToChatStyles.dmAvatarImage} />
           ) : (
             <IconSymbol name="person.fill" size={20} color={theme.colors.textMuted} />
           )}
@@ -751,7 +758,7 @@ export function ShareToChatModal({
     }
   };
 
-  const handleSelectFarcasterDM = async (conversation: { conversationId: string; farcasterParticipantFids?: number[] }) => {
+  const handleSelectFarcasterDM = async (conversation: { conversationId: string; type?: string; farcasterParticipantFids?: number[] }) => {
     try {
       setIsSending(true);
       // Extract the actual Farcaster conversation ID (remove 'farcaster:' prefix)
@@ -761,6 +768,7 @@ export function ShareToChatModal({
       const recipientFids = (conversation as any).farcasterParticipantFids ?? [];
       await sendFarcasterDirectCast({
         conversationId: fcConversationId,
+        isGroup: conversation.type === 'group',
         recipientFids,
         message: castUrl,
       });
@@ -1140,10 +1148,17 @@ function LiveVideoPlayer({
     ensureAudioMode();
   }, []);
 
-  // Create video player
+  // Create video player. A preview only needs its first frame, so it holds a
+  // couple of seconds rather than the ~50 s Android buffers by default even
+  // while paused; pressing play raises it (startPlayback).
   const player = useVideoPlayer(url, (player) => {
     player.loop = false;
+    if (!startPlaying) player.bufferOptions = PREVIEW_BUFFER_OPTIONS;
   });
+
+  // Tabs and the screens under the top one stay mounted; don't keep playing
+  // in them.
+  usePauseWhenOffScreen(player, () => setIsPlaying(false));
 
   // Listen for playback status changes
   useEffect(() => {
@@ -1207,7 +1222,7 @@ function LiveVideoPlayer({
     if (!startPlaying) return;
     setHasStarted(true);
     setIsPlaying(true);
-    player.play();
+    startPlayback(player);
   }, [startPlaying, player]);
 
   // Tap on the play-button overlay → play/pause toggle (or start on
@@ -1217,12 +1232,12 @@ function LiveVideoPlayer({
     if (!hasStarted) {
       setHasStarted(true);
       setIsPlaying(true);
-      player.play();
+      startPlayback(player);
     } else if (isPlaying) {
       player.pause();
       setIsPlaying(false);
     } else {
-      player.play();
+      startPlayback(player);
       setIsPlaying(true);
     }
   };
@@ -1418,14 +1433,15 @@ function LinkPreview({
         onPress={handlePress}
         activeOpacity={0.8}
       >
-        <Image
-          source={{ uri: image }}
+        <SizedImage
+          uri={image}
+          displayWidth={SCREEN_WIDTH}
           style={{
             width: '100%',
             height: 180,
             backgroundColor: theme.colors.surface3,
           }}
-          resizeMode="cover"
+          contentFit="cover"
         />
         <View style={{ padding: Skin.space(12) }}>
           <Text
@@ -1475,14 +1491,15 @@ function LinkPreview({
       activeOpacity={0.8}
     >
       {image && (
-        <Image
-          source={{ uri: image }}
+        <SizedImage
+          uri={image}
+          displayWidth={100}
           style={{
             width: 100,
             height: 100,
             backgroundColor: theme.colors.surface3,
           }}
-          resizeMode="cover"
+          contentFit="cover"
         />
       )}
       <View style={{ flex: 1, padding: Skin.space(12), justifyContent: 'center' }}>
@@ -1749,10 +1766,13 @@ function ParentContextLine({
           )}
         </View>
         {previewImage && (
-          <Image
-            source={{ uri: previewImage }}
+          // Asked for at the width the feed shows the same photo, so the two
+          // share one download.
+          <SizedImage
+            uri={previewImage}
+            displayWidth={SCREEN_WIDTH}
             style={{ width: '100%', height: 120, backgroundColor: theme.colors.surface3 }}
-            resizeMode="contain"
+            contentFit="contain"
           />
         )}
       </Wrapper>
@@ -2172,14 +2192,17 @@ function QuoteCast({
       </View>
       {/* Image preview */}
       {hasImage && previewImage && (
-        <Image
-          source={{ uri: previewImage }}
+        // Same width the feed asks for the quoted photo at, so it's one
+        // download.
+        <SizedImage
+          uri={previewImage}
+          displayWidth={SCREEN_WIDTH}
           style={{
             width: '100%',
             height: 150,
             backgroundColor: theme.colors.surface3,
           }}
-          resizeMode="contain"
+          contentFit="contain"
         />
       )}
     </TouchableOpacity>
@@ -2316,14 +2339,15 @@ function FrameEmbed({
       activeOpacity={0.9}
       style={{ overflow: 'hidden' }}
     >
-      <Image
-        source={{ uri: imageUrl }}
+      <SizedImage
+        uri={imageUrl}
+        displayWidth={width}
         style={{
           width,
           height: width * 0.525, // Standard frame aspect ratio
           backgroundColor: theme.colors.surface3,
         }}
-        resizeMode="cover"
+        contentFit="cover"
       />
       <View
         style={{
@@ -3944,14 +3968,15 @@ export function ProfileView({
           style={{ width: SCREEN_WIDTH, height: 120 }}
         >
           {author.profile?.bannerImageUrl ? (
-            <Image
-              source={{ uri: author.profile.bannerImageUrl }}
+            <SizedImage
+              uri={author.profile.bannerImageUrl}
+              displayWidth={SCREEN_WIDTH}
               style={{
                 width: '100%',
                 height: '100%',
                 backgroundColor: theme.colors.surface3,
               }}
-              resizeMode="cover"
+              contentFit="cover"
             />
           ) : (
             <View
@@ -4506,14 +4531,15 @@ function ChannelView({
       <View style={{ backgroundColor: theme.colors.surface1 }}>
         {/* Header Image */}
         {channel?.headerImageUrl && (
-          <Image
-            source={{ uri: channel.headerImageUrl }}
+          <SizedImage
+            uri={channel.headerImageUrl}
+            displayWidth={SCREEN_WIDTH}
             style={{
               width: SCREEN_WIDTH,
               height: 100,
               backgroundColor: theme.colors.surface3,
             }}
-            resizeMode="cover"
+            contentFit="cover"
           />
         )}
 
@@ -4537,8 +4563,10 @@ function ChannelView({
         <View style={{ padding: Skin.space(16), marginTop: channel?.headerImageUrl ? -24 : 0 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
             {channel?.imageUrl ? (
-              <Image
-                source={{ uri: channel.imageUrl }}
+              <SizedImage
+                uri={channel.imageUrl}
+                displayWidth={64}
+                stillFrame
                 style={{
                   width: 64,
                   height: 64,
@@ -5311,7 +5339,8 @@ function normalizedCastToFeedPost(cast: NormalizedCast): FeedPost {
   };
 }
 
-const MediaGridCell = React.memo(function MediaGridCell({
+/** Exported for tests (feedImagesSized). */
+export const MediaGridCell = React.memo(function MediaGridCell({
   post,
   theme,
   onPress,
@@ -5335,8 +5364,10 @@ const MediaGridCell = React.memo(function MediaGridCell({
           stalls the JS thread on the first scroll past each tile;
           expo-image hands decoding off to native so scrolling
           stays smooth. */}
-      <ExpoImage
-        source={{ uri: thumb.uri }}
+      <SizedImage
+        uri={thumb.uri}
+        // A third of the screen: the tile's size, not the full upload.
+        displayWidth={GRID_TILE_SIZE}
         contentFit="cover"
         cachePolicy="memory-disk"
         transition={0}
@@ -6849,7 +6880,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
       return (
         <TouchableOpacity style={styles.searchResultItem} onPress={() => handleSearchChannelPress(channel)}>
           {channel.imageUrl ? (
-            <Image source={{ uri: channel.imageUrl }} style={styles.channelImage} />
+            <SizedImage uri={channel.imageUrl} displayWidth={44} stillFrame style={styles.channelImage} />
           ) : (
             <View style={styles.channelImage} />
           )}
@@ -7275,6 +7306,9 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
   const userPanelHeight = 8 + 32 + Math.max(8, insets.bottom);
 
   return (
+    // Videos in the feed itself pause once a screen is pushed over it; each
+    // stacked screen below does the same for the ones under it.
+    <MediaOnTopContext.Provider value={visible && navStack.length <= 1}>
     <View style={styles.overlay} pointerEvents="box-none">
       <Animated.View
         pointerEvents="none"
@@ -7800,7 +7834,12 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
             const isTopScreen = stackIndex === navStack.length - 1;
 
             // Wrap content with gesture detector for swipe-back on top screen
-            const wrapWithGesture = (content: React.ReactNode, key: string) => {
+            const wrapWithGesture = (screenContent: React.ReactNode, key: string) => {
+              const content = (
+                <MediaOnTopContext.Provider value={visible && isTopScreen}>
+                  {screenContent}
+                </MediaOnTopContext.Provider>
+              );
               if (isTopScreen) {
                 return (
                   <GestureDetector key={key} gesture={swipeBackGesture}>
@@ -8235,6 +8274,7 @@ function SocialFeedModal({ visible, token, onClose: _onClose, initialThread, ini
         {!isRouteMode && <View style={{ height: userPanelHeight }} />}
       </View>
     </View>
+    </MediaOnTopContext.Provider>
   );
 });
 

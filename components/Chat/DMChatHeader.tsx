@@ -19,6 +19,7 @@
  */
 
 import type { AppTheme } from '@/theme';
+import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ScreenHeader, headerIconHitSlop } from '@/components/ui/ScreenHeader';
@@ -26,7 +27,7 @@ import { QuorumIdentityBadge } from '@/components/SocialFeed/content/QuorumIdent
 import { useQuorumIdentityForFid } from '@/hooks/useQuorumIdentityForFid';
 import { useResolvedName } from '@/identity';
 import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -170,7 +171,7 @@ export const DMChatHeader = React.memo(function DMChatHeader({
           accessibilityLabel={accessibilityLabel}
         >
           {icon ? (
-            <Image source={{ uri: icon }} style={styles.avatar} />
+            <CachedAvatar source={{ uri: icon }} style={styles.avatar} fallbackName={title} />
           ) : (
             <DefaultAvatar resolvedName={title} address={address} size={28} />
           )}

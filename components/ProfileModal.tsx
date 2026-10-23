@@ -818,15 +818,15 @@ export default function ProfileModal({
   const handleToggleDeliveryReceipts = React.useCallback(async (enabled: boolean) => {
     setIsReceiptsToggling(true);
     try {
+      // Turning delivery off also turns read off (matches desktop). The hook
+      // does both in one config write, so it is one upload rather than two.
       await setDeliveryReceipts(enabled);
-      // Cascade: turning delivery off also turns read off (matches desktop).
-      if (!enabled) await setReadReceipts(false);
     } catch {
       Alert.alert('Error', 'Failed to update delivery receipts. Please try again.');
     } finally {
       setIsReceiptsToggling(false);
     }
-  }, [setDeliveryReceipts, setReadReceipts]);
+  }, [setDeliveryReceipts]);
   const handleToggleReadReceipts = React.useCallback(async (enabled: boolean) => {
     setIsReceiptsToggling(true);
     try {

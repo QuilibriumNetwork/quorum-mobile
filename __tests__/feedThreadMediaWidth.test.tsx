@@ -169,8 +169,8 @@ function renderCard(post: FeedPost, threadPosition?: 'first' | 'middle' | 'last'
 }
 
 function imageWidth(root: ReturnType<typeof renderCard>, uri: string): number | undefined {
-  // Frame images are React Native images; video posters are expo-image.
-  const images = [...root.UNSAFE_getAllByType(Image), ...root.UNSAFE_getAllByType(ExpoImage)];
+  // Frame images and video posters are both expo-image.
+  const images = root.UNSAFE_queryAllByType(ExpoImage);
   const image = images.find((i) => i.props.source?.uri === uri);
   return image ? (StyleSheet.flatten(image.props.style) as { width?: number }).width : undefined;
 }

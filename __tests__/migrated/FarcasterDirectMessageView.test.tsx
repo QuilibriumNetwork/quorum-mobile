@@ -91,6 +91,7 @@ jest.mock('@/hooks/chat', () => ({
   useMarkFarcasterConversationRead: () => ({ mutate: jest.fn() }),
   useAddFarcasterDirectCastReaction: () => ({ mutate: jest.fn() }),
   useRemoveFarcasterDirectCastReaction: () => ({ mutate: jest.fn() }),
+  showDirectCastConversation: () => () => {},
 }));
 jest.mock('@/components/Chat/MessagesList', () => ({
   MessagesList: () => null,

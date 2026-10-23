@@ -25,6 +25,7 @@ export {
   farcasterDCQueryKeys,
 } from './useFarcasterDirectCasts';
 export type { DirectCastConversation, DirectCastMessage } from './useFarcasterDirectCasts';
+export { useDirectCastLive, showDirectCastConversation } from './useDirectCastLive';
 
 // Unified conversations (E2EE + Farcaster)
 export { useUnifiedConversations } from './useUnifiedConversations';

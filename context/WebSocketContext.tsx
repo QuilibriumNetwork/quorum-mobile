@@ -117,6 +117,9 @@ import {
 import { buildJoinedMemberRow } from '../services/space/joinedMemberRow';
 import { buildListenHubFrame, buildLogSinceFrame } from '../services/space/hubLogSync';
 import { getHubLastSeq, setHubLastSeq } from '../services/space/hubLogCursor';
+import { advanceHubCursor, hubLogEntryIsEmpty, PassableHubSeqs } from '../services/space/hubLogCursorAdvance';
+import { announceKeysDue, markKeysAnnounced } from '../services/space/announceKeysGate';
+import { createReconnectScheduler, type ReconnectScheduler } from '../services/api/wsReconnectBackoff';
 import {
   isInboxEnvelopePoisoned,
   recordInboxAttempt,
@@ -504,6 +507,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
   // WebSocket client instance (singleton for the app)
   const wsClientRef = useRef<WebSocketClient | null>(null);
+  // Drives reconnects for that client, with backoff. See wsReconnectBackoff.ts.
+  const reconnectSchedulerRef = useRef<ReconnectScheduler | null>(null);
 
   // Track subscribed inbox addresses
   const subscribedInboxesRef = useRef<Set<string>>(new Set());
@@ -513,6 +518,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
   // Store our own inbox address for checking initialization messages
   const ownInboxAddressRef = useRef<string | null>(null);
+
+  // Hub-log seqs that arrived with nothing to apply, so the cursor may step
+  // over them. See hubLogCursorAdvance.ts.
+  const passableHubSeqsRef = useRef(new PassableHubSeqs());
 
   // Message queue for throttled processing - prevents CPU overload from burst messages
   const messageQueueRef = useRef<EncryptedWebSocketMessage[]>([]);
@@ -5958,7 +5967,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // along a contiguous run from the prior cursor — if there's a gap (e.g.
       // queue-overflow dropped older entries), stop at the gap so the next
       // log-since refetches what we lost. Doing this AFTER persistence means
-      // a crash mid-batch leaves the cursor unchanged.
+      // a crash mid-batch leaves the cursor unchanged. Seqs that arrived with
+      // nothing to apply were never queued, so they are stepped over here
+      // rather than read as a gap (hubLogCursorAdvance.ts).
       const seqsByHub = new Map<string, number[]>();
       for (const msg of batch) {
         const m = msg as { __logSeq?: number; __logHub?: string };
@@ -5969,14 +5980,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
       }
       seqsByHub.forEach((seqs, hub) => {
-        seqs.sort((a, b) => a - b);
-        let advance = getHubLastSeq(hub);
-        for (const seq of seqs) {
-          if (seq <= advance) continue;
-          if (seq === advance + 1) advance = seq;
-          else break; // gap — stop and let next log-since refetch
+        const prior = getHubLastSeq(hub);
+        const advance = advanceHubCursor(prior, seqs, passableHubSeqsRef.current.get(hub));
+        if (advance > prior) {
+          setHubLastSeq(hub, advance);
+          passableHubSeqsRef.current.prune(hub, advance);
         }
-        if (advance > getHubLastSeq(hub)) setHubLastSeq(hub, advance);
       });
 
       // Yield between drains so this slice's batchInput/stringify/result
@@ -6119,20 +6128,31 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
     const config = getApiConfig();
 
+    // The client's own reconnect is a fixed interval, so it is switched off
+    // (maxReconnectAttempts: 0) and the scheduler below retries through
+    // connect() with exponential backoff and jitter instead.
     const client = createRNWebSocketClient({
       url: config.wsUrl,
-      reconnectInterval: 2000,
-      maxReconnectAttempts: Infinity,
+      maxReconnectAttempts: 0,
       queueProcessInterval: 500,
     });
+
+    const scheduler = createReconnectScheduler({
+      reconnect: () => {
+        // A failed attempt closes, and that close schedules the next one.
+        client.connect().catch(() => {});
+      },
+    });
+    reconnectSchedulerRef.current = scheduler;
 
     // Set up handlers - use throttled handler to prevent CPU overload
     client.setMessageHandler(throttledMessageHandler);
     client.setResubscribeHandler(handleResubscribe);
 
-    // Track state changes
+    // Track state changes. The scheduler sees every one first, to start or
+    // cancel a retry, and reports 'reconnecting' while one is pending.
     client.onStateChange((state) => {
-      setConnectionState(state);
+      setConnectionState(scheduler.onStateChange(state));
     });
 
     client.onError((error) => {
@@ -6153,47 +6173,32 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     }
 
     const client = getOrCreateClient();
-    await client.connect();
-
-    // Subscribe to own inbox to receive messages
-    // Note: ownInboxAddressRef is set in initializeDeviceKeys
-    const ownInboxAddress = ownInboxAddressRef.current;
-    if (ownInboxAddress) {
-      try {
-        await client.subscribe([ownInboxAddress]);
-        subscribedInboxesRef.current.add(ownInboxAddress);
-      } catch (error) {
-        // Failed to subscribe to device inbox
-      }
+    const scheduler = reconnectSchedulerRef.current;
+    scheduler?.setWanted(true);
+    // Connecting now, so a backoff retry still waiting is redundant.
+    scheduler?.cancelPending();
+    try {
+      await client.connect();
+    } catch {
+      // The socket failed to open. Its close schedules the next attempt.
     }
 
-    // Subscribe to all space inboxes for receiving space/hub messages
-    const spaceInboxes = getAllSpaceInboxAddresses();
-    if (spaceInboxes.length > 0) {
-      try {
-        await client.subscribe(spaceInboxes);
-        spaceInboxes.forEach((addr) => subscribedInboxesRef.current.add(addr));
-      } catch (error) {
-        // Failed to subscribe to space inboxes
-      }
-    }
-
-    // Subscribe to all conversation inboxes
-    const conversationInboxes = encryptionStateStorage.getAllConversationInboxAddresses();
-    if (conversationInboxes.length > 0) {
-      try {
-        await client.subscribe(conversationInboxes);
-        conversationInboxes.forEach((addr) => subscribedInboxesRef.current.add(addr));
-      } catch (error) {
-        // Failed to subscribe to conversation inboxes
-      }
-    }
+    // No explicit `listen` here. Every open — this one and every reconnect —
+    // runs handleResubscribe from the client's onopen, and that already
+    // listens on the device inbox, every space inbox and every conversation
+    // inbox (plus anything subscribed since). Subscribing them again here
+    // sent a second `listen` for each, and the relay answers every `listen`
+    // by re-sending every envelope still pending on that inbox, so each cold
+    // start downloaded the whole backlog twice. If connect() returns before
+    // an open (one already in progress), that open still resubscribes.
   }, [getOrCreateClient, initializeDeviceKeys]);
 
   /**
    * Disconnect from WebSocket server
    */
   const disconnect = useCallback(() => {
+    // Before the close, so the 'disconnected' it causes isn't retried.
+    reconnectSchedulerRef.current?.setWanted(false);
     const client = wsClientRef.current;
     if (client) {
       client.disconnect();
@@ -6658,8 +6663,14 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           break;
         }
         lastVisited = entry.seq;
-        const sealedEnvelope = entry.payload?.data;
-        if (!sealedEnvelope) continue;
+        if (hubLogEntryIsEmpty(entry)) {
+          // Nothing to decrypt, now or on any refetch. Skipped as before, but
+          // recorded so the cursor can step over it instead of stopping in
+          // front of it and re-fetching the log from here on every update.
+          passableHubSeqsRef.current.add(hubAddress, entry.seq);
+          continue;
+        }
+        const sealedEnvelope = entry.payload.data;
         // Tag with __logSeq / __logHub so processMessageQueue can advance the
         // hub cursor only after persistence — see post-batch hook there.
         const synthetic = {
@@ -6674,6 +6685,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
         messageQueueRef.current.push(synthetic);
       }
+      // A run of empty entries right at the cursor has nothing waiting on the
+      // drain, so move past it now; anything queued still advances it from
+      // processMessageQueue once persisted.
+      const prior = getHubLastSeq(hubAddress);
+      const settled = advanceHubCursor(prior, [], passableHubSeqsRef.current.get(hubAddress));
+      if (settled > prior) setHubLastSeq(hubAddress, settled);
+      passableHubSeqsRef.current.prune(hubAddress, settled);
       if (entries.length > 0) {
         processMessageQueue();
       }
@@ -6712,7 +6730,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       try {
         const spaceIds = getSpaceIds();
         // Master keys + this device's inbox tag for the per-space announce-keys
-        // broadcast (self-healing for receivers that missed a prior announce).
+        // broadcast (gated per space, see below).
         const [annPriv, annPub, annDeviceKeyset] = await Promise.all([
           getPrivateKey(),
           getPublicKey(),
@@ -6746,16 +6764,26 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           } catch (e) {
             logger.warn('[hub-log] log-since build failed', e);
           }
-          // Re-announce this device's per-space signing key. Idempotent,
-          // fire-and-forget; behaviour-neutral until the flip is live.
-          if (announceMaster && announceDeviceInbox) {
+          // Announce this device's per-space signing key — but only when it
+          // is new to this space or the last announce is a week old. Each one
+          // is a permanent hub-log entry every member downloads, and this runs
+          // on every reconnect (announceKeysGate.ts). Fire-and-forget;
+          // behaviour-neutral until the flip is live.
+          const announceFp =
+            announceMaster && announceDeviceInbox
+              ? announceKeysDue(spaceId, announceMaster.publicKeyHex, announceDeviceInbox)
+              : null;
+          if (announceMaster && announceDeviceInbox && announceFp) {
             try {
               const frame = await buildAnnounceKeysFrame(
                 spaceId,
                 announceMaster,
                 announceDeviceInbox
               );
-              if (frame) enqueueOutbound(async () => [frame]);
+              if (frame) {
+                enqueueOutbound(async () => [frame]);
+                markKeysAnnounced(spaceId, announceFp);
+              }
             } catch (e) {
               logger.warn('[DeviceKeys] announce build failed', e);
             }

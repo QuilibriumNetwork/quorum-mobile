@@ -1,10 +1,21 @@
 /**
  * useFarcasterDirectCasts - Fetches Farcaster direct cast conversations
+ *
+ * The inbox, messages, mark-read and text sends use the direct-cast token
+ * (`services/farcaster/directCastAuth.ts`); a message with an image and
+ * reactions use the session token (`farcasterAuthToken`). Nothing polls: the
+ * socket (`useDirectCastLive`) keeps both caches current.
  */
 
-import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { AppState } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
+import {
+  getDirectCastToken,
+  peekDirectCastToken,
+  subscribeDirectCastToken,
+} from '@/services/farcaster/directCastAuth';
 import {
   getCachedDMConversations,
   setCachedDMConversations,
@@ -16,7 +27,9 @@ import {
 import {
   getDirectCastConversations,
   getDirectCastMessages,
+  isOneToOneConversationId,
   sendDirectCast,
+  sendDirectCastWithMedia,
   markDirectCastRead,
   addDirectCastReaction,
   removeDirectCastReaction,
@@ -35,17 +48,46 @@ export const farcasterDCQueryKeys = {
 };
 
 /**
+ * The direct-cast token for the signed-in Farcaster account, minted on first
+ * use. Null until there is one (or when this account can't have one). A mint
+ * that failed (offline, say) is tried again when the app comes back to the
+ * front.
+ */
+export function useDirectCastToken(): string | null {
+  const { user } = useAuth();
+  const fid = user?.farcaster?.fid;
+  const token = useSyncExternalStore(subscribeDirectCastToken, () => peekDirectCastToken(fid));
+  useEffect(() => {
+    if (fid == null || token) return;
+    void getDirectCastToken();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void getDirectCastToken();
+    });
+    return () => sub.remove();
+  }, [fid, token]);
+  return token;
+}
+
+/**
  * Convert Farcaster conversation to unified Conversation type
  */
-function toUnifiedConversation(fc: DirectCastConversation, currentUserFid?: number): Conversation {
-  const counterParty = fc.viewerContext?.counterParty ?? fc.participants[0];
+export function toUnifiedConversation(fc: DirectCastConversation, currentUserFid?: number): Conversation {
+  const participants = fc.participants ?? [];
+  const counterParty =
+    fc.viewerContext?.counterParty ??
+    participants.find((p) => p.fid !== currentUserFid) ??
+    participants[0];
   // Use conversation photo (for groups) or counterparty's profile picture
   const iconUrl = fc.photoUrl ?? counterParty?.pfp?.url;
 
-  // Get all participant FIDs except current user (needed for sending messages)
-  const participantFids = fc.participants
+  // Everyone but the current user. The inbox doesn't always list participants;
+  // a 1:1 then still has its counterparty.
+  const participantFids = participants
     .filter((p) => p.fid !== currentUserFid)
     .map((p) => p.fid);
+  if (participantFids.length === 0 && !fc.isGroup && counterParty?.fid != null) {
+    participantFids.push(counterParty.fid);
+  }
 
   // Extract preview from last message
   let lastMessagePreview: string | undefined;
@@ -80,7 +122,7 @@ function toUnifiedConversation(fc: DirectCastConversation, currentUserFid?: numb
     farcasterParticipantFids: participantFids,
     lastMessagePreview,
     lastMessageSenderName,
-    unreadCount: fc.unreadCount,
+    unreadCount: fc.viewerContext?.unreadCount ?? fc.unreadCount ?? 0,
     // Don't show read status for Farcaster conversations
   };
 }
@@ -89,7 +131,8 @@ function toUnifiedConversation(fc: DirectCastConversation, currentUserFid?: numb
  * Hook to fetch Farcaster direct cast conversations
  */
 export function useFarcasterConversations(options?: { enabled?: boolean }) {
-  const { farcasterAuthToken, user } = useAuth();
+  const { user } = useAuth();
+  const directCastToken = useDirectCastToken();
   const hasFarcaster = !!user?.farcaster?.fid;
   const currentUserFid = user?.farcaster?.fid;
 
@@ -98,16 +141,9 @@ export function useFarcasterConversations(options?: { enabled?: boolean }) {
 
   const query = useInfiniteQuery({
     queryKey: farcasterDCQueryKeys.conversations,
-    queryFn: async ({ pageParam }) => {
-      if (!farcasterAuthToken) {
-        throw new Error('Hypersnap auth token not available');
-      }
-
-      const result = await getDirectCastConversations({
-        token: farcasterAuthToken,
-        cursor: pageParam,
-        limit: 20,
-      });
+    queryFn: async ({ pageParam, signal }) => {
+      // 100 is the most farcaster.xyz gives at once.
+      const result = await getDirectCastConversations({ cursor: pageParam, limit: 100, signal });
 
       return {
         conversations: result.conversations.map((fc) => toUnifiedConversation(fc, currentUserFid)),
@@ -119,20 +155,14 @@ export function useFarcasterConversations(options?: { enabled?: boolean }) {
     // Treat the cached data as stale so the background refresh still runs.
     initialDataUpdatedAt: 0,
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor,
-    enabled: (options?.enabled ?? true) && hasFarcaster && !!farcasterAuthToken,
-    // Cache-first: the Messages tab must paint instantly on focus, not
-    // block on a network round-trip (the old `refetchOnMount:'always'`
-    // gated first paint for up to ~5s on slow connections). Cached
-    // conversations show immediately; the `refetchInterval` below keeps
-    // them fresh while the app is in the foreground, never more than ~30s
-    // stale. It stops in the background (it used to keep polling every 15s
-    // there); an open conversation polls on its own, faster.
+    getNextPageParam: nextInboxCursor,
+    enabled: (options?.enabled ?? true) && hasFarcaster && !!directCastToken,
+    // Cached conversations paint at once and refresh in the background
+    // (that doesn't hold up first paint). After that the socket keeps the
+    // list current, and catches it up whenever it reconnects, including on
+    // coming back to the app (it's closed in the background), so it isn't
+    // refetched on focus as well. No polling.
     staleTime: 60000,
-    refetchInterval: 30000,
-    refetchIntervalInBackground: false,
-    refetchOnMount: false,
-    refetchOnWindowFocus: true,
   });
 
   // Persist the freshest page so the next launch/open paints instantly.
@@ -152,7 +182,7 @@ export function useFarcasterDirectCastMessages(
   conversationId: string | undefined,
   options?: { enabled?: boolean }
 ) {
-  const { farcasterAuthToken } = useAuth();
+  const directCastToken = useDirectCastToken();
 
   // Extract actual Farcaster conversation ID from unified ID
   const fcConversationId = conversationId?.startsWith('farcaster:')
@@ -164,14 +194,14 @@ export function useFarcasterDirectCastMessages(
 
   const query = useInfiniteQuery({
     queryKey: farcasterDCQueryKeys.messages(fcConversationId ?? ''),
-    queryFn: async ({ pageParam }) => {
-      if (!farcasterAuthToken || !fcConversationId) {
-        throw new Error('Missing auth token or conversation ID');
+    queryFn: async ({ pageParam, signal }) => {
+      if (!fcConversationId) {
+        throw new Error('Missing conversation ID');
       }
 
       const result = await getDirectCastMessages({
-        token: farcasterAuthToken,
         conversationId: fcConversationId,
+        signal,
         cursor: pageParam,
         limit: 50,
       });
@@ -186,23 +216,16 @@ export function useFarcasterDirectCastMessages(
     initialDataUpdatedAt: 0,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
-    enabled: (options?.enabled ?? true) && !!farcasterAuthToken && !!fcConversationId,
-    // Poll while the chat is open for near-real-time delivery, but NOT in
-    // the background: `refetchIntervalInBackground` kept re-fetching +
-    // re-rendering the entire (large) message view every 3s even when the
-    // app/DM wasn't on screen, churning render memory until low-RAM (2GB)
-    // devices OOM. Foreground-only polling + the referentially-stable
-    // `displayMessages` mapping in FarcasterDirectMessageView stop the
-    // unnecessary re-renders.
-    staleTime: 3000,
-    refetchInterval: 5000,
-    refetchIntervalInBackground: false,
-    // Forces an immediate refresh when navigating into a chat —
-    // otherwise the user lands on a screen with potentially-minutes-old
-    // state, waits ~3s for the first poll, and only then sees fresh
-    // messages.
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
+    enabled: (options?.enabled ?? true) && !!directCastToken && !!fcConversationId,
+    // No polling: new messages arrive over the socket (`useDirectCastLive`),
+    // which writes them into every chat held in memory, so a chat opened
+    // again is already current and isn't fetched again (each refetch reloads
+    // every page held). When the socket reconnects, after a drop or on
+    // coming back to the app, it refetches the open chat and marks the rest
+    // stale, so they refetch when next opened. A chat painted from the copy
+    // saved on the phone is stale from the start (above), so it refreshes on
+    // opening.
+    staleTime: 5 * 60_000,
   });
 
   // Persist the freshest page so re-opening this DM paints instantly.
@@ -213,6 +236,28 @@ export function useFarcasterDirectCastMessages(
   }, [query.data, query.isFetched, fcConversationId]);
 
   return query;
+}
+
+type InboxPage = { conversations: Conversation[]; nextCursor?: string };
+
+/**
+ * The next inbox page's cursor, or none. farcaster.xyz's cursor can come round
+ * again, so a cursor already used, or a page with no conversation not already
+ * listed, is the end whatever the cursor says.
+ */
+export function nextInboxCursor(
+  lastPage: InboxPage,
+  allPages: InboxPage[],
+  _lastPageParam?: string,
+  allPageParams: (string | undefined)[] = [],
+): string | undefined {
+  const next = lastPage.nextCursor;
+  if (!next || allPageParams.includes(next)) return undefined;
+  const earlier = new Set(
+    allPages.slice(0, -1).flatMap((page) => page.conversations.map((c) => c.conversationId)),
+  );
+  const addsSomething = lastPage.conversations.some((c) => !earlier.has(c.conversationId));
+  return addsSomething ? next : undefined;
 }
 
 // Type for infinite query data structure
@@ -246,33 +291,49 @@ export function useSendFarcasterDirectCast() {
   return useMutation({
     mutationFn: async ({
       conversationId,
+      isGroup,
       recipientFids,
       message,
       inReplyToId,
       metadata,
     }: {
       conversationId: string;
+      /** Defaults to whether the id isn't a 1:1's `<fid>-<fid>`. */
+      isGroup?: boolean;
       recipientFids: number[];
       message: string;
       inReplyToId?: string;
       metadata?: DirectCastMessageMetadata;
-    }) => {
-      if (!farcasterAuthToken) {
-        throw new Error('Hypersnap auth token not available');
-      }
-
+    }): Promise<{ messageId?: string }> => {
       // Extract actual Farcaster conversation ID
       const fcConversationId = conversationId.startsWith('farcaster:')
         ? conversationId.slice(10)
         : conversationId;
 
+      // An image goes the way farcaster.xyz sends media: the older endpoint,
+      // with the session token.
+      if (metadata) {
+        if (!farcasterAuthToken) {
+          throw new Error('Hypersnap auth token not available');
+        }
+        await sendDirectCastWithMedia({
+          token: farcasterAuthToken,
+          conversationId: fcConversationId,
+          recipientFids,
+          message,
+          inReplyToId,
+          metadata,
+        });
+        return {};
+      }
+
+      const group = isGroup ?? !isOneToOneConversationId(fcConversationId);
       return sendDirectCast({
-        token: farcasterAuthToken,
         conversationId: fcConversationId,
-        recipientFids,
+        isGroup: group,
+        recipientFid: group ? undefined : (recipientFids[0] ?? otherFidInConversationId(fcConversationId, currentUserFid)),
         message,
         inReplyToId,
-        metadata,
       });
     },
 
@@ -356,14 +417,34 @@ export function useSendFarcasterDirectCast() {
       }
     },
 
-    onSuccess: (result, variables) => {
-      // Invalidate messages for this conversation to get the real message from server
+    onSuccess: (result, variables, context) => {
       const fcConversationId = variables.conversationId.startsWith('farcaster:')
         ? variables.conversationId.slice(10)
         : variables.conversationId;
-      queryClient.invalidateQueries({
-        queryKey: farcasterDCQueryKeys.messages(fcConversationId),
-      });
+      const sent = context?.optimisticMessage;
+      if (result.messageId && sent) {
+        // The sent copy takes farcaster.xyz's id, so the socket's copy of it
+        // replaces it in place rather than adding a second.
+        const { _optimistic: _, ...confirmed } = sent as DirectCastMessage & { _optimistic?: boolean };
+        queryClient.setQueryData<InfiniteFarcasterMessagesData>(
+          farcasterDCQueryKeys.messages(fcConversationId),
+          (old) =>
+            old && {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                messages: page.messages.map((m) =>
+                  m.messageId === sent.messageId ? { ...confirmed, messageId: result.messageId! } : m,
+                ),
+              })),
+            },
+        );
+      } else {
+        // No id back (an image send): fetch the real message.
+        queryClient.invalidateQueries({
+          queryKey: farcasterDCQueryKeys.messages(fcConversationId),
+        });
+      }
       // Also refresh conversations list
       queryClient.invalidateQueries({
         queryKey: farcasterDCQueryKeys.conversations,
@@ -376,30 +457,61 @@ export function useSendFarcasterDirectCast() {
  * Hook to mark a Farcaster conversation as read
  */
 export function useMarkFarcasterConversationRead() {
-  const { farcasterAuthToken } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (conversationId: string) => {
-      if (!farcasterAuthToken) {
-        throw new Error('Hypersnap auth token not available');
-      }
-
       const fcConversationId = conversationId.startsWith('farcaster:')
         ? conversationId.slice(10)
         : conversationId;
-
-      return markDirectCastRead({
-        token: farcasterAuthToken,
-        conversationId: fcConversationId,
-      });
+      await markDirectCastRead({ conversationId: fcConversationId });
+      return fcConversationId;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: farcasterDCQueryKeys.conversations,
-      });
+    onSuccess: (fcConversationId) => {
+      updateCachedConversation(queryClient, fcConversationId, (c) => ({ ...c, unreadCount: 0 }));
     },
   });
+}
+
+/** In a 1:1's id (`<fid>-<fid>`), the FID that isn't `me`. */
+function otherFidInConversationId(conversationId: string, me: number | undefined): number | undefined {
+  if (!isOneToOneConversationId(conversationId)) return undefined;
+  return conversationId.split('-').map(Number).find((fid) => fid !== me);
+}
+
+export type InboxData = { pages: (InboxPage & { requestsCount?: number })[]; pageParams: unknown[] };
+
+/**
+ * Change one conversation in the cached inbox; `top` moves it to the top.
+ * False when it isn't there.
+ */
+export function updateCachedConversation(
+  queryClient: ReturnType<typeof useQueryClient>,
+  fcConversationId: string,
+  change: (c: Conversation) => Conversation | null,
+  top = false,
+): boolean {
+  let found = false;
+  queryClient.setQueryData<InboxData>(farcasterDCQueryKeys.conversations, (old) => {
+    if (!old) return old;
+    let moved: Conversation | null = null;
+    const pages = old.pages.map((page) => ({
+      ...page,
+      conversations: page.conversations.flatMap((c) => {
+        if (c.farcasterConversationId !== fcConversationId) return [c];
+        found = true;
+        const next = change(c);
+        if (next && top) {
+          moved = next;
+          return [];
+        }
+        return next ? [next] : [];
+      }),
+    }));
+    if (moved && pages[0]) pages[0] = { ...pages[0], conversations: [moved, ...pages[0].conversations] };
+    return found ? { ...old, pages } : old;
+  });
+  return found;
 }
 
 /**

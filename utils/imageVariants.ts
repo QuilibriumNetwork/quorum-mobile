@@ -15,6 +15,11 @@ import { PixelRatio } from 'react-native';
 
 const WIDTH_BUCKETS = [96, 192, 320, 640, 960, 1280, 1920];
 
+// Pixels asked for per point are capped at 2. At 3, a phone-wide feed image
+// landed in the 1280 bucket; at 2 it's 960, roughly half the bytes, and the
+// difference is hard to see at arm's length.
+const MAX_PIXEL_RATIO = 2;
+
 // https://imagedelivery.net/<account>/<image id>/<variant>[?query]
 const IMAGEDELIVERY = /^(https:\/\/imagedelivery\.net\/[^/?#]+\/[^/?#]+\/)([^/?#]+)([?#].*)?$/;
 
@@ -25,7 +30,7 @@ const IMAGEDELIVERY = /^(https:\/\/imagedelivery\.net\/[^/?#]+\/[^/?#]+\/)([^/?#
 export function sizedImageUrl(url: string, displayWidth: number, options: { stillFrame?: boolean } = {}): string {
   const match = IMAGEDELIVERY.exec(url);
   if (!match || !(displayWidth > 0)) return url;
-  const pixels = Math.ceil(displayWidth * Math.min(PixelRatio.get(), 3));
+  const pixels = Math.ceil(displayWidth * Math.min(PixelRatio.get(), MAX_PIXEL_RATIO));
   const width = WIDTH_BUCKETS.find((bucket) => bucket >= pixels) ?? WIDTH_BUCKETS[WIDTH_BUCKETS.length - 1];
   const variant = options.stillFrame ? `anim=false,w=${width}` : `w=${width}`;
   return `${match[1]}${variant}${match[3] ?? ''}`;

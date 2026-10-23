@@ -81,6 +81,8 @@ jest.mock('expo-router', () => ({
 // — which requires the real native QuorumCrypto module at import time and
 // cannot run under jest at all. Stubbed wholesale; AvatarButton never calls
 // this hook itself.
+// The bell's notifications poll (network) isn't what these tests are about.
+jest.mock('@/hooks/useHaatzNotifications', () => ({ useHaatzNotificationsPoll: () => {} }));
 jest.mock('@/hooks/useUnifiedNotifications', () => ({
   useUnifiedNotifications: () => ({ unreadCount: 0 }),
 }));

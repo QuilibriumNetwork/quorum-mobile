@@ -24,9 +24,10 @@ import { refreshFarcasterAuthToken, fetchFarcasterProfileByFid } from '../servic
 import { registerFarcasterAuthFailureHandler } from '../services/farcaster/authTokenEvents';
 import { initializeEncryptionKeys, uploadUserRegistration, deriveQuilibriumAddressWithMnemonic, ensurePrivateKey } from '../services/onboarding/keyService';
 import { NativeSigningProvider } from '../services/crypto';
-import { getConfig, saveConfig } from '../services/config';
+import { flushAllConfigPublishes, getConfig, saveConfig } from '../services/config';
 import { mergeSyncedPrimaryName } from '../utils/primaryName';
 import { logger } from '@quilibrium/quorum-shared';
+import { forgetDirectCastToken } from '../services/farcaster/directCastAuth';
 // Auth state types
 export type AuthState = 'loading' | 'unauthenticated' | 'onboarding' | 'authenticated';
 
@@ -489,6 +490,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Derived wallet keys held in memory die with the identity, whatever the
       // wipe below does.
       clearWalletKeysCache();
+      // Likewise the direct-cast token, which the DM socket reads from memory.
+      // Its stored copy goes with the wipe below.
+      void forgetDirectCastToken().catch(() => {});
+      // Settings toggles are uploaded a couple of seconds after the last
+      // change; send any still waiting while the keys that sign them exist.
+      // Bounded, so an unreachable server doesn't hold up signing out.
+      await Promise.race([
+        flushAllConfigPublishes().catch(() => {}),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]);
       try {
         // Secure storage (private keys, mnemonics, onboarding state)
         await clearAllSecureStorage();

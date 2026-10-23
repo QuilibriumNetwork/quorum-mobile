@@ -7,7 +7,7 @@ import React, {
   useEffect,
   useMemo,
 } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import type { MediaStream } from 'react-native-webrtc';
 import { hexToBytes, logger, type Message } from '@quilibrium/quorum-shared';
 import { useAuth, useWebSocket } from '@/context';
@@ -24,6 +24,7 @@ import {
   createCallRenegotiate,
 } from '@/services/calling';
 import type { TurnCredentials, CallQuality } from '@/services/calling';
+import { paddingActionForAppState } from '@/services/calling/postHangupPadding';
 import {
   reportIncomingCall as nativeReportIncomingCall,
   reportOutgoingCall as nativeReportOutgoingCall,
@@ -203,6 +204,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   // Track whether we're in the post-hangup padding phase (call ended for UI
   // but WebRTC connection still alive sending silence frames until next boundary)
   const isPaddingRef = useRef(false);
+  // When the padding is due to end, and the circuit it is holding open. Kept
+  // outside the timer so the AppState handler below can end it early.
+  const paddingDeadlineRef = useRef<number | null>(null);
+  const paddingCircuitIdRef = useRef<string | null>(null);
 
   // Track whether native call UI (CallKit/ConnectionService) is active
   // for the current call, so we can report state transitions.
@@ -227,11 +232,45 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(paddingTimeoutRef.current);
       paddingTimeoutRef.current = null;
     }
+    paddingDeadlineRef.current = null;
+    paddingCircuitIdRef.current = null;
     if (isPaddingRef.current) {
       isPaddingRef.current = false;
       await webrtcRef.current.cleanup();
     }
   }, []);
+
+  // End post-hangup padding the way its timer does: drop the silent stream
+  // and release the circuit. Shared by the timer and the AppState handler.
+  const finishPadding = useCallback(async (why: string) => {
+    if (!isPaddingRef.current) return;
+    if (paddingTimeoutRef.current) {
+      clearTimeout(paddingTimeoutRef.current);
+      paddingTimeoutRef.current = null;
+    }
+    const circuitId = paddingCircuitIdRef.current;
+    isPaddingRef.current = false;
+    paddingDeadlineRef.current = null;
+    paddingCircuitIdRef.current = null;
+    log.debug(`padding complete (${why}), releasing circuit`);
+    await webrtcRef.current.cleanup();
+    if (circuitId) relayClientRef.current.releaseCircuit(circuitId);
+  }, []);
+
+  // The padding timer is a JS timer, and those don't fire while the app is in
+  // the background on Android, so without this a backgrounded app kept
+  // streaming silence until it was reopened. See postHangupPadding.ts for the
+  // privacy trade-off of ending it early.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (!isPaddingRef.current) return;
+      const action = paddingActionForAppState(nextState, paddingDeadlineRef.current, Date.now());
+      if (action === 'end-now') {
+        void finishPadding(nextState === 'background' ? 'app backgrounded' : 'deadline passed').catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, [finishPadding]);
 
   // Circuit rotation: periodically swap to a new relay to limit traffic
   // correlation by relay nodes. Only applies to 1-to-1 DM calls.
@@ -835,14 +874,20 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       const teardownAt = nextRotationTime();
       const delay = Math.max(teardownAt - Date.now(), 0);
       log.debug(`post-hangup padding: holding circuit for ${Math.round(delay / 1000)}s until next boundary`);
+      paddingDeadlineRef.current = teardownAt;
+      paddingCircuitIdRef.current = circuitId;
 
-      paddingTimeoutRef.current = setTimeout(async () => {
-        log.debug('padding complete, releasing circuit');
-        isPaddingRef.current = false;
+      paddingTimeoutRef.current = setTimeout(() => {
         paddingTimeoutRef.current = null;
-        await webrtcRef.current.cleanup();
-        relayClientRef.current.releaseCircuit(circuitId);
+        void finishPadding('boundary reached').catch(() => {});
       }, delay);
+
+      // Hung up from the lock screen or a notification action: the app is
+      // already in the background, so no 'change' event will come and the
+      // timer above won't run either.
+      if (paddingActionForAppState(AppState.currentState, teardownAt, Date.now()) === 'end-now') {
+        void finishPadding('app already in background').catch(() => {});
+      }
     } else {
       // Not connected (ringing, offering, etc.) — clean up immediately
       if (circuitId) {

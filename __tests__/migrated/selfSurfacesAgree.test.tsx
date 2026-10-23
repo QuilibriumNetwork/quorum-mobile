@@ -64,6 +64,8 @@ jest.mock('expo-router', () => ({
   usePathname: () => '/messages',
 }));
 
+// The bell's notifications poll (network) isn't what these tests are about.
+jest.mock('@/hooks/useHaatzNotifications', () => ({ useHaatzNotificationsPoll: () => {} }));
 jest.mock('@/hooks/useUnifiedNotifications', () => ({
   useUnifiedNotifications: () => ({ unreadCount: 0 }),
 }));

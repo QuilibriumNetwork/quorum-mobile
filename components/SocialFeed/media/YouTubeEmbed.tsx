@@ -1,7 +1,10 @@
 import type { AppTheme } from '@/theme';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import YoutubePlayer from 'react-native-youtube-iframe';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useMediaOnScreen } from './videoPlayback';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
@@ -20,6 +23,11 @@ interface YouTubeEmbedProps {
  * Inline YouTube player. Wraps `react-native-youtube-iframe`, which handles
  * the WebView origin/IFrame-API complexity that the player needs to render
  * reliably on iOS and Android.
+ *
+ * It shows the video's thumbnail with a play button until tapped, then mounts
+ * the player and starts it. The player is a WebView loading YouTube's iframe
+ * API and player page, megabytes per embed, and every YouTube link in the feed
+ * used to load one as it scrolled into view.
  */
 export function YouTubeEmbed({ videoId, playlistId, theme, width }: YouTubeEmbedProps) {
   // When the caller doesn't supply a width, measure the parent so the
@@ -30,6 +38,17 @@ export function YouTubeEmbed({ videoId, playlistId, theme, width }: YouTubeEmbed
   const w = width ?? measured ?? 0;
   const h = Math.round((w * 9) / 16);
   const [loadError, setLoadError] = useState(false);
+  // The embed the user tapped play on (reset when a recycled cell shows
+  // another), and whether they want it playing: set by the tap, then
+  // following the player's own play/pause.
+  const embedKey = `${videoId ?? ''}|${playlistId ?? ''}`;
+  const [activatedFor, setActivatedFor] = useState<string | null>(null);
+  const activated = activatedFor === embedKey;
+  const [wantsPlay, setWantsPlay] = useState(false);
+  // Pause when the screen goes out of view (tabs and stacked feed screens
+  // stay mounted). The player reports the pause, which clears `wantsPlay`, so
+  // it doesn't resume by itself on return.
+  const onScreen = useMediaOnScreen();
   const containerStyle = useMemo(
     () => [
       staticStyles.container,
@@ -37,6 +56,10 @@ export function YouTubeEmbed({ videoId, playlistId, theme, width }: YouTubeEmbed
     ],
     [w, h, theme.colors.surface3],
   );
+  const handleChangeState = useCallback((state: string) => {
+    if (state === 'playing') setWantsPlay(true);
+    else if (state === 'paused' || state === 'ended') setWantsPlay(false);
+  }, []);
 
   if (!videoId && !playlistId) return null;
 
@@ -69,8 +92,40 @@ export function YouTubeEmbed({ videoId, playlistId, theme, width }: YouTubeEmbed
             YouTube
           </Text>
           <Text style={[staticStyles.fallbackSub, { color: theme.colors.textMuted }]} numberOfLines={2}>
-            This video can't play here. Tap to open on YouTube.
+            This video can’t play here. Tap to open on YouTube.
           </Text>
+        </View>
+      </Pressable>
+    );
+  }
+
+  if (!activated) {
+    // A playlist link with no video has no thumbnail to show; it gets the
+    // plain box and play button.
+    const thumbnailUrl = videoId ? youTubeThumbnailUrl(videoId) : undefined;
+    return (
+      <Pressable
+        style={containerStyle}
+        onPress={() => {
+          setActivatedFor(embedKey);
+          setWantsPlay(true);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Play YouTube video"
+      >
+        {thumbnailUrl ? (
+          <Image
+            source={{ uri: thumbnailUrl }}
+            style={StyleSheet.absoluteFill}
+            // The 4:3 thumbnail letterboxes a 16:9 frame; cover crops the bars.
+            contentFit="cover"
+            recyclingKey={thumbnailUrl}
+          />
+        ) : null}
+        <View style={staticStyles.playOverlay} pointerEvents="none">
+          <View style={staticStyles.playButton}>
+            <IconSymbol name="play.fill" color="#fff" size={28} />
+          </View>
         </View>
       </Pressable>
     );
@@ -86,6 +141,9 @@ export function YouTubeEmbed({ videoId, playlistId, theme, width }: YouTubeEmbed
         videoId={videoId ?? ''}
         playList={playlistId}
         playListStartIndex={0}
+        // Starts once the player is ready: the user already tapped play.
+        play={wantsPlay && onScreen}
+        onChangeState={handleChangeState}
         webViewProps={{
           allowsFullscreenVideo: true,
           allowsInlineMediaPlayback: true,
@@ -109,10 +167,28 @@ export function YouTubeEmbed({ videoId, playlistId, theme, width }: YouTubeEmbed
   );
 }
 
+/** YouTube's 480x360 thumbnail, which every video has. */
+export function youTubeThumbnailUrl(videoId: string): string {
+  return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+}
+
 const staticStyles = createSkinnable(() => StyleSheet.create({
   container: {
     overflow: 'hidden',
     borderRadius: Skin.radius(8),
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playButton: {
+    width: 60,
+    height: 60,
+    borderRadius: Skin.circleOrSquare(30),
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   fallback: {
     borderRadius: Skin.radius(8),

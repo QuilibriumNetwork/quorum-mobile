@@ -291,6 +291,11 @@ export function useWalletBalances(options?: { enabled?: boolean; refetchInterval
     gcTime: 5 * 60 * 1000, // 5 minutes
     refetchInterval: focused ? options?.refetchInterval : false,
     refetchOnWindowFocus: focused,
+    // Per-chain failures already come back as "no balance", so this only
+    // fails when a chain is rate-limited. A retry repeats all 40+ chains to
+    // hit the same limit again (up to three more times by default); the
+    // previous balances stay on screen until the next refresh instead.
+    retry: false,
     // Use cached data as initial data - this persists while refreshing
     initialData: cachedBalances ?? undefined,
     initialDataUpdatedAt: cacheTimestamp,

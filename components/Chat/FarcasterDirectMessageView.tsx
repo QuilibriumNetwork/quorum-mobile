@@ -23,6 +23,7 @@ import {
   useMarkFarcasterConversationRead,
   useAddFarcasterDirectCastReaction,
   useRemoveFarcasterDirectCastReaction,
+  showDirectCastConversation,
 } from '@/hooks/chat';
 import { useAuth } from '@/context/AuthContext';
 import { pickImage, type ProcessedAttachment } from '@/services/media/imageAttachment';
@@ -102,9 +103,17 @@ export function FarcasterDirectMessageView({
   const addReactionMutation = useAddFarcasterDirectCastReaction();
   const removeReactionMutation = useRemoveFarcasterDirectCastReaction();
 
+  // New messages arriving over the socket are read as they arrive while this
+  // chat is on screen (useDirectCastLive).
+  const fcConversationId = conversation.conversationId.startsWith('farcaster:')
+    ? conversation.conversationId.slice('farcaster:'.length)
+    : conversation.conversationId;
+  React.useEffect(() => showDirectCastConversation(fcConversationId), [fcConversationId]);
+
   // Convert DirectCastMessages to DisplayMessages.
-  // The query polls every few seconds and React Query's structural sharing
-  // keeps *unchanged* message objects referentially stable. We exploit that:
+  // The cache changes with every message that arrives, and React Query's
+  // structural sharing keeps *unchanged* message objects referentially
+  // stable. We exploit that:
   //  - reuse the prior DisplayMessage for any source message whose ref is
   //    unchanged (per-message cache), and
   //  - if NONE changed, return the exact same array reference,
@@ -174,11 +183,13 @@ export function FarcasterDirectMessageView({
       : conversation.farcasterFid
         ? [conversation.farcasterFid]
         : [];
+    // A group is addressed by its id, so it needs no participant list.
+    const isGroup = conversation.type === 'group';
 
     const hasText = messageText.trim().length > 0;
     const hasAttachment = !!pendingAttachment;
 
-    if ((!hasText && !hasAttachment) || recipientFids.length === 0) return;
+    if ((!hasText && !hasAttachment) || (!isGroup && recipientFids.length === 0)) return;
 
     try {
       let finalMessage = messageText.trim();
@@ -221,6 +232,7 @@ export function FarcasterDirectMessageView({
 
       sendMutation.mutate({
         conversationId: conversation.conversationId,
+        isGroup,
         recipientFids,
         message: finalMessage,
         inReplyToId: replyTo?.messageId,
@@ -291,10 +303,11 @@ export function FarcasterDirectMessageView({
   // composer's resting footprint.
   return (
     <View style={styles.container}>
-      {/* Security warning banner */}
+      {/* Security warning banner. Names Farcaster, not Hypersnap: these
+          messages are held by farcaster.xyz, so that's who can read them. */}
       <View style={styles.warningBanner}>
         <Text style={styles.warningText}>
-          Hypersnap messages are not end-to-end encrypted
+          Farcaster messages are not end-to-end encrypted
         </Text>
       </View>
 

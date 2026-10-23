@@ -10,8 +10,11 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useFarcasterThread, parseFarcasterUrl, type ThreadCast } from '@/hooks/useFarcasterThread';
 import { useTheme, type AppTheme } from '@/theme';
 import { isScamCast } from '@/services/farcaster/scamFilter';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
+import type { NormalizedCast } from '@quilibrium/quorum-shared';
+import { useCastByFullHash } from '@/services/farcaster/hypersnapCastLookup';
+import { isFullCastHash } from '@/services/farcaster/hypersnapWrites';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { Image } from 'expo-image';
 import * as Skin from '@/theme/skins/geometry';
@@ -101,6 +104,27 @@ interface FarcasterCastCardProps {
   onLongPress?: () => void;
 }
 
+/** A cast from the by-hash lookup, in the shape this card renders (a thread cast's). */
+function cardCast(cast: NormalizedCast) {
+  return {
+    hash: cast.hash,
+    author: {
+      fid: cast.author.fid,
+      username: cast.author.username,
+      displayName: cast.author.displayName,
+      pfp: cast.author.pfpUrl ? { url: cast.author.pfpUrl } : undefined,
+    },
+    text: cast.text,
+    timestamp: cast.timestamp,
+    embeds: {
+      images: cast.embeds.filter((e) => e.image?.url).map((e) => ({ url: e.image!.url! })),
+    },
+    replies: { count: cast.reactions.repliesCount },
+    recasts: { count: cast.reactions.recastsCount },
+    reactions: { count: cast.reactions.likesCount },
+  };
+}
+
 export function FarcasterCastCard({ url, cast: providedCast, channelKey, fullWidth = false, onPress, onLongPress }: FarcasterCastCardProps) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
@@ -108,15 +132,22 @@ export function FarcasterCastCard({ url, cast: providedCast, channelKey, fullWid
   // Parse the URL to get username and cast hash (only when a URL was provided)
   const parsed = url ? parseFarcasterCastUrl(url) : null;
 
-  // Fetch the cast data only if we don't already have one
-  const { mainCast, isLoading, error } = useFarcasterThread({
+  // Fetch the cast data only if we don't already have one. A link with the
+  // full hash is one small lookup; only a short-hash link needs the thread
+  // fetch, which resolves the prefix but downloads the whole conversation.
+  const hasFullHash = isFullCastHash(parsed?.castHash);
+  const byHash = useCastByFullHash(parsed?.castHash, { enabled: !!parsed && !providedCast && hasFullHash });
+  const thread = useFarcasterThread({
     username: parsed?.username ?? '',
     castHashPrefix: parsed?.castHash ?? '',
-    enabled: !!parsed && !providedCast,
+    enabled: !!parsed && !providedCast && !hasFullHash,
   });
+  const fetched = useMemo(() => (byHash.data ? cardCast(byHash.data) : undefined), [byHash.data]);
+  const isLoading = hasFullHash ? byHash.isLoading : thread.isLoading;
+  const error = hasFullHash ? byHash.error : thread.error;
 
   // Use the supplied cast first, fall back to fetched
-  const cast = providedCast ?? mainCast;
+  const cast = providedCast ?? (hasFullHash ? fetched : thread.mainCast);
 
   // Suppress wallet-drainer typo-squat casts (hyrpia.xyz). See
   // services/farcaster/scamFilter.ts. This is the chat-stream embed

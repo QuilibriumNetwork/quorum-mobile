@@ -10,13 +10,15 @@
  *   - React Native's `fetch` doesn't enforce CORS so we get the raw
  *     bytes directly.
  *   - The metadata sits in the <head>; the first few KB of any page is
- *     enough — we never parse the body.
+ *     enough — only the first MAX_HTML_BYTES are downloaded.
  *
- * Cached aggressively (24h gcTime) since page metadata changes rarely
- * and a miss for a 404/empty page is itself a useful cache.
+ * Cached aggressively, a day on disk (see `probeStore`), since page metadata
+ * changes rarely and a miss for a 404/empty page is itself a useful cache.
  */
 
 import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
+import { fetchCapped, isTransientStatus, type CappedResponse } from '@/services/farcaster/cappedFetch';
+import { createPersistedTtlCache } from '@/services/offline/persistedTtlCache';
 
 export interface ParsedFrameMeta {
   name?: string;
@@ -105,6 +107,7 @@ function parseMiniappMeta(head: string): ParsedFrameMeta | undefined {
   } catch {
     return undefined;
   }
+  if (!json || typeof json !== 'object') return undefined;
   // The v1 spec wraps `button.action.url` for the home/launch target;
   // v2 spec uses `homeUrl` directly. Accept either so we don't miss the
   // launch action.
@@ -132,61 +135,83 @@ export interface LinkProbe {
   metadata: UrlMetadata | null;
 }
 
-/** Most links probed recently. Bounded, oldest first out. */
-const PROBE_CACHE_MAX = 300;
-const probeCache = new Map<string, LinkProbe>();
+const NOT_A_PAGE: LinkProbe = { isSnap: false, metadata: null };
+
+/**
+ * Finished probes, kept a day across launches so a feed that paints from its
+ * cache doesn't download every link in it again. A page's tags and whether a
+ * link is a snap rarely change within a day. Bounded, oldest first out.
+ */
+const probeStore = createPersistedTtlCache<LinkProbe>({
+  prefix: 'link-probe:v1:',
+  ttlMs: 24 * 60 * 60 * 1000,
+  maxEntries: 300,
+});
+
+/** Probes that failed for reasons of the moment (offline, timed out, a 5xx),
+ *  answered for this session only, so being offline at launch isn't
+ *  remembered for a day. Bounded, oldest first out. */
+const FAILED_PROBES_MAX = 300;
+const failedProbes = new Map<string, LinkProbe>();
 const probesInFlight = new Map<string, Promise<LinkProbe>>();
 
-function rememberProbe(url: string, probe: LinkProbe): void {
-  probeCache.delete(url);
-  probeCache.set(url, probe);
-  if (probeCache.size > PROBE_CACHE_MAX) {
-    const oldest = probeCache.keys().next().value;
-    if (oldest !== undefined) probeCache.delete(oldest);
+function rememberFailedProbe(url: string, probe: LinkProbe): void {
+  failedProbes.delete(url);
+  failedProbes.set(url, probe);
+  if (failedProbes.size > FAILED_PROBES_MAX) {
+    const oldest = failedProbes.keys().next().value;
+    if (oldest !== undefined) failedProbes.delete(oldest);
   }
 }
 
-/** A finished probe for this URL, if one is cached. */
+/** A finished probe for this URL, if one is cached (in memory or on disk). */
 export function getCachedLinkProbe(url: string): LinkProbe | undefined {
-  return probeCache.get(url);
+  return probeStore.get(url) ?? failedProbes.get(url);
 }
 
 /**
  * Fetch a link once and answer both questions the feed asks of it: is it a
  * snap, and what is its OpenGraph / inline mini-app metadata. Snap detection
- * and the link preview used to GET the same page separately, and React
- * Native's `fetch` downloads the whole body either way. The request asks for
- * a snap first and a page otherwise, the header the Farcaster client sends.
- * Concurrent callers share one request; results are cached, failures too.
+ * and the link preview used to GET the same page separately. The request asks
+ * for a snap first and a page otherwise, the header the Farcaster client
+ * sends. Concurrent callers share one request; results are cached, failures
+ * too.
  */
 export function probeLink(url: string): Promise<LinkProbe> {
-  const cached = probeCache.get(url);
+  const cached = getCachedLinkProbe(url);
   if (cached) return Promise.resolve(cached);
   const inFlight = probesInFlight.get(url);
   if (inFlight) return inFlight;
-  const request = fetchLinkProbe(url).then((probe) => {
-    rememberProbe(url, probe);
-    probesInFlight.delete(url);
-    return probe;
-  });
+  const request = fetchLinkProbe(url)
+    .catch((): ProbeOutcome => ({ probe: NOT_A_PAGE, lasting: false }))
+    .then(({ probe, lasting }) => {
+      if (lasting) probeStore.set(url, probe);
+      else rememberFailedProbe(url, probe);
+      probesInFlight.delete(url);
+      return probe;
+    });
   probesInFlight.set(url, request);
   return request;
 }
 
-async function fetchLinkProbe(url: string): Promise<LinkProbe> {
+/** A probe, and whether it says something about the link (keep it a day)
+ *  or only about the moment it was made (keep it this session). */
+interface ProbeOutcome {
+  probe: LinkProbe;
+  lasting: boolean;
+}
+
+async function fetchLinkProbe(url: string): Promise<ProbeOutcome> {
   let domain: string | undefined;
   try {
     domain = new URL(url).hostname;
   } catch {
-    return { isSnap: false, metadata: null };
+    return { probe: NOT_A_PAGE, lasting: false };
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  let res: Response;
+  let res: CappedResponse;
   try {
-    res = await fetch(url, {
-      method: 'GET',
+    res = await fetchCapped(url, {
       // A real browser UA — many CDNs short-circuit bot UAs with empty
       // pages, which kills the OG enrichment we're trying to extract.
       headers: {
@@ -194,43 +219,23 @@ async function fetchLinkProbe(url: string): Promise<LinkProbe> {
           'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
         accept: `${SNAP_MEDIA_TYPE},text/html,application/xhtml+xml,*/*`,
       },
-      signal: controller.signal,
+      maxBytes: MAX_HTML_BYTES,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      // Decided from the headers alone: a snap is known by its content type,
+      // and anything but a page (a video, a PDF) has no <head> to read, so
+      // none of its body is downloaded.
+      wantsBody: ({ ok, contentType }) =>
+        ok && !contentType.includes(SNAP_MEDIA_TYPE) && (!contentType || contentType.includes('html')),
     });
   } catch {
-    clearTimeout(timer);
-    return { isSnap: false, metadata: null };
+    return { probe: NOT_A_PAGE, lasting: false };
   }
-  clearTimeout(timer);
 
-  const contentType = res.headers.get('content-type') ?? '';
-  if (contentType.includes(SNAP_MEDIA_TYPE)) return { isSnap: true, metadata: null };
-  if (!res.ok) return { isSnap: false, metadata: null };
-  if (contentType && !contentType.includes('html')) return { isSnap: false, metadata: null };
-
-  // Stream the response only up to MAX_HTML_BYTES — saves time + memory
-  // on long pages. RN's `Response.text()` reads the whole body, so we
-  // read manually via the reader when possible. Fall back to text() on
-  // platforms where ReadableStream isn't exposed.
-  let html = '';
-  try {
-    const reader = (res.body as any)?.getReader?.();
-    if (reader) {
-      const decoder = new TextDecoder();
-      let bytes = 0;
-      while (bytes < MAX_HTML_BYTES) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        html += decoder.decode(value, { stream: true });
-        bytes += value.length;
-      }
-      try { reader.cancel(); } catch { /* ignore */ }
-    } else {
-      const full = await res.text();
-      html = full.slice(0, MAX_HTML_BYTES);
-    }
-  } catch {
-    return { isSnap: false, metadata: null };
-  }
+  if (res.contentType.includes(SNAP_MEDIA_TYPE)) return { probe: { isSnap: true, metadata: null }, lasting: true };
+  if (!res.ok) return { probe: NOT_A_PAGE, lasting: !isTransientStatus(res.status) };
+  if (res.contentType && !res.contentType.includes('html')) return { probe: NOT_A_PAGE, lasting: true };
+  if (res.bodyFailed && !res.text) return { probe: NOT_A_PAGE, lasting: false };
+  const html = res.text;
 
   // Restrict pattern matching to the <head> when present — bodies often
   // contain comment-form og:* tags that don't apply to the page itself.
@@ -249,16 +254,21 @@ async function fetchLinkProbe(url: string): Promise<LinkProbe> {
   const miniapp = parseMiniappMeta(head);
 
   return {
-    isSnap: false,
-    metadata: {
-      url,
-      domain,
-      title,
-      description,
-      image,
-      siteName,
-      miniapp,
+    probe: {
+      isSnap: false,
+      metadata: {
+        url,
+        domain,
+        title,
+        description,
+        image,
+        siteName,
+        miniapp,
+      },
     },
+    // A page cut short by an error or the timeout may have lost tags past
+    // the cut: good enough for now, not worth keeping.
+    lasting: !res.bodyFailed,
   };
 }
 
@@ -266,9 +276,11 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null>
   return (await probeLink(url)).metadata;
 }
 
-/** Test reset. */
-export function __resetLinkProbes(): void {
-  probeCache.clear();
+/** Test reset. `keepPersisted` forgets only what a relaunch forgets. */
+export function __resetLinkProbes(options: { keepPersisted?: boolean } = {}): void {
+  if (options.keepPersisted) probeStore.forgetInMemory();
+  else probeStore.clear();
+  failedProbes.clear();
   probesInFlight.clear();
 }
 

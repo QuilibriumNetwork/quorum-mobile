@@ -72,6 +72,18 @@ export interface PostQuoteArgs {
   channelKey?: string;
 }
 
+const normalizeHash = (hash: string) => hash.toLowerCase().replace(/^0x/, '');
+
+/** Whether a cached thread (its casts, flat) holds any of `hashes`. */
+function threadHolds(data: unknown, hashes: Set<string>): boolean {
+  if (!Array.isArray(data)) return false;
+  return data.some(
+    (cast: { hash?: string; threadHash?: string }) =>
+      (cast?.hash && hashes.has(normalizeHash(cast.hash))) ||
+      (cast?.threadHash && hashes.has(normalizeHash(cast.threadHash))),
+  );
+}
+
 /**
  * The actions, without subscribing the caller to the store: a like elsewhere
  * doesn't re-render whoever calls this. Cells read the state they show through
@@ -85,15 +97,23 @@ export function useFeedOptimisticActions() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
-  // Once a pending cast is on the network, the open thread and the feed must
+  // Once a pending cast is on the network, the thread it's in and the feed must
   // pick it up so the real server copy appears and the stub reconciles away. The
-  // cast can take a moment to index server-side, so this checks twice. A
-  // thread is one request (`invalidateQueries` only refetches mounted ones).
-  // The feed only has its newest casts pulled into the top: invalidating it
-  // refetched every page it held, four times over, about 24 requests a post.
-  const refetchAfterSubmit = useCallback(() => {
+  // cast can take a moment to index server-side, so this checks twice. Only the
+  // threads holding one of `castHashes` (a reply's parent, a deleted cast) are
+  // refetched: every thread was, and stacked thread screens and chat cast cards
+  // stay mounted, each a whole thread download. The feed only has its newest
+  // casts pulled into the top: invalidating it refetched every page it held,
+  // four times over, about 24 requests a post.
+  const refetchAfterSubmit = useCallback((castHashes: (string | undefined)[] = []) => {
+    const changed = new Set(castHashes.filter((h): h is string => !!h).map(normalizeHash));
     const kick = () => {
-      void queryClient.invalidateQueries({ queryKey: ['farcaster-thread'] });
+      if (changed.size > 0) {
+        void queryClient.invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === 'farcaster-thread' && threadHolds(query.state.data, changed),
+        });
+      }
       if (fid) {
         prependNewestToFeed(queryClient, fid).catch((e) => {
           logger.warn('[feedOptimistic] feed refresh failed:', e instanceof Error ? e.message : e);
@@ -184,7 +204,7 @@ export function useFeedOptimisticActions() {
         await removeOwnCast({ fid, castHash });
         // Reflect the removal once the server catches up (and drop the stale
         // copy from any cached feed/thread).
-        refetchAfterSubmit();
+        refetchAfterSubmit([castHash]);
       } catch (e) {
         store.setDeleted(castHash, false); // restore
         logger.warn('[feedOptimistic] delete failed:', e instanceof Error ? e.message : e);
@@ -221,6 +241,8 @@ export function useFeedOptimisticActions() {
     if (draining || !fid) return;
     draining = true;
     let anyLanded = false;
+    // The threads a landed reply belongs in.
+    const landedThreads: (string | undefined)[] = [];
     try {
       // Snapshot the ids to attempt this pass; the store is the source of
       // truth so we re-read each item before submitting. Only un-sent
@@ -241,6 +263,7 @@ export function useFeedOptimisticActions() {
             if (typeof earlier === 'object') {
               store.updatePending(p.localId, { status: 'sent', realHash: earlier.landed, priorHashes: undefined });
               anyLanded = true;
+              landedThreads.push(p.parentHash, p.threadHash);
               continue;
             }
             if (earlier === 'unknown') throw new Error("Couldn't check whether it already posted");
@@ -272,7 +295,7 @@ export function useFeedOptimisticActions() {
       draining = false;
     }
     // A landed cast won't show until the view it lives in refetches.
-    if (anyLanded) refetchAfterSubmit();
+    if (anyLanded) refetchAfterSubmit(landedThreads);
   }, [fid, submitOne, refetchAfterSubmit]);
 
   // Look up each accepted cast until one of its copies shows up ('sent': the
@@ -281,6 +304,7 @@ export function useFeedOptimisticActions() {
   // lookup that fails proves nothing either way, so it keeps waiting.
   const confirmPending = useCallback(async () => {
     let anyLanded = false;
+    const landedThreads: (string | undefined)[] = [];
     const due = store.getPending().filter((p) => p.status === 'confirming' && p.realHash);
     for (const p of due) {
       const result = await findLandedCopy(p.author.fid, [p.realHash as string, ...(p.priorHashes ?? [])]);
@@ -289,11 +313,12 @@ export function useFeedOptimisticActions() {
       if (typeof result === 'object') {
         store.updatePending(p.localId, { status: 'sent', realHash: result.landed, priorHashes: undefined });
         anyLanded = true;
+        landedThreads.push(p.parentHash, p.threadHash);
       } else if (result === 'absent' && Date.now() - (p.acceptedAt ?? p.timestamp) >= CONFIRM_TIMEOUT_MS) {
         store.updatePending(p.localId, { status: 'failed', error: "Didn't reach the network" });
       }
     }
-    if (anyLanded) refetchAfterSubmit();
+    if (anyLanded) refetchAfterSubmit(landedThreads);
   }, [refetchAfterSubmit]);
 
   useEffect(() => {

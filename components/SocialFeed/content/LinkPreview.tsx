@@ -2,7 +2,8 @@ import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
-import { Image } from 'expo-image';
+import { SizedImage } from '@/components/ui/SizedImage';
+import { SCREEN_WIDTH } from '../utils';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
 
@@ -45,12 +46,11 @@ export function LinkPreview({
         onPress={handlePress}
         activeOpacity={0.8}
       >
-        <Image
-          source={{ uri: image }}
+        <SizedImage
+          uri={image}
+          displayWidth={SCREEN_WIDTH}
           style={styles.imageLarge}
           contentFit="cover"
-          // Reset animated-GIF source on recycled cell reuse — see AutoHeightImage.
-          recyclingKey={image}
         />
         <View style={staticStyles.padding12}>
           <Text
@@ -84,12 +84,11 @@ export function LinkPreview({
       activeOpacity={0.8}
     >
       {image && (
-        <Image
-          source={{ uri: image }}
+        <SizedImage
+          uri={image}
+          displayWidth={100}
           style={styles.imageSmall}
           contentFit="cover"
-          // Reset animated-GIF source on recycled cell reuse — see AutoHeightImage.
-          recyclingKey={image}
         />
       )}
       <View style={staticStyles.contentSmall}>

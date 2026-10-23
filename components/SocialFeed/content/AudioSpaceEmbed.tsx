@@ -17,6 +17,7 @@ import { useAudioSpace } from '@/context/AudioSpaceContext';
 import { useAuth } from '@/context/AuthContext';
 import { fetchAudioRoom, type AudioRoom } from '@/services/spaces/spacesClient';
 import { useFarcasterUserPersistent } from '@/hooks/useFarcasterUserPersistent';
+import { useScreenFocused } from '@/hooks/useScreenFocused';
 import { useTheme } from '@/theme';
 import * as Skin from '@/theme/skins/geometry';
 
@@ -36,6 +37,9 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
   const { theme } = useTheme();
   const { farcasterAuthToken } = useAuth();
   const { join } = useAudioSpace();
+  // Feed, thread and profile cells stay mounted behind other tabs, so the
+  // poll below would otherwise keep running for every live room in them.
+  const focused = useScreenFocused();
 
   const { data: room, isLoading } = useQuery<AudioRoom | null>({
     queryKey: ['audio-room', spaceId] as const,
@@ -44,7 +48,7 @@ export function AudioSpaceEmbed({ spaceId, castHash, onFallbackOpen }: AudioSpac
     // Rooms tick — listener counts move every few seconds — but we
     // don't want to hammer the API from a feed cell either.
     staleTime: 15_000,
-    refetchInterval: (q) => (q.state.data?.state === 'live' ? 20_000 : false),
+    refetchInterval: (q) => (focused && q.state.data?.state === 'live' ? 20_000 : false),
   });
 
   // Host comes denormalized on the room snapshot. Fall back to a

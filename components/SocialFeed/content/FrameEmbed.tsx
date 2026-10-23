@@ -2,7 +2,7 @@ import type { AppTheme } from '@/theme';
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
-import { Image } from 'expo-image';
+import { SizedImage } from '@/components/ui/SizedImage';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { SCREEN_WIDTH } from '../utils';
 import * as Skin from '@/theme/skins/geometry';
@@ -64,12 +64,11 @@ export function FrameEmbed({
       activeOpacity={0.9}
       style={staticStyles.container}
     >
-      <Image
-        source={{ uri: imageUrl }}
+      <SizedImage
+        uri={imageUrl}
+        displayWidth={SCREEN_WIDTH}
         style={styles.image}
         contentFit="cover"
-        // Reset animated-GIF source on recycled cell reuse — see AutoHeightImage.
-        recyclingKey={imageUrl}
       />
       <View style={styles.buttonRow}>
         <Text style={styles.buttonText}>

@@ -2,30 +2,31 @@
  * BackgroundMessageService - Checks for new messages in background
  *
  * This service is designed to run in background fetch tasks.
- * It checks for new Farcaster direct casts and Quorum messages
- * and shows local notifications for any new messages found.
+ * It checks for new Farcaster direct casts and shows local notifications
+ * for any new ones found.
+ *
+ * Quorum messages are NOT checked here. This used to open a socket, `listen`
+ * on every inbox the device owns and wait 5 s, on every push and every 15
+ * minutes. The relay answers a listen by re-sending every envelope still
+ * pending on those inboxes, and nothing here acked or deleted them, so each
+ * wake-up downloaded the whole backlog again. It also never raised anything:
+ * it counted frames with `type === 'message'` and an `encrypted_content`
+ * field, and the relay sends neither — an inbox frame is
+ * `{ encryptedContent, inboxAddress, timestamp }` with no `type` at all
+ * (quorum-api server/client.go, `EncryptedMessage`). Quorum pushes already
+ * reach the user as the push itself; full message handling happens when the
+ * app opens.
  *
  * Limitations:
  * - Background execution time is limited (~30 seconds on iOS)
- * - We don't process/decrypt messages fully, just check for presence
- * - Full message handling happens when app opens
  */
 
-import { getDeviceKeyset, getFarcasterAuthToken } from '../onboarding/secureStorage';
-import { getInboxAddress } from '../onboarding/secureStorage';
-import { getAllSpaceInboxAddresses } from '../config/spaceStorage';
-import { encryptionStateStorage } from '../crypto/encryption-state-storage';
+import { getDeviceKeyset } from '../onboarding/secureStorage';
+import { getDirectCastToken } from '../farcaster/directCastAuth';
 import { showMessageNotification } from './NotificationService';
 import { getDirectCastConversations } from '../farcasterClient';
 import { planFarcasterPings, rewoundWatermark } from './farcasterPingPlan';
 import { mmkvStorage } from '../offline/storage';
-
-import { getApiConfig } from '../api/config';
-
-const API_CONFIG = getApiConfig();
-
-// Timeout for background WebSocket connection (keep short for background execution limits)
-const BACKGROUND_WS_TIMEOUT = 15000; // 15 seconds
 
 export interface BackgroundCheckResult {
   newMessageCount: number;
@@ -37,43 +38,22 @@ export interface BackgroundCheckResult {
 const LAST_FC_MESSAGE_KEY = 'background.lastFarcasterMessageTimestamp';
 
 /**
- * Check for new messages in background
- * Checks both Farcaster direct casts and Quorum messages
+ * Check for new messages in background: Farcaster direct casts only. See the
+ * header for why Quorum inboxes are not polled from here.
  */
 export async function checkForNewMessages(): Promise<BackgroundCheckResult> {
   setLastBackgroundCheckTime(Date.now());
 
-  let totalNewMessages = 0;
-  let hasError = false;
-  let errorMessage: string | undefined;
-
   try {
-    // 1. Check Farcaster direct casts first (most common use case)
     const farcasterResult = await checkFarcasterDirectCasts();
-    totalNewMessages += farcasterResult.newMessageCount;
-
-    // 2. Check Quorum messages if authenticated
-    const deviceKeyset = await getDeviceKeyset();
-    if (deviceKeyset) {
-      const inboxAddresses = await collectInboxAddresses();
-      if (inboxAddresses.length > 0) {
-        const quorumResult = await checkInboxesViaWebSocket(inboxAddresses);
-        totalNewMessages += quorumResult.newMessageCount;
-        if (!quorumResult.success) {
-          hasError = true;
-          errorMessage = quorumResult.error;
-        }
-      }
-    }
-
     return {
-      newMessageCount: totalNewMessages,
-      success: !hasError,
-      error: errorMessage,
+      newMessageCount: farcasterResult.newMessageCount,
+      success: farcasterResult.success,
+      error: farcasterResult.error,
     };
   } catch (error) {
     return {
-      newMessageCount: totalNewMessages,
+      newMessageCount: 0,
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
@@ -89,10 +69,10 @@ export interface FarcasterCheckResult extends BackgroundCheckResult {
    * did I just get?" is otherwise a guess.
    */
   digest: boolean;
-  /** False when there is no stored Farcaster token, so nothing was fetched. */
+  /** False when there is no direct-cast token (none could be minted), so nothing was fetched. */
   hasToken: boolean;
   /** Conversations the API returned. 0 means the fetch, not the logic, is why
-   *  nothing happened. Note the fetch is `category: 'default'` only — a
+   *  nothing happened. Note the fetch is the inbox (`category: 'default'`) only — a
    *  message from someone you have never replied to sits in `request` and is
    *  invisible here. */
   conversationsFetched: number;
@@ -142,7 +122,8 @@ export function rewindFarcasterCheckWatermark(byMs: number): void {
  */
 export async function checkFarcasterDirectCasts(): Promise<FarcasterCheckResult> {
   try {
-    const token = await getFarcasterAuthToken();
+    // The direct-cast token, minted here if there's none yet.
+    const token = await getDirectCastToken();
     if (!token) {
       return {
         newMessageCount: 0, success: true, digest: false,
@@ -155,11 +136,7 @@ export async function checkFarcasterDirectCasts(): Promise<FarcasterCheckResult>
     const lastSeenTimestamp = lastSeenStr ? parseInt(lastSeenStr, 10) : 0;
 
     // Fetch recent conversations
-    const { conversations } = await getDirectCastConversations({
-      token,
-      category: 'default',
-      limit: 20,
-    });
+    const { conversations } = await getDirectCastConversations({ limit: 20 });
 
     const plan = planFarcasterPings(conversations, lastSeenTimestamp);
 
@@ -223,132 +200,6 @@ export async function checkFarcasterDirectCasts(): Promise<FarcasterCheckResult>
       error: error instanceof Error ? error.message : 'Farcaster check failed',
     };
   }
-}
-
-/**
- * Collect all inbox addresses the user should receive messages on
- */
-async function collectInboxAddresses(): Promise<string[]> {
-  const addresses: string[] = [];
-
-  // 1. User's device inbox
-  const deviceInboxAddress = await getInboxAddress();
-  if (deviceInboxAddress) {
-    addresses.push(deviceInboxAddress);
-  }
-
-  // 2. Space inbox addresses
-  const spaceInboxAddresses = getAllSpaceInboxAddresses();
-  addresses.push(...spaceInboxAddresses);
-
-  // 3. Conversation inbox addresses (created when we initiate conversations)
-  const conversationInboxAddresses = encryptionStateStorage.getAllConversationInboxAddresses();
-  addresses.push(...conversationInboxAddresses);
-
-  // Deduplicate
-  return [...new Set(addresses)];
-}
-
-/**
- * Create a brief WebSocket connection to check for pending messages
- * Returns quickly after receiving any messages or timeout
- */
-async function checkInboxesViaWebSocket(
-  inboxAddresses: string[]
-): Promise<BackgroundCheckResult> {
-  return new Promise((resolve) => {
-    let messageCount = 0;
-    let resolved = false;
-    let ws: WebSocket | null = null;
-
-    const cleanup = () => {
-      if (ws) {
-        try {
-          ws.close();
-        } catch {
-          // Ignore close errors
-        }
-        ws = null;
-      }
-    };
-
-    const finalize = (success: boolean, error?: string) => {
-      if (resolved) return;
-      resolved = true;
-      cleanup();
-      resolve({ newMessageCount: messageCount, success, error });
-    };
-
-    // Set timeout for background execution limits
-    const timeoutId = setTimeout(() => {
-      finalize(true); // Timeout is success - we tried
-    }, BACKGROUND_WS_TIMEOUT);
-
-    try {
-      ws = new WebSocket(API_CONFIG.wsUrl);
-
-      ws.onopen = () => {
-        // Send listen message
-        const listenMessage = JSON.stringify({
-          type: 'listen',
-          inbox_addresses: inboxAddresses,
-        });
-
-        ws?.send(listenMessage);
-
-        // Give some time to receive queued messages, then close
-        // Messages are delivered immediately on subscribe if pending
-        setTimeout(() => {
-          if (!resolved) {
-            finalize(true);
-          }
-        }, 5000); // 5 seconds to receive pending messages
-      };
-
-      ws.onmessage = async (event) => {
-        try {
-          const data = JSON.parse(event.data as string);
-
-          // Check if this is an encrypted message
-          if (data.type === 'message' && data.encrypted_content) {
-            messageCount++;
-
-            // Show a notification for the new message
-            // Note: In background, we can't fully decrypt - just show generic notification
-            if (messageCount === 1) {
-              // Only show one notification for batch
-              await showMessageNotification({
-                title: 'New Message',
-                body: 'You have new messages waiting',
-                data: {
-                  type: 'message',
-                  messageId: `bg-${Date.now()}`,
-                  origin: 'quorum',
-                },
-              });
-            }
-          }
-        } catch {
-          // Malformed WebSocket message — skip and continue listening
-        }
-      };
-
-      ws.onerror = (error) => {
-        clearTimeout(timeoutId);
-        finalize(false, 'WebSocket error');
-      };
-
-      ws.onclose = () => {
-        clearTimeout(timeoutId);
-        if (!resolved) {
-          finalize(true);
-        }
-      };
-    } catch (error) {
-      clearTimeout(timeoutId);
-      finalize(false, error instanceof Error ? error.message : 'Connection failed');
-    }
-  });
 }
 
 /**

@@ -4,6 +4,7 @@
  */
 
 import type { AppTheme } from '@/theme';
+import { CachedAvatar } from '@/components/ui/CachedAvatar';
 import { DefaultAvatar } from '@/components/ui/DefaultAvatar';
 import { FarcasterLogoIcon } from '@/components/ui/FarcasterLogoIcon';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -13,7 +14,7 @@ import { formatRowTime } from '@/utils/dateFormat';
 import { useResolvedName } from '@/identity';
 import { qnsLookupAddresses, MAX_QNS_LOOKUPS } from '@/hooks/chat/useConversationsWithQnsNames';
 import React, { useCallback, useMemo } from 'react';
-import { ActivityIndicator, Alert, Image, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { TouchableOpacity } from '@/components/ui/SkinTouchable';
 import { SegmentedPills } from '@/components/ui/SegmentedPills';
 import { FlashList } from '@shopify/flash-list';
@@ -147,7 +148,7 @@ const DMConversationItem = React.memo(function DMConversationItem({
     >
       <View style={styles.avatarContainer}>
         {hasValidIcon ? (
-          <Image source={{ uri: item.icon }} style={styles.avatar} />
+          <CachedAvatar source={{ uri: item.icon }} style={styles.avatar} fallbackName={label} />
         ) : (
           <DefaultAvatar resolvedName={label} address={item.address || ''} size={48} />
         )}

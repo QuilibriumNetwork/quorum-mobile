@@ -6,7 +6,6 @@ import { normalizedCastToLegacy } from '@/services/farcaster/hypersnapToLegacySh
 import { rememberCastAuthor } from '@/services/farcaster/hypersnapWrites';
 import { useAuth } from '@/context/AuthContext';
 import { useFollowingFids } from '@/hooks/useFollowingFids';
-import { useFarcasterUsersPrefetch } from '@/hooks/useFarcasterUsersPrefetch';
 import { prefetchReplyAncestors, type AncestorSeed } from '@/hooks/useFeedThreadAncestors';
 import { getCachedFeed, setCachedFeed } from '@/services/offline/farcasterFeedCache';
 import {
@@ -317,20 +316,10 @@ export function useFarcasterFeed({ enabled = true }: UseFarcasterFeedOptions = {
     [query.data],
   );
 
-  // Bulk-resolve parent authors for replies whose parent username is
-  // missing (hypersnap only returns the parent FID) — one bulk lookup per
-  // page instead of N per-cast fetches when ParentContextLine renders.
-  const parentAuthorFids = useMemo(() => {
-    const fids: number[] = [];
-    for (const item of allItems) {
-      const parent = item.cast?.parentAuthor;
-      if (item.cast?.parentHash && parent?.fid && !parent.username) {
-        fids.push(parent.fid);
-      }
-    }
-    return fids;
-  }, [allItems]);
-  useFarcasterUsersPrefetch(parentAuthorFids);
+  // Parent authors are bulk-resolved by the feed screen, for the posts it
+  // shows (SocialFeedModal's `useFarcasterUsersPrefetch`). A second prefetch
+  // here kept its own record of what it had asked for, so the same lookups
+  // went out twice per page.
 
   // Main-feed reply filtering, in two layers (a reply is any cast with a
   // parentHash):

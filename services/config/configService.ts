@@ -12,6 +12,7 @@ import { gcm } from '@noble/ciphers/aes.js';
 // startup in index.js by react-native-get-random-values.
 import { randomBytes } from '@noble/ciphers/utils.js';
 import { createMMKV, type MMKV } from 'react-native-mmkv';
+import { AppState } from 'react-native';
 import { getQuorumClient } from '../api/quorumClient';
 import { mmkvStorage } from '../offline/storage';
 import { getPrivateKey, getPublicKey } from '../onboarding/secureStorage';
@@ -289,7 +290,15 @@ export function getLocalUserConfig(address: string): UserConfig | null {
 export function saveLocalUserConfig(config: UserConfig): void {
   const key = `${CONFIG_KEY_PREFIX}${config.address}`;
   configStorage.set(key, JSON.stringify(config));
+  localConfigRevisions.set(config.address, (localConfigRevisions.get(config.address) ?? 0) + 1);
 }
+
+/**
+ * Counts local config writes per address, so a coalesced publish can tell
+ * whether the stored config changed while its upload was in flight. In memory
+ * only: it is compared within one upload, never across launches.
+ */
+const localConfigRevisions = new Map<string, number>();
 
 // AES-256 key = SHA-512(private_key)[0:32]
 const derivedKeyCache = new Map<string, Uint8Array>();
@@ -395,9 +404,70 @@ async function verifyConfigSignature(
   }
 }
 
-// Returns remote config if newer than local, otherwise local config.
-export async function getConfig(address: string): Promise<UserConfig> {
-  const client = getQuorumClient();
+// --- Config downloads ---
+//
+// The config blob is the whole account: every Space's encryption state rides
+// in it, so it runs to megabytes, and there is no way to ask the server only
+// for its timestamp. It was downloaded in full by every caller — on launch, on
+// every DM open (useReceiptSettings → useUserConfig), twice when the profile
+// screen opened (two useUserConfig hooks mounting together) — mostly to find
+// that nothing had changed.
+
+type RemoteConfig = { user_config: string; timestamp: number; signature: string } | null;
+
+/**
+ * How long a non-critical refresh may reuse the last download instead of
+ * fetching again. Only for reads that merely refresh what is on screen; a read
+ * that feeds a save must not pass a max age (see getConfig).
+ */
+export const CONFIG_REFRESH_MAX_AGE_MS = 5 * 60 * 1000;
+
+const remoteConfigInFlight = new Map<string, Promise<RemoteConfig>>();
+const lastRemoteConfig = new Map<string, { fetchedAt: number; value: RemoteConfig }>();
+
+/**
+ * The server's copy of the config. Calls that overlap share one request.
+ * With `maxAgeMs`, a download completed within that window is reused; without
+ * it the caller always gets a request that was still running when it asked.
+ * Failures are not remembered.
+ */
+function fetchRemoteConfig(address: string, maxAgeMs: number): Promise<RemoteConfig> {
+  if (maxAgeMs > 0) {
+    const last = lastRemoteConfig.get(address);
+    if (last && Date.now() - last.fetchedAt <= maxAgeMs) return Promise.resolve(last.value);
+  }
+  const inFlight = remoteConfigInFlight.get(address);
+  if (inFlight) return inFlight;
+
+  const request = (async (): Promise<RemoteConfig> => {
+    const value = (await getQuorumClient().getUserSettings(address)) ?? null;
+    lastRemoteConfig.set(address, { fetchedAt: Date.now(), value });
+    return value;
+  })();
+  remoteConfigInFlight.set(address, request);
+  const clear = () => {
+    if (remoteConfigInFlight.get(address) === request) remoteConfigInFlight.delete(address);
+  };
+  request.then(clear, clear);
+  return request;
+}
+
+/**
+ * Returns remote config if newer than local, otherwise local config.
+ *
+ * `maxAgeMs` lets a non-critical refresh reuse a download made within that
+ * window (CONFIG_REFRESH_MAX_AGE_MS). Leave it out when the result is merged
+ * into a save, so the save is built on the server's current state.
+ */
+export async function getConfig(
+  address: string,
+  options: { maxAgeMs?: number } = {}
+): Promise<UserConfig> {
+  // Publish any coalesced change first. Until it is uploaded the local copy
+  // holds an edit the server lacks under the old timestamp, and adopting a
+  // newer remote below would silently drop it.
+  await settleConfigPublish(address);
+
   const privateKey = await getPrivateKey();
   const publicKey = await getPublicKey();
 
@@ -408,7 +478,7 @@ export async function getConfig(address: string): Promise<UserConfig> {
   // Try to fetch remote config
   let remoteConfig: { user_config: string; timestamp: number; signature: string } | undefined;
   try {
-    remoteConfig = (await client.getUserSettings(address)) ?? undefined;
+    remoteConfig = (await fetchRemoteConfig(address, options.maxAgeMs ?? 0)) ?? undefined;
   } catch {
     // Network failure — fall through to local config
   }
@@ -663,8 +733,20 @@ async function promoteSpaceSigningKeys(userAddress: string): Promise<void> {
   }
 }
 
-// Syncs to server if config.allowSync is true.
+// Syncs to server if config.allowSync is true, then saves locally.
 export async function saveConfig(config: UserConfig): Promise<void> {
+  await publishConfig(config);
+  // Always save locally
+  saveLocalUserConfig(config);
+}
+
+/**
+ * The upload half of saveConfig: publishes `config` when sync is on and leaves
+ * `config.timestamp` at what the local copy should carry afterwards (the
+ * published timestamp, or the one it came in with when nothing was
+ * published). Never throws for a failed upload; that is recorded instead.
+ */
+async function publishConfig(config: UserConfig): Promise<void> {
   const privateKey = await getPrivateKey();
   const publicKey = await getPublicKey();
 
@@ -956,23 +1038,187 @@ export async function saveConfig(config: UserConfig): Promise<void> {
       // Continue to save locally even if sync fails
     }
   }
+}
 
-  // Always save locally
+// --- Coalesced publishing ---
+//
+// Every mute, bookmark, receipt and notification toggle used to upload the
+// whole blob (megabytes, see "Config downloads" above) the moment it was made,
+// so muting three conversations in a row was three full uploads. Toggles now
+// save locally at once and schedule ONE upload of the stored config, made once
+// they have been quiet for CONFIG_PUBLISH_DEBOUNCE_MS, or straight away when
+// the app leaves the foreground (it may not come back) or a getConfig needs
+// the server current.
+//
+// What is uploaded is the stored config as it stands when the upload starts,
+// never a copy captured when a toggle was made: every coalesced caller writes
+// its change to local storage first and builds it on what is stored, so the
+// stored copy always holds every pending change.
+//
+// Only the toggles use this. Joining or leaving a Space, profile edits and
+// turning sync on still publish immediately through saveConfig.
+
+/** Quiet period before a coalesced upload. */
+export const CONFIG_PUBLISH_DEBOUNCE_MS = 2_000;
+
+interface PendingConfigPublish {
+  timer: ReturnType<typeof setTimeout>;
+  waiters: { resolve: () => void; reject: (error: unknown) => void }[];
+}
+
+const pendingConfigPublishes = new Map<string, PendingConfigPublish>();
+const runningConfigPublishes = new Map<string, Promise<void>>();
+let appStateFlushSubscription: { remove(): void } | null = null;
+/** Bumped by clearConfigStorage, so an upload still running at sign-out doesn't write back. */
+let configStorageGeneration = 0;
+
+function flushConfigPublishesWhenBackgrounded(): void {
+  if (appStateFlushSubscription) return;
+  try {
+    appStateFlushSubscription = AppState.addEventListener('change', (state) => {
+      // 'inactive' as well: iOS passes through it on the way out, and an app
+      // killed from the switcher never reaches 'background'.
+      if (state === 'background' || state === 'inactive') {
+        void flushAllConfigPublishes();
+      }
+    });
+  } catch {
+    // No AppState in this context; the timer still publishes.
+  }
+}
+
+/**
+ * Upload the stored config for `address` once toggles have gone quiet. The
+ * caller must already have saved its change locally. Resolves (or rejects,
+ * as saveConfig would) when the upload that carries this change has run.
+ */
+export function scheduleConfigPublish(address: string): Promise<void> {
+  flushConfigPublishesWhenBackgrounded();
+  return new Promise<void>((resolve, reject) => {
+    const pending = pendingConfigPublishes.get(address);
+    if (pending) clearTimeout(pending.timer);
+    const waiters = pending?.waiters ?? [];
+    waiters.push({ resolve, reject });
+    pendingConfigPublishes.set(address, {
+      waiters,
+      timer: setTimeout(() => {
+        void flushConfigPublish(address);
+      }, CONFIG_PUBLISH_DEBOUNCE_MS),
+    });
+  });
+}
+
+/**
+ * saveConfig for a toggle: saves locally now, uploads coalesced. With sync
+ * off there is nothing to upload, so it is just saveConfig.
+ */
+export function saveConfigCoalesced(config: UserConfig): Promise<void> {
+  if (!config.allowSync) return saveConfig(config);
   saveLocalUserConfig(config);
+  return scheduleConfigPublish(config.address);
+}
+
+/** Run a scheduled upload now instead of waiting out the quiet period. */
+export async function flushConfigPublish(address: string): Promise<void> {
+  const pending = pendingConfigPublishes.get(address);
+  if (!pending) return;
+  pendingConfigPublishes.delete(address);
+  clearTimeout(pending.timer);
+
+  // One upload per address at a time, so a later one can't finish first and
+  // leave the server holding the older picture.
+  const previous = runningConfigPublishes.get(address);
+  const run = (async () => {
+    if (previous) await previous.catch(() => {});
+    await publishStoredConfig(address);
+  })();
+  runningConfigPublishes.set(address, run);
+  try {
+    await run;
+    pending.waiters.forEach((w) => w.resolve());
+  } catch (error) {
+    pending.waiters.forEach((w) => w.reject(error));
+  } finally {
+    if (runningConfigPublishes.get(address) === run) runningConfigPublishes.delete(address);
+  }
+}
+
+/** Flush every scheduled upload, e.g. as the app goes to the background. */
+export async function flushAllConfigPublishes(): Promise<void> {
+  await Promise.all(Array.from(pendingConfigPublishes.keys()).map(flushConfigPublish));
+}
+
+/** Flush a scheduled upload for `address` and wait out one already running. */
+async function settleConfigPublish(address: string): Promise<void> {
+  await flushConfigPublish(address);
+  await runningConfigPublishes.get(address)?.catch(() => {});
+}
+
+async function publishStoredConfig(address: string): Promise<void> {
+  const snapshot = getLocalUserConfig(address);
+  // Signed out (storage cleared) since the change was made: nothing to send.
+  if (!snapshot) return;
+  const incomingTimestamp = snapshot.timestamp ?? 0;
+  const revision = localConfigRevisions.get(address) ?? 0;
+  const generation = configStorageGeneration;
+
+  await publishConfig(snapshot);
+
+  // Signed out while the upload ran: the wipe must stay wiped.
+  if (generation !== configStorageGeneration) return;
+
+  // A toggle made while the upload ran wrote a newer local copy, built on
+  // this snapshot (it was read from storage) and still carrying the old
+  // timestamp, and scheduled its own upload. Writing the snapshot back, as
+  // saveConfig does, would erase that toggle, and its upload would then send
+  // the erased copy. Keep it, under the timestamp this upload earned.
+  //
+  // Any other write — a pull adopting a remote config, another save landing
+  // — changed the timestamp too, and gets saveConfig's last-write behaviour.
+  if ((localConfigRevisions.get(address) ?? 0) !== revision) {
+    const current = getLocalUserConfig(address);
+    if (current && (current.timestamp ?? 0) === incomingTimestamp) {
+      saveLocalUserConfig({ ...current, timestamp: snapshot.timestamp });
+      return;
+    }
+  }
+  saveLocalUserConfig(snapshot);
 }
 
 export function clearConfigStorage(): void {
+  configStorageGeneration += 1;
+  // Nothing scheduled may upload after sign-out; settle its waiters as done.
+  pendingConfigPublishes.forEach((pending) => {
+    clearTimeout(pending.timer);
+    pending.waiters.forEach((w) => w.resolve());
+  });
+  pendingConfigPublishes.clear();
+  remoteConfigInFlight.clear();
+  lastRemoteConfig.clear();
   configStorage.clearAll();
   bookmarkStorage.clearAll();
   clearSpaceStorage();
 }
 
+/**
+ * Apply `updates` to the stored config and save it. `coalesce` is for toggles:
+ * the change is stored at once and the upload batched with others made close
+ * together (saveConfigCoalesced). Leave it off for anything that must reach
+ * the server before the caller moves on.
+ */
 export async function updateConfig(
   address: string,
-  updates: Partial<UserConfig>
+  updates: Partial<UserConfig>,
+  options: { coalesce?: boolean } = {}
 ): Promise<UserConfig> {
   const currentConfig = getLocalUserConfig(address) ?? getDefaultUserConfig(address);
   const updatedConfig = { ...currentConfig, ...updates };
+  if (options.coalesce) {
+    await saveConfigCoalesced(updatedConfig);
+    // The upload worked on the stored copy, so that is what carries the
+    // timestamp it earned.
+    return getLocalUserConfig(address) ?? updatedConfig;
+  }
   await saveConfig(updatedConfig);
   return updatedConfig;
 }
@@ -1093,7 +1339,7 @@ export async function setMutedConversations(
   saveLocalUserConfig(updated);
   try {
     if (updated.allowSync) {
-      await saveConfig(updated);
+      await scheduleConfigPublish(address);
     }
   } catch {
     // Config sync is best-effort — the mute change is already saved locally.
@@ -1194,7 +1440,7 @@ export async function setLocalConversationSetting(
   saveLocalUserConfig(updated);
   try {
     if (updated.allowSync) {
-      await saveConfig(updated);
+      await scheduleConfigPublish(address);
     }
   } catch (error) {
     // Best-effort sync — the setting change is already saved locally. Still log:
@@ -1223,6 +1469,8 @@ export async function setLocalConversationSettings(
   const updated: UserConfig = { ...current, conversationSettings: merged };
   saveLocalUserConfig(updated);
   try {
+    // Immediate, not coalesced: a one-off migration sweep, not a toggle, and
+    // its caller waits on this before showing the migrated values.
     if (updated.allowSync) {
       await saveConfig(updated);
     }
@@ -1266,7 +1514,7 @@ export async function setMutedChannels(
   saveLocalUserConfig(updated);
   try {
     if (updated.allowSync) {
-      await saveConfig(updated);
+      await scheduleConfigPublish(address);
     }
   } catch {
     // Best-effort sync — the mute change is already saved locally.
@@ -1320,7 +1568,7 @@ export async function setSpaceMuted(
   saveLocalUserConfig(updated);
   try {
     if (updated.allowSync) {
-      await saveConfig(updated);
+      await scheduleConfigPublish(address);
     }
   } catch {
     // Best-effort sync — the mute change is already saved locally.
@@ -1390,7 +1638,7 @@ export async function setNotificationTypes(
   saveLocalUserConfig(updated);
   try {
     if (updated.allowSync) {
-      await saveConfig(updated);
+      await scheduleConfigPublish(address);
     }
   } catch {
     // Best-effort sync — the change is already saved locally.
@@ -1429,7 +1677,7 @@ export async function setBlockedUsers(
   saveLocalUserConfig(updated);
   try {
     if (updated.allowSync) {
-      await saveConfig(updated);
+      await scheduleConfigPublish(address);
     }
   } catch {
     // Best-effort sync — the block change is already saved locally.

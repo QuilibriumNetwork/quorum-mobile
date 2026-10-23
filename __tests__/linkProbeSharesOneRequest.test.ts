@@ -27,16 +27,37 @@ const PAGE = `<!doctype html><html><head>
 </head><body>…</body></html>`;
 
 function response(contentType: string, body: string, status = 200): Response {
+  const bytes = new TextEncoder().encode(body);
+  let sent = false;
   return {
     ok: status >= 200 && status < 300,
     status,
     headers: { get: (k: string) => (k.toLowerCase() === 'content-type' ? contentType : null) },
-    text: async () => body,
+    body: {
+      getReader: () => ({
+        read: async () => (sent ? { done: true } : ((sent = true), { done: false, value: bytes })),
+        cancel: async () => {},
+      }),
+    },
   } as unknown as Response;
 }
 
+// The probe streams through `expo/fetch`, not the global `fetch`.
 const mockFetch = jest.fn();
-(globalThis as { fetch: unknown }).fetch = mockFetch;
+jest.mock('expo/fetch', () => ({ fetch: (...args: unknown[]) => mockFetch(...args) }));
+// Its answers are kept on disk; an in-memory MMKV stands in.
+jest.mock('react-native-mmkv', () => {
+  const store = new Map<string, string>();
+  return {
+    createMMKV: () => ({
+      getString: (k: string) => store.get(k),
+      set: (k: string, v: string) => void store.set(k, v),
+      remove: (k: string) => store.delete(k),
+      getAllKeys: () => [...store.keys()],
+      clearAll: () => store.clear(),
+    }),
+  };
+});
 
 beforeEach(() => {
   __resetLinkProbes();

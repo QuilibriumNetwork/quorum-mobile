@@ -7,6 +7,7 @@ import { setAudioModeAsync } from 'expo-audio';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { saveMediaToLibrary } from '@/services/media/saveToLibrary';
 import { VideoViewer } from './VideoViewer';
+import { startPlayback, usePauseWhenOffScreen } from './videoPlayback';
 import { SCREEN_WIDTH, SCREEN_HEIGHT, formatDuration } from '../utils';
 import * as Skin from '@/theme/skins/geometry';
 import { createSkinnable } from '@/theme/skins/skinnableStyleSheet';
@@ -84,21 +85,64 @@ interface VideoPlayerProps {
 }
 
 /**
- * Video player with thumbnail preview and tap to play/pause.
+ * Video with a poster, tap to play/pause. It shows the poster (or a sized
+ * placeholder when there isn't one) until the user taps play, and only then
+ * creates a native player. Creating one on mount, as this used to, prepared
+ * and buffered every video in a thread or profile as it scrolled into view.
  */
-export function VideoPlayer({
-  url,
-  thumbnailUrl,
-  width,
-  height,
-  duration,
-  theme,
-}: VideoPlayerProps) {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
-  const [saving, setSaving] = useState(false);
+export function VideoPlayer(props: VideoPlayerProps) {
+  const { url, thumbnailUrl, width, height, duration, theme } = props;
+  // The URL the user pressed play on. Reset when a recycled cell moves to
+  // another video.
+  const [activated, setActivated] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const save = useSaveVideo(url);
 
+  const aspectRatio = width && height ? height / width : 9 / 16;
+  const calculatedHeight = Math.min(SCREEN_WIDTH * aspectRatio, SCREEN_HEIGHT * 0.8);
+  const mediaStyle = useMemo(() => ({
+    width: SCREEN_WIDTH,
+    height: calculatedHeight,
+    backgroundColor: theme.colors.surface3,
+  }), [calculatedHeight, theme.colors.surface3]);
+
+  const viewer = fullscreen ? (
+    <VideoViewer visible url={url} onClose={() => setFullscreen(false)} />
+  ) : null;
+
+  if (activated === url) {
+    return (
+      <>
+        <LiveVideoPlayer
+          {...props}
+          mediaStyle={mediaStyle}
+          save={save}
+          onOpenFullscreen={() => setFullscreen(true)}
+        />
+        {viewer}
+      </>
+    );
+  }
+
+  return (
+    <>
+    <Pressable onPress={() => setFullscreen(true)} style={staticStyles.container}>
+      <VideoPoster
+        thumbnailUrl={thumbnailUrl}
+        duration={duration}
+        mediaStyle={mediaStyle}
+        save={save}
+        onPlay={() => setActivated(url)}
+      />
+    </Pressable>
+    {viewer}
+    </>
+  );
+}
+
+/** Save-to-library state and handler for a video. */
+function useSaveVideo(url: string) {
+  const [saving, setSaving] = useState(false);
   const handleSave = useCallback(async () => {
     if (!url || saving) return;
     setSaving(true);
@@ -118,25 +162,114 @@ export function VideoPlayer({
       Alert.alert('Save failed', message);
     }
   }, [url, saving]);
-  const videoRef = useRef<VideoView>(null);
-  const aspectRatio = width && height ? height / width : 9 / 16;
-  const calculatedHeight = Math.min(SCREEN_WIDTH * aspectRatio, SCREEN_HEIGHT * 0.8);
+  return { saving, handleSave };
+}
 
-  const mediaStyle = useMemo(() => ({
-    width: SCREEN_WIDTH,
-    height: calculatedHeight,
-    backgroundColor: theme.colors.surface3,
-  }), [calculatedHeight, theme.colors.surface3]);
+type SaveVideo = ReturnType<typeof useSaveVideo>;
+
+function SaveButton({ save }: { save: SaveVideo }) {
+  return (
+    <Pressable
+      style={[staticStyles.saveButton, save.saving && { opacity: 0.5 }]}
+      onPress={save.handleSave}
+      disabled={save.saving}
+      hitSlop={8}
+      accessibilityLabel="Save video to library"
+    >
+      <IconSymbol name="square.and.arrow.down" color="#fff" size={18} />
+    </Pressable>
+  );
+}
+
+function PlayButton({ onPress }: { onPress: () => void }) {
+  return (
+    <View style={staticStyles.overlay} pointerEvents="box-none">
+      <Pressable
+        style={staticStyles.playButton}
+        onPress={onPress}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel="Play video"
+      >
+        <IconSymbol name="play.fill" color="#fff" size={28} />
+      </Pressable>
+    </View>
+  );
+}
+
+/** The poster with its play button, save button and duration badge. */
+function VideoPoster({
+  thumbnailUrl,
+  duration,
+  mediaStyle,
+  save,
+  onPlay,
+}: {
+  thumbnailUrl: string;
+  duration?: number;
+  mediaStyle: { width: number; height: number; backgroundColor: string };
+  save: SaveVideo;
+  onPlay: () => void;
+}) {
+  return (
+    <>
+      <Image
+        source={{ uri: thumbnailUrl }}
+        style={mediaStyle}
+        contentFit="cover"
+      />
+      {/* Play button overlay (interactive — its own tap target) */}
+      <PlayButton onPress={onPlay} />
+      {/* Save-to-library button. iOS native fullscreen player
+          doesn't expose UI hooks, so the save affordance lives on
+          the inline preview — visible before playback starts and
+          again when paused. */}
+      <SaveButton save={save} />
+      {/* Duration badge */}
+      {duration && duration > 0 && (
+        <View style={staticStyles.durationBadge} pointerEvents="none">
+          <Text style={staticStyles.durationText}>
+            {formatDuration(duration)}
+          </Text>
+        </View>
+      )}
+    </>
+  );
+}
+
+/** The video with its native player, mounted by a tap on play. */
+function LiveVideoPlayer({
+  url,
+  thumbnailUrl,
+  duration,
+  mediaStyle,
+  save,
+  onOpenFullscreen,
+}: VideoPlayerProps & {
+  mediaStyle: { width: number; height: number; backgroundColor: string };
+  save: SaveVideo;
+  onOpenFullscreen: () => void;
+}) {
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [hasStarted, setHasStarted] = useState(true);
+  const videoRef = useRef<VideoView>(null);
 
   // Configure audio mode on mount
   useEffect(() => {
     ensureAudioMode();
   }, []);
 
-  // Create video player
   const player = useVideoPlayer(url, (player) => {
     player.loop = false;
   });
+
+  // Mounted by a tap on play: start right away.
+  useEffect(() => {
+    startPlayback(player);
+  }, [player]);
+
+  // Tabs stay mounted when you leave them; don't keep playing there.
+  usePauseWhenOffScreen(player, () => setIsPlaying(false));
 
   // Listen for playback status changes
   useEffect(() => {
@@ -161,12 +294,12 @@ export function VideoPlayer({
     if (!hasStarted) {
       setHasStarted(true);
       setIsPlaying(true);
-      player.play();
+      startPlayback(player);
     } else if (isPlaying) {
       player.pause();
       setIsPlaying(false);
     } else {
-      player.play();
+      startPlayback(player);
       setIsPlaying(true);
     }
   };
@@ -179,47 +312,20 @@ export function VideoPlayer({
       player.pause();
       setIsPlaying(false);
     }
-    setFullscreen(true);
+    onOpenFullscreen();
   };
 
   return (
-    <>
     <Pressable onPress={handleSurfaceTap} style={staticStyles.container}>
       {!hasStarted ? (
-        <>
-          <Image
-            source={{ uri: thumbnailUrl }}
-            style={mediaStyle}
-            contentFit="cover"
-          />
-          {/* Play button overlay (interactive — its own tap target) */}
-          <View style={staticStyles.overlay} pointerEvents="box-none">
-            <Pressable style={staticStyles.playButton} onPress={handlePlayButtonTap} hitSlop={12}>
-              <IconSymbol name="play.fill" color="#fff" size={28} />
-            </Pressable>
-          </View>
-          {/* Save-to-library button. iOS native fullscreen player
-              doesn't expose UI hooks, so the save affordance lives on
-              the inline preview — visible before playback starts and
-              again when paused. */}
-          <Pressable
-            style={[staticStyles.saveButton, saving && { opacity: 0.5 }]}
-            onPress={handleSave}
-            disabled={saving}
-            hitSlop={8}
-            accessibilityLabel="Save video to library"
-          >
-            <IconSymbol name="square.and.arrow.down" color="#fff" size={18} />
-          </Pressable>
-          {/* Duration badge */}
-          {duration && duration > 0 && (
-            <View style={staticStyles.durationBadge} pointerEvents="none">
-              <Text style={staticStyles.durationText}>
-                {formatDuration(duration)}
-              </Text>
-            </View>
-          )}
-        </>
+        // Played to the end: back to the poster.
+        <VideoPoster
+          thumbnailUrl={thumbnailUrl}
+          duration={duration}
+          mediaStyle={mediaStyle}
+          save={save}
+          onPlay={handlePlayButtonTap}
+        />
       ) : (
         <>
           <VideoView
@@ -233,29 +339,13 @@ export function VideoPlayer({
           {/* Pause indicator overlay - shown when paused (interactive button) */}
           {!isPlaying && (
             <>
-              <View style={staticStyles.overlay} pointerEvents="box-none">
-                <Pressable style={staticStyles.playButton} onPress={handlePlayButtonTap} hitSlop={12}>
-                  <IconSymbol name="play.fill" color="#fff" size={28} />
-                </Pressable>
-              </View>
-              <Pressable
-                style={[staticStyles.saveButton, saving && { opacity: 0.5 }]}
-                onPress={handleSave}
-                disabled={saving}
-                hitSlop={8}
-                accessibilityLabel="Save video to library"
-              >
-                <IconSymbol name="square.and.arrow.down" color="#fff" size={18} />
-              </Pressable>
+              <PlayButton onPress={handlePlayButtonTap} />
+              <SaveButton save={save} />
             </>
           )}
         </>
       )}
     </Pressable>
-    {fullscreen && (
-      <VideoViewer visible url={url} onClose={() => setFullscreen(false)} />
-    )}
-    </>
   );
 }
 

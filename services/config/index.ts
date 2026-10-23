@@ -6,6 +6,7 @@ export {
   // Config management
   getConfig,
   saveConfig,
+  flushAllConfigPublishes,
   updateConfig,
   setAllowSync,
   getLocalUserConfig,
