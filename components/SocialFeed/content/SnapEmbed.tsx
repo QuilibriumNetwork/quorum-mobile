@@ -1173,10 +1173,18 @@ export function SnapEmbed({
               body: JSON.stringify({
                 targetUrl: target,
                 payload: {
+                  // Spec payload: `user` is required by the current schema (the
+                  // top-level `fid` is deprecated but still read by older
+                  // servers). Without `user`/`audience`/`surface`, servers that
+                  // validate with @farcaster/snap reject the POST outright and
+                  // never record the submit.
                   fid: userFid,
+                  user: { fid: userFid },
                   inputs: formState,
-                  button_index: 0,
                   timestamp: Math.floor(Date.now() / 1000),
+                  audience: String((formState as Record<string, unknown>).audience ?? 'Public'),
+                  surface: { type: 'standalone' },
+                  button_index: 0,
                 },
               }),
               signal: controller.signal,
