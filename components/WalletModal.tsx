@@ -38,7 +38,7 @@ import { SegmentedPills, type SegmentedPillItem } from '@/components/ui/Segmente
 const walletDisplayStorage = createMMKV({ id: 'quorum-wallet-display' });
 const SHOW_ZERO_VALUE_KEY = 'showZeroValueAssets';
 const HIDE_BALANCES_KEY = 'hideBalances';
-const QUIL_ADDRESS_WARNING_SHOWN_KEY = 'quilAddressWarningShown';
+const QUIL_ADDRESS_WARNING_SHOWN_KEY = 'quilAddressWarningShownV2';
 
 interface WalletModalProps {
   visible: boolean;
@@ -298,7 +298,7 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
       if (!warningShown) {
         Alert.alert(
           'Important',
-          'This address is for Quilibrium native assets (QUIL and other tokens) only. Do not send wQUIL to this address, you will lose your wQUIL. Send wQUIL to the Ethereum address.',
+          'This address holds your Quilibrium usernames. It cannot receive QUIL: QUIL now accepts only confidential addresses, which Quorum does not show yet. Do not send wQUIL here either; send wQUIL to the Ethereum address.',
           [
             {
               text: 'I Understand',
@@ -783,7 +783,7 @@ export default function WalletModal({ visible, onClose, isRouteMode = false, noT
                         <Image source={require('@/assets/images/qlogo.png')} style={styles.chainLogo} />
                         <View>
                           <Text style={styles.addressCardTitle}>Quilibrium</Text>
-                          <Text style={styles.addressCardSubtitle}>View + Spend Keys</Text>
+                          <Text style={styles.addressCardSubtitle}>Usernames · not for QUIL</Text>
                         </View>
                       </View>
                       <TouchableOpacity
