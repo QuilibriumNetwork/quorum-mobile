@@ -48,7 +48,7 @@ renders from the same code on both, so Android is a genuine proxy.
 ## 1. The native header is not a React component
 
 Three shipped iOS-only bugs came from this single misunderstanding
-(`.agents/issues/.done/2026-08-01-ios-space-header-back-button-dead-and-loading-label.md`).
+(`.agents/tickets/.done/2026-08-01-ios-space-header-back-button-dead-and-loading-label.md`).
 
 ### 1a. The back button's label is inherited from the previous screen
 
@@ -197,9 +197,9 @@ Any box ticked → mark the PR **iOS untested**, and add an item to
 ## Related
 
 - `.agents/docs/ios-verification-checklist.md` — the live list of things awaiting an iPhone
-- `.agents/issues/.done/2026-08-01-ios-space-header-back-button-dead-and-loading-label.md` — the
+- `.agents/tickets/.done/2026-08-01-ios-space-header-back-button-dead-and-loading-label.md` — the
   worked examples behind sections 1 and 2
-- `.agents/issues/.done/2026-08-01-adopt-ios26-liquid-glass.md` — the dated deadline attached to
+- `.agents/tickets/.done/2026-08-01-adopt-ios26-liquid-glass.md` — the dated deadline attached to
   section 2
 - `.agents/docs/composer-keyboard-emoji-panel.md` — keyboard/inset timing, the other big
   cross-platform divergence in this app

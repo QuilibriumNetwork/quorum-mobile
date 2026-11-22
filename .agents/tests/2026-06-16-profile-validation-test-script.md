@@ -106,7 +106,7 @@ When delivery is restored, the intended test is:
 > **Separate known bug found 2026-06-16 (the SEND direction):** clearing a per-space name on
 > **mobile** does NOT propagate to desktop — mobile strips the empty displayName on send. That's
 > a different, pre-existing gap (the symmetric counterpart to this receive-side fix), filed at
-> `issues/.done/2026-06-16-mobile-send-strips-empty-displayname-clear-not-propagated.md`. Not part of
+> `tickets/.done/2026-06-16-mobile-send-strips-empty-displayname-clear-not-propagated.md`. Not part of
 > this PR; fix deferred to a focused follow-up.
 
 ---

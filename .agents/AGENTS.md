@@ -15,7 +15,7 @@ This project uses a `.agents/` folder to organize AI-generated documentation, ta
 ├── docs/             # Feature documentation
 │   ├── features/     # Feature-specific docs
 │   └── .archive/     # Archived documentation
-├── issues/           # Bugs AND tasks being worked on right now
+├── tickets/          # Bugs AND tasks being worked on right now
 │   ├── .open/        # Not started, or unfixed bugs nobody is on
 │   ├── .secret/     # NEVER TRACKED - exploitable security detail (see below)
 │   ├── .deferred/    # Consciously postponed
@@ -26,9 +26,9 @@ This project uses a `.agents/` folder to organize AI-generated documentation, ta
     └── .archived/    # Outdated reports
 ```
 
-### Issues: bugs and tasks together
+### Tickets: bugs and tasks together
 
-Bugs and tasks share `.agents/issues/`. Which one an item is lives in its
+Bugs and tasks share `.agents/tickets/`. Which one an item is lives in its
 `type: bug` / `type: task` frontmatter, never in its folder path. Setting `type:`
 is mandatory.
 
@@ -44,14 +44,14 @@ takes a week is still a bug.
 add the task sections, keep the Symptoms and Root Cause, keep the filename. Never
 open a second file for the same item.
 
-**Epics:** a big issue with many sub-issues gets its own named folder under
-`issues/`, which behaves as a miniature issues tree with its own `.open/`,
+**Epics:** a big ticket with many sub-tickets gets its own named folder under
+`tickets/`, which behaves as a miniature tickets tree with its own `.open/`,
 `.done/` and `.archived/`. It sits at the root while in progress and moves into
 `.done/` when the whole epic is finished.
 
-### Security-sensitive issues: `issues/.secret/`
+### Security-sensitive tickets: `tickets/.secret/`
 
-`issues/.secret/` is gitignored and must stay that way. It holds issue files whose
+`tickets/.secret/` is gitignored and must stay that way. It holds ticket files whose
 contents would help someone attack users of the shipped app.
 
 **The test, applied when you create the file, not later:**
@@ -109,14 +109,14 @@ All documents use YAML frontmatter with these statuses:
 ### Creating Documents
 
 Use the **docs-manager** skill for consistent templates:
-- Bugs and tasks → `.agents/issues/`
+- Bugs and tasks → `.agents/tickets/`
 - Documentation → `.agents/docs/features/`
 - Reports/Audits → `.agents/reports/`
 
-**Security review gate (this repo).** An issue touching authentication,
+**Security review gate (this repo).** A ticket touching authentication,
 encryption, user data, network communication or permissions must be analysed by
 the `security-analyst` agent (`.claude/agents/security-analyst.md`) *before*
-implementation, and its findings recorded in the issue. This is a project rule,
+implementation, and its findings recorded in the ticket. This is a project rule,
 not part of the shared docs-manager skill.
 
 ### Updating the Index
@@ -130,15 +130,15 @@ python .agents/update-index.py
 ### Before Starting Work
 
 1. Check `INDEX.md` for existing documentation
-2. Review open and in-progress work in `.agents/issues/`
-3. Check for related bugs in `.agents/issues/` and `.agents/issues/.done/`
+2. Review open and in-progress work in `.agents/tickets/`
+3. Check for related bugs in `.agents/tickets/` and `.agents/tickets/.done/`
 4. Look for relevant reports in `.agents/reports/`
 
 ### After Completing Work
 
 1. Update task/bug status to `done`
-2. Move completed items to `.agents/issues/.done/` (never move a `type: bug`
-   issue there without verified testing)
+2. Move completed items to `.agents/tickets/.done/` (never move a `type: bug`
+   ticket there without verified testing)
 3. Run the index update script
 4. Create documentation for significant changes
 
@@ -179,4 +179,4 @@ git config --local alias.debug '!bash .agents/scripts/git-debug.sh'
 ```
 
 Details: [scripts/README.md](scripts/README.md) and §D of
-[the DM master report](issues/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md).
+[the DM master report](tickets/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md).

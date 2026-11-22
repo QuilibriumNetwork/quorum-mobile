@@ -105,7 +105,7 @@ mobile task. This feature only covers **mobile DM** delete.
 **Could NOT verify end-to-end (blocked by a pre-existing, separate issue):**
 - Live mobile→desktop delete propagation, because desktop↔mobile message delivery
   itself is unreliable (a long-standing infrastructure sync problem tracked
-  separately — see `.agents/issues/.open/2026-06-13-desktop-to-mobile-messages-fail-decryption-invalid-signature.md`).
+  separately — see `.agents/tickets/.open/2026-06-13-desktop-to-mobile-messages-fail-decryption-invalid-signature.md`).
   The delete was confirmed leaving mobile correctly (encrypted to all devices on
   the wire) and desktop's handler was confirmed to honor it in code — but the
   message simply doesn't always arrive, same as normal messages.

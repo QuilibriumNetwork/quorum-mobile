@@ -58,8 +58,11 @@ app-example
 
 # --- must stay ignored even once .agents/ is published -----------------------
 
-# Issue write-ups describing an attack that works against shipped code.
-# See .agents/AGENTS.md -> "Security-sensitive issues".
+# Ticket write-ups describing an attack that works against shipped code.
+# See .agents/AGENTS.md -> "Security-sensitive tickets".
+.agents/tickets/.secret/
+# Former name of the folder above. Keep until every local checkout has moved its
+# secret files to tickets/, so a pull never leaves them unignored.
 .agents/issues/.secret/
 
 # Logs and captures. Regenerated every run; carry account/machine names and,

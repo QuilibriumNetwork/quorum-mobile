@@ -3,7 +3,7 @@ type: report
 title: "UI touchable audit findings — buttons/rows-in-disguise across quorum-mobile"
 status: done
 created: 2026-06-28
-parent-task: ../issues/.open/2026-06-28-ui-button-consistency-audit-and-sweep.md
+parent-task: ../tickets/.open/2026-06-28-ui-button-consistency-audit-and-sweep.md
 method: 5 parallel read-only agents, one per feature-area cluster
 ---
 

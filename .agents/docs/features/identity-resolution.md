@@ -114,7 +114,7 @@ works end to end**:
 - **Route A — the published public profile** (`primary_username`). Dead
   server-side: `POST /users/:addr/public-profile` rejects any payload carrying
   a primary username (upstream #240). Tracked at
-  `issues/.open/2026-08-06-server-rejects-every-primary-username-publish.md`.
+  `tickets/.open/2026-08-06-server-rejects-every-primary-username-publish.md`.
 - **Route B — the profile broadcast** (`claimed_primary_username`). A member
   announces their elected name to every space they are in, and to DM partners.
   Receivers store it under a deliberately separate key. **Mobile-only**: desktop's
@@ -194,14 +194,14 @@ render somebody else's name entirely.
 - **Desktop has no claim verification.** It renders `primary_username` off a
   fetched profile without checking ownership. So "desktop shows a `.q`, mobile
   does not" may be mobile correctly refusing an unverified claim. Parity gaps are
-  itemised in `issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md`.
+  itemised in `tickets/2026-08-06-qns-primary-name-work-and-desktop-parity.md`.
 - **The Space Settings member list shows no `.q` for anyone.** It reads roster
   rows and never fetches a public profile. Deliberate — its cardinality is the
   whole community — but it means that screen is the wrong place to check whether
   a `.q` renders.
 - **No coverage instrument yet.** There is no number for "what fraction of
   rendered names resolved past the address tier". Tracked as Task 11 of
-  `issues/2026-08-11-mobile-identity-resolution-plan.md`.
+  `tickets/2026-08-11-mobile-identity-resolution-plan.md`.
 
 ## 8. Testing a `.q` without owning one
 

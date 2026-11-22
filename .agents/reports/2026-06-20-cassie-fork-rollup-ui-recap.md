@@ -112,7 +112,7 @@ surfaced device-level edge cases (Motorola Edge 50 Fusion, prod variant). Shippe
 - **Scroll jump fixes** to the panel↔keyboard swap (footprint published as
   `max(0, panelHeight − liveKeyboard)` so panel + keyboard never double-count the list inset).
 - See `.agents/docs/composer-keyboard-emoji-panel.md` (the design) +
-  `.agents/issues/.done/2026-06-20-composer-emoji-panel-transitions.md` (this round).
+  `.agents/tickets/.done/2026-06-20-composer-emoji-panel-transitions.md` (this round).
 
 ## 9. Icon registry: `flask` + `ellipsis.vertical` (2026-06-20)
 

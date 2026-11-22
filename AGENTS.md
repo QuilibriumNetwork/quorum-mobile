@@ -51,12 +51,12 @@ All clients sync data via `@quilibrium/quorum-shared`. **This repo consumes it a
 1. **[.agents/AGENTS.md](.agents/AGENTS.md)** — documentation workflow guidelines
 2. **[.agents/INDEX.md](.agents/INDEX.md)** — find specific documentation for your task
 
-**🔒 `.agents/issues/.secret/` — gitignored, never committed.** Issue write-ups that
+**🔒 `.agents/tickets/.secret/` — gitignored, never committed.** Ticket write-ups that
 describe an attack working against code users are running today (mechanism,
 `file:line` pointers, vulnerable code, repro steps) are created in `.secret/` from
 the start and kept out of `INDEX.md`. Ordinary reliability, data-loss and
 correctness bugs are filed normally, however serious. Full rule and the release
-procedure: [.agents/AGENTS.md](.agents/AGENTS.md) → "Security-sensitive issues".
+procedure: [.agents/AGENTS.md](.agents/AGENTS.md) → "Security-sensitive tickets".
 
 ---
 
@@ -170,7 +170,7 @@ quorum-mobile/
 │
 └── .agents/                    # Development documentation
     ├── docs/                  # Architecture & feature guides
-    ├── issues/                # Bugs AND tasks being worked on right now
+    ├── tickets/               # Bugs AND tasks being worked on right now
     │   └── .secret/          # NEVER TRACKED - exploitable security detail
     └── INDEX.md
 ```
@@ -336,7 +336,7 @@ cost depends on what changed, not on asking:
   fast tier plus the live tier, about **6.5 minutes measured** (longer once
   the two cross-client arms are runnable; they are currently skipped from a
   linked worktree checkout, tracked in quorum-desktop's
-  `.agents/issues/.open/2026-08-23-cross-client-harness-scripts-resolve-mobile-wrong-from-worktree.md`).
+  `.agents/tickets/.open/2026-08-23-cross-client-harness-scripts-resolve-mobile-wrong-from-worktree.md`).
   Real bots send real messages over a real relay.
 - `yarn verify --fast` skips the live tier on request, for a quick check
   mid-work; it is not a substitute for the full run before reporting done.
@@ -367,4 +367,4 @@ behalf.
 
 ---
 
-_Last updated: 2026-08-23_
+_Last updated: 2026-11-22_

@@ -42,7 +42,7 @@ the chat stay put, or does it jump up to the first/oldest message?"
   the same `target<=0` event. Re-instrument: log keyboard events (`onStart/onMove/onEnd`
   `target`/`height`) AND the FlashList `onScroll` y in `MessagesList`, repro on an iOS
   device/sim, and find what actually fires the scroll-to-0 there. Solved-bug writeup with
-  the full Android investigation: `.agents/issues/.done/2026-06-21-chat-list-jumps-to-top-on-modal-open.md`.
+  the full Android investigation: `.agents/tickets/.done/2026-06-21-chat-list-jumps-to-top-on-modal-open.md`.
 
 ### 2. Composer ↔ keyboard ↔ emoji-panel choreography 🔲
 **▶ Ask:** "In a chat (try both a Space channel and a DM): open the keyboard, then tap the
@@ -175,7 +175,7 @@ tell for this exact bug).
 **Context (agent):**
 - **What:** fix for a confirmed upstream bug, reported by a tester on iPhone 13 Pro / iOS 26,
   not reproducible on Android 16. Full writeup:
-  `.agents/issues/.done/2026-08-01-ios-space-header-back-button-dead-and-loading-label.md` §1.
+  `.agents/tickets/.done/2026-08-01-ios-space-header-back-button-dead-and-loading-label.md` §1.
 - **Root cause:** `react-native-screens` 4.16.0 (the version Expo SDK 54 pins) disables
   `userInteractionEnabled` on the nav bar's back-button wrapper view in
   `navigationBar:shouldPopItem:` and only re-enables it in `navigationBar:didPopItem:`.
@@ -232,7 +232,7 @@ buttons.
   conversions themselves are JS and ship over the air.
 - **If it FAILS on iOS:** find which screen. If it is one of ours, something is still
   showing a native header — grep for a missing `headerShown: false`. Writeup: same bug
-  file, §3, and the archived task `.agents/issues/.done/2026-08-01-adopt-ios26-liquid-glass.md`.
+  file, §3, and the archived task `.agents/tickets/.done/2026-08-01-adopt-ios26-liquid-glass.md`.
 
 ### 10. Converted headers look right on iOS: DM, Discover Spaces, Account 🔲
 **▶ Ask:** "Open a DM, then Spaces → Discover, then your Account screen. On each: is the top
@@ -306,7 +306,7 @@ keyboard; a tap on the dim area closes the keyboard (a second tap closes the she
   2026-07-19). The sheet was bottom-anchored inside a raw `<Modal>` with no keyboard
   avoidance, an inert backdrop `View`, and a `multiline` input — so the keyboard covered the
   entire sheet and none of drag / tap-outside / Return dismissed it. Full writeup:
-  `.agents/issues/2026-06-12-reimport-sheet-keyboard-covers-and-traps.md`.
+  `.agents/tickets/2026-06-12-reimport-sheet-keyboard-covers-and-traps.md`.
 - **Why this one IS Android-testable, unusually:** an RN `<Modal>` gets its own window, and
   `KeyboardProvider` sets modal windows to `SOFT_INPUT_ADJUST_NOTHING`
   (`ModalAttachedWatcher.kt:96`), so Android never resized it either. The Android run is
@@ -338,7 +338,7 @@ top bar, and does signing still work?"
 **Context (agent):**
 - **What:** split `BrowserModal` into `mode: 'link' | 'miniapp'`, added YouTube hand-off,
   rebuilt the link-mode chrome, deleted the duplicate `app/browser.tsx` route. Plan:
-  `.agents/issues/.open/2026-08-10-in-app-browser-link-handling-plan.md`.
+  `.agents/tickets/.open/2026-08-10-in-app-browser-link-handling-plan.md`.
 - **(d) is the regression arm and must not be skipped.** Everything mini-app-shaped is now
   behind an `isLink` gate; the whole design rests on those gates being no-ops in miniapp
   mode. If the wallet chip is missing or signing breaks in a mini app, a gate is inverted.
@@ -384,7 +384,7 @@ icons come back exactly as they were?"
   than on Android, which is exactly the class of difference this dev loop cannot see.
 - **Expected in production today:** the spinner will always end in the "Could not start the
   call" toast, because the server serves no call routes
-  (`.agents/issues/2026-08-10-space-calls-dead-endpoints-and-stale-banner.md`). That is the
+  (`.agents/tickets/2026-08-10-space-calls-dead-endpoints-and-stale-banner.md`). That is the
   correct behaviour to observe here — this item is about the header's geometry, not the call.
 - **If it FAILS:** give the spinner a fixed-width wrapper matching the two icons' combined
   width rather than swapping the subtree, so the slot's width never changes.
@@ -497,7 +497,7 @@ roughly how far you had raised the slider.
   bar — it fits, but with only ~3-9px of headroom on either side. `ScreenHeader.tsx`'s
   `bar.height` is a hard constant; nothing there multiplies it by `PixelRatio.getFontScale()`,
   unlike `MessagesList.tsx:1837`'s `messageHeader`, which was fixed to do exactly that for the
-  same bug class (`.agents/issues/.done/2026-08-19-chat-message-text-renders-at-react-native-default-14.md`).
+  same bug class (`.agents/tickets/.done/2026-08-19-chat-message-text-renders-at-react-native-default-14.md`).
   Both `Text`s scale with the OS font size but the bar does not, so the two-line block likely
   exceeds 44px well before Android's own previously-tested max of 1.3x — the estimate lands
   around scale ~1.15-1.25, inside normal Settings, not even into accessibility sizes.

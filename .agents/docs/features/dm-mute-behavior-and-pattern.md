@@ -191,8 +191,8 @@ background → MMKV helper.
   `services/notifications/NotificationService.ts`,
   `hooks/useUnifiedNotifications.ts`, `components/Chat/DMSettingsSheet.tsx`,
   `app/(tabs)/messages/index.tsx`.
-- Follow-up: `.agents/issues/.done/2026-06-21-dm-mute-suppress-native-notifications.md`.
-- Settings parity context: `.agents/issues/.done/2026-06-17-dm-conversation-settings-parity.md`.
+- Follow-up: `.agents/tickets/.done/2026-06-21-dm-mute-suppress-native-notifications.md`.
+- Settings parity context: `.agents/tickets/.done/2026-06-17-dm-conversation-settings-parity.md`.
 - Storage-pattern background: memory `config-to-user-readback-bridge-missing`.
 
 *Last updated: 2026-06-21*
