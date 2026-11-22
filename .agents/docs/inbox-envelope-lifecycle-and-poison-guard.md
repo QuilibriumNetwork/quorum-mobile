@@ -5,9 +5,9 @@ status: current (as-built)
 created: 2026-07-23
 area: WebSocket receive path / message queue drain / native batch
 related:
-  - "issues/.done/2026-07-23-bounded-retry-inbox-poison-skiplist.md (the implementation spec + verification)"
-  - "issues/.done/2026-07-21-dev-env-receive-deaf-investigation.md (how the freeze was diagnosed on-device)"
-  - "issues/.done/2026-07-21-investigate-receive-cursor-wedge-bug-or-intentional.md (the sibling cursor-wedge fix, 1ce7bb1)"
+  - "tickets/.done/2026-07-23-bounded-retry-inbox-poison-skiplist.md (the implementation spec + verification)"
+  - "tickets/.done/2026-07-21-dev-env-receive-deaf-investigation.md (how the freeze was diagnosed on-device)"
+  - "tickets/.done/2026-07-21-investigate-receive-cursor-wedge-bug-or-intentional.md (the sibling cursor-wedge fix, 1ce7bb1)"
 ---
 
 # Inbox envelope lifecycle & the poison guard

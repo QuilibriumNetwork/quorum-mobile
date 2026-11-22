@@ -9,8 +9,8 @@ related:
   - "quorum-desktop/.agents/docs/debugging/dm-architecture-and-debug-playbook.md (DM identity/profile sync + desktop debug ladder)"
   - "quorum-desktop/.agents/tasks/transport/dm-ratchet-upstream-divergences.md (why decrypt-failure no longer destroys the session; Signal-spec justification)"
   - "docs/inbox-envelope-lifecycle-and-poison-guard.md (mobile: what an inbox is, delete-on-ack, the bounded-retry poison guard)"
-  - "issues/.open/2026-07-20-mobile-desktop-message-transport-delay-loss-master.md (mobile transport master report — the tier model)"
-  - "issues/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md (the current OPEN receive bug)"
+  - "tickets/.open/2026-07-20-mobile-desktop-message-transport-delay-loss-master.md (mobile transport master report — the tier model)"
+  - "tickets/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md (the current OPEN receive bug)"
   - "quorum-desktop/.agents/bugs/.solved/2026-07-02-dm-message-delivery-unreliable-master.md (desktop transport master — mechanism catalogue + invariants)"
   - "Quilibrium Docs/docs/learn/02-communication/ + /03-oblivious-hypergraph/ (the decentralized NETWORK beneath the relay: BlossomSub, mixnet/SLRP routing, addressing, content-addressed hypergraph storage)"
 ---
@@ -272,9 +272,9 @@ written by the Lead Dev; divergences are often intentional — verify against th
 | DM session tag / per-address inbox store | SDK-native throughout | aligned to SDK in **PR #177** (was divergent before) |
 
 **The transport master reports are required reading for cross-platform work:** mobile
-[2026-07-20-...-transport-delay-loss-master.md](../issues/.open/2026-07-20-mobile-desktop-message-transport-delay-loss-master.md)
+[2026-07-20-...-transport-delay-loss-master.md](../tickets/.open/2026-07-20-mobile-desktop-message-transport-delay-loss-master.md)
 (the tier model: space-receive / DM-receive / space-send / DM-session) and desktop
-[2026-07-02-dm-message-delivery-unreliable-master.md](../../../quorum-desktop/.agents/issues/.done/2026-07-02-dm-message-delivery-unreliable-master.md)
+[2026-07-02-dm-message-delivery-unreliable-master.md](../../../quorum-desktop/.agents/tickets/.done/2026-07-02-dm-message-delivery-unreliable-master.md)
 (three cooperating defects + the §2 invariants every DM change must respect).
 
 ---
@@ -283,9 +283,9 @@ written by the Lead Dev; divergences are often intentional — verify against th
 
 | Symptom | Most likely layer | Start here |
 |---|---|---|
-| DM send slow (seconds) | unconfirmed sessions re-running X3DH per device; SecureStore/registration re-reads | PR #176/#177; `issues/.open/2026-07-24-dm-send-latency-10s-production.md` |
+| DM send slow (seconds) | unconfirmed sessions re-running X3DH per device; SecureStore/registration re-reads | PR #176/#177; `tickets/.open/2026-07-24-dm-send-latency-10s-production.md` |
 | DM sent shows no ticks | receipts are failing frames, OR confirmed-send was unsigned | §3.1 signing; the open divergence bug below |
-| desktop→mobile DM lands sometimes, not others | inner DR decrypt fails against all stored states (state divergence/fork) | **OPEN:** `issues/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md` |
+| desktop→mobile DM lands sometimes, not others | inner DR decrypt fails against all stored states (state divergence/fork) | **OPEN:** `tickets/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md` |
 | DM "arrives minutes later" after restart | client not subscribed to the right conversation inbox | §3.1 per-address store; PR #177 |
 | DM redelivery loop / native batch freeze | undecryptable envelope hoard | [poison-guard doc](inbox-envelope-lifecycle-and-poison-guard.md) |
 | Space message 0% then floods on restart | Tier-1 cursor-wedge storm | mobile transport master §3 (fixed #169) |

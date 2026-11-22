@@ -353,7 +353,7 @@ wallet hooks). Screenshots via `adb exec-out screencap -p`.
 ## The DM diagnostic rig
 
 This is a **unit**, not seven independent tools, and it exists to serve one open
-bug: `issues/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md`
+bug: `tickets/.open/2026-07-24-dm-desktop-frames-undecryptable-state-divergence.md`
 (upstream root causes filed as quorum-mobile issue #183). Read that doc's PART I
 before running any of it. When #183 closes and the diag branches are deleted,
 this whole section can go with them.

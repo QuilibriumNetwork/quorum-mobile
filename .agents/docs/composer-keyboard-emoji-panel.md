@@ -345,7 +345,7 @@ Three things this layer must get right (all added/fixed 2026-06-20):
      reposition. Removing that needs the clearance inside the cells' own layout;
      that variant was built and measured (rest and keyboard exactly right) and
      regressed the panel state, so it is NOT in tree. See the bug file before
-     retrying it: `.agents/issues/.done/2026-08-01-short-chat-last-message-hidden-behind-composer.md`.
+     retrying it: `.agents/tickets/.done/2026-08-01-short-chat-last-message-hidden-behind-composer.md`.
 
 The cold-open panel SLIDE itself (the spacer growing from rest to the panel
 height) is driven by `coldOpenSV` (a `withTiming` 0→1 ramp), since there's no OS

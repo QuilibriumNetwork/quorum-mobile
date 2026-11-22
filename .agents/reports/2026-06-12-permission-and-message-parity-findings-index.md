@@ -31,11 +31,11 @@ Legend: ✅ fixed & committed · 🟢 ready to implement (scoped) · 📄 docume
 | # | Finding | Severity | Repo(s) | Status | Detail doc |
 |---|---|---|---|---|---|
 | 1 | **Mobile applies ANY incoming delete with no permission check** — any client can delete anyone's messages on all mobile peers | HIGH (real, propagating) | mobile | ✅ **committed `54c9919`** | this index §1 |
-| 2 | **@everyone owner-bypass** — owner-with-no-role spams @everyone; send-side-only enforcement → propagates on desktop | MED (live on desktop) | shared + desktop | 📄 documented | [desktop bug](../../../quorum-desktop/.agents/issues/.done/2026-06-12-everyone-mention-owner-bypass-send-side-only.md) |
-| 3 | **Shared `hasPermission` owner-bypass** — root cause of #2 + mobile owner pin/delete button illusion | MED (correctness) | shared (+ desktop/mobile consumers) | 📄 documented, plan written | [cross-repo plan](../issues/.done/2026-06-12-owner-permission-bypass-cross-repo-fix.md) |
+| 2 | **@everyone owner-bypass** — owner-with-no-role spams @everyone; send-side-only enforcement → propagates on desktop | MED (live on desktop) | shared + desktop | 📄 documented | [desktop bug](../../../quorum-desktop/.agents/tickets/.done/2026-06-12-everyone-mention-owner-bypass-send-side-only.md) |
+| 3 | **Shared `hasPermission` owner-bypass** — root cause of #2 + mobile owner pin/delete button illusion | MED (correctness) | shared (+ desktop/mobile consumers) | 📄 documented, plan written | [cross-repo plan](../tickets/.done/2026-06-12-owner-permission-bypass-cross-repo-fix.md) |
 | 4 | **Read-only channels unenforced on mobile** — no composer lock (send) AND no receive-side validation (post/embed/sticker propagate) | MED-HIGH | mobile | 🟢 implementing now | this index §4 + Wave 0 task 0.4 |
-| 4b | **Desktop read-only receive-side gaps** — sticker/embed bypass the check; post-block is cache-only (resurrects from disk) | MED | desktop | 📄 documented | [desktop bug](../../../quorum-desktop/.agents/issues/.done/2026-06-12-readonly-channel-receive-side-enforcement-gaps.md) |
-| 5 | **Mobile mishandles pin/mute/thread on receipt** — saved as JUNK timeline bubbles | MED (user-visible junk) | mobile | ✅ **junk-bubble fixed `2212339`** (drop); pin-sync/mute-sync deferred as features | [mobile bug](../issues/.done/2026-06-12-mobile-saves-pin-mute-thread-control-msgs-as-junk-bubbles.md) |
+| 4b | **Desktop read-only receive-side gaps** — sticker/embed bypass the check; post-block is cache-only (resurrects from disk) | MED | desktop | 📄 documented | [desktop bug](../../../quorum-desktop/.agents/tickets/.done/2026-06-12-readonly-channel-receive-side-enforcement-gaps.md) |
+| 5 | **Mobile mishandles pin/mute/thread on receipt** — saved as JUNK timeline bubbles | MED (user-visible junk) | mobile | ✅ **junk-bubble fixed `2212339`** (drop); pin-sync/mute-sync deferred as features | [mobile bug](../tickets/.done/2026-06-12-mobile-saves-pin-mute-thread-control-msgs-as-junk-bubbles.md) |
 | 6 | **Cross-platform mute gap** — mobile never receives/applies desktop's broadcast mutes (mobile's own mute is a personal local hide, correctly ungated) | LOW-MED (feature-port) | mobile | 📄 documented | Wave 0 task (dropped-0.3 section) |
 | 7 | **Image+caption wire divergence** — desktop `post`+`embeddedMedia`+text vs mobile `embed`+informal `text` cast (not in shared type) | LOW (correctness) | shared + both | 📄 already noted | candidates.md "Image + caption" |
 
@@ -66,7 +66,7 @@ Legend: ✅ fixed & committed · 🟢 ready to implement (scoped) · 📄 docume
 
 ## Deferred cross-repo work (needs coordination + a shared publish)
 
-The **shared owner-bypass cleanup (#2 + #3)** is the one piece that crosses into shared+desktop and needs a `quorum-shared` publish. Full 4-phase plan with version mechanics + 4 open decisions: [2026-06-12-owner-permission-bypass-cross-repo-fix.md](../issues/.done/2026-06-12-owner-permission-bypass-cross-repo-fix.md). NOT on fire — owner pin/delete is a harmless local illusion; @everyone is annoyance-grade. Tackle deliberately when ready to coordinate a release.
+The **shared owner-bypass cleanup (#2 + #3)** is the one piece that crosses into shared+desktop and needs a `quorum-shared` publish. Full 4-phase plan with version mechanics + 4 open decisions: [2026-06-12-owner-permission-bypass-cross-repo-fix.md](../tickets/.done/2026-06-12-owner-permission-bypass-cross-repo-fix.md). NOT on fire — owner pin/delete is a harmless local illusion; @everyone is annoyance-grade. Tackle deliberately when ready to coordinate a release.
 
 ## How to justify all this to the lead dev (the through-line)
 

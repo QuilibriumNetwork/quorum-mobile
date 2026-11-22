@@ -9,12 +9,12 @@ area: identity resolution / QNS / cross-client architecture
 repos: quorum-mobile (this), quorum-desktop (the plan), quorum-shared (the rule)
 source: read-only survey run before writing the mobile plan, then updated against desktop's final handoff once its branch shipped
 related:
-  - "quorum-desktop/.agents/issues/2026-08-10-identity-resolution-architecture-design.md (THE DESIGN)"
-  - "quorum-desktop/.agents/issues/2026-08-10-identity-resolution-architecture-plan.md (its 'What actually happened' section IS the handoff — read it)"
+  - "quorum-desktop/.agents/tickets/2026-08-10-identity-resolution-architecture-design.md (THE DESIGN)"
+  - "quorum-desktop/.agents/tickets/2026-08-10-identity-resolution-architecture-plan.md (its 'What actually happened' section IS the handoff — read it)"
   - "quorum-desktop/.superpowers/sdd/2026-08-10-identity-resolution-architecture-plan/progress.md (the full deviation ledger)"
-  - "issues/2026-08-06-qns-primary-name-work-and-desktop-parity.md (the parity index)"
-  - "issues/.open/2026-08-10-invite-contact-picker-renders-an-unresolved-name.md (an instance of finding 3)"
-  - "issues/.open/2026-08-11-profile-modal-bio-is-read-raw-so-it-vanishes-for-any-unmerged-member.md (mobile's instance of desktop bug 5)"
+  - "tickets/2026-08-06-qns-primary-name-work-and-desktop-parity.md (the parity index)"
+  - "tickets/.open/2026-08-10-invite-contact-picker-renders-an-unresolved-name.md (an instance of finding 3)"
+  - "tickets/.open/2026-08-11-profile-modal-bio-is-read-raw-so-it-vanishes-for-any-unmerged-member.md (mobile's instance of desktop bug 5)"
 ---
 
 # Mobile identity migration: survey
@@ -213,7 +213,7 @@ genuinely good **function-level** sweep that feeds a real join row through every
 name-producing function. READ, and worth preserving.
 
 **But function-level tests cannot catch the defect this whole project is about.**
-Proof, not assertion: `issues/.open/2026-08-10-invite-contact-picker-renders-an-unresolved-name.md`
+Proof, not assertion: `tickets/.open/2026-08-10-invite-contact-picker-renders-an-unresolved-name.md`
 records `components/ShareInviteSheet.tsx:173` rendering
 `conv.displayName || truncateAddress(conv.address)` — a surface that never calls
 the resolver at all. Every function-level test was green while that shipped.
@@ -590,7 +590,7 @@ filtering hook, so filtering and display cannot disagree.
   address, the scope, and which sources were missing, behind a live counter.
   "0 degraded resolutions this session" is a readable positive signal instead of
   a manual per-surface pass. Mobile has an open task for an identity-coverage
-  instrument (`issues/.open/2026-08-04-qns-names-and-the-identity-coverage-instrument.md`)
+  instrument (`tickets/.open/2026-08-04-qns-names-and-the-identity-coverage-instrument.md`)
   which should be reconciled with this rather than built twice.
 
   Desktop's known blind spot, inherited if ported verbatim: it cannot tell

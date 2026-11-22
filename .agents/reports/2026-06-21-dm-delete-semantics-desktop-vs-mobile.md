@@ -4,8 +4,8 @@ title: "DM delete semantics — desktop vs mobile (message-delete + conversation
 created: 2026-06-21
 status: resolved — lead-dev decided 2026-06-24 (see "Lead-dev decisions" below)
 related:
-  - .agents/issues/.done/2026-06-17-dm-conversation-settings-parity.md
-  - .agents/issues/.done/2026-06-17-delete-own-message-in-dm.md
+  - .agents/tickets/.done/2026-06-17-dm-conversation-settings-parity.md
+  - .agents/tickets/.done/2026-06-17-delete-own-message-in-dm.md
 ---
 
 # DM delete semantics: desktop vs mobile

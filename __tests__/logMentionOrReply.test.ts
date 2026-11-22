@@ -87,7 +87,7 @@ describe('logMentionOrReply — mentions inside the body', () => {
   // WebSocket receive thread with no React tree above it — so it can never
   // verify a QNS claim, and a `.q` could never appear in a notification for
   // anyone, including the viewer. See
-  // `.agents/issues/.open/2026-08-14-space-mention-notifications-bake-names-at-write-time-so-no-q-ever-renders.md`.
+  // `.agents/tickets/.open/2026-08-14-space-mention-notifications-bake-names-at-write-time-so-no-q-ever-renders.md`.
   //
   // What is pinned here now is the other half of that contract: this function
   // must leave the token ALONE, because a baked name carries no token for the

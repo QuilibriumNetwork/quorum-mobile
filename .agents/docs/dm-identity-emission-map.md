@@ -99,7 +99,7 @@ unauthorised one.
 - **Native batch path skips the auto-reveal for `call-*` frames.** Its
   call-signal early `continue` runs before the `user_profile` auto-reveal check,
   whereas the JS path checks first. Filed as
-  `issues/.open/2026-08-19-batch-decrypt-path-skips-auto-reveal-for-call-frames.md`.
+  `tickets/.open/2026-08-19-batch-decrypt-path-skips-auto-reveal-for-call-frames.md`.
 - **The native auto-reveal trigger is narrower than "a new session appeared."**
   It fires on `user_profile` presence, which the native module only emits when
   the partner's envelope carries a non-empty `display_name` or `user_icon`

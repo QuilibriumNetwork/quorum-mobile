@@ -9,7 +9,7 @@ audience: self (gitignored, local-only)
 
 > **Scope: this is the LOCAL-ONLY, one-machine workflow.** For the team-wide question
 > ("can we commit `link:../quorum-shared` like desktop does?" — no, EAS blocks it) see
-> `.agents/issues/.open/2026-08-01-deliver-quorum-shared-to-mobile-without-npm-publish.md`.
+> `.agents/tickets/.open/2026-08-01-deliver-quorum-shared-to-mobile-without-npm-publish.md`.
 
 > **Version numbers below are from the era this was written (`-29` pinned, `-30` pending).
 > The mechanics are unchanged; today's pin is `2.1.0-39`.** Read `-29` as "whatever

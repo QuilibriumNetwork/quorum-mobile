@@ -4,7 +4,7 @@ title: "Should mobile adopt quorum-shared UI primitives? (analysis + decision di
 status: discussion-captured
 created: 2026-06-28
 related-task-desktop: ../../../quorum-desktop/.agents/tasks/port-from-mobile/2026-06-11-port-skins-phase-0-1.md
-related-task-mobile: ../issues/.deferred/2026-06-09-migrate-iconsymbol-to-shared-icon-primitive.md
+related-task-mobile: ../tickets/.deferred/2026-06-09-migrate-iconsymbol-to-shared-icon-primitive.md
 related-doc-desktop: ../../../quorum-desktop/.agents/docs/features/primitives/
 ---
 
@@ -100,7 +100,7 @@ skin-aware native primitive has nothing uniform to call.
 
 ## 4. Precedent: this is exactly the IconSymbol decision
 
-`../issues/.deferred/2026-06-09-migrate-iconsymbol-to-shared-icon-primitive.md` is a worked instance of the
+`../tickets/.deferred/2026-06-09-migrate-iconsymbol-to-shared-icon-primitive.md` is a worked instance of the
 same question (move a mobile component → its shared `.native.tsx` sibling). The decided plan there
 is the template for Button and every other primitive:
 
